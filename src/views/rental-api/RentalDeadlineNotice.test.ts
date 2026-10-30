@@ -26,7 +26,7 @@ describe('rental deadline notices', () => {
     expect(html).toContain('bg-orange-700')
     expect(html).not.toContain('bg-red-800')
     expect(html).toContain('text-white')
-    expect(html).not.toContain('sử dụng — hạn')
+    expect(html).not.toContain('sử dụng - hạn')
     expect(html).toContain('Gia hạn chỉ thành công khi bạn đến cơ sở ký hợp đồng gia hạn')
     expect(html).toContain('Chỉ thanh toán tiền thuê gia hạn trả trước chưa được tính là gia hạn thành công')
     expect(html).not.toContain('Chưa có dữ liệu xác thực')

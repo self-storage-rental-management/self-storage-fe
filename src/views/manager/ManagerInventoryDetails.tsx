@@ -146,7 +146,7 @@ export function InventoryMaintenanceDetails({
       ) : read.data.length === 0 ? (
         unit.status === "maintenance"
           ? <p role="alert" className="text-amber-800">Gian kho đang bảo trì nhưng chưa có nhiệm vụ bảo trì được ghi nhận.</p>
-          : <p className="text-green-700">Bình thường — Không có lịch sử hoặc yêu cầu bảo trì đang mở.</p>
+          : <p className="text-green-700">Bình thường - Không có lịch sử hoặc yêu cầu bảo trì đang mở.</p>
       ) : (
         <ul className="space-y-3">
           {read.data.map((t) => (

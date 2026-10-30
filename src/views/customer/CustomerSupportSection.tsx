@@ -274,7 +274,7 @@ export default function CustomerSupportSection({
             Tổng đài hỗ trợ khách hàng
           </h1>
           <p className="text-xs text-stone-500 mt-1">
-            Hỏi trợ lý StorageHub trước — nếu cần, yêu cầu sẽ tự động chuyển cho nhân viên kèm lịch sử trao đổi.
+            Hỏi trợ lý StorageHub trước - nếu cần, yêu cầu sẽ tự động chuyển cho nhân viên kèm lịch sử trao đổi.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -323,7 +323,7 @@ export default function CustomerSupportSection({
         <div className="rounded-xl border border-stone-200 bg-[#faf8f4] p-4 shadow-xs">
           <span className="text-xs font-medium text-stone-500">Hài lòng trợ lý AI</span>
           <div className="mt-1 flex items-baseline gap-1.5">
-            <b className="text-2xl font-black text-amber-800">{botStats.total > 0 ? `${botStats.satisfactionRate}%` : '—'}</b>
+            <b className="text-2xl font-black text-amber-800">{botStats.total > 0 ? `${botStats.satisfactionRate}%` : '-'}</b>
             <span className="text-[11px] text-stone-500">{botStats.total > 0 ? `(${botStats.helpful} )` : 'Chưa có đánh giá'}</span>
           </div>
         </div>
@@ -436,7 +436,7 @@ export default function CustomerSupportSection({
               </h3>
               <p className="mt-1 text-xs text-stone-500">
                 {ticket.category} · <span className="font-semibold text-stone-800">{ticket.facility}</span>
-                {ticket.unit && ticket.unit !== '—' && (
+                {ticket.unit && ticket.unit !== '-' && (
                   <span> · Gian kho: <span className="font-semibold text-stone-900">{ticket.unit}</span></span>
                 )}
                 {' · '}{formatTicketTime(ticket.updatedAt || ticket.created)}

@@ -9,11 +9,11 @@ import ManagerAccessCredentialsPanel from './ManagerAccessCredentialsPanel'
 type Tab = 'checkins' | 'returns' | 'credentials'
 
 function dateTime(value: string | null | undefined) {
-  return value ? new Date(value).toLocaleString('vi-VN') : '—'
+  return value ? new Date(value).toLocaleString('vi-VN') : '-'
 }
 
 function dateOnly(value: string | null | undefined) {
-  return value ? new Date(value).toLocaleDateString('vi-VN') : '—'
+  return value ? new Date(value).toLocaleDateString('vi-VN') : '-'
 }
 
 function statusVariant(status: string | null | undefined) {
@@ -24,7 +24,7 @@ function statusVariant(status: string | null | undefined) {
 }
 
 function statusBadge(status: string | null | undefined) {
-  return <Badge variant={statusVariant(status)}>{managerStatusLabel(status || '—', 'vi')}</Badge>
+  return <Badge variant={statusVariant(status)}>{managerStatusLabel(status || '-', 'vi')}</Badge>
 }
 
 export default function ManagerMovesApiPanel({ facilityId }: { facilityId?: string }) {

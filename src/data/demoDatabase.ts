@@ -19,7 +19,7 @@ export interface UnitSpec {
   frameDistanceM: number
   /** Chiều rộng lối xe (m) */
   vehicleLaneWidthM: number
-  /** Chiều rộng lối đi bộ (m) – bằng khoảng cách 2 khung */
+  /** Chiều rộng lối đi bộ (m) - bằng khoảng cách 2 khung */
   aisleM: number
   /** Kích thước khung cửa kho: rộng × cao (m) */
   doorWidthM: number
@@ -66,7 +66,7 @@ export const UNIT_SPECS: Record<'S' | 'M' | 'L' | 'XL', UnitSpec> = {
     smallBoxes: 336,
     largeBoxes: 200,
     cartEquipment: 'Xe đẩy tay / xe sàn nhỏ',
-    cartEquipmentDetail: 'Xe đẩy tay thông thường (0,8 × 0,5 m) – phù hợp thùng carton và đồ gia dụng nhẹ'
+    cartEquipmentDetail: 'Xe đẩy tay thông thường (0,8 × 0,5 m) - phù hợp thùng carton và đồ gia dụng nhẹ'
   },
   M: {
     size: 'M',
@@ -92,7 +92,7 @@ export const UNIT_SPECS: Record<'S' | 'M' | 'L' | 'XL', UnitSpec> = {
     smallBoxes: 504,
     largeBoxes: 300,
     cartEquipment: 'Platform trolley',
-    cartEquipmentDetail: 'Xe đẩy sàn phẳng (0,9 × 0,6 m) – phù hợp thiết bị văn phòng và nội thất vừa'
+    cartEquipmentDetail: 'Xe đẩy sàn phẳng (0,9 × 0,6 m) - phù hợp thiết bị văn phòng và nội thất vừa'
   },
   L: {
     size: 'L',
@@ -118,7 +118,7 @@ export const UNIT_SPECS: Record<'S' | 'M' | 'L' | 'XL', UnitSpec> = {
     smallBoxes: 672,
     largeBoxes: 400,
     cartEquipment: 'Pallet jack tay',
-    cartEquipmentDetail: 'Xe nâng tay thủy lực (1,6 × 0,7 m) – phù hợp pallet hàng và tồn kho kinh doanh'
+    cartEquipmentDetail: 'Xe nâng tay thủy lực (1,6 × 0,7 m) - phù hợp pallet hàng và tồn kho kinh doanh'
   },
   XL: {
     size: 'XL',
@@ -144,15 +144,15 @@ export const UNIT_SPECS: Record<'S' | 'M' | 'L' | 'XL', UnitSpec> = {
     smallBoxes: 840,
     largeBoxes: 500,
     cartEquipment: 'Electric walkie pallet truck',
-    cartEquipmentDetail: 'Xe nâng pallet điện dắt bộ (1,8 × 0,8 m) – phù hợp máy móc, hàng nặng và pallet công nghiệp'
+    cartEquipmentDetail: 'Xe nâng pallet điện dắt bộ (1,8 × 0,8 m) - phù hợp máy móc, hàng nặng và pallet công nghiệp'
   }
 }
 
 export const UNITS: any[] = []
 
 export const MY_RENTALS = [
-  { id: 'rent-001', unit: 'HCM-Q1-F01-M-001', facility: 'Kho Việt – Cơ sở Quận 1', size: 131.04, sizeCode: 'M', status: 'active', paid: true, amount: 9500000, startDate: 'Jan 12, 2026', nextDue: 'Oct 12, 2026' },
-  { id: 'rent-002', unit: 'HCM-Q1-F01-S-001', facility: 'Kho Việt – Cơ sở Quận 1', size: 80.0, sizeCode: 'S', status: 'active', paid: false, amount: 5500000, startDate: 'Feb 01, 2026', nextDue: 'Sep 25, 2026' }
+  { id: 'rent-001', unit: 'HCM-Q1-F01-M-001', facility: 'Kho Việt - Cơ sở Quận 1', size: 131.04, sizeCode: 'M', status: 'active', paid: true, amount: 9500000, startDate: 'Jan 12, 2026', nextDue: 'Oct 12, 2026' },
+  { id: 'rent-002', unit: 'HCM-Q1-F01-S-001', facility: 'Kho Việt - Cơ sở Quận 1', size: 80.0, sizeCode: 'S', status: 'active', paid: false, amount: 5500000, startDate: 'Feb 01, 2026', nextDue: 'Sep 25, 2026' }
 ]
 
 export const PAYMENTS = [
@@ -210,12 +210,12 @@ export interface StaffRosterMember {
 }
 
 export const STAFF_ROSTER: StaffRosterMember[] = [
-  { id: 'staff-1', name: 'Mai Tran', initials: 'MT', role: 'staff', email: 'mai.tran@storagehub.demo', phone: '+84 905 111 222', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001', online: true },
-  { id: 'staff-2', name: 'Huy Le', initials: 'HL', role: 'staff', email: 'huy.le@storagehub.demo', phone: '+84 905 333 444', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001', online: true },
-  { id: 'staff-3', name: 'Anh Pham', initials: 'AP', role: 'staff', email: 'anh.pham@storagehub.demo', phone: '+84 905 555 666', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001', online: false },
-  { id: 'staff-4', name: 'Tuan Vo', initials: 'TV', role: 'staff', email: 'tuan.vo@storagehub.demo', phone: '+84 905 777 888', facility: 'Kho Việt – Cơ sở Bình Dương', facilityId: 'fac-002', online: true },
-  { id: 'staff-5', name: 'Demo Staff', initials: 'DS', role: 'staff', email: 'staff@storagehub.demo', phone: '+84 905 550 101', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001', online: true },
-  { id: 'staff-mgr', name: 'Demo Manager', initials: 'DM', role: 'manager', email: 'manager@storagehub.demo', phone: '+84 903 444 888', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001', online: true }
+  { id: 'staff-1', name: 'Mai Tran', initials: 'MT', role: 'staff', email: 'mai.tran@storagehub.demo', phone: '+84 905 111 222', facility: 'Kho Việt - Cơ sở Quận 1', facilityId: 'fac-001', online: true },
+  { id: 'staff-2', name: 'Huy Le', initials: 'HL', role: 'staff', email: 'huy.le@storagehub.demo', phone: '+84 905 333 444', facility: 'Kho Việt - Cơ sở Quận 1', facilityId: 'fac-001', online: true },
+  { id: 'staff-3', name: 'Anh Pham', initials: 'AP', role: 'staff', email: 'anh.pham@storagehub.demo', phone: '+84 905 555 666', facility: 'Kho Việt - Cơ sở Quận 1', facilityId: 'fac-001', online: false },
+  { id: 'staff-4', name: 'Tuan Vo', initials: 'TV', role: 'staff', email: 'tuan.vo@storagehub.demo', phone: '+84 905 777 888', facility: 'Kho Việt - Cơ sở Bình Dương', facilityId: 'fac-002', online: true },
+  { id: 'staff-5', name: 'Demo Staff', initials: 'DS', role: 'staff', email: 'staff@storagehub.demo', phone: '+84 905 550 101', facility: 'Kho Việt - Cơ sở Quận 1', facilityId: 'fac-001', online: true },
+  { id: 'staff-mgr', name: 'Demo Manager', initials: 'DM', role: 'manager', email: 'manager@storagehub.demo', phone: '+84 903 444 888', facility: 'Kho Việt - Cơ sở Quận 1', facilityId: 'fac-001', online: true }
 ]
 
 export const TICKETS: TicketItem[] = [
@@ -234,7 +234,7 @@ export const TICKETS: TicketItem[] = [
     estimatedWaitTime: '~5 - 10 phút',
     created: 'Sep 17, 2026 · 10:24 AM',
     updatedAt: 'Sep 17, 2026 · 10:45 AM',
-    facility: 'Kho Việt – Cơ sở Quận 1',
+    facility: 'Kho Việt - Cơ sở Quận 1',
     facilityId: 'fac-001',
     unit: 'HCM-Q1-F01-M-001',
     assignedStaff: 'Mai Tran',
@@ -265,7 +265,7 @@ export const TICKETS: TicketItem[] = [
     priority: 'medium',
     status: 'in-progress',
     created: 'Sep 16, 2026 · 02:15 PM',
-    facility: 'Kho Việt – Cơ sở Quận 1',
+    facility: 'Kho Việt - Cơ sở Quận 1',
     unit: 'HCM-Q1-F01-S-002',
     messages: [
       {
@@ -293,7 +293,7 @@ export const TICKETS: TicketItem[] = [
     priority: 'low',
     status: 'resolved',
     created: 'Sep 14, 2026 · 09:00 AM',
-    facility: 'Kho Việt – Cơ sở Quận 1',
+    facility: 'Kho Việt - Cơ sở Quận 1',
     unit: 'HCM-Q1-F01-L-001',
     messages: [
       {
@@ -308,7 +308,7 @@ export const TICKETS: TicketItem[] = [
         sender: 'Facility Operations',
         role: 'staff',
         time: 'Sep 14, 2026 · 10:12 AM',
-        text: 'Hi Mr. Nam, Floor 3 is temperature controlled between 20°C–23°C with humidity strictly maintained under 55% RH 24/7.'
+        text: 'Hi Mr. Nam, Floor 3 is temperature controlled between 20°C-23°C with humidity strictly maintained under 55% RH 24/7.'
       }
     ]
   },
@@ -321,7 +321,7 @@ export const TICKETS: TicketItem[] = [
     priority: 'low',
     status: 'resolved',
     created: 'Sep 12, 2026 · 03:40 PM',
-    facility: 'Kho Việt – Cơ sở Quận 1',
+    facility: 'Kho Việt - Cơ sở Quận 1',
     unit: 'HCM-Q1-F01-S-001',
     messages: [
       {
@@ -351,12 +351,12 @@ export const TASKS = [
 ]
 
 export const RESERVATIONS = [
-  { id: 'RSV-2048', customer: 'Nguyen Minh Anh', email: 'anh.nguyen@outlook.com', phone: '090 123 4567', identityId: '079203001234', unit: 'HCM-Q1-F01-S-001', facility: 'Kho Việt – Cơ sở Quận 1', facilityAddress: '125 Nguyễn Bỉnh Khiêm, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh', size: 33.6, sizeCode: 'S', moveIn: 'Sep 20, 2026', payment: 'paid', paid: true, status: 'pending', emailVerified: true, goodsType: 'Tài liệu và đồ gia dụng', material: 'Giấy, nhựa, vải', packageCount: 12, weightKg: 180, dimensionsCm: '80 × 60 × 70', dimWeightKg: 56, initialCondition: '12 kiện nguyên niêm phong, khô ráo', evidence: ['EV-2048-01 · Ảnh hàng hóa lúc khai báo', 'MAIL-2048 · Email đã xác nhận lúc 09:42 18/09/2026'] },
-  { id: 'RSV-2049', customer: 'Hoang Van Bach', email: 'bach.hoang@gmail.com', phone: '091 999 8811', identityId: '079198004567', unit: 'HCM-Q1-F01-M-002', facility: 'Kho Việt – Cơ sở Quận 1', facilityAddress: '125 Nguyễn Bỉnh Khiêm, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh', size: 57.6, sizeCode: 'M', moveIn: 'Sep 22, 2026', payment: 'pending', paid: false, status: 'confirmed', emailVerified: false, goodsType: 'Thiết bị văn phòng', material: 'Kim loại, nhựa', packageCount: 8, weightKg: 240, dimensionsCm: '120 × 80 × 90', dimWeightKg: 173, initialCondition: '8 kiện, 1 thùng móp góc nhẹ', evidence: ['EV-2049-01 · Phiếu khai báo hàng hóa'] }
+  { id: 'RSV-2048', customer: 'Nguyen Minh Anh', email: 'anh.nguyen@outlook.com', phone: '090 123 4567', identityId: '079203001234', unit: 'HCM-Q1-F01-S-001', facility: 'Kho Việt - Cơ sở Quận 1', facilityAddress: '125 Nguyễn Bỉnh Khiêm, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh', size: 33.6, sizeCode: 'S', moveIn: 'Sep 20, 2026', payment: 'paid', paid: true, status: 'pending', emailVerified: true, goodsType: 'Tài liệu và đồ gia dụng', material: 'Giấy, nhựa, vải', packageCount: 12, weightKg: 180, dimensionsCm: '80 × 60 × 70', dimWeightKg: 56, initialCondition: '12 kiện nguyên niêm phong, khô ráo', evidence: ['EV-2048-01 · Ảnh hàng hóa lúc khai báo', 'MAIL-2048 · Email đã xác nhận lúc 09:42 18/09/2026'] },
+  { id: 'RSV-2049', customer: 'Hoang Van Bach', email: 'bach.hoang@gmail.com', phone: '091 999 8811', identityId: '079198004567', unit: 'HCM-Q1-F01-M-002', facility: 'Kho Việt - Cơ sở Quận 1', facilityAddress: '125 Nguyễn Bỉnh Khiêm, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh', size: 57.6, sizeCode: 'M', moveIn: 'Sep 22, 2026', payment: 'pending', paid: false, status: 'confirmed', emailVerified: false, goodsType: 'Thiết bị văn phòng', material: 'Kim loại, nhựa', packageCount: 8, weightKg: 240, dimensionsCm: '120 × 80 × 90', dimWeightKg: 173, initialCondition: '8 kiện, 1 thùng móp góc nhẹ', evidence: ['EV-2049-01 · Phiếu khai báo hàng hóa'] }
 ]
 
 export const CHECKINS = [
-  { id: 'CHK-301', reservationId: 'RSV-2048', customer: 'Nguyen Minh Anh', email: 'anh.nguyen@outlook.com', phone: '090 123 4567', identityId: '079203001234', unit: 'HCM-Q1-F01-S-001', facility: 'Kho Việt – Cơ sở Quận 1', date: 'Sep 20, 2026', time: '11:00 AM', status: 'scheduled', goodsType: 'Tài liệu và đồ gia dụng', material: 'Giấy, nhựa, vải', packageCount: 12, weightKg: 180, dimensionsCm: '80 × 60 × 70', dimWeightKg: 56, initialCondition: 'Kho sạch, khóa hoạt động, 12 kiện nguyên niêm phong', evidence: ['Ảnh CCCD đã đối chiếu', 'Ảnh hiện trạng kho trước bàn giao', 'Phiếu cân & đo kích thước'] }
+  { id: 'CHK-301', reservationId: 'RSV-2048', customer: 'Nguyen Minh Anh', email: 'anh.nguyen@outlook.com', phone: '090 123 4567', identityId: '079203001234', unit: 'HCM-Q1-F01-S-001', facility: 'Kho Việt - Cơ sở Quận 1', date: 'Sep 20, 2026', time: '11:00 AM', status: 'scheduled', goodsType: 'Tài liệu và đồ gia dụng', material: 'Giấy, nhựa, vải', packageCount: 12, weightKg: 180, dimensionsCm: '80 × 60 × 70', dimWeightKg: 56, initialCondition: 'Kho sạch, khóa hoạt động, 12 kiện nguyên niêm phong', evidence: ['Ảnh CCCD đã đối chiếu', 'Ảnh hiện trạng kho trước bàn giao', 'Phiếu cân & đo kích thước'] }
 ]
 
 export const RETURNS: any[] = []
@@ -381,7 +381,7 @@ export interface MonthlyRevenueRecord {
 }
 
 export const REVENUE_DATA: MonthlyRevenueRecord[] = [
-  { month: 'Tháng 4', revenue: 0, growth: '—', growthNumber: 0, contracts: 0, occupancyRate: '0%', occupancyNumber: 0 },
+  { month: 'Tháng 4', revenue: 0, growth: '-', growthNumber: 0, contracts: 0, occupancyRate: '0%', occupancyNumber: 0 },
   { month: 'Tháng 5', revenue: 0, growth: '0%', growthNumber: 0, contracts: 0, occupancyRate: '0%', occupancyNumber: 0 },
   { month: 'Tháng 6', revenue: 0, growth: '0%', growthNumber: 0, contracts: 0, occupancyRate: '0%', occupancyNumber: 0 },
   { month: 'Tháng 7', revenue: 0, growth: '0%', growthNumber: 0, contracts: 0, occupancyRate: '0%', occupancyNumber: 0 },
@@ -442,7 +442,7 @@ export const RENTALS: RentalRecord[] = [
     unit: 'HCM-Q1-F01-S-001',
     unitType: 'Kho Nhỏ (S)',
     size: 5,
-    facility: 'Kho Việt – Cơ sở Quận 1',
+    facility: 'Kho Việt - Cơ sở Quận 1',
     amount: 5500000,
     deposit: 5500000,
     status: 'active',
@@ -464,7 +464,7 @@ export const RENTALS: RentalRecord[] = [
     unit: 'HCM-Q1-F01-M-001',
     unitType: 'Kho Trung (M)',
     size: 10,
-    facility: 'Kho Việt – Cơ sở Quận 1',
+    facility: 'Kho Việt - Cơ sở Quận 1',
     amount: 9500000,
     deposit: 9500000,
     status: 'active',
@@ -486,7 +486,7 @@ export const RENTALS: RentalRecord[] = [
     unit: 'HCM-Q1-F01-L-001',
     unitType: 'Kho Lớn (L)',
     size: 15,
-    facility: 'Kho Việt – Cơ sở Quận 1',
+    facility: 'Kho Việt - Cơ sở Quận 1',
     amount: 15000000,
     deposit: 15000000,
     status: 'active',
@@ -508,7 +508,7 @@ export const RENTALS: RentalRecord[] = [
     unit: 'HCM-Q1-F01-L-001',
     unitType: 'Kho Lớn (L)',
     size: 20,
-    facility: 'Kho Việt – Cơ sở Quận 1',
+    facility: 'Kho Việt - Cơ sở Quận 1',
     amount: 15000000,
     deposit: 15000000,
     status: 'active',
@@ -530,7 +530,7 @@ export const RENTALS: RentalRecord[] = [
     unit: 'HCM-Q1-F01-XL-001',
     unitType: 'Kho Rất Lớn (XL)',
     size: 25,
-    facility: 'Kho Việt – Cơ sở Quận 1',
+    facility: 'Kho Việt - Cơ sở Quận 1',
     amount: 22500000,
     deposit: 22500000,
     status: 'active',
@@ -552,7 +552,7 @@ export const RENTALS: RentalRecord[] = [
     unit: 'BD-F01-S-002',
     unitType: 'Kho Nhỏ (S)',
     size: 5,
-    facility: 'Kho Việt – Cơ sở Bình Dương',
+    facility: 'Kho Việt - Cơ sở Bình Dương',
     amount: 5500000,
     deposit: 5500000,
     status: 'pending',
@@ -575,7 +575,7 @@ export const RENTALS: RentalRecord[] = [
     unit: 'BD-F01-M-001',
     unitType: 'Kho Trung (M)',
     size: 10,
-    facility: 'Kho Việt – Cơ sở Bình Dương',
+    facility: 'Kho Việt - Cơ sở Bình Dương',
     amount: 9500000,
     deposit: 9500000,
     status: 'active',
@@ -591,9 +591,9 @@ export const RENTALS: RentalRecord[] = [
 ]
 
 export const STAFF_LIST = [
-  { id: 'demo-staff', name: 'Demo Staff', email: 'staff@storagehub.demo', role: 'Operations Specialist', roleVi: 'Chuyên viên vận hành', shift: 'Morning', shiftVi: 'Ca sáng', tasks: 3, status: 'on-duty', phone: '090 555 0101', facilityId: 'fac-001', facilityName: 'Kho Việt – Cơ sở Quận 1' },
-  { id: 'staff-2', name: 'Mai Tran', email: 'mai@storagehub.demo', role: 'Facility Supervisor', roleVi: 'Giám sát cơ sở', shift: 'Day', shiftVi: 'Ca ngày', tasks: 5, status: 'on-duty', phone: '090 555 0102', facilityId: 'fac-001', facilityName: 'Kho Việt – Cơ sở Quận 1' },
-  { id: 'staff-3', name: 'Nguyen Quoc Dat', email: 'dat.nguyen@storagehub.demo', role: 'Security & Access Tech', roleVi: 'Kỹ thuật an ninh và truy cập', shift: 'Night', shiftVi: 'Ca đêm', tasks: 1, status: 'off-duty', phone: '090 555 0103', facilityId: 'fac-002', facilityName: 'Kho Việt – Cơ sở Bình Dương' }
+  { id: 'demo-staff', name: 'Demo Staff', email: 'staff@storagehub.demo', role: 'Operations Specialist', roleVi: 'Chuyên viên vận hành', shift: 'Morning', shiftVi: 'Ca sáng', tasks: 3, status: 'on-duty', phone: '090 555 0101', facilityId: 'fac-001', facilityName: 'Kho Việt - Cơ sở Quận 1' },
+  { id: 'staff-2', name: 'Mai Tran', email: 'mai@storagehub.demo', role: 'Facility Supervisor', roleVi: 'Giám sát cơ sở', shift: 'Day', shiftVi: 'Ca ngày', tasks: 5, status: 'on-duty', phone: '090 555 0102', facilityId: 'fac-001', facilityName: 'Kho Việt - Cơ sở Quận 1' },
+  { id: 'staff-3', name: 'Nguyen Quoc Dat', email: 'dat.nguyen@storagehub.demo', role: 'Security & Access Tech', roleVi: 'Kỹ thuật an ninh và truy cập', shift: 'Night', shiftVi: 'Ca đêm', tasks: 1, status: 'off-duty', phone: '090 555 0103', facilityId: 'fac-002', facilityName: 'Kho Việt - Cơ sở Bình Dương' }
 ]
 
 export interface OverdueAccount {
@@ -626,14 +626,14 @@ export const OVERDUE: OverdueAccount[] = [
     email: 'binh.tran@email.com',
     phone: '+84 912 345 678',
     unit: 'A-210',
-    facility: 'Kho Việt – Cơ sở Quận 1',
+    facility: 'Kho Việt - Cơ sở Quận 1',
     amount: 89,
     baseAmount: 89,
     lateFee: 25,
     days: 13,
     overdueDays: 13,
     stage: 'notice',
-    stageLabel: '8–14 Days (Notice Sent)',
+    stageLabel: '8-14 Days (Notice Sent)',
     status: 'overdue',
     overlocked: false,
     lastContact: 'Sep 15, 2026 · SMS Sent',
@@ -647,14 +647,14 @@ export const OVERDUE: OverdueAccount[] = [
     email: 'tuan.vuong@vcorp.vn',
     phone: '+84 909 888 222',
     unit: 'B-108',
-    facility: 'Kho Việt – Cơ sở Bình Dương',
+    facility: 'Kho Việt - Cơ sở Bình Dương',
     amount: 135,
     baseAmount: 135,
     lateFee: 35,
     days: 17,
     overdueDays: 17,
     stage: 'overlocked',
-    stageLabel: '15–30 Days (Overlocked)',
+    stageLabel: '15-30 Days (Overlocked)',
     status: 'critical',
     overlocked: true,
     lastContact: 'Sep 14, 2026 · Phone Call',
@@ -668,7 +668,7 @@ export const OVERDUE: OverdueAccount[] = [
     email: 'trinh.nguyen@freemail.com',
     phone: '+84 902 119 922',
     unit: 'C-105',
-    facility: 'Kho Việt – Cơ sở Quận 1',
+    facility: 'Kho Việt - Cơ sở Quận 1',
     amount: 220,
     baseAmount: 220,
     lateFee: 50,
@@ -689,14 +689,14 @@ export const OVERDUE: OverdueAccount[] = [
     email: 'giabao.ha@gmail.com',
     phone: '+84 938 445 566',
     unit: 'A-304',
-    facility: 'Kho Việt – Cơ sở Quận 1',
+    facility: 'Kho Việt - Cơ sở Quận 1',
     amount: 89,
     baseAmount: 89,
     lateFee: 0,
     days: 4,
     overdueDays: 4,
     stage: 'grace',
-    stageLabel: '1–7 Days (Grace Period)',
+    stageLabel: '1-7 Days (Grace Period)',
     status: 'overdue',
     overlocked: false,
     lastContact: 'Sep 17, 2026 · Automated Email',
@@ -706,8 +706,8 @@ export const OVERDUE: OverdueAccount[] = [
 ]
 
 export const UTILIZATION = [
-  { name: 'Kho Việt – Cơ sở Quận 1', value: 80 },
-  { name: 'Kho Việt – Cơ sở Bình Dương', value: 76 }
+  { name: 'Kho Việt - Cơ sở Quận 1', value: 80 },
+  { name: 'Kho Việt - Cơ sở Bình Dương', value: 76 }
 ]
 
 export const SUPPORT_METRICS = [
@@ -814,9 +814,9 @@ export const SETTINGS_GROUPS: SettingGroup[] = [
 ]
 
 export const USERS = [
-  { id: 'demo-customer', name: 'Demo Customer', email: 'customer@storagehub.demo', role: 'customer', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001', phone: '+84 908 123 456', status: 'active', lastLogin: 'Today, 09:12 AM', joined: 'Jan 12, 2026' },
-  { id: 'demo-staff', name: 'Demo Staff', email: 'staff@storagehub.demo', role: 'staff', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001', phone: '+84 905 550 101', status: 'active', lastLogin: 'Today, 08:45 AM', joined: 'Jan 10, 2026' },
-  { id: 'demo-manager', name: 'Demo Manager', email: 'manager@storagehub.demo', role: 'manager', facility: 'Kho Việt – Cơ sở Quận 1', facilityId: 'fac-001', phone: '+84 903 444 888', status: 'active', lastLogin: 'Today, 08:30 AM', joined: 'Jan 05, 2026' },
+  { id: 'demo-customer', name: 'Demo Customer', email: 'customer@storagehub.demo', role: 'customer', facility: 'Kho Việt - Cơ sở Quận 1', facilityId: 'fac-001', phone: '+84 908 123 456', status: 'active', lastLogin: 'Today, 09:12 AM', joined: 'Jan 12, 2026' },
+  { id: 'demo-staff', name: 'Demo Staff', email: 'staff@storagehub.demo', role: 'staff', facility: 'Kho Việt - Cơ sở Quận 1', facilityId: 'fac-001', phone: '+84 905 550 101', status: 'active', lastLogin: 'Today, 08:45 AM', joined: 'Jan 10, 2026' },
+  { id: 'demo-manager', name: 'Demo Manager', email: 'manager@storagehub.demo', role: 'manager', facility: 'Kho Việt - Cơ sở Quận 1', facilityId: 'fac-001', phone: '+84 903 444 888', status: 'active', lastLogin: 'Today, 08:30 AM', joined: 'Jan 05, 2026' },
   { id: 'demo-business', name: 'Demo Operations', email: 'business@storagehub.demo', role: 'business', facility: 'All facilities', phone: '+84 28 3999 1111', status: 'active', lastLogin: 'Yesterday, 04:20 PM', joined: 'Dec 20, 2025' },
   { id: 'demo-admin', name: 'Demo Administrator', email: 'admin@storagehub.demo', role: 'admin', facility: 'All facilities', phone: '+84 901 000 999', status: 'active', lastLogin: 'Today, 07:55 AM', joined: 'Dec 01, 2025' }
 ]

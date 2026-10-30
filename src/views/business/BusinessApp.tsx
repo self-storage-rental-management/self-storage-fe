@@ -328,7 +328,7 @@ const getFeeType = (type: string, lang: string) => {
 
 const getFeeTrigger = (trigger: string, lang: string) => {
   if (lang !== "vi") return trigger
-  // Trigger strings are already in Vietnamese in FEES data — return as-is
+  // Trigger strings are already in Vietnamese in FEES data - return as-is
   return trigger
 }
 
@@ -1430,7 +1430,7 @@ export default function BusinessApp({
     [],
   )
 
-  // Map ngày thanh toán vào tháng báo cáo (Tháng 4 – Tháng 9)
+  // Map ngày thanh toán vào tháng báo cáo (Tháng 4 - Tháng 9)
   const getPaymentReportingMonth = useCallback((dateStr?: string): string => {
     if (!dateStr) return "Tháng 9"
     const d = new Date(dateStr)
@@ -1592,7 +1592,7 @@ export default function BusinessApp({
           growthNum = diff / 100
         }
       } else {
-        growthStr = "—"
+        growthStr = "-"
       }
 
       previousMonthRevenue = monthRevenue
@@ -3647,7 +3647,7 @@ export default function BusinessApp({
             title={lang === "vi" ? "Quản Lý Cơ Sở" : "Facility Management"}
             subtitle={
               lang === "vi"
-                ? `${facilitiesList.length} cơ sở trong hệ thống – Thêm, sửa, xóa và theo dõi vận hành`
+                ? `${facilitiesList.length} cơ sở trong hệ thống - Thêm, sửa, xóa và theo dõi vận hành`
                 : `${facilitiesList.length} ${facilitiesList.length === 1 ? "facility" : "facilities"
                 } in the portfolio`
             }

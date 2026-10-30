@@ -13,10 +13,10 @@ export function paymentMethodLabel(value?: string | null): string {
     case 'SIMULATED':
       return 'Mô phỏng'
     default:
-      return value || '—'
+      return value || '-'
   }
 }
 
 export function paymentCurrencyLabel(value?: string | null): string {
-  return value === 'VND' ? 'Đồng Việt Nam' : value || '—'
+  return value === 'VND' ? 'Đồng Việt Nam' : value || '-'
 }

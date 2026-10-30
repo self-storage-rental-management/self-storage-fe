@@ -265,7 +265,7 @@ describe('Business Owner (BO) Business Rules & Logic', () => {
       const facInitial = {
         id: 'HN-F01',
         code: 'HN-F01',
-        name: 'Kho Việt – Cơ sở Hà Nội',
+        name: 'Kho Việt - Cơ sở Hà Nội',
         units: 25,
         unitDistribution: { S: 0, M: 0, L: 0, XL: 25 },
         price: '22.500.000đ',
@@ -350,7 +350,7 @@ describe('Business Owner (BO) Business Rules & Logic', () => {
         id: 'fac-danang-01',
         code: 'DN-F01',
         city: 'Đà Nẵng',
-        name: 'Kho Việt – Cơ sở Đà Nẵng'
+        name: 'Kho Việt - Cơ sở Đà Nẵng'
       }
       expect(isExcludedFacility(daNangFacility)).toBe(false)
 
@@ -358,13 +358,13 @@ describe('Business Owner (BO) Business Rules & Logic', () => {
         id: 'DN-F01-S-001',
         code: 'DN-F01-S-001',
         facilityId: 'DN-F01',
-        facilityName: 'Kho Việt – Cơ sở Đà Nẵng'
+        facilityName: 'Kho Việt - Cơ sở Đà Nẵng'
       }
       expect(isExcludedUnit(daNangUnit)).toBe(false)
 
       const daNangRelated = {
         facilityId: 'DN-F01',
-        facilityName: 'Kho Việt – Cơ sở Đà Nẵng'
+        facilityName: 'Kho Việt - Cơ sở Đà Nẵng'
       }
       expect(isExcludedRelated(daNangRelated)).toBe(false)
     })

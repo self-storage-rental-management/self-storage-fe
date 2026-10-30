@@ -31,14 +31,14 @@ export default function ReservationReceipt({ payment, reservationCode }: { payme
     status={isRemainingRental ? 'Đã ghi nhận thanh toán nhận kho' : accepted ? 'Đơn đã xác nhận cọc' : 'Đơn chưa xác nhận'}
     fields={[
       ['Mã giao dịch StorageHub', payment.paymentId], [isRemainingRental ? 'Mã tham chiếu thanh toán' : 'Mã tham chiếu VNPay', payment.transactionReference],
-      [isRemainingRental ? 'Mã phiếu thu hoặc giao dịch' : 'Mã giao dịch VNPay', payment.gatewayTransactionNo || '—'], ['Đơn giữ kho', reservationCode],
-      [isRemainingRental ? 'Thời điểm ghi nhận tại quầy' : 'Thời điểm VNPay ghi nhận', gatewayPaidAt || (payment.paidAt ? new Date(payment.paidAt).toLocaleString('vi-VN') : '—')],
-      ['Thời điểm StorageHub xử lý', payment.processedAt ? new Date(payment.processedAt).toLocaleString('vi-VN') : '—'],
+      [isRemainingRental ? 'Mã phiếu thu hoặc giao dịch' : 'Mã giao dịch VNPay', payment.gatewayTransactionNo || '-'], ['Đơn giữ kho', reservationCode],
+      [isRemainingRental ? 'Thời điểm ghi nhận tại quầy' : 'Thời điểm VNPay ghi nhận', gatewayPaidAt || (payment.paidAt ? new Date(payment.paidAt).toLocaleString('vi-VN') : '-')],
+      ['Thời điểm StorageHub xử lý', payment.processedAt ? new Date(payment.processedAt).toLocaleString('vi-VN') : '-'],
       ['Phương thức thanh toán', paymentMethodLabel(payment.paymentMethod)],
-      ['Người ghi nhận', payment.initiatedByName || '—'],
+      ['Người ghi nhận', payment.initiatedByName || '-'],
       ['Nội dung', isRemainingRental ? 'Thanh toán phần còn lại khi nhận kho' : accepted ? 'Cọc giữ chỗ đã được đơn xác nhận' : 'Giao dịch cọc giữ chỗ cần đối soát'], ['Số tiền', formatVnd(payment.amount)], ['Tiền tệ', paymentCurrencyLabel(payment.currency)],
-      ['Số hóa đơn', payment.invoiceNumber || '—'], ['Trạng thái hóa đơn', payment.invoiceStatus || 'DRAFT'],
-      ['Ngày phát hành hóa đơn', payment.invoiceIssuedAt ? new Date(payment.invoiceIssuedAt).toLocaleString('vi-VN') : '—'],
+      ['Số hóa đơn', payment.invoiceNumber || '-'], ['Trạng thái hóa đơn', payment.invoiceStatus || 'DRAFT'],
+      ['Ngày phát hành hóa đơn', payment.invoiceIssuedAt ? new Date(payment.invoiceIssuedAt).toLocaleString('vi-VN') : '-'],
     ]}
     footer={isRemainingRental || accepted ? 'Biên lai được lưu cùng đơn giữ kho để đối chiếu thanh toán.' : 'Hệ thống đã ghi nhận giao dịch, trạng thái đơn cần được kiểm tra trước khi tính là cọc được chấp nhận.'} />
 }

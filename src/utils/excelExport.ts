@@ -24,10 +24,10 @@ export function exportRevenueExcel(options: RevenueExportOptions = {}): string {
   const highestItem =
     totalRevenue > 0
       ? [...data].sort((a, b) => b.revenue - a.revenue)[0] || {
-          month: '—',
+          month: '-',
           revenue: 0
         }
-      : { month: '—', revenue: 0 }
+      : { month: '-', revenue: 0 }
   const forecastNext =
     totalRevenue > 0
       ? `~${Math.round(highestItem.revenue * 1.03).toLocaleString('vi-VN')} ₫`
@@ -207,8 +207,8 @@ export function exportManagerFacilityExcel(options: ManagerFacilityExportOptions
     ['Gian kho đang sử dụng', m.occupiedUnits, 'Số gian có hợp đồng thuê hoạt động'],
     ['Gian kho còn trống', m.availableUnits, 'Khả dụng cho khách thuê mới'],
     ['Gian kho đang bảo trì', m.maintenanceUnits, 'Đang sửa chữa / nghiệm thu hiện trường'],
-    ['Doanh thu định kỳ/tháng', m.monthlyRevenue ?? '—', 'Tổng giá trị hợp đồng active'],
-    ['Tiền đã thu', m.collectedRevenue ?? '—', 'Đã đối soát ghi nhận'],
+    ['Doanh thu định kỳ/tháng', m.monthlyRevenue ?? '-', 'Tổng giá trị hợp đồng active'],
+    ['Tiền đã thu', m.collectedRevenue ?? '-', 'Đã đối soát ghi nhận'],
     ['Hồ sơ thuê quá hạn', m.overdueRentalsCount ?? 0, 'Cần nhắc nợ hoặc xử lý'],
     ['Lượt nhận kho trong tháng', m.monthCheckinsCount ?? 0, 'Check-in thành công'],
     ['Yêu cầu trả kho chờ xử lý', m.openReturnsCount ?? 0, 'Đang chờ nghiệm thu / hoàn tất']
@@ -232,7 +232,7 @@ export function exportManagerFacilityExcel(options: ManagerFacilityExportOptions
         u.zone,
         u.status,
         u.price,
-        u.availability || '—'
+        u.availability || '-'
       ])
     })
     const wsUnits = XLSX.utils.aoa_to_sheet(sheetUnits)
@@ -254,7 +254,7 @@ export function exportManagerFacilityExcel(options: ManagerFacilityExportOptions
         r.scheduledDate,
         r.status,
         r.damageClassification || 'Chưa kiểm tra',
-        r.notes || '—'
+        r.notes || '-'
       ])
     })
     const wsReturns = XLSX.utils.aoa_to_sheet(sheetReturns)
@@ -276,7 +276,7 @@ export function exportManagerFacilityExcel(options: ManagerFacilityExportOptions
         a.actorRole,
         a.entityType,
         a.entityId,
-        a.notes || '—'
+        a.notes || '-'
       ])
     })
     const wsActivities = XLSX.utils.aoa_to_sheet(sheetActivities)

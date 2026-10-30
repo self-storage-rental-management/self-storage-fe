@@ -271,7 +271,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
       name: facility.name,
       address: facility.address,
       city: facility.city,
-      price: facility.startingMonthlyPrice == null ? '—' : facility.startingMonthlyPrice.toLocaleString('vi-VN'),
+      price: facility.startingMonthlyPrice == null ? '-' : facility.startingMonthlyPrice.toLocaleString('vi-VN'),
       units: facility.totalUnits,
       available: facility.availableUnits,
     }))
@@ -583,11 +583,11 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
               {/* Quick Trust Badges */}
               <div className="grid grid-cols-3 gap-2 sm:gap-3 pt-4 border-t border-stone-100 text-center sm:text-left">
                 <div>
-                   <div className="text-lg sm:text-2xl font-black text-stone-900">{facilitiesList.length ? availableUnitCount : '—'}</div>
+                   <div className="text-lg sm:text-2xl font-black text-stone-900">{facilitiesList.length ? availableUnitCount : '-'}</div>
                    <div className="text-[11px] sm:text-xs text-stone-500 mt-0.5 leading-tight">Gian kho còn trống</div>
                 </div>
                 <div>
-                   <div className="text-lg sm:text-2xl font-black text-stone-900">{facilitiesList.length ? totalUnitCount : '—'}</div>
+                   <div className="text-lg sm:text-2xl font-black text-stone-900">{facilitiesList.length ? totalUnitCount : '-'}</div>
                    <div className="text-[11px] sm:text-xs text-stone-500 mt-0.5 leading-tight">Tổng gian kho</div>
                 </div>
                 <div>
