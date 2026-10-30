@@ -1,3 +1,4 @@
+import { matchesReservationSearch, reservationPage } from './reservationList'
 import { estimatedRentalPeriod } from '../../domain/rentalTimeline'
 import { formatCustomerDate, formatCustomerDateTime } from '../../i18n/customerDate'
 import { useBackendNotifications } from '../../hooks/useBackendNotifications'
@@ -742,6 +743,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const [rentalMenuVisit, setRentalMenuVisit] = useState(0)
   const [paymentHistoryFilter, setPaymentHistoryFilter] = useState<'all' | 'payments' | 'settlement'>('all')
   const [reservationSizeFilter, setReservationSizeFilter] = useState('all')
+  const [reservationSearch, setReservationSearch] = useState('')
+  const [reservationPageNumber, setReservationPageNumber] = useState(1)
+  const reservationPageSize = 5
   const [rentalFacilityFilter, setRentalFacilityFilter] = useState('all')
   const [rentalTypeFilter, setRentalTypeFilter] = useState('all')
   const [rentalDeadlineFilter, setRentalDeadlineFilter] = useState<'all' | 'upcoming' | 'overdue'>('all')
@@ -1139,14 +1143,23 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     if (reservationFacilityFilter !== 'all' && hold.facilityId !== reservationFacilityFilter) return false
     const assignedUnit = units.find(unit => unit.id === hold.assignedUnitId || unit.code === hold.assignedUnitId)
     const holdSize = storageSizeCode(assignedUnit?.type || hold.unitTypeName || hold.unitId)
+    if (!matchesReservationSearch(reservationSearch, [hold.id, hold.unitTypeName, facilities.find(item => item.id === hold.facilityId)?.name])) return false
     return reservationSizeFilter === 'all' || holdSize === reservationSizeFilter
   })
   const pendingHandoverReservations = backendReservations.filter(reservation => reservation.status !== 'COMPLETED')
   const filteredBackendReservations = pendingHandoverReservations.filter(reservation => {
     if (reservationFacilityFilter !== 'all' && reservation.facilityId !== reservationFacilityFilter) return false
     const unitType = backendUnitTypes.find(item => item.id === reservation.unitTypeId)
+    if (!matchesReservationSearch(reservationSearch, [reservation.reservationCode, reservation.customerName, reservation.customerPhone, reservation.customerEmail, reservation.unitTypeName || unitType?.name, reservation.assignedUnitCode, facilities.find(item => item.id === reservation.facilityId)?.name])) return false
     return reservationSizeFilter === 'all' || storageSizeCode(unitType?.name || unitType?.code || '') === reservationSizeFilter
   })
+
+  const reservationCount = isApiAuthenticated() ? filteredBackendReservations.length : filteredReservationHolds.length
+  const reservationPagination = reservationPage(reservationCount, reservationPageNumber, reservationPageSize)
+  const pagedBackendReservations = filteredBackendReservations.slice(reservationPagination.start, reservationPagination.end)
+  const pagedReservationHolds = filteredReservationHolds.slice(reservationPagination.start, reservationPagination.end)
+  useEffect(() => { setReservationPageNumber(1) }, [reservationSearch, reservationFacilityFilter, reservationSizeFilter, reservationPageSize])
+  useEffect(() => { setReservationPageNumber(current => Math.min(current, reservationPagination.pages)) }, [reservationPagination.pages])
 
   const activeUnassignedCapacityHolds = holds.filter(hold => {
     if (hold.assignedUnitId || ['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(hold.status)) return false
@@ -1716,6 +1729,15 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   const revealNotificationTarget = (targetId?: string) => {
     if (!targetId) return
+    const reservationIndex = pendingHandoverReservations.findIndex(item => item.id === targetId)
+    const holdIndex = visibleMyHolds.findIndex(item => item.id === targetId)
+    if (reservationIndex >= 0 || holdIndex >= 0) {
+      setReservationSearch('')
+      setReservationFacilityFilter('all')
+      setReservationSizeFilter('all')
+      const targetPage = Math.floor((isApiAuthenticated() ? reservationIndex : holdIndex) / reservationPageSize) + 1
+      window.setTimeout(() => setReservationPageNumber(Math.max(1, targetPage)), 0)
+    }
     notificationRevealTimers.current.forEach(timer => window.clearTimeout(timer))
     notificationRevealTimers.current = []
     setFocusedNotificationTarget(null)
@@ -2565,17 +2587,20 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           />
 
           <Card className="p-4">
-            <div className="grid gap-3 md:grid-cols-[260px_1fr_auto] md:items-end">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[2fr_1fr_1fr_auto] md:items-end">
+              <Input label="Tìm kiếm đơn giữ kho" placeholder="Mã đơn, cơ sở, loại kho hoặc thông tin liên hệ" value={reservationSearch} onChange={event => setReservationSearch(event.target.value)} />
               <Select label="Lọc theo cơ sở" value={reservationFacilityFilter} onChange={event => setReservationFacilityFilter(event.target.value)}><option value="all">Tất cả cơ sở</option>{facilities.map(facility => <option key={facility.id} value={facility.id}>{CUSTOMER_FACILITY_DISPLAY[facility.id]?.name || facility.name}</option>)}</Select>
               <Select label="Lọc theo kích thước kho" value={reservationSizeFilter} onChange={event => setReservationSizeFilter(event.target.value)}><option value="all">Tất cả kích thước</option><option value="S">Kho nhỏ (S)</option><option value="M">Kho vừa (M)</option><option value="L">Kho lớn (L)</option><option value="XL">Kho rất lớn (XL)</option></Select>
-              <Button variant="outline" disabled={reservationFacilityFilter === 'all' && reservationSizeFilter === 'all'} onClick={() => { setReservationFacilityFilter('all'); setReservationSizeFilter('all') }}>Xóa bộ lọc</Button>
+              <Button variant="outline" disabled={!reservationSearch && reservationFacilityFilter === 'all' && reservationSizeFilter === 'all'} onClick={() => { setReservationSearch(''); setReservationFacilityFilter('all'); setReservationSizeFilter('all') }}>Xóa bộ lọc</Button>
             </div>
             <p className="mt-3 text-xs text-stone-500">Hiển thị {isApiAuthenticated() ? filteredBackendReservations.length : filteredReservationHolds.length}/{isApiAuthenticated() ? pendingHandoverReservations.length : visibleMyHolds.length} đơn đặt giữ kho.</p>
+
+
           </Card>
 
           {isApiAuthenticated() ? (
             <div className="grid gap-4">
-              {filteredBackendReservations.map(reservation => <CustomerReservationCard
+              {pagedBackendReservations.map(reservation => <CustomerReservationCard
                 key={reservation.id}
                 reservation={reservation}
                 facilityName={facilities.find(item => item.id === reservation.facilityId)?.name || reservation.facilityId}
@@ -2606,11 +2631,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   navigateTo('rental-records')
                 }}
               />)}
-              {!filteredBackendReservations.length && <Card className="p-10 text-center"><h2 className="font-semibold text-stone-700">{pendingHandoverReservations.length ? 'Không tìm thấy đơn phù hợp' : 'Không có đơn đặt giữ kho đang chờ bàn giao'}</h2><p className="mt-1 text-sm text-stone-500">{pendingHandoverReservations.length ? 'Hãy chọn lại cơ sở hoặc kích thước kho.' : 'Kho đã bàn giao được theo dõi trong Hồ sơ thuê.'}</p></Card>}
+              {!filteredBackendReservations.length && <Card className="p-10 text-center"><h2 className="font-semibold text-stone-700">{pendingHandoverReservations.length ? 'Không tìm thấy đơn phù hợp' : 'Không có đơn đặt giữ kho đang chờ bàn giao'}</h2><p className="mt-1 text-sm text-stone-500">{pendingHandoverReservations.length ? 'Hãy thử từ khóa khác hoặc thay đổi bộ lọc.' : 'Kho đã bàn giao được theo dõi trong Hồ sơ thuê.'}</p></Card>}
             </div>
           ) : filteredReservationHolds.length ? (
             <div className="grid gap-4">
-              {filteredReservationHolds.map(hold => {
+              {pagedReservationHolds.map(hold => {
                 const linkedRental = myRentals.find(rental => rental.holdId === hold.id)
                 const receiptConfirmed = Boolean(linkedRental?.receiptConfirmedAt)
                 const linkedRentalEnded = rentals.some(rental => rental.holdId === hold.id && rental.status === 'completed')
@@ -2861,6 +2886,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               {visibleMyHolds.length ? <Button className="mt-4" size="sm" variant="outline" onClick={() => { setReservationFacilityFilter('all'); setReservationSizeFilter('all') }}>Xóa bộ lọc</Button> : <Button className="mt-4" size="sm" onClick={() => navigateTo('browse-units')}>{'Khám phá gian kho'}</Button>}
             </Card>
           )}
+          <Card className="p-4">
+            <nav aria-label="Phân trang đơn giữ kho" className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-stone-500">5 đơn mỗi trang</p>
+              <div className="flex items-center gap-3"><Button variant="outline" size="sm" disabled={reservationPagination.page <= 1} onClick={() => setReservationPageNumber(reservationPagination.page - 1)}>Trang trước</Button><span aria-live="polite" className="text-sm text-stone-600">Trang {reservationPagination.page}/{reservationPagination.pages} · Tổng {reservationCount} đơn</span><Button variant="outline" size="sm" disabled={reservationPagination.page >= reservationPagination.pages} onClick={() => setReservationPageNumber(reservationPagination.page + 1)}>Trang sau</Button></div>
+            </nav>
+          </Card>
         </div>
       )}
 
