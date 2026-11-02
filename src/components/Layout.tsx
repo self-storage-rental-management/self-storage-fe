@@ -518,7 +518,7 @@ export default function Layout({
       </aside>
 
       {/* Main */}
-      <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
+      <div className={`flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden ${user.role === 'customer' ? 'basis-0 w-0' : ''}`}>
         {/* Top bar */}
         <header className="bg-white border-b border-[#deddd2] h-16 flex items-center px-4 lg:px-7 gap-3 lg:gap-4 flex-shrink-0">
           <button
@@ -637,7 +637,7 @@ export default function Layout({
 
         {/* Content */}
         <main ref={contentScrollRef} data-layout-scroll-container className="min-h-0 min-w-0 flex-1 basis-0 overflow-x-hidden overflow-y-auto overscroll-contain p-4 lg:p-7 fade-in">
-          <div className="mx-auto min-w-0 w-full max-w-[1600px]">{children}</div>
+          <div className={`mx-auto min-w-0 w-full ${user.role === 'customer' ? 'max-w-none' : 'max-w-[1600px]'}`}>{children}</div>
 
         </main>
       </div>
