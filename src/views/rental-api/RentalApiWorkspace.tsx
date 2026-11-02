@@ -226,6 +226,8 @@ function WorkspaceData({
   const { manager, copy } = useManagerPresentation()
 
   const actor = getAuthenticatedActor()!
+  const [rentalPages, setRentalPages] = useState<Record<string, number>>({})
+  useEffect(() => setRentalPages({}), [rq.search, rq.status, rq.sort])
   const [returnRental, setReturnRental] = useState<{ id: string; active: boolean }>()
   const dataTab = tab === "renewal" ? "renewal" : "rental"
   const query = dataTab === "rental" ? rq : nq
@@ -333,16 +335,16 @@ function WorkspaceData({
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-stone-900">{role === "manager" ? "Hồ sơ thuê & Gia hạn" : "Hồ sơ thuê"}</h1>
           <p className="mt-1 text-sm text-stone-500">Thông tin hợp đồng, thời hạn thuê, gia hạn và trả kho trong cùng một nơi.</p>
         </div>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className={role === "customer" ? "grid grid-cols-2 gap-2 lg:grid-cols-4" : "grid gap-3 sm:grid-cols-2"}>
         {[
           "Tổng hồ sơ",
           "Đang hiệu lực",
           "Hết hạn trong 30 ngày",
           "Yêu cầu gia hạn",
         ].map((label, i) => (
-          <Card className={`rounded-xl border-t-4 p-4 ${['border-t-stone-700', 'border-t-emerald-500', 'border-t-amber-500', 'border-t-blue-500'][i]}`} key={label}>
+          <Card className={`${role === "customer" ? "rounded-lg border-t-2 px-3 py-2.5" : "rounded-xl border-t-4 p-4"} ${['border-t-stone-700', 'border-t-emerald-500', 'border-t-amber-500', 'border-t-blue-500'][i]}`} key={label}>
             <p className="text-xs font-medium text-stone-500">{label}</p>
-            <p className="mt-2 text-2xl font-bold tracking-tight text-stone-900">
+            <p className={role === "customer" ? "mt-1 text-xl font-bold tracking-tight text-stone-900" : "mt-2 text-2xl font-bold tracking-tight text-stone-900"}>
               {counts.loading ? "…" : (counts.data?.[i] ?? copy("Chưa có"))}
             </p>
           </Card>
@@ -433,7 +435,10 @@ function WorkspaceData({
           {role === 'manager' ? <ManagerRentalGroups kind={read.data.kind} rows={read.data.page.data} onDetail={id => setDetail({ kind: read.data!.kind, id })} /> : role === 'customer' && read.data.kind === 'renewal' ? <CustomerRenewalGroups rows={read.data.page.data} onDetail={id => setDetail({ kind: 'renewal', id })} /> : role === 'customer' && read.data.kind === 'rental' ? <div className="space-y-5">{[
             { id: 'ongoing', title: 'Đang diễn ra', subtitle: 'Hồ sơ đang thuê, quá hạn hoặc đang xử lý trả kho.', rows: read.data.page.data.filter(row => row.status !== 'completed'), active: true },
             { id: 'finished', title: 'Hồ sơ đã kết thúc', subtitle: 'Hồ sơ thuê đã hoàn tất xử lý.', rows: read.data.page.data.filter(row => row.status === 'completed'), active: false },
-          ].map(group => <section key={group.id} aria-labelledby={`rental-group-${group.id}`} className="overflow-hidden rounded-xl border border-stone-200 bg-white">
+          ].map(group => {
+            const pages = Math.ceil(group.rows.length / 5)
+            const page = Math.min(rentalPages[group.id] ?? 0, Math.max(0, pages - 1))
+            return <section key={group.id} aria-labelledby={`rental-group-${group.id}`} className="overflow-hidden rounded-xl border border-stone-200 bg-white">
             <header className="flex items-center justify-between gap-3 border-b border-stone-100 px-4 py-4">
               <div className="flex items-center gap-3"><span aria-hidden="true" className={`h-8 w-1 rounded-full ${group.active ? 'bg-amber-400' : 'bg-stone-300'}`} /><div><h2 id={`rental-group-${group.id}`} className="text-base font-semibold text-stone-900">{group.title}</h2><p className="mt-0.5 text-xs text-stone-500">{group.subtitle}</p></div></div>
               <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${group.active ? 'bg-amber-50 text-amber-800' : 'bg-stone-100 text-stone-600'}`}>{group.rows.length} hồ sơ</span>
@@ -443,7 +448,7 @@ function WorkspaceData({
             <div className={`${customerRentalColumns} border-l-4 border-transparent px-1 text-xs font-semibold text-stone-500`}>
               {['Kho / Cơ sở', 'Mã hồ sơ', 'Trạng thái', 'Thời hạn thuê', 'Giá thuê / tháng', 'Thao tác'].map(label => <div key={label} className={`px-3 py-2 ${label === 'Trạng thái' ? 'text-center' : ''}`}>{label}</div>)}
             </div>
-            {group.rows.map(row => {
+            {group.rows.slice(page * 5, (page + 1) * 5).map(row => {
               const days = rentalDaysUntilDeadline(row)
               const focused = focusStorageUnitId === row.storageUnit.id && row.status !== 'completed'
               return <article key={row.id} id={`rental-api-record-${row.id}`} tabIndex={-1}
@@ -468,7 +473,12 @@ function WorkspaceData({
             })}
             </div>
           </div> : <p className="px-4 py-8 text-center text-sm text-stone-500">{group.active ? 'Không có hồ sơ thuê đang diễn ra.' : 'Chưa có hồ sơ thuê đã kết thúc.'}</p>}
-          </section>)}</div> : <div className="overflow-x-auto">
+            {group.rows.length > 0 && <div className="border-t border-stone-100 text-sm">
+              <Pager fixedSize page={page} pages={pages} total={group.rows.length} size={5}
+                setSize={() => {}}
+                setPage={next => setRentalPages(current => ({ ...current, [group.id]: next }))} />
+            </div>}
+          </section>})}</div> : <div className="overflow-x-auto">
             <table className="w-full min-w-[960px] table-fixed text-left text-sm">
               <caption className="sr-only">Danh sách hồ sơ thuê hoặc gia hạn</caption>
               <colgroup>

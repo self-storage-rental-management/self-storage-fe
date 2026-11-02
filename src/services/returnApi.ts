@@ -218,6 +218,16 @@ export async function updateReturnRequest(id: string, scheduledDate: string, not
 }
 export const feeKeys = ['damageFee', 'cleaningFee', 'lostItemFee', 'overdueFee', 'outstandingFee'] as const
 export type ReturnFees = Record<typeof feeKeys[number], number>
+
+export function sanitizeFees(f: Partial<ReturnFees>): ReturnFees {
+  return {
+    damageFee: Number.isFinite(f.damageFee) && (f.damageFee ?? 0) >= 0 ? (f.damageFee ?? 0) : 0,
+    cleaningFee: Number.isFinite(f.cleaningFee) && (f.cleaningFee ?? 0) >= 0 ? (f.cleaningFee ?? 0) : 0,
+    lostItemFee: Number.isFinite(f.lostItemFee) && (f.lostItemFee ?? 0) >= 0 ? (f.lostItemFee ?? 0) : 0,
+    overdueFee: Number.isFinite(f.overdueFee) && (f.overdueFee ?? 0) >= 0 ? (f.overdueFee ?? 0) : 0,
+    outstandingFee: Number.isFinite(f.outstandingFee) && (f.outstandingFee ?? 0) >= 0 ? (f.outstandingFee ?? 0) : 0,
+  }
+}
 export interface InspectionInput extends ReturnFees {
   unitVacated?: boolean
   inventoryMatch: 'match' | 'missing' | 'excess'; damageClassification: 'no_damage' | 'minor_damage' | 'major_damage' | 'abandoned_goods'
@@ -230,13 +240,14 @@ async function mutate(role: ReturnRole, id: string, action: string, body: object
 }
 function fees(body: ReturnFees) { if (!feeKeys.every(k => money(body[k]))) throw new Error('Phí phải là số tiền VND không âm, tối đa hai chữ số thập phân.') }
 export function inspectReturn(id: string, body: InspectionInput) {
-  fees(body)
+  const safeBody: InspectionInput = { ...body, ...sanitizeFees(body) }
+  fees(safeBody)
   if (!['match', 'missing', 'excess'].includes(body.inventoryMatch) ||
     !['no_damage', 'minor_damage', 'major_damage', 'abandoned_goods'].includes(body.damageClassification) ||
     !['available', 'maintenance'].includes(body.proposedUnitStatus) || body.staffNotes.length > 4000 ||
     !Array.isArray(body.evidencePhotos) || !body.evidencePhotos.every(p => typeof p === 'string') ||
     !['returnedKey', 'returnedCard', 'returnedLock'].every(k => typeof body[k as keyof InspectionInput] === 'boolean')) throw new Error('Kiểm tra thông tin nghiệm thu.')
-  return mutate('staff', id, 'inspection', body)
+  return mutate('staff', id, 'inspection', safeBody)
 }
 export async function completeRefund(id: string, body: {
   transactionReference?: string
@@ -363,10 +374,32 @@ export async function decideLegacyPricing(id: string, body: {
     body: JSON.stringify({ ...body, resolutionNote: body.resolutionNote.trim() }),
   }), 'business', id, undefined, 'MANAGE')
 }
-export function confirmReturn(id: string, decision: 'accepted' | 'disputed', note: string) {
+export function confirmReturn(id: string, decision: 'accepted' | 'disputed', note: string, role: ReturnRole = 'customer') {
   if (decision === 'disputed' && !note.trim()) throw new Error('Nhập lý do yêu cầu xem xét lại.')
   if (note.length > 2000) throw new Error('Ghi chú quá dài.')
-  return mutate('customer', id, 'confirm', { decision, note })
+  return mutate(role, id, 'confirm', { decision, note })
+}
+export async function fastApproveReturn(id: string, role: ReturnRole = 'staff') {
+  const current = await getReturn(role, id)
+  if (['requested', 'scheduled'].includes(current.status)) {
+    await inspectReturn(id, {
+      damageFee: 0,
+      cleaningFee: 0,
+      lostItemFee: 0,
+      overdueFee: 0,
+      outstandingFee: 0,
+      inventoryMatch: 'match',
+      damageClassification: 'no_damage',
+      staffNotes: 'Nghiệm thu và cho trả kho nhanh tại quầy - Không phát sinh hư hại',
+      evidencePhotos: [],
+      returnedKey: true,
+      returnedCard: true,
+      returnedLock: true,
+      proposedUnitStatus: 'available',
+      unitVacated: true,
+    })
+  }
+  return confirmReturn(id, 'accepted', 'Nhân viên xác nhận quyết toán trả kho nhanh trực tiếp tại quầy', role)
 }
 export function paySettlement(id: string, paymentMethod: string, notes = '') {
   if (!paymentMethod.trim() || paymentMethod.length > 40) throw new Error('Nhập phương thức thanh toán hợp lệ.')

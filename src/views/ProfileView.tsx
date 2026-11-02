@@ -165,7 +165,7 @@ export const ROLE_NOTIFICATION_CONFIGS: Record<Role, RoleNotificationConfig> = {
       {
         id: 'mgr_reservation_assignment',
         title: 'Đơn Đặt Giữ Kho Mới Chờ Phân Gian',
-        description: 'Thông báo ngay khi khách thuê cọc giữ chỗ thành công và đang chờ Quản lý chỉ định mã kho vật lý phù hợp.',
+        description: 'Thông báo ngay khi khách thuê phí giữ chỗ thành công và đang chờ Quản lý chỉ định mã kho vật lý phù hợp.',
         defaultEnabled: true,
         badge: 'Đơn mới',
         badgeColor: 'bg-amber-50 text-amber-700 border-amber-200'

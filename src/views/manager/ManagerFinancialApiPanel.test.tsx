@@ -56,7 +56,7 @@ describe('Manager payment history screen', () => {
     expect(html).toContain('Lịch sử thanh toán')
     expect(html).toContain('VNPAY-20261013-001')
     expect(html).toContain('Demo Customer')
-    expect(html).toContain('Cọc giữ chỗ')
+    expect(html).toContain('Phí giữ chỗ')
     expect(html).not.toContain('Mã hồ sơ thuê')
     expect(html).not.toContain('A-01')
     expect(html).not.toContain('Xem thông tin tài chính')

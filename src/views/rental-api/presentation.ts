@@ -39,7 +39,7 @@ export function rentalMoney(
   currency: string,
 ) {
   if (value == null || !Number.isFinite(value)) return unknown
-  // Wire values are applied amounts, never legacy USD-base values.
+  // Monetary API values are already VND and must not be converted.
   return `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 2 }).format(value)} ${
     currency === "VND" ? "đ" : currency
   }`

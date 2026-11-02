@@ -1,3 +1,4 @@
+import { formatCustomerDateTime } from '../../i18n/customerDate'
 import { userFacingError } from '../../presentation/userFacingError'
 import { VIETNAM_TIME_ZONE, parseVietnamDate } from '../../utils/vietnamTime'
 import { useEffect, useState } from 'react'
@@ -106,7 +107,7 @@ export default function CustomerSupportSection({
                     <div>
                       <p className="font-bold text-stone-900">{ticket.subject}</p>
                       <p className="mt-1 text-xs text-stone-500">
-                        {ticket.facilityName || 'Chưa gắn cơ sở'} · Cập nhật {parseVietnamDate(ticket.updatedAt).toLocaleString('vi-VN', { timeZone: VIETNAM_TIME_ZONE })}
+                        {ticket.facilityName || 'Chưa gắn cơ sở'} · Cập nhật {formatCustomerDateTime(parseVietnamDate(ticket.updatedAt))}
                       </p>
                     </div>
                     <Badge variant={ticket.status === 'resolved' || ticket.status === 'closed' ? 'success' : 'warning'}>
@@ -262,7 +263,7 @@ export default function CustomerSupportSection({
 
   const formatTicketTime = (value: string) => {
     const parsed = parseVietnamDate(value)
-    return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString('vi-VN', { timeZone: VIETNAM_TIME_ZONE })
+    return Number.isNaN(parsed.getTime()) ? value : formatCustomerDateTime(parsed)
   }
 
   return (

@@ -9,7 +9,7 @@ import PaymentReceiptCard from '../customer/PaymentReceiptCard'
 import { paymentCurrencyLabel, paymentMethodLabel } from '../customer/paymentLabels'
 
 const statuses = { PENDING: 'Chờ thanh toán', PROCESSING: 'Đang xử lý', PAID: 'Đã thanh toán', NOT_RECEIVED: 'Chưa nhận tiền', FAILED: 'Không thành công', CANCELLED: 'Đã hủy', REFUNDED: 'Đã hoàn tiền' }
-const purpose = (p: RentalPaymentReceipt) => p.purpose==='RENEWAL' ? 'Thanh toán gia hạn' : p.purpose==='RENTAL_BALANCE' ? p.renewalId ? 'Thanh toán khi ký gia hạn' : 'Thanh toán khi nhận kho' : p.purpose==='MONTHLY_RENT' ? 'Tiền thuê tháng' : 'Cọc giữ chỗ'
+const purpose = (p: RentalPaymentReceipt) => p.purpose==='RENEWAL' ? 'Thanh toán gia hạn' : p.purpose==='RENTAL_BALANCE' ? p.renewalId ? 'Thanh toán khi ký gia hạn' : 'Thanh toán khi nhận kho' : p.purpose==='MONTHLY_RENT' ? 'Tiền thuê tháng' : 'Phí giữ chỗ'
 function Receipt({ payment: p }: { payment: RentalPaymentReceipt }) {
   const verified = ['VERIFIED','SANDBOX'].includes(p.verification)
   return <PaymentReceiptCard title="Biên lai thanh toán" reference={p.renewalId || p.rentalId}

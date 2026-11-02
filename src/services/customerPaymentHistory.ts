@@ -12,7 +12,7 @@ import {
 } from "./customerReservationApi"
 
 export const paymentCategories = {
-  deposit: "Thanh toán cọc giữ chỗ",
+  deposit: "Thanh toán phí giữ chỗ",
   renewal: "Thanh toán tiền thuê gia hạn trả trước",
   damage: "Thanh toán bổ sung khi trả kho",
   refund: "Hoàn tiền trả kho",

@@ -5,6 +5,7 @@ const FALLBACK = 'Không thể thực hiện yêu cầu. Vui lòng kiểm tra th
 const technical = /(?:\b(?:exception|stacktrace|java\.|jdbc|sql|backend|frontend|FileAsset|UUID|ApiEnvelope|TypeError|ReferenceError)\b|goodsItems\[|expectedVersion|Idempotency-Key|Request body|Cannot deserialize)/i
 
 export function userFacingError(error: unknown, fallback = FALLBACK): string {
+  if (error instanceof Error && error.message === 'The email delivery service is not configured') return 'Dịch vụ gửi email chưa được cấu hình. Vui lòng liên hệ quản trị hoặc thử lại sau.'
   if (error instanceof ApiClientError) {
     if (error.status === 401) return 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'
     if (error.status === 403) return 'Bạn không có quyền thực hiện thao tác này.'
