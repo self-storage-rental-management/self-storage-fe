@@ -73,8 +73,6 @@ import {
 } from "../../domain/facilityRules"
 import { generateDefaultRentalPackages } from "../../domain/packageRules"
 import { resolveBusinessFacilityIds } from "../../domain/businessFacilityIds"
-import { UnitAllocationTable } from "./facility/UnitAllocationTable"
-import { AddUnitSpecModal } from "./facility/AddUnitSpecModal"
 import {
   FacilityGeneralInfo,
   FacilityOperations,
@@ -87,12 +85,14 @@ import type { CustomerUnitType } from "../../services/customerReservationApi"
 import { isApiAuthenticated, canApiActor } from "../../services/authApi"
 import { listNotifications, markNotificationRead, notifyBell, type ApiNotification } from "../../services/notificationApi"
 import {
+  type RentalPackagePolicyApi,
   createBusinessPackagePolicy,
   deactivateBusinessPackagePolicy,
   listBusinessPackagePolicies,
   updateBusinessPackagePolicy,
   publishBusinessPackagePolicy,
   inactiveBusinessPackagePolicy,
+  deleteAllBusinessPackagePolicies,
 } from "../../services/businessPolicyApi"
 
 const RUNTIME_REVENUE_DATA = DEMO_DATA_ENABLED ? REVENUE_DATA : []
@@ -1108,6 +1108,27 @@ export default function BusinessApp({
   }
 
   // ── QUẢN LÝ GÓI THUÊ & CHIẾT KHẤU KỲ HẠN ──
+  const [deleteAllPackagesModal, setDeleteAllPackagesModal] = useState(false)
+  const [isDeletingAllPackages, setIsDeletingAllPackages] = useState(false)
+
+  const handleDeleteAllDurationDiscounts = async () => {
+    setIsDeletingAllPackages(true)
+    try {
+      if (isApiAuthenticated()) {
+        await deleteAllBusinessPackagePolicies()
+      }
+      setDurationDiscounts([])
+      localStorage.removeItem("storagehub:durationDiscounts")
+      setDeleteAllPackagesModal(false)
+      showToast(lang === 'vi' ? 'Đã xóa toàn bộ gói thuê hiện có!' : 'All rental packages have been deleted!')
+      await reloadPackagePolicies()
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Không thể xóa các gói thuê.')
+    } finally {
+      setIsDeletingAllPackages(false)
+    }
+  }
+
   const [createDurationModal, setCreateDurationModal] = useState(false)
   const [formCreateDurationTitle, setFormCreateDurationTitle] = useState("")
   const [formCreateDurationLabel, setFormCreateDurationLabel] = useState("")
@@ -1199,21 +1220,26 @@ export default function BusinessApp({
         const rentalMonthsNumber = typeof validMonths === 'number' ? validMonths : 1
         const rentalYears = (rentalMonthsNumber % 12 === 0) ? rentalMonthsNumber / 12 : null
         const pubStatus = formCreateDurationStatus === 'active' ? 'PUBLISHED' : 'DRAFT'
-        const created = await Promise.all(targetFacilityIds.map(facilityId => createBusinessPackagePolicy({
-          facilityId,
-          code: `PKG-${validMonths}M-${Date.now().toString().slice(-6)}`,
-          name: title,
-          rentalMonths: rentalMonthsNumber,
-          rentalYears,
-          freeSetupDays: newPkg.freeSetupDays,
-          discountRate: newPkg.discountPercent / 100,
-          depositRate: (newPkg.depositPercent ?? 20) / 100,
-          policyVersion: `v${Date.now()}`,
-          publicationStatus: pubStatus,
-          active: pubStatus === 'PUBLISHED',
-          effectiveFrom,
-          effectiveTo: null,
-        })))
+        const packageCode = `PKG-${validMonths}M-${Date.now().toString().slice(-6)}`
+        const created: RentalPackagePolicyApi[] = []
+        for (const facilityId of targetFacilityIds) {
+          const policy = await createBusinessPackagePolicy({
+            facilityId,
+            code: packageCode,
+            name: title,
+            rentalMonths: rentalMonthsNumber,
+            rentalYears,
+            freeSetupDays: newPkg.freeSetupDays,
+            discountRate: newPkg.discountPercent / 100,
+            depositRate: (newPkg.depositPercent ?? 20) / 100,
+            policyVersion: `v${Date.now()}`,
+            publicationStatus: pubStatus,
+            active: pubStatus === 'PUBLISHED',
+            effectiveFrom,
+            effectiveTo: null,
+          })
+          created.push(policy)
+        }
         newPkg.facilityIds = targetFacilityIds
         newPkg.scopeType = 'specific'
         newPkg.rentalYears = rentalYears
@@ -1231,6 +1257,7 @@ export default function BusinessApp({
     if (!isApiAuthenticated()) localStorage.setItem("storagehub:durationDiscounts", JSON.stringify(next))
     setCreateDurationModal(false)
     showToast(lang === 'vi' ? `Đã tạo gói thuê "${newPkg.title}" thành công!` : `Created package "${newPkg.title}"!`)
+    await reloadPackagePolicies()
   }
 
   const handleOpenEditDuration = (item: DurationDiscountItem) => {
@@ -2575,15 +2602,7 @@ export default function BusinessApp({
 
     const totalCalculatedUnits = formFacUnitSpecs.reduce((sum, s) => sum + s.count, 0)
 
-    if (!isApiAuthenticated() && totalCalculatedUnits <= 0) {
-      showToast(
-        lang === "vi"
-          ? "Vui lòng chỉ định ít nhất 1 gian kho cho cơ sở!"
-          : "Please specify at least 1 storage unit!",
-      )
-
-      return
-    }
+    
 
     const unitDistribution: Record<string, number> = {}
     const newUnitPrices: Record<string, number> = {}
@@ -3131,15 +3150,7 @@ export default function BusinessApp({
 
     const totalCalculatedUnits = formFacUnitSpecs.reduce((sum, s) => sum + s.count, 0)
 
-    if (!isApiAuthenticated() && totalCalculatedUnits <= 0) {
-      showToast(
-        lang === "vi"
-          ? "Vui lòng chỉ định ít nhất 1 gian kho cho cơ sở!"
-          : "Please specify at least 1 storage unit!",
-      )
-
-      return
-    }
+    
 
     // Validation an toàn: Không cho phép giảm số lượng thấp hơn số gian kho đang được khách thuê (occupied)
     const facUnits = unitsList.filter(
@@ -3954,14 +3965,29 @@ export default function BusinessApp({
                 : "Configure rental duration tiers and automated discount rates for bookings and renewals"
             }
             action={
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleOpenCreateDuration}
-                className="flex items-center gap-1.5 shadow-sm"
-              >
-                {Icon.plus} {lang === "vi" ? "Thêm Gói Thuê Mới" : "Add Rental Package"}
-              </Button>
+              <div className="flex items-center gap-2">
+                {durationDiscounts.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setDeleteAllPackagesModal(true)}
+                    className="flex items-center gap-1.5 text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400 shadow-xs"
+                  >
+                    <svg className="w-4 h-4 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    <span>{lang === "vi" ? "Xóa Tất Cả Gói Thuê" : "Delete All Packages"}</span>
+                  </Button>
+                )}
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleOpenCreateDuration}
+                  className="flex items-center gap-1.5 shadow-sm"
+                >
+                  {Icon.plus} {lang === "vi" ? "Thêm Gói Thuê Mới" : "Add Rental Package"}
+                </Button>
+              </div>
             }
           />
 
@@ -4968,9 +4994,66 @@ export default function BusinessApp({
         </div>
       </Modal>
 
+      {/* ── MODAL: XÁC NHẬN XÓA TẤT CẢ GÓI THUÊ ── */}
+      <Modal
+        open={deleteAllPackagesModal}
+        size="md"
+        onClose={() => !isDeletingAllPackages && setDeleteAllPackagesModal(false)}
+        title={lang === "vi" ? "Xác nhận xóa tất cả gói thuê" : "Confirm Delete All Packages"}
+      >
+        <div className="space-y-4">
+          <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-900 text-sm leading-relaxed flex items-start gap-3">
+            <svg className="w-5 h-5 text-red-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div>
+              <p className="font-semibold text-red-950">
+                {lang === "vi" ? "Cảnh báo hành động xóa toàn bộ" : "Action Warning"}
+              </p>
+              <p className="mt-1 text-xs text-red-800">
+                {lang === "vi"
+                  ? `Bạn có chắc chắn muốn xóa toàn bộ ${durationDiscounts.length} gói thuê hiện có trên hệ thống? Hành động này sẽ xóa sạch cấu hình các gói thuê và không thể hoàn tác.`
+                  : `Are you sure you want to delete all ${durationDiscounts.length} existing rental packages? This action cannot be undone.`}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-stone-200">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDeleteAllPackagesModal(false)}
+              disabled={isDeletingAllPackages}
+            >
+              {lang === "vi" ? "Hủy" : "Cancel"}
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleDeleteAllDurationDiscounts}
+              disabled={isDeletingAllPackages}
+              className="bg-red-600 hover:bg-red-700 text-white shadow-sm flex items-center gap-2 border-transparent"
+            >
+              {isDeletingAllPackages ? (
+                <>
+                  <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                  </svg>
+                  <span>{lang === "vi" ? "Đang xóa..." : "Deleting..."}</span>
+                </>
+              ) : (
+                <span>{lang === "vi" ? "Xác nhận xóa tất cả" : "Confirm Delete All"}</span>
+              )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
       {/* ── MODAL: THÊM GÓI THUÊ MỚI ── */}
       <Modal
         open={createDurationModal}
+        size="2xl"
         onClose={() => setCreateDurationModal(false)}
         title={lang === "vi" ? "Thêm Gói Thuê Mới" : "Add New Rental Package"}
       >
@@ -5222,6 +5305,7 @@ export default function BusinessApp({
       {/* ── MODAL: CHỈNH SỬA GÓI THUÊ & MỨC GIẢM GIÁ KỲ HẠN ── */}
       <Modal
         open={editDurationModal}
+        size="2xl"
         onClose={() => setEditDurationModal(false)}
         title={
           selectedDurationItem
@@ -5596,15 +5680,7 @@ export default function BusinessApp({
                   lang={lang}
                 />
 
-                {!isApiAuthenticated() && <UnitAllocationTable
-                  specs={formFacUnitSpecs}
-                  onChangeSpecs={handleSyncUnitSpecs}
-                  isEditing={false}
-                  onOpenAddSpec={() => setShowAddUnitSpecModal(true)}
-                  lang={lang}
-                  onValidationChange={(_hasErrors, errors) => setCreateValidationErrors(errors)}
-                  highlightSpecCode={highlightSpecCode}
-                />}
+                
 
                 {/* Thông số vận hành */}
                 <FacilityOperations
@@ -5618,23 +5694,7 @@ export default function BusinessApp({
 
                 {/* Sticky footer */}
                 <div className="sticky -bottom-6 -mx-6 -mb-6 bg-white/95 backdrop-blur-xs px-6 py-3 border-t border-stone-200 flex flex-col sm:flex-row items-center justify-between gap-2.5 z-10">
-                  <div className="text-xs text-stone-500">
-                    {!isApiAuthenticated() && formFacUnits <= 0 ? (
-                      <span className="text-red-600 font-semibold flex items-center gap-1">
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
-                        Cần ít nhất 1 loại kho có số lượng &gt; 0
-                      </span>
-                    ) : !isApiAuthenticated() && createValidationErrors.length > 0 ? (
-                      <span className="text-red-600 font-semibold flex items-center gap-1">
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
-                        {createValidationErrors[0]}
-                      </span>
-                    ) : null}
-                  </div>
+                  <div className="text-xs text-stone-500" />
 
                   <div className="flex items-center gap-2 self-end sm:self-auto">
                     <Button
@@ -5650,9 +5710,7 @@ export default function BusinessApp({
                         !formFacName.trim() ||
                         !formFacCode.trim() ||
                         !formFacAddress.trim() ||
-                        (!isApiAuthenticated() && formFacUnits <= 0) ||
-                        (!isApiAuthenticated() && createValidationErrors.length > 0) ||
-                        facilitiesList.some(
+                                                facilitiesList.some(
                           (f) => (f.code || f.id).toUpperCase() === formFacCode.trim().toUpperCase()
                         )
                       }
@@ -5757,17 +5815,7 @@ export default function BusinessApp({
                         lang={lang}
                       />
 
-                      {!isApiAuthenticated() && <UnitAllocationTable
-                        specs={formFacUnitSpecs}
-                        onChangeSpecs={handleSyncUnitSpecs}
-                        isEditing={true}
-                        occupiedMap={occMap}
-                        initialSpecs={editInitialSpecs}
-                        onOpenAddSpec={() => setShowAddUnitSpecModal(true)}
-                        lang={lang}
-                        onValidationChange={(_hasErrors, errors) => setEditValidationErrors(errors)}
-                        highlightSpecCode={highlightSpecCode}
-                      />}
+                      
 
                       {/* Thông số vận hành */}
                       <FacilityOperations
@@ -5783,21 +5831,7 @@ export default function BusinessApp({
                       {/* Sticky footer */}
                       <div className="sticky -bottom-6 -mx-6 -mb-6 bg-white/95 backdrop-blur-xs px-6 py-3 border-t border-stone-200 flex flex-col sm:flex-row items-center justify-between gap-2.5 z-10">
                         <div className="text-xs text-stone-500">
-                          {!isApiAuthenticated() && formFacUnits <= 0 ? (
-                            <span className="text-red-600 font-semibold flex items-center gap-1">
-                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                              </svg>
-                              Cần ít nhất 1 loại kho có số lượng &gt; 0
-                            </span>
-                          ) : !isApiAuthenticated() && editValidationErrors.length > 0 ? (
-                            <span className="text-red-600 font-semibold flex items-center gap-1">
-                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                              </svg>
-                              {editValidationErrors[0]}
-                            </span>
-                          ) : !isEditDirty ? (
+                          {!isEditDirty ? (
                             <span className="text-stone-400 italic">
                               Chưa có thay đổi nào so với dữ liệu gốc
                             </span>
@@ -5825,9 +5859,7 @@ export default function BusinessApp({
                               !formFacName.trim() ||
                               !formFacCode.trim() ||
                               !formFacAddress.trim() ||
-                              (!isApiAuthenticated() && formFacUnits <= 0) ||
-                              hasDuplicateCode ||
-                              (!isApiAuthenticated() && editValidationErrors.length > 0)
+                              hasDuplicateCode
                             }
                             onClick={handleUpdateFacility}
                           >
@@ -5851,21 +5883,7 @@ export default function BusinessApp({
             </Modal>
 
             {/* Modal Thêm Loại Kho Mới Vào Cơ Sở */}
-            {!isApiAuthenticated() && <AddUnitSpecModal
-              open={showAddUnitSpecModal}
-              onClose={() => setShowAddUnitSpecModal(false)}
-              onConfirm={(newSpec) => {
-                handleSyncUnitSpecs([...formFacUnitSpecs, newSpec])
-                setHighlightSpecCode(newSpec.sizeCode)
-                showToast(
-                  lang === "vi"
-                    ? `Đã thêm loại kho "${newSpec.sizeCode}" (${newSpec.name}) vào cơ sở!`
-                    : `Added unit type "${newSpec.sizeCode}"!`,
-                )
-              }}
-              existingSpecs={formFacUnitSpecs}
-              lang={lang}
-            />}
+            
 
             {/* Modal Xác Nhận Rời Đi Khi Có Unsaved Changes */}
             {showConfirmCloseEdit && (

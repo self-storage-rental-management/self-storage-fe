@@ -170,7 +170,7 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 export function Input({ label, className = '', ...props }: InputProps) {
   return (
     <div className="space-y-1">
-      {label && <label className="block whitespace-nowrap text-sm font-medium text-stone-700">{label}</label>}
+      {label && <label className="block text-sm font-medium text-stone-700 leading-tight">{label}</label>}
       <LocalizedDateInput
         className={`w-full border border-stone-300 rounded-lg px-3 py-2 text-sm text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition ${className}`}
         {...props}
@@ -201,7 +201,7 @@ export function PasswordField({
 
   return (
     <div className="space-y-1">
-      {label && <label htmlFor={id} className="block whitespace-nowrap text-sm font-medium text-stone-700">{label}</label>}
+      {label && <label htmlFor={id} className="block text-sm font-medium text-stone-700 leading-tight">{label}</label>}
       <div className="relative">
         <input
           {...props}
@@ -249,7 +249,7 @@ export function Select({ label, children, className = '', value, onChange, disab
 }) {
   return (
     <div className="space-y-1">
-      {label && <label className="block whitespace-nowrap text-sm font-medium text-stone-700">{label}</label>}
+      {label && <label className="block text-sm font-medium text-stone-700 leading-tight">{label}</label>}
       <select
         className={`w-full border border-stone-300 rounded-lg px-3 py-2 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition bg-white ${className}`}
         value={value}
