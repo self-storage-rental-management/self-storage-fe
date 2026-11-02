@@ -326,16 +326,16 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
           <p className="text-xs leading-5 text-blue-800">Lịch nhận kho khách đặt: <b>{savedAppointmentAt ? formatCustomerDateTime(new Date(savedAppointmentAt)) : 'Chưa đặt lịch'}</b></p>
         </div>
       </div>
-        <div className="flex w-full min-w-0 flex-col items-stretch gap-3 md:w-72 md:shrink-0">
+        <div className="flex w-full min-w-0 flex-col items-end gap-2 md:w-64 md:shrink-0">
         <div className="text-right"><p className="text-xs text-stone-500">Tổng thu cả kỳ (gồm tiền cọc đảm bảo kho)</p><p className="text-xl font-bold text-stone-900">{(r.totalInitialObligation == null ? "Chưa xác định" : formatVnd(r.totalInitialObligation))}</p><p className="text-xs text-amber-800">Trả lúc giữ chỗ: {(r.reservationDepositAmount == null ? "Chưa xác định" : formatVnd(r.reservationDepositAmount))}</p></div>
         {r.status === 'AWAITING_EMAIL' && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-right text-xs text-amber-950"><p className="font-bold">Cần xác minh email</p><p className="mt-1">Thời gian giữ đơn còn lại</p><p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{countdown.text}</p><Button className="mt-2" size="sm" disabled={countdown.expired} onClick={onVerify}>Xác minh email</Button></div>}
         {r.status === 'AWAITING_REVIEW' && <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950"><p className="font-bold">Đang chờ nhân viên cơ sở duyệt hàng hóa</p><p className="mt-1">Thời gian giữ hồ sơ còn lại</p><p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{countdown.text}</p><p className="mt-1">Tối đa 24 giờ từ khi xác minh email.</p></div>}
         <CustomerReservationPayment reservation={r} facilityName={facilityName} unitTypeName={unitTypeName} paymentExpiresAt={detail?.paymentExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />
         {r.status === 'AWAITING_CUSTOMER_RECEIPT' && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-right text-xs text-amber-950"><p className="font-bold">Nhân viên đã hoàn tất bàn giao</p><p className="mt-1">Vui lòng xác nhận bạn đã nhận kho và mã ra vào.</p><Button type="button" className="mt-2" size="sm" disabled={confirmingReceipt} onClick={() => void confirmReceipt()}>{confirmingReceipt ? 'Đang xác nhận…' : 'Xác nhận đã nhận kho'}</Button></div>}
-        {documentAvailable && <Button variant="outline" size="sm" disabled={busy} onClick={() => void prepareBookingDocument()}>{busy ? 'Đang chuẩn bị…' : 'Xem phiếu giữ kho'}</Button>}
+        {documentAvailable && <Button variant="outline" size="sm" className="reservation-action reservation-action-document" disabled={busy} onClick={() => void prepareBookingDocument()}>{busy ? 'Đang chuẩn bị…' : 'Xem phiếu giữ kho'}</Button>}
         {handoverDocumentsAvailable && <Button variant="outline" size="sm" disabled={busy} onClick={() => void loadHandoverDocuments()}>{busy ? 'Đang tải…' : 'Xem hợp đồng đã ký'}</Button>}
         {['PAYMENT_GRACE', 'PAYMENT_REVIEW'].includes(r.status) && <CustomerPaymentComplaint reservation={r} complaintExpiresAt={detail?.complaintExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />}
-        {APPOINTMENT_EDITABLE_STATUSES.some(status => status === r.status) && <Button variant="ghost" size="sm" className="text-red-600 hover:bg-red-50 text-xs" onClick={() => setCancelConfirmOpen(true)}>Hủy giữ kho</Button>}
+        {APPOINTMENT_EDITABLE_STATUSES.some(status => status === r.status) && <Button variant="ghost" size="sm" className="reservation-action reservation-action-cancel" onClick={() => setCancelConfirmOpen(true)}>Hủy giữ kho</Button>}
       </div>
       </div>
       <section role="tabpanel" id={`reservation-info-${r.id}`} aria-labelledby={`reservation-info-tab-${r.id}`} hidden={activeSection !== 'information'} className="w-full min-w-0">
@@ -349,18 +349,6 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
             <div className="mt-2 space-y-1"><p><b>Địa chỉ:</b> {facilityDetails ? `${facilityDetails.address}, ${facilityDetails.city}` : 'Chưa cập nhật'}</p><p><b>Liên hệ:</b> {facilityDetails?.phone || 'Chưa cập nhật'}</p><p><b>Giờ hoạt động:</b> {facilityDetails?.accessHours || 'Chưa cập nhật'}</p>{unitTypeDetails && <><p><b>Kích thước kho:</b> {unitTypeDetails.lengthM} × {unitTypeDetails.widthM} × {unitTypeDetails.heightM} m · {unitTypeDetails.volumeM3} m³</p><p><b>Khung:</b> {unitTypeDetails.rackCount} khung · {unitTypeDetails.rackLengthM} × {unitTypeDetails.rackWidthM} × {unitTypeDetails.rackHeightM} m/khung</p><p><b>Tải trọng:</b> {unitTypeDetails.maxLoadKg.toLocaleString('vi-VN')} kg</p></>}{r.assignedUnitCode && <p><b>Gian kho đã phân:</b> {r.assignedUnitCode}{r.assignedUnitStatus ? ` (${r.assignedUnitStatus})` : ''}</p>}</div>
           </section>
         </div>
-        {APPOINTMENT_EDITABLE_STATUSES.some(status => status === r.status) && <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950">
-          <div className="grid w-full gap-3 sm:grid-cols-2">
-            <div><VietnameseDateInput value={appointmentInput.split('T')[0] || ''} min={policyDateTimeInput(appointmentWindow.availableAt).slice(0, 10)} max={policyDateTimeInput(appointmentWindow.deadlineAt).slice(0, 10)}
-              onChange={date => { setAppointmentInput(`${date}T${appointmentInput.split('T')[1] || '00:00'}`); setAppointmentErrors(current => ({ ...current, date: undefined })); setMessage(null) }} />
-              {appointmentErrors.date && <p className="mt-1 text-xs text-red-700">{appointmentErrors.date}</p>}</div>
-            <label className="block text-sm font-medium text-stone-700">Giờ nhận kho mong muốn<input aria-invalid={Boolean(appointmentErrors.time)} className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2.5 font-normal" type="time" step="60" value={appointmentInput.split('T')[1] || ''}
-              onChange={event => { setAppointmentInput(`${appointmentInput.split('T')[0] || ''}T${event.target.value}`); setAppointmentErrors(current => ({ ...current, time: undefined })); setMessage(null) }} />{appointmentErrors.time && <p className="mt-1 text-xs text-red-700">{appointmentErrors.time}</p>}</label>
-          </div>
-          <Button size="sm" disabled={!appointmentInput || busy} onClick={() => void saveAppointment()}>{busy ? 'Đang lưu…' : r.appointmentAt ? 'Đổi lịch nhận kho' : 'Lưu lịch nhận kho'}</Button>
-          <span className="basis-full text-[11px]">Bạn có thể nhận kho từ {formatPolicyDateTime(appointmentWindow.availableAt)} đến {formatPolicyDateTime(appointmentWindow.deadlineAt)}. Kỳ thuê có tính tiền bắt đầu sau số ngày setup miễn phí, tính từ ngày bàn giao thực tế. Trước bàn giao, ngày bắt đầu và kết thúc chỉ là dự kiến. Mọi thay đổi lịch sẽ được thông báo cho nhân viên tại cơ sở.</span>
-          {message && <p role="status" className="basis-full rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{message}</p>}
-        </div>}
         <div className="mt-3 space-y-4">
           <section className="rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-700">
             <div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="text-sm font-bold text-stone-900">Thông tin hàng hóa đã khai báo</h3></div>{r.status === 'READY_FOR_CHECKIN' && !r.setupGoodsRevisionUsedAt && !setupGoodsEditOpen && <Button type="button" variant="outline" size="sm" disabled={!goodsItems.length || busy} onClick={beginSetupGoodsEdit}>Sửa khai báo một lần</Button>}</div>
@@ -400,6 +388,19 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
 
 
         </div>
+        {APPOINTMENT_EDITABLE_STATUSES.some(status => status === r.status) && <div className="mt-4 flex flex-wrap items-end gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950">
+          <h3 className="w-full text-sm font-bold">Lịch nhận kho</h3>
+          <div className="grid w-full gap-3 sm:grid-cols-2">
+            <div><VietnameseDateInput value={appointmentInput.split('T')[0] || ''} min={policyDateTimeInput(appointmentWindow.availableAt).slice(0, 10)} max={policyDateTimeInput(appointmentWindow.deadlineAt).slice(0, 10)}
+              onChange={date => { setAppointmentInput(`${date}T${appointmentInput.split('T')[1] || '00:00'}`); setAppointmentErrors(current => ({ ...current, date: undefined })); setMessage(null) }} />
+              {appointmentErrors.date && <p className="mt-1 text-xs text-red-700">{appointmentErrors.date}</p>}</div>
+            <label className="block text-sm font-medium text-stone-700">Giờ nhận kho mong muốn<input aria-invalid={Boolean(appointmentErrors.time)} className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2.5 font-normal" type="time" step="60" value={appointmentInput.split('T')[1] || ''}
+              onChange={event => { setAppointmentInput(`${appointmentInput.split('T')[0] || ''}T${event.target.value}`); setAppointmentErrors(current => ({ ...current, time: undefined })); setMessage(null) }} />{appointmentErrors.time && <p className="mt-1 text-xs text-red-700">{appointmentErrors.time}</p>}</label>
+          </div>
+          <Button size="sm" disabled={!appointmentInput || busy} onClick={() => void saveAppointment()}>{busy ? 'Đang lưu…' : r.appointmentAt ? 'Đổi lịch nhận kho' : 'Lưu lịch nhận kho'}</Button>
+          <span className="basis-full text-[11px]">Bạn có thể nhận kho từ {formatPolicyDateTime(appointmentWindow.availableAt)} đến {formatPolicyDateTime(appointmentWindow.deadlineAt)}. Kỳ thuê có tính tiền bắt đầu sau số ngày setup miễn phí, tính từ ngày bàn giao thực tế. Trước bàn giao, ngày bắt đầu và kết thúc chỉ là dự kiến. Mọi thay đổi lịch sẽ được thông báo cho nhân viên tại cơ sở.</span>
+          {message && <p role="status" className="basis-full rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{message}</p>}
+        </div>}
         {progress !== null && <div className="mt-4 border-t border-stone-200 pt-4">
           <div className="mb-3 flex flex-wrap items-start justify-between gap-2"><div><p className="text-xs font-bold text-black">Tiến trình đơn đặt kho</p><p className="mt-0.5 text-[11px] text-stone-500">Đã hoàn thành {progress}/{steps.length} bước</p></div>{steps[progress] && <span className="rounded-full bg-amber-100 px-3 py-1 text-[11px] font-bold text-amber-900 ring-1 ring-amber-300">Đang thực hiện: {steps[progress].label}</span>}</div>
           <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">{steps.map((step, index) => {
