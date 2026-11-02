@@ -170,7 +170,7 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
       </div>
     </Modal>
     <Modal size="3xl" open={receiptOpen} onClose={() => setReceiptOpen(false)} title={payment && bookingDepositAccepted(payment) ? 'Biên lai thanh toán' : 'Chi tiết giao dịch'}>
-      {payment && <div className="grid items-start gap-5 lg:grid-cols-2"><ReservationReceipt payment={payment} reservationCode={reservation.reservationCode} /><ReservationQuoteSummary quote={{ ...snapshot, facilityName, unitTypeName }} needsReview={false} context="reservation" /></div>}
+      {payment && <div className="w-full min-w-0"><ReservationReceipt payment={payment} reservationCode={reservation.reservationCode} /></div>}
     </Modal>
     <Modal open={returnFailure !== null} onClose={() => setReturnFailure(null)} title="Kết quả thanh toán VNPay">
       <div className="space-y-4">
