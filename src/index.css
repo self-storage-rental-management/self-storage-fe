@@ -592,3 +592,8 @@ main textarea:focus) {
 .reservation-action.reservation-action-document:hover { border-color: #1e40af; background: #1e40af; }
 .reservation-action.reservation-action-cancel { border: 1px solid #b91c1c; background: #b91c1c; color: #ffffff; }
 .reservation-action.reservation-action-cancel:hover { border-color: #991b1b; background: #991b1b; }
+
+/* Customer navigation keeps its content at the final width from the first frame. */
+.customer-role-layout [data-layout-scroll-container] { scrollbar-gutter: stable; }
+.customer-role-layout [data-layout-scroll-container].fade-in,
+.customer-role-layout .customer-page .fade-in { animation: none; }
