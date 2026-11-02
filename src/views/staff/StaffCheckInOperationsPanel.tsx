@@ -123,6 +123,8 @@ function ComparisonBadge({ matches }: { matches: boolean | null }) {
   )
 }
 
+const MAX_UPLOAD_FILE_SIZE_BYTES = 25 * 1024 * 1024
+
 type MeasurementComparisonKey = "packageCount" | "weight" | "volume" | "dimensions"
 
 const emptyMeasurementChecks = (): Record<MeasurementComparisonKey, boolean> => ({
@@ -1156,7 +1158,18 @@ export default function StaffCheckInOperationsPanel({
                   </div>
                 ) : (
                   <>
-                    <label className="block text-sm font-medium text-stone-700">Hợp đồng đã ký (PDF hoặc ảnh) *<input disabled={submitting || isReviewingCompletedStep} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => { setContractFile(event.target.files?.[0] || null); setConfirmedSetupTerms(null) }} /></label>
+                    <label className="block text-sm font-medium text-stone-700">Hợp đồng đã ký (PDF hoặc ảnh, tối đa 25MB) *<input disabled={submitting || isReviewingCompletedStep} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => {
+                      const selected = event.target.files?.[0] || null
+                      if (selected && selected.size > MAX_UPLOAD_FILE_SIZE_BYTES) {
+                        setError(`Tệp hợp đồng "${selected.name}" vượt quá dung lượng tối đa 25MB (${(selected.size / (1024 * 1024)).toFixed(1)}MB). Vui lòng chọn tệp nhỏ hơn.`)
+                        event.target.value = ""
+                        setContractFile(null)
+                        return
+                      }
+                      setError(null)
+                      setContractFile(selected)
+                      setConfirmedSetupTerms(null)
+                    }} /></label>
                     <FilePreviewList files={contractFile ? [contractFile] : []} onRemove={() => { setContractFile(null); setConfirmedSetupTerms(null) }} disabled={submitting || isReviewingCompletedStep} />
                     {setupTermsKey && <label className="flex items-start gap-2 text-sm text-blue-950">
                       <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-amber-600" checked={confirmedSetupTerms === setupTermsKey} disabled={submitting || isReviewingCompletedStep || !contractFile || handoverTarget.setupEarlyExitFee == null} onChange={event => setConfirmedSetupTerms(event.target.checked ? setupTermsKey : null)} />
@@ -1174,7 +1187,17 @@ export default function StaffCheckInOperationsPanel({
                 {(handoverTarget.dueAtCheckIn ?? 0) > 0 && !isReviewingCompletedStep ? (
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Select label="Phương thức thanh toán" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}><option value="CASH">Tiền mặt</option><option value="BANK_TRANSFER">Chuyển khoản</option></Select>
-                    <label className="block text-sm font-medium">Biên lai / bằng chứng giao dịch *<input className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => setPaymentEvidenceFile(event.target.files?.[0] || null)} /></label>
+                    <label className="block text-sm font-medium">Biên lai / bằng chứng giao dịch (tối đa 25MB) *<input className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => {
+                      const selected = event.target.files?.[0] || null
+                      if (selected && selected.size > MAX_UPLOAD_FILE_SIZE_BYTES) {
+                        setError(`Biên lai "${selected.name}" vượt quá dung lượng tối đa 25MB (${(selected.size / (1024 * 1024)).toFixed(1)}MB). Vui lòng chọn tệp nhỏ hơn.`)
+                        event.target.value = ""
+                        setPaymentEvidenceFile(null)
+                        return
+                      }
+                      setError(null)
+                      setPaymentEvidenceFile(selected)
+                    }} /></label>
                   </div>
                 ) : <p className="text-sm">{isReviewingCompletedStep ? `Đã ghi nhận lúc ${formatStaffDateTime(handoverTarget.paymentCollectedAt)}.` : "Đơn không còn khoản phải thu. Xác nhận để chuyển sang bước setup."}</p>}
                 {!isReviewingCompletedStep && <FilePreviewList files={paymentEvidenceFile ? [paymentEvidenceFile] : []} onRemove={() => setPaymentEvidenceFile(null)} disabled={submitting} />}
@@ -1225,7 +1248,17 @@ export default function StaffCheckInOperationsPanel({
                 {measurementVariance && <div className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm"><label className="flex gap-2"><input type="checkbox" disabled={isReviewingCompletedStep} checked={varianceAccepted} onChange={(event) => setVarianceAccepted(event.target.checked)} />Đã trao đổi với khách và chấp nhận chênh lệch *</label><Input label="Lý do chênh lệch *" disabled={isReviewingCompletedStep} value={varianceReason} onChange={(event) => setVarianceReason(event.target.value)} /></div>}
                 <div className="grid gap-3 sm:grid-cols-2"><Input label="Loại hàng *" disabled={isReviewingCompletedStep} value={goodsCategory} onChange={(event) => setGoodsCategory(event.target.value)} /><Input label="Hiện trạng gian kho *" disabled={isReviewingCompletedStep} value={initialCondition} onChange={(event) => setInitialCondition(event.target.value)} /><Input label="Tình trạng hàng hóa *" disabled={isReviewingCompletedStep} value={goodsCondition} onChange={(event) => setGoodsCondition(event.target.value)} /><Input label="Ghi chú kiểm kê" disabled={isReviewingCompletedStep} value={handoverNotes} onChange={(event) => setHandoverNotes(event.target.value)} /></div>
                 <label className="flex items-center gap-2 text-sm"><input type="checkbox" disabled={isReviewingCompletedStep} checked={checklist.conditionRecorded} onChange={(event) => setChecklist((value) => ({ ...value, conditionRecorded: event.target.checked }))} />Đã ghi nhận hiện trạng gian kho và hàng hóa *</label>
-                {!isReviewingCompletedStep && <><label className="block text-sm font-medium">Ảnh/PDF kiểm kê sau setup *<input className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2" type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => setEvidenceFiles(Array.from(event.target.files || []))} /></label><FilePreviewList files={evidenceFiles} onRemove={(index) => setEvidenceFiles((files) => files.filter((_, current) => current !== index))} disabled={submitting} /></>}
+                {!isReviewingCompletedStep && <><label className="block text-sm font-medium">Ảnh/PDF kiểm kê sau setup (tối đa 25MB/tệp) *<input className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2" type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => {
+                    const selected = Array.from(event.target.files || [])
+                    const tooBig = selected.find(f => f.size > MAX_UPLOAD_FILE_SIZE_BYTES)
+                    if (tooBig) {
+                      setError(`Tệp "${tooBig.name}" vượt quá dung lượng tối đa 25MB (${(tooBig.size / (1024 * 1024)).toFixed(1)}MB). Vui lòng chọn tệp nhỏ hơn.`)
+                      event.target.value = ""
+                      return
+                    }
+                    setError(null)
+                    setEvidenceFiles(selected)
+                  }} /></label><FilePreviewList files={evidenceFiles} onRemove={(index) => setEvidenceFiles((files) => files.filter((_, current) => current !== index))} disabled={submitting} /></>}
                 {isReviewingCompletedStep && handoverTarget.handover?.evidenceReferences.length ? <p className="text-xs text-stone-600">Đã lưu {handoverTarget.handover.evidenceReferences.length} tệp bằng chứng kiểm kê trong biên bản.</p> : null}
               </div>
             )}

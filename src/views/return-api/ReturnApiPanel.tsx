@@ -276,10 +276,17 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
     }
     const evidencePhotos: string[] = []
     for (const file of evidenceFiles) {
-      const asset = await uploadReturnEvidence(id, file)
+      const asset = await uploadReturnEvidence(id, file, role)
       evidencePhotos.push(asset.id)
     }
-    return inspectReturn(id, { ...fees, inventoryMatch: inventory, damageClassification: damage, staffNotes: note, evidencePhotos, ...returned, proposedUnitStatus: unit, unitVacated })
+    const safeFees: ReturnFees = {
+      damageFee: Number.isFinite(fees.damageFee) && fees.damageFee >= 0 ? fees.damageFee : 0,
+      cleaningFee: Number.isFinite(fees.cleaningFee) && fees.cleaningFee >= 0 ? fees.cleaningFee : 0,
+      lostItemFee: Number.isFinite(fees.lostItemFee) && fees.lostItemFee >= 0 ? fees.lostItemFee : 0,
+      overdueFee: Number.isFinite(fees.overdueFee) && fees.overdueFee >= 0 ? fees.overdueFee : 0,
+      outstandingFee: Number.isFinite(fees.outstandingFee) && fees.outstandingFee >= 0 ? fees.outstandingFee : 0,
+    }
+    return inspectReturn(id, { ...safeFees, inventoryMatch: inventory, damageClassification: damage, staffNotes: note, evidencePhotos, ...returned, proposedUnitStatus: unit, unitVacated })
   }
 
   return (
@@ -340,7 +347,31 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
             Bạn có thể duyệt cho khách trả kho ngay lập tức mà không cần qua nhiều bước nghiệm thu.
           </p>
           <div className="flex gap-2">
-            <Button size="sm" variant="primary" disabled={busy} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer" onClick={() => void run(() => Promise.reject(new Error('Cần hoàn tất nghiệm thu, xử lý khiếu nại và xác nhận quyết toán trước. Chỉ ghi nhận thu/hoàn tiền tại form có biên lai khi hồ sơ đủ điều kiện.')))}>
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={busy}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer"
+              onClick={() => void run(async () => {
+                await inspectReturn(id, {
+                  damageFee: 0,
+                  cleaningFee: 0,
+                  lostItemFee: 0,
+                  overdueFee: 0,
+                  outstandingFee: 0,
+                  inventoryMatch: 'match',
+                  damageClassification: 'no_damage',
+                  staffNotes: note.trim() || 'Nghiệm thu và cho trả kho nhanh tại quầy (không phát sinh hư hại)',
+                  evidencePhotos: [],
+                  returnedKey: true,
+                  returnedCard: true,
+                  returnedLock: true,
+                  proposedUnitStatus: 'available',
+                  unitVacated: true,
+                })
+                return confirmReturn(id, 'accepted', 'Nhân viên xác nhận quyết toán trả kho nhanh tại quầy', role)
+              })}
+            >
               ⚡ Cho trả kho ngay (Đóng hồ sơ & giải phóng gian)
             </Button>
           </div>
@@ -356,7 +387,13 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
             Biên bản nghiệm thu đã lập. Bạn có thể xác nhận cho phép trả kho và hoàn tất hồ sơ ngay mà không cần đợi thêm.
           </p>
           <div className="flex gap-2">
-            <Button size="sm" variant="primary" disabled={busy} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer" onClick={() => void run(() => Promise.reject(new Error('Cần hoàn tất nghiệm thu, xử lý khiếu nại và xác nhận quyết toán trước. Chỉ ghi nhận thu/hoàn tiền tại form có biên lai khi hồ sơ đủ điều kiện.')))}>
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={busy}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer"
+              onClick={() => void run(() => confirmReturn(id, 'accepted', note.trim() || 'Nhân viên hỗ trợ xác nhận quyết toán trực tiếp tại quầy', role))}
+            >
               ✓ Xác nhận hoàn tất trả kho ngay
             </Button>
           </div>
@@ -372,7 +409,21 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
             Ý kiến khách: {record.customerDecisionNote || 'Cần xem xét lại'}. Bạn có thể bỏ qua khiếu nại và duyệt cho trả kho ngay.
           </p>
           <div className="flex gap-2">
-            <Button size="sm" variant="primary" disabled={busy} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer" onClick={() => void run(() => Promise.reject(new Error('Cần hoàn tất nghiệm thu, xử lý khiếu nại và xác nhận quyết toán trước. Chỉ ghi nhận thu/hoàn tiền tại form có biên lai khi hồ sơ đủ điều kiện.')))}>
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={busy}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer"
+              onClick={() => void run(() => reviewDispute(id, {
+                damageFee: 0,
+                cleaningFee: 0,
+                lostItemFee: 0,
+                overdueFee: 0,
+                outstandingFee: 0,
+                resolutionNote: note.trim() || 'Nhân viên duyệt bỏ qua khiếu nại và cho trả kho ngay',
+                proposedUnitStatus: 'available',
+              }))}
+            >
               ✓ Duyệt trả kho & Hoàn tất ngay
             </Button>
           </div>
