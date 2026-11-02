@@ -363,10 +363,32 @@ export async function decideLegacyPricing(id: string, body: {
     body: JSON.stringify({ ...body, resolutionNote: body.resolutionNote.trim() }),
   }), 'business', id, undefined, 'MANAGE')
 }
-export function confirmReturn(id: string, decision: 'accepted' | 'disputed', note: string) {
+export function confirmReturn(id: string, decision: 'accepted' | 'disputed', note: string, role: ReturnRole = 'customer') {
   if (decision === 'disputed' && !note.trim()) throw new Error('Nhập lý do yêu cầu xem xét lại.')
   if (note.length > 2000) throw new Error('Ghi chú quá dài.')
-  return mutate('customer', id, 'confirm', { decision, note })
+  return mutate(role, id, 'confirm', { decision, note })
+}
+export async function fastApproveReturn(id: string, role: ReturnRole = 'staff') {
+  const current = await getReturn(role, id)
+  if (['requested', 'scheduled'].includes(current.status)) {
+    await inspectReturn(id, {
+      damageFee: 0,
+      cleaningFee: 0,
+      lostItemFee: 0,
+      overdueFee: 0,
+      outstandingFee: 0,
+      inventoryMatch: 'match',
+      damageClassification: 'no_damage',
+      staffNotes: 'Nghiệm thu và cho trả kho nhanh tại quầy - Không phát sinh hư hại',
+      evidencePhotos: [],
+      returnedKey: true,
+      returnedCard: true,
+      returnedLock: true,
+      proposedUnitStatus: 'available',
+      unitVacated: true,
+    })
+  }
+  return confirmReturn(id, 'accepted', 'Nhân viên xác nhận quyết toán trả kho nhanh trực tiếp tại quầy', role)
 }
 export function paySettlement(id: string, paymentMethod: string, notes = '') {
   if (!paymentMethod.trim() || paymentMethod.length > 40) throw new Error('Nhập phương thức thanh toán hợp lệ.')

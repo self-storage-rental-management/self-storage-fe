@@ -357,6 +357,12 @@ export async function rejectCheckIn(
 }
 
 export async function uploadCheckInEvidence(checkInId: string, file: File) {
+  if (file.size > 25 * 1024 * 1024) {
+    throw new ApiClientError(
+      "Tệp vượt quá dung lượng tối đa 25MB. Vui lòng chọn tệp nhỏ hơn.",
+      { code: 'FILE_TOO_LARGE', status: 413 }
+    )
+  }
   const form = new FormData()
   form.set('file', file)
   form.set('entityType', 'CHECK_IN')

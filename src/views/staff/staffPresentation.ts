@@ -130,6 +130,10 @@ export function staffErrorMessage(error: unknown, fallback: string) {
 
   if (code === "TIMEOUT")
     return "Hệ thống phản hồi quá lâu. Vui lòng thử lại sau ít phút."
+  if (code === "FILE_TOO_LARGE")
+    return typeof (candidate as { message?: unknown }).message === "string"
+      ? String((candidate as { message?: unknown }).message)
+      : "Tệp tải lên vượt quá dung lượng cho phép (tối đa 25MB)."
   if (code === "NETWORK_ERROR")
     return "Không thể kết nối đến hệ thống. Vui lòng kiểm tra mạng và thử lại."
   if (status === 401)
