@@ -44,6 +44,31 @@ function ReceiptForm({ role = 'staff', embedded = false, record, view, busy, onC
   const [confirmed, setConfirmed] = useState(false)
   const [validation, setValidation] = useState('')
   useEffect(() => () => listener.current(false), [])
+
+  const handleReferenceChange = (val: string) => {
+    setReference(val)
+    if (command.conflict || command.error) {
+      command.clear()
+      setValidation('')
+    }
+  }
+
+  const handleMethodChange = (val: typeof method) => {
+    setMethod(val)
+    if (command.conflict || command.error) {
+      command.clear()
+      setValidation('')
+    }
+  }
+
+  const handleFilesChange = (newFiles: string[]) => {
+    setFiles(newFiles)
+    if (command.conflict || command.error) {
+      command.clear()
+      setValidation('')
+    }
+  }
+
   const allowed = actor?.status === 'ACTIVE' && actor.roles.some(r => ['STAFF', 'MANAGER', 'BUSINESS', 'ADMIN'].includes(r))
     && actor.permissions.includes(record.status === 'refund_pending' && !view ? 'refunds:execute' : 'payments:collect')
     && (actor.roles.includes('ADMIN') || actor.roles.includes('BUSINESS') && !Object.keys(actor.facilityScopes).length || (role === 'staff' ? ['OPERATE', 'MANAGE'].includes(actor.facilityScopes[record.facilityId]) : actor.facilityScopes[record.facilityId] === 'MANAGE'))
@@ -72,19 +97,59 @@ function ReceiptForm({ role = 'staff', embedded = false, record, view, busy, onC
   }
   return <form className={embedded ? 'space-y-2' : 'space-y-2 rounded border border-amber-200 bg-amber-50 p-3'} onSubmit={event => { event.preventDefault(); submit() }}>
     {!embedded && <h5 className="font-semibold">{record.status === 'payment_due' ? (view ? 'Thu tiền quyết toán thu hồi' : 'Thu tiền quyết toán trả kho') : (view ? 'Hoàn tiền quyết toán thu hồi' : 'Hoàn tiền quyết toán trả kho')}</h5>}
-    <fieldset disabled={frozen || !allowed || command.conflict} className="space-y-2">
+    <fieldset disabled={frozen || !allowed} className="space-y-2">
       {!view && <label className="block">Số tiền theo bảng kê (VND)<input readOnly className="block w-full rounded border p-2" value={(record.status === 'payment_due' ? record.amountDueFromCustomer : record.netRefundAmount)?.toLocaleString('vi-VN') ?? 'Chưa xác định'} /></label>}
-      <label className="block">Phương thức thanh toán<select className="block w-full rounded border p-2" value={method} onChange={event => setMethod(event.target.value as typeof method)}><option value="BANK_TRANSFER">Chuyển khoản</option><option value="CASH">Tiền mặt</option></select></label>
-      <label className="block">Mã giao dịch hoặc biên nhận<input className="block w-full rounded border p-2" required maxLength={64} value={reference} onChange={event => setReference(event.target.value)} /></label>
-      <EvidenceUpload entityType={view ? 'DUONG_RECOVERY_SETTLEMENT' : 'RETURN_CASE'} entityId={view ? record.recoveryTaskId! : record.id} label="Biên lai quyết toán" limit={1} value={files} onChange={setFiles}
+      <label className="block">Phương thức thanh toán<select className="block w-full rounded border p-2" value={method} onChange={event => handleMethodChange(event.target.value as typeof method)}><option value="BANK_TRANSFER">Chuyển khoản</option><option value="CASH">Tiền mặt</option></select></label>
+      <label className="block">Mã giao dịch hoặc biên nhận<input className="block w-full rounded border p-2" required maxLength={64} value={reference} onChange={event => handleReferenceChange(event.target.value)} /></label>
+      <EvidenceUpload entityType={view ? 'DUONG_RECOVERY_SETTLEMENT' : 'RETURN_CASE'} entityId={view ? record.recoveryTaskId! : record.id} label="Biên lai quyết toán" limit={1} value={files} onChange={handleFilesChange}
         upload={view ? undefined : file => uploadReturnEvidence(record.id, file, role)}
-        disabled={frozen || !allowed || command.conflict} onBusy={value => { uploadLock.current = value; setUploading(value); listener.current(value || command.isLocked()) }} />
+        disabled={frozen || !allowed} onBusy={value => { uploadLock.current = value; setUploading(value); listener.current(value || command.isLocked()) }} />
       <label className="block"><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} /> Tôi xác nhận đã thực thu hoặc thực hoàn đúng số tiền quyết toán, kèm biên lai đã đối chiếu.</label>
     </fieldset>
-    {validation && <p role="alert">{validation}</p>}
-    {!!command.error && <p role="alert">{view ? recoveryOperationError(command.error) : returnError(command.error)}</p>}
-    {command.conflict
-      ? <Button type="button" disabled={busy || uploading} onClick={() => { refresh(); onChanged() }}>Tải lại dữ liệu</Button>
-      : <Button type="submit" disabled={!allowed || busy || uploading || command.busy || (!command.uncertain && (!reference.trim() || !files.length || !confirmed))}>{command.busy ? 'Đang lưu...' : command.uncertain ? 'Gửi lại cùng yêu cầu' : record.status === 'payment_due' ? 'Xác nhận đã thu tiền' : 'Xác nhận đã hoàn tiền'}</Button>}
+    {validation && <p role="alert" className="text-sm text-red-600 font-medium">{validation}</p>}
+    {!!command.error && <p role="alert" className="text-sm text-red-600 font-medium">{view ? recoveryOperationError(command.error) : returnError(command.error)}</p>}
+    {command.conflict ? (
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          disabled={busy || uploading}
+          onClick={() => command.clear()}
+        >
+          Sửa thông tin / Thử lại
+        </Button>
+        <Button
+          type="button"
+          disabled={busy || uploading}
+          onClick={() => {
+            command.clear()
+            refresh()
+            onChanged()
+          }}
+        >
+          Tải lại dữ liệu
+        </Button>
+      </div>
+    ) : (
+      <Button
+        type="submit"
+        disabled={
+          !allowed ||
+          busy ||
+          uploading ||
+          command.busy ||
+          (!command.uncertain &&
+            (!reference.trim() || !files.length || !confirmed))
+        }
+      >
+        {command.busy
+          ? 'Đang lưu...'
+          : command.uncertain
+            ? 'Gửi lại cùng yêu cầu'
+            : record.status === 'payment_due'
+              ? 'Xác nhận đã thu tiền'
+              : 'Xác nhận đã hoàn tiền'}
+      </Button>
+    )}
   </form>
 }

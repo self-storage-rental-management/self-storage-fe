@@ -4971,6 +4971,7 @@ export default function BusinessApp({
       {/* ── MODAL: THÊM GÓI THUÊ MỚI ── */}
       <Modal
         open={createDurationModal}
+        size="2xl"
         onClose={() => setCreateDurationModal(false)}
         title={lang === "vi" ? "Thêm Gói Thuê Mới" : "Add New Rental Package"}
       >
@@ -5222,6 +5223,7 @@ export default function BusinessApp({
       {/* ── MODAL: CHỈNH SỬA GÓI THUÊ & MỨC GIẢM GIÁ KỲ HẠN ── */}
       <Modal
         open={editDurationModal}
+        size="2xl"
         onClose={() => setEditDurationModal(false)}
         title={
           selectedDurationItem
