@@ -1,5 +1,5 @@
 import { useManagerPresentation } from "../manager/managerPresentation"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import RenewalRiskNotice from "./RenewalRiskNotice"
 import RentalHandoverFiles from "./RentalHandoverFiles"
 import { Badge, Button, Card, Modal } from "../../components/ui"
@@ -7,8 +7,43 @@ import BookingTransactionReceipt from "./BookingTransactionReceipt"
 import type { RentalApiDetail, RentalApiRole } from "../../types/rentalApi"
 import { bookingPaymentPurposes, bookingPaymentStatuses } from "../../services/rentalBookingEvidence"
 import { rentalLabels, rentalMoney, unknown, rentalDataWarning, rentalPeriodText, rentalDate, accessStatusLabels } from "./presentation"
+import { downloadCheckInEvidence } from "../../services/checkInApi"
+import FilePreviewDialog from "../../components/FilePreviewDialog"
+import { vietnamDateInput } from "../../utils/vietnamTime"
 const labelClass = "text-xs font-normal text-slate-500"
 const valueClass = "mt-1 text-sm font-medium text-slate-900"
+
+function GoodsImage({ image }: { image: { id: string; originalName: string; contentType: string; sizeBytes: number } }) {
+  const [url, setUrl] = useState<string>()
+  const [preview, setPreview] = useState(false)
+  const [error, setError] = useState(false)
+  useEffect(() => {
+    let active = true
+    let objectUrl: string | undefined
+    void downloadCheckInEvidence(image.id).then(downloaded => {
+      if (!active) return
+      objectUrl = URL.createObjectURL(downloaded.blob)
+      setUrl(objectUrl)
+    }).catch(() => { if (active) setError(true) })
+    return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl) }
+  }, [image.id])
+  const open = async () => {
+    if (url) { setPreview(true); return }
+    try {
+      const downloaded = await downloadCheckInEvidence(image.id)
+      const next = URL.createObjectURL(downloaded.blob)
+      setUrl(current => { if (current) URL.revokeObjectURL(current); return next })
+      setPreview(true)
+    } catch { setError(true) }
+  }
+  return <div className="space-y-1">
+    <button type="button" className="block overflow-hidden rounded-lg border border-stone-200 bg-stone-50" onClick={() => void open()} title="Xem ảnh">
+      {url ? <img src={url} alt={image.originalName} className="h-24 w-24 object-cover" /> : <span className="flex h-24 w-24 items-center justify-center px-2 text-center text-[11px] text-stone-500">Xem ảnh</span>}
+    </button>
+    {error && <p className="text-[11px] text-red-700">Không thể tải ảnh</p>}
+    {preview && url && <FilePreviewDialog file={{ url, type: image.contentType, name: image.originalName }} onClose={() => setPreview(false)} />}
+  </div>
+}
 export default function RentalDetail({
   rental,
   onRequest,
@@ -87,11 +122,13 @@ export default function RentalDetail({
           </div>
           {rental.setupStartedAt && rental.setupEndsAt && <div>
             <dt>Setup miễn phí</dt>
-            <dd>
-              <p>Bắt đầu bàn giao: {rentalDate(rental.setupStartedAt)}</p>
-              <p>Setup đến hết: {rentalDate(new Date(new Date(rental.setupEndsAt).getTime() - 86_400_000).toISOString())}</p>
-              <p>Thời hạn thuê tính từ: {rentalDate(rental.startDate)}</p>
-              {rental.moveInCompletedAt && <p className="text-xs text-stone-500">Khách báo setup xong lúc: {rentalDate(rental.moveInCompletedAt)}</p>}
+            <dd className="space-y-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-lg border border-stone-200 bg-stone-50 p-3"><p className="text-xs text-stone-500">Bàn giao thực tế</p><p className="mt-1 font-semibold">{rentalDate(vietnamDateInput(rental.setupStartedAt))}</p><p className="mt-1 text-xs text-stone-500">{new Date(rental.setupStartedAt).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })}</p></div>
+                <div className="rounded-lg border border-stone-200 bg-stone-50 p-3"><p className="text-xs text-stone-500">Ngày cuối setup miễn phí</p><p className="mt-1 font-semibold">{rentalDate(vietnamDateInput(new Date(new Date(rental.setupEndsAt).getTime() - 1)))}</p></div>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3"><span className="text-sm text-emerald-800">Bắt đầu kỳ thuê có tính tiền</span><span className="font-bold text-emerald-900">{rentalDate(rental.startDate)}</span></div>
+              {rental.moveInCompletedAt && <p className="border-t border-stone-100 pt-3 text-xs text-stone-500">Đã báo hoàn tất setup lúc {new Date(rental.moveInCompletedAt).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })} ngày {rentalDate(vietnamDateInput(rental.moveInCompletedAt))}</p>}
             </dd>
           </div>}
           {rental.inventoryPending && <div>
@@ -134,24 +171,47 @@ export default function RentalDetail({
           )}
         </div>
       )}
+      {evidence && evidence.customer && <Card className="rounded-xl p-5">
+        <h3 className="mb-4 border-b border-stone-200 pb-3 text-base font-bold">Thông tin khách hàng</h3>
+        <dl className="grid gap-4 sm:grid-cols-2">
+          {[['Họ và tên', evidence.customer.fullName], ['Email', evidence.customer.email], ['Số điện thoại', evidence.customer.phone || 'Chưa cập nhật'], ['Địa chỉ', evidence.customer.address || 'Chưa cập nhật'], ['CCCD hoặc hộ chiếu', evidence.customer.identityDocumentNumber || 'Chưa cập nhật']].map(([label, value]) => <div key={label}><dt className="text-xs text-stone-500">{label}</dt><dd className="mt-1 font-semibold text-stone-900">{value}</dd></div>)}
+        </dl>
+      </Card>}
+      {evidence && <Card className="rounded-xl p-5">
+        <h3 className="mb-4 border-b border-stone-200 pb-3 text-base font-bold">Hàng hóa khai báo</h3>
+        {!(evidence.goodsItems ?? []).length ? <p className="text-sm text-stone-500">Chưa có hàng hóa được khai báo.</p> : <div className="space-y-3">{(evidence.goodsItems ?? []).map(item => <article key={item.id} className="rounded-xl border border-stone-200 bg-stone-50 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-bold text-stone-900">{item.customGoodsName || item.categoryName || item.goodsCode}</p><p className="mt-1 text-sm text-stone-600">Vật liệu: {item.materialName || 'Chưa xác định'} · Số lượng: {item.quantity}</p></div><Badge variant={item.fragile ? 'warning' : 'muted'}>{item.fragile ? 'Dễ vỡ' : 'Không dễ vỡ'}</Badge></div>
+          <p className="mt-2 text-sm text-stone-700">Kích thước mỗi kiện: {item.lengthCm} × {item.widthCm} × {item.heightCm} cm · {item.weightPerItemKg} kg</p>
+          {item.description && <p className="mt-2 text-sm text-stone-600">{item.description}</p>}
+          {item.customerNote && <p className="mt-2 text-sm text-stone-600">Ghi chú: {item.customerNote}</p>}
+        </article>)}</div>}
+      </Card>}
+      {evidence?.goodsItems?.some(item => item.images.length > 0) && <Card className="rounded-xl p-5">
+        <h3 className="mb-4 border-b border-stone-200 pb-3 text-base font-bold">Hình ảnh hàng hóa</h3>
+        <div className="space-y-5">{evidence.goodsItems.filter(item => item.images.length > 0).map(item => <div key={item.id}>
+          <p className="mb-3 text-sm font-semibold text-stone-700">{item.customGoodsName || item.categoryName || item.goodsCode}</p>
+          <div className="flex flex-wrap gap-3">{item.images.map(image => <GoodsImage key={image.id} image={image} />)}</div>
+        </div>)}</div>
+      </Card>}
       </div>
       <div className={section === 'payments' ? 'space-y-5' : 'hidden'}>
       {evidence && (
         <Card className="rounded-xl p-5">
           <h3 className="mb-4 border-b border-stone-200 pb-3 text-base font-bold">Thỏa thuận ban đầu</h3>
           {agreed ? (
-            <dl className="grid gap-3 sm:grid-cols-2 [&>div]:min-w-0 [&>div]:rounded-xl [&>div]:border [&>div]:border-stone-200 [&>div]:bg-stone-50 [&>div]:p-4">
-              {([
-                ["Tiền thuê toàn kỳ", agreed.netRentalAmount],
-                ["Phí giữ chỗ (trừ vào tiền thuê)", agreed.reservationDepositAmount],
-                ["Tiền thuê còn lại sau phí giữ chỗ", agreed.remainingRentalAmount],
-                ["Cọc bảo đảm kho", agreed.securityDepositAmount],
-                ["Thanh toán khi nhận kho (tiền thuê còn lại + cọc bảo đảm)", agreed.dueAtCheckIn],
-                ["Tổng tiền thuê + cọc bảo đảm (không cộng phí giữ chỗ lần nữa)", agreed.totalInitialObligation],
-              ] as const).map(([label, amount]) => (
-                <div key={label} className={label.startsWith('Tổng') ? '!border-emerald-200 !bg-emerald-50' : label.startsWith('Thanh toán') ? '!border-amber-200 !bg-amber-50' : ''}><dt>{label}</dt><dd className="!mt-2 !text-lg !font-bold">{rentalMoney(amount, evidence.currency)}</dd></div>
-              ))}
-            </dl>
+            <div className="space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-stone-900 px-5 py-5 text-white">
+                <div><p className="text-sm font-semibold">Tổng tiền theo thỏa thuận</p><p className="mt-1 text-xs text-stone-300">Đã gồm cọc bảo đảm kho</p></div>
+                <p className="text-2xl font-bold tabular-nums">{rentalMoney(agreed.totalInitialObligation, evidence.currency)}</p>
+              </div>
+              <div className="divide-y divide-stone-100 px-1">
+                {[["Tiền thuê toàn kỳ", agreed.netRentalAmount], ["Cọc bảo đảm kho", agreed.securityDepositAmount]].map(([label, amount]) => <div key={String(label)} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"><span className="text-stone-600">{label}</span><span className="font-semibold tabular-nums text-stone-900">{rentalMoney(Number(amount), evidence.currency)}</span></div>)}
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <section className="rounded-xl border border-stone-200 p-5"><p className="text-xs font-bold uppercase tracking-wide text-stone-500">Chặng 1 · Khi giữ chỗ</p><p className="mt-3 text-sm text-stone-700">Phí giữ chỗ</p><p className="mt-2 text-xl font-bold tabular-nums text-stone-900">{rentalMoney(agreed.reservationDepositAmount, evidence.currency)}</p></section>
+                <section className="rounded-xl border border-amber-300 bg-amber-50 p-5"><p className="text-xs font-bold uppercase tracking-wide text-amber-800">Chặng 2 · Khi nhận kho</p><p className="mt-3 text-sm text-stone-700">Tổng tiền trừ phí giữ chỗ</p><p className="mt-2 text-xl font-bold tabular-nums text-amber-800">{rentalMoney(agreed.dueAtCheckIn, evidence.currency)}</p></section>
+              </div>
+            </div>
           ) : <p>Không có dữ liệu</p>}
           <p className="mt-3 text-sm">Đây là số tiền theo thỏa thuận ban đầu, không phải xác nhận đã thu tiền hoặc dư nợ hiện tại.</p>
           <h4 className="font-bold mt-4 mb-2">Giao dịch của đơn đặt chỗ</h4>
