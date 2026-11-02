@@ -79,7 +79,12 @@ export function useRenewalCommand() {
     }
     success?.(outcome)
   }
+  const clear = () => {
+    attempt.current.clear()
+    setError(undefined)
+    setUncertain(false)
+  }
   // Event/effect callbacks may precede a rerender; read the current attempt lock.
   const isLocked = () => lock.current || attempt.current.isUncertain()
-  return { run, busy, uncertain, error, conflict, isLocked }
+  return { run, clear, busy, uncertain, error, conflict, isLocked }
 }
