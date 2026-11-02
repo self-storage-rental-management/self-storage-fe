@@ -1,7 +1,7 @@
 import { isApiAuthenticated } from '../../services/authApi'
 import { useReturnRecords } from '../../hooks/useReturnRecords'
 import { returnScreenRecord } from '../../services/returnScreenAdapter'
-import { getReturn, reviewDispute, recordReturnSettlement, uploadReturnEvidence, returnError } from '../../services/returnApi'
+import { getReturn, reviewDispute, recordReturnSettlement, uploadReturnEvidence, returnError, confirmReturn, fastApproveReturn } from '../../services/returnApi'
 import React, { useEffect, useRef, useState } from 'react'
 import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Select, Avatar, Input, Tabs } from '../../components/ui'
 import { Icon } from '../../components/Layout'
@@ -263,9 +263,42 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
     return msg || fallback
   }
 
-  const handleConfirmComplete = () => {
+  const handleConfirmComplete = async () => {
     if (!completeTarget) return
-    if (useApi) { showToast('Hồ sơ API chỉ hoàn tất theo quyết toán và chứng từ hợp lệ, không đóng trực tiếp từ thao tác local.'); return }
+    if (useApi) {
+      setApiBusy(true)
+      try {
+        if (completeTarget.status === 'requested' || completeTarget.status === 'scheduled') {
+          await fastApproveReturn(completeTarget.id, 'manager')
+          showToast(`Đã nghiệm thu và cho trả kho ngay hồ sơ ${completeTarget.id}!`)
+        } else if (completeTarget.status === 'awaiting_customer_confirmation' || completeTarget.status === 'inspected') {
+          await confirmReturn(completeTarget.id, 'accepted', completeNotes || 'Quản lý duyệt quyết toán trực tiếp tại quầy', 'manager')
+          showToast(`Đã duyệt quyết toán cho hồ sơ ${completeTarget.id}!`)
+        } else if (completeTarget.status === 'disputed') {
+          await reviewDispute(completeTarget.id, {
+            damageFee: 0,
+            cleaningFee: 0,
+            lostItemFee: 0,
+            overdueFee: 0,
+            outstandingFee: 0,
+            resolutionNote: completeNotes || 'Quản lý duyệt hoàn tất trả kho',
+            proposedUnitStatus: 'available',
+          })
+          showToast(`Đã duyệt bỏ qua khiếu nại và cho trả kho ngay hồ sơ ${completeTarget.id}!`)
+        } else {
+          showToast(`Hồ sơ đang ở trạng thái ${completeTarget.status}, vui lòng xử lý theo đúng quy trình.`)
+          return
+        }
+        apiRead.refresh()
+        setCompleteModalOpen(false)
+        setCompleteTarget(null)
+      } catch (err: any) {
+        showToast(formatReturnManagerError(err, 'Có lỗi khi đóng hồ sơ trả kho.'))
+      } finally {
+        setApiBusy(false)
+      }
+      return
+    }
     try {
       completeReturnCase(completeTarget.id, user, completeNotes)
       showToast(`Đã xác nhận hoàn tất hồ sơ trả kho ${completeTarget.id}!`)
