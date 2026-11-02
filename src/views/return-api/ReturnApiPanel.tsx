@@ -9,8 +9,10 @@ import RecoveryReturnSettlement from './RecoveryReturnSettlement'
 import RecoveryTaskLink from '../rental-api/RecoveryTaskLink'
 import {
   confirmReturn,
+  fastApproveReturn,
   feeKeys,
   inspectReturn,
+  sanitizeFees,
   listReturns,
   requestReturn,
   updateReturnRequest,
@@ -279,14 +281,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       const asset = await uploadReturnEvidence(id, file, role)
       evidencePhotos.push(asset.id)
     }
-    const safeFees: ReturnFees = {
-      damageFee: Number.isFinite(fees.damageFee) && fees.damageFee >= 0 ? fees.damageFee : 0,
-      cleaningFee: Number.isFinite(fees.cleaningFee) && fees.cleaningFee >= 0 ? fees.cleaningFee : 0,
-      lostItemFee: Number.isFinite(fees.lostItemFee) && fees.lostItemFee >= 0 ? fees.lostItemFee : 0,
-      overdueFee: Number.isFinite(fees.overdueFee) && fees.overdueFee >= 0 ? fees.overdueFee : 0,
-      outstandingFee: Number.isFinite(fees.outstandingFee) && fees.outstandingFee >= 0 ? fees.outstandingFee : 0,
-    }
-    return inspectReturn(id, { ...safeFees, inventoryMatch: inventory, damageClassification: damage, staffNotes: note, evidencePhotos, ...returned, proposedUnitStatus: unit, unitVacated })
+    return inspectReturn(id, { ...sanitizeFees(fees), inventoryMatch: inventory, damageClassification: damage, staffNotes: note, evidencePhotos, ...returned, proposedUnitStatus: unit, unitVacated })
   }
 
   return (
@@ -352,25 +347,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
               variant="primary"
               disabled={busy}
               className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer"
-              onClick={() => void run(async () => {
-                await inspectReturn(id, {
-                  damageFee: 0,
-                  cleaningFee: 0,
-                  lostItemFee: 0,
-                  overdueFee: 0,
-                  outstandingFee: 0,
-                  inventoryMatch: 'match',
-                  damageClassification: 'no_damage',
-                  staffNotes: note.trim() || 'Nghiệm thu và cho trả kho nhanh tại quầy (không phát sinh hư hại)',
-                  evidencePhotos: [],
-                  returnedKey: true,
-                  returnedCard: true,
-                  returnedLock: true,
-                  proposedUnitStatus: 'available',
-                  unitVacated: true,
-                })
-                return confirmReturn(id, 'accepted', 'Nhân viên xác nhận quyết toán trả kho nhanh tại quầy', role)
-              })}
+              onClick={() => void run(() => fastApproveReturn(id, role))}
             >
               ⚡ Cho trả kho ngay (Đóng hồ sơ & giải phóng gian)
             </Button>

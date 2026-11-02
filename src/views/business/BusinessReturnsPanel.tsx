@@ -602,34 +602,24 @@ export default function BusinessReturnsPanel({ user }: Props) {
           proposedUnitStatus: inspectProposedUnit,
         })
         await loadApiData()
+      } else {
+        const updated = localReturns.map((r) =>
+          r.id === selectedItem.id
+            ? {
+                ...r,
+                status: 'awaiting_customer_confirmation',
+                ...inspectFees,
+                totalDeductions: totalDed,
+                netRefundAmount: netRef,
+                amountDueFromCustomer: due,
+                inspectionNotes: inspectNotes.trim(),
+                proposedUnitStatus: inspectProposedUnit,
+                ...inspectReturned,
+              }
+            : r
+        )
+        saveLocalState(updated)
       }
-
-      if (useApi) {
-        setSelectedItem((prev) => prev ? { ...prev, status: 'awaiting_customer_confirmation', ...inspectFees, totalDeductions: totalDed, netRefundAmount: netRef, amountDueFromCustomer: due, inspectionNotes: inspectNotes.trim(), proposedUnitStatus: inspectProposedUnit } : null)
-        setFeedback('Đã lập biên bản nghiệm thu hiện trạng thành công! Hồ sơ chuyển sang Chờ khách xác nhận.')
-        setActiveTab('overview')
-        return
-      }
-
-      // Cập nhật local state
-      const updated = localReturns.map((r) =>
-        r.id === selectedItem.id
-          ? {
-              ...r,
-              status: 'awaiting_customer_confirmation',
-              ...inspectFees,
-              totalDeductions: totalDed,
-              netRefundAmount: netRef,
-              amountDueFromCustomer: due,
-              inspectionNotes: inspectNotes.trim(),
-              proposedUnitStatus: inspectProposedUnit,
-              returnedKey: inspectReturned.returnedKey,
-              returnedCard: inspectReturned.returnedCard,
-              returnedLock: inspectReturned.returnedLock,
-            }
-          : r
-      )
-      saveLocalState(updated)
 
       setSelectedItem((prev) =>
         prev
@@ -642,6 +632,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
               amountDueFromCustomer: due,
               inspectionNotes: inspectNotes.trim(),
               proposedUnitStatus: inspectProposedUnit,
+              ...inspectReturned,
             }
           : null
       )
@@ -665,11 +656,6 @@ export default function BusinessReturnsPanel({ user }: Props) {
     setFeedback('')
 
     try {
-      if (useApi) {
-        await confirmReturn(selectedItem.id, decision, decision === 'disputed' ? disputeNoteInput : 'Xác nhận quyết toán trực tiếp tại quầy', 'staff')
-        await loadApiData()
-      }
-
       let nextStatus = 'disputed'
       if (decision === 'accepted') {
         if (selectedItem.netRefundAmount > 0) nextStatus = 'refund_pending'
@@ -677,39 +663,19 @@ export default function BusinessReturnsPanel({ user }: Props) {
         else nextStatus = 'completed'
       }
 
+      const note = decision === 'disputed' ? disputeNoteInput : 'Khách hàng đã xác nhận đồng ý quyết toán.'
       if (useApi) {
-        setSelectedItem((prev) => prev ? { ...prev, status: nextStatus, customerDecisionNote: decision === 'disputed' ? disputeNoteInput : 'Khách hàng đã xác nhận đồng ý quyết toán.' } : null)
-        setFeedback(decision === 'accepted' ? `Khách hàng đã đồng ý quyết toán! Hồ sơ chuyển sang: ${statusLabels[nextStatus] || nextStatus}.` : 'Khách hàng đã gửi khiếu nại! Hồ sơ đã được chuyển đến Ban Điều Hành để thẩm định.')
-        setActiveTab('overview')
-        return
-      }
-
-      const updated = localReturns.map((r) =>
-        r.id === selectedItem.id
-          ? {
-              ...r,
-              status: nextStatus,
-              customerDecisionNote: decision === 'disputed' ? disputeNoteInput : 'Khách hàng đã xác nhận đồng ý quyết toán.',
-            }
-          : r
-      )
-      saveLocalState(updated)
-
-      setSelectedItem((prev) =>
-        prev
-          ? {
-              ...prev,
-              status: nextStatus,
-              customerDecisionNote: decision === 'disputed' ? disputeNoteInput : 'Khách hàng đã xác nhận đồng ý quyết toán.',
-            }
-          : null
-      )
-
-      if (decision === 'accepted') {
-        setFeedback(`Khách hàng đã đồng ý quyết toán! Hồ sơ chuyển sang: ${statusLabels[nextStatus] || nextStatus}.`)
+        await confirmReturn(selectedItem.id, decision, decision === 'disputed' ? disputeNoteInput : 'Xác nhận quyết toán trực tiếp tại quầy', 'staff')
+        await loadApiData()
       } else {
-        setFeedback('Khách hàng đã gửi khiếu nại! Hồ sơ đã được chuyển đến Ban Điều Hành để thẩm định.')
+        const updated = localReturns.map((r) =>
+          r.id === selectedItem.id ? { ...r, status: nextStatus, customerDecisionNote: note } : r
+        )
+        saveLocalState(updated)
       }
+
+      setSelectedItem((prev) => prev ? { ...prev, status: nextStatus, customerDecisionNote: note } : null)
+      setFeedback(decision === 'accepted' ? `Khách hàng đã đồng ý quyết toán! Hồ sơ chuyển sang: ${statusLabels[nextStatus] || nextStatus}.` : 'Khách hàng đã gửi khiếu nại! Hồ sơ đã được chuyển đến Ban Điều Hành để thẩm định.')
       setActiveTab('overview')
     } catch (err) {
       setFeedback(returnError(err))
@@ -724,45 +690,35 @@ export default function BusinessReturnsPanel({ user }: Props) {
     setSubmitting(true)
     setFeedback('')
     try {
+      const nextStatus = (selectedItem.netRefundAmount ?? selectedItem.depositAmount ?? 0) > 0 ? 'refund_pending' : (selectedItem.amountDueFromCustomer ?? 0) > 0 ? 'payment_due' : 'completed'
       if (useApi) {
-        const nextStatus = (selectedItem.netRefundAmount ?? selectedItem.depositAmount ?? 0) > 0 ? 'refund_pending' : (selectedItem.amountDueFromCustomer ?? 0) > 0 ? 'payment_due' : 'completed'
         await fastApproveReturn(selectedItem.id, 'staff')
         await loadApiData()
-        setSelectedItem((prev) => prev ? {
-          ...prev,
-          status: nextStatus,
-          totalDeductions: 0,
-          customerConfirmed: true,
-          inspectionNotes: 'Nghiệm thu và cho trả kho nhanh tại quầy (Không trừ cọc)',
-          completedAt: nextStatus === 'completed' ? new Date().toLocaleString('vi-VN') : prev.completedAt,
-        } : null)
-        setFeedback(`Đã nghiệm thu và cho trả kho ngay thành công! Trạng thái: ${statusLabels[nextStatus] || nextStatus}.`)
-        setActiveTab('overview')
-        return
+      } else {
+        const updated = localReturns.map((r) =>
+          r.id === selectedItem.id
+            ? {
+                ...r,
+                status: nextStatus,
+                totalDeductions: 0,
+                inspectionNotes: 'Nghiệm thu và cho trả kho nhanh tại quầy (Không trừ cọc)',
+                customerConfirmed: true,
+                completedAt: nextStatus === 'completed' ? new Date().toLocaleString('vi-VN') : r.completedAt,
+              }
+            : r
+        )
+        saveLocalState(updated as any)
       }
-      const nextStatus = (selectedItem.netRefundAmount ?? 0) > 0 ? 'refund_pending' : (selectedItem.amountDueFromCustomer ?? 0) > 0 ? 'payment_due' : 'completed'
-      const updated = localReturns.map((r) =>
-        r.id === selectedItem.id
-          ? {
-              ...r,
-              status: nextStatus,
-              totalDeductions: 0,
-              inspectionNotes: 'Nghiệm thu và cho trả kho nhanh tại quầy (Không trừ cọc)',
-              customerConfirmed: true,
-              completedAt: nextStatus === 'completed' ? new Date().toLocaleString('vi-VN') : r.completedAt,
-            }
-          : r
-      )
-      saveLocalState(updated as any)
       setSelectedItem((prev) => prev ? {
         ...prev,
         status: nextStatus,
         totalDeductions: 0,
-        inspectionNotes: 'Nghiệm thu và cho trả kho nhanh tại quầy (Không trừ cọc)',
         customerConfirmed: true,
+        inspectionNotes: 'Nghiệm thu và cho trả kho nhanh tại quầy (Không trừ cọc)',
         completedAt: nextStatus === 'completed' ? new Date().toLocaleString('vi-VN') : prev.completedAt,
       } : null)
-      setFeedback('Đã nghiệm thu và cho trả kho ngay thành công!')
+      setFeedback(`Đã nghiệm thu và cho trả kho ngay thành công! Trạng thái: ${statusLabels[nextStatus] || nextStatus}.`)
+      setActiveTab('overview')
     } catch (err) {
       setFeedback(returnError(err))
     } finally {
@@ -776,8 +732,8 @@ export default function BusinessReturnsPanel({ user }: Props) {
     setSubmitting(true)
     setFeedback('')
     try {
+      const nextStatus = (selectedItem.netRefundAmount ?? selectedItem.depositAmount ?? 0) > 0 ? 'refund_pending' : (selectedItem.amountDueFromCustomer ?? 0) > 0 ? 'payment_due' : 'completed'
       if (useApi) {
-        const nextStatus = (selectedItem.netRefundAmount ?? selectedItem.depositAmount ?? 0) > 0 ? 'refund_pending' : (selectedItem.amountDueFromCustomer ?? 0) > 0 ? 'payment_due' : 'completed'
         await reviewDispute(selectedItem.id, {
           damageFee: 0,
           cleaningFee: 0,
@@ -788,35 +744,27 @@ export default function BusinessReturnsPanel({ user }: Props) {
           proposedUnitStatus: 'available',
         })
         await loadApiData()
-        setSelectedItem((prev) => prev ? {
-          ...prev,
-          status: nextStatus,
-          managerResolutionNote: 'Bỏ qua khiếu nại và cho trả kho ngay',
-          completedAt: nextStatus === 'completed' ? new Date().toLocaleString('vi-VN') : prev.completedAt,
-        } : null)
-        setFeedback(`Đã duyệt bỏ qua khiếu nại và cho trả kho ngay thành công! Trạng thái: ${statusLabels[nextStatus] || nextStatus}.`)
-        setActiveTab('overview')
-        return
+      } else {
+        const updated = localReturns.map((r) =>
+          r.id === selectedItem.id
+            ? {
+                ...r,
+                status: nextStatus,
+                managerResolutionNote: 'Bỏ qua khiếu nại và cho trả kho ngay',
+                completedAt: nextStatus === 'completed' ? new Date().toLocaleString('vi-VN') : r.completedAt,
+              }
+            : r
+        )
+        saveLocalState(updated as any)
       }
-      const nextStatus = (selectedItem.netRefundAmount ?? 0) > 0 ? 'refund_pending' : (selectedItem.amountDueFromCustomer ?? 0) > 0 ? 'payment_due' : 'completed'
-      const updated = localReturns.map((r) =>
-        r.id === selectedItem.id
-          ? {
-              ...r,
-              status: nextStatus,
-              managerResolutionNote: 'Bỏ qua khiếu nại và cho trả kho ngay',
-              completedAt: nextStatus === 'completed' ? new Date().toLocaleString('vi-VN') : r.completedAt,
-            }
-          : r
-      )
-      saveLocalState(updated as any)
       setSelectedItem((prev) => prev ? {
         ...prev,
         status: nextStatus,
         managerResolutionNote: 'Bỏ qua khiếu nại và cho trả kho ngay',
         completedAt: nextStatus === 'completed' ? new Date().toLocaleString('vi-VN') : prev.completedAt,
       } : null)
-      setFeedback('Đã duyệt bỏ qua khiếu nại và cho trả kho ngay thành công!')
+      setFeedback(`Đã duyệt bỏ qua khiếu nại và cho trả kho ngay thành công! Trạng thái: ${statusLabels[nextStatus] || nextStatus}.`)
+      setActiveTab('overview')
     } catch (err) {
       setFeedback(returnError(err))
     } finally {

@@ -125,6 +125,15 @@ function ComparisonBadge({ matches }: { matches: boolean | null }) {
 
 const MAX_UPLOAD_FILE_SIZE_BYTES = 25 * 1024 * 1024
 
+const validateUploadFile = (file: File | null, label: string, onError: (msg: string | null) => void): boolean => {
+  if (file && file.size > MAX_UPLOAD_FILE_SIZE_BYTES) {
+    onError(`Tệp ${label} "${file.name}" vượt quá dung lượng tối đa 25MB (${(file.size / (1024 * 1024)).toFixed(1)}MB). Vui lòng chọn tệp nhỏ hơn.`)
+    return false
+  }
+  onError(null)
+  return true
+}
+
 type MeasurementComparisonKey = "packageCount" | "weight" | "volume" | "dimensions"
 
 const emptyMeasurementChecks = (): Record<MeasurementComparisonKey, boolean> => ({
@@ -1160,13 +1169,11 @@ export default function StaffCheckInOperationsPanel({
                   <>
                     <label className="block text-sm font-medium text-stone-700">Hợp đồng đã ký (PDF hoặc ảnh, tối đa 25MB) *<input disabled={submitting || isReviewingCompletedStep} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => {
                       const selected = event.target.files?.[0] || null
-                      if (selected && selected.size > MAX_UPLOAD_FILE_SIZE_BYTES) {
-                        setError(`Tệp hợp đồng "${selected.name}" vượt quá dung lượng tối đa 25MB (${(selected.size / (1024 * 1024)).toFixed(1)}MB). Vui lòng chọn tệp nhỏ hơn.`)
+                      if (!validateUploadFile(selected, 'hợp đồng', setError)) {
                         event.target.value = ""
                         setContractFile(null)
                         return
                       }
-                      setError(null)
                       setContractFile(selected)
                       setConfirmedSetupTerms(null)
                     }} /></label>
@@ -1189,13 +1196,11 @@ export default function StaffCheckInOperationsPanel({
                     <Select label="Phương thức thanh toán" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}><option value="CASH">Tiền mặt</option><option value="BANK_TRANSFER">Chuyển khoản</option></Select>
                     <label className="block text-sm font-medium">Biên lai / bằng chứng giao dịch (tối đa 25MB) *<input className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => {
                       const selected = event.target.files?.[0] || null
-                      if (selected && selected.size > MAX_UPLOAD_FILE_SIZE_BYTES) {
-                        setError(`Biên lai "${selected.name}" vượt quá dung lượng tối đa 25MB (${(selected.size / (1024 * 1024)).toFixed(1)}MB). Vui lòng chọn tệp nhỏ hơn.`)
+                      if (!validateUploadFile(selected, 'biên lai', setError)) {
                         event.target.value = ""
                         setPaymentEvidenceFile(null)
                         return
                       }
-                      setError(null)
                       setPaymentEvidenceFile(selected)
                     }} /></label>
                   </div>
@@ -1250,13 +1255,11 @@ export default function StaffCheckInOperationsPanel({
                 <label className="flex items-center gap-2 text-sm"><input type="checkbox" disabled={isReviewingCompletedStep} checked={checklist.conditionRecorded} onChange={(event) => setChecklist((value) => ({ ...value, conditionRecorded: event.target.checked }))} />Đã ghi nhận hiện trạng gian kho và hàng hóa *</label>
                 {!isReviewingCompletedStep && <><label className="block text-sm font-medium">Ảnh/PDF kiểm kê sau setup (tối đa 25MB/tệp) *<input className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2" type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => {
                     const selected = Array.from(event.target.files || [])
-                    const tooBig = selected.find(f => f.size > MAX_UPLOAD_FILE_SIZE_BYTES)
+                    const tooBig = selected.find(f => !validateUploadFile(f, 'kiểm kê', setError))
                     if (tooBig) {
-                      setError(`Tệp "${tooBig.name}" vượt quá dung lượng tối đa 25MB (${(tooBig.size / (1024 * 1024)).toFixed(1)}MB). Vui lòng chọn tệp nhỏ hơn.`)
                       event.target.value = ""
                       return
                     }
-                    setError(null)
                     setEvidenceFiles(selected)
                   }} /></label><FilePreviewList files={evidenceFiles} onRemove={(index) => setEvidenceFiles((files) => files.filter((_, current) => current !== index))} disabled={submitting} /></>}
                 {isReviewingCompletedStep && handoverTarget.handover?.evidenceReferences.length ? <p className="text-xs text-stone-600">Đã lưu {handoverTarget.handover.evidenceReferences.length} tệp bằng chứng kiểm kê trong biên bản.</p> : null}
