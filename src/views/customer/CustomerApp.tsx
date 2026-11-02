@@ -1,3 +1,4 @@
+import CustomerCatalogStatus, { catalogLoadError, type CatalogLoadError } from './CustomerCatalogStatus'
 import { matchesReservationSearch, reservationPage } from './reservationList'
 import { estimatedRentalPeriod } from '../../domain/rentalTimeline'
 import { formatCustomerDate, formatCustomerDateTime } from '../../i18n/customerDate'
@@ -430,7 +431,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   }])) as Record<GoodsCategoryCode, { normal: string[]; fragile: string[] }>, [goodsCatalog])
   const catalogCategoryFor = (code: string) => goodsCatalog?.categories.find(category => category.code === code)
   const [catalogLoading, setCatalogLoading] = useState(true)
-  const [catalogError, setCatalogError] = useState<string | null>(null)
+  const [catalogError, setCatalogError] = useState<CatalogLoadError | null>(null)
+  const [warehouseError, setWarehouseError] = useState<CatalogLoadError | null>(null)
+  const [catalogRetry, setCatalogRetry] = useState(0)
   const [availabilityByUnitType, setAvailabilityByUnitType] = useState<Record<string, number>>({})
   const [availabilityRevision, setAvailabilityRevision] = useState(0)
   const [availabilityPeriod, setAvailabilityPeriod] = useState(() => {
@@ -906,7 +909,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   const timelinePackage = backendRentalPackages.find(pkg => pkg.code === selectedPackageId)
   const timelineSetupDays = isApiAuthenticated()
-    ? timelinePackage?.freeSetupDays
+    ? serverQuote?.freeSetupDays ?? timelinePackage?.freeSetupDays
     : selectedUnit?.rentalPackages?.find(pkg => pkg.id === selectedPackageId)?.freeSetupDays ?? 0
   const bookingRentalPeriod = useMemo(() => timelineSetupDays == null ? null
     : estimatedRentalPeriod(moveInDate || earliestCheckInDate, timelineSetupDays, rentalMonths),
@@ -924,20 +927,18 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   }, [selectedTarget, bookingRentalPeriod, selectedPackageId, goodsCondition, apiGoodsItems])
 
   useEffect(() => {
-    if (!serverQuote || !bookingRentalPeriod) return
+    if (!serverQuote) return
     if (serverQuote.facilityId === selectedTarget?.facility.id
       && serverQuote.unitTypeId === selectedTarget?.unitType.id
-      && serverQuote.startDate === bookingRentalPeriod.startDate
-      && serverQuote.endDate === bookingRentalPeriod.endDate
       && serverQuote.pricingPackageCode === selectedPackageId) return
     setServerQuote(null)
     setBookingReview(false)
     setTermsAccepted(false)
     setAcceptedSetupQuoteId(null)
     reservationIdempotencyKey.current = null
-    setReservationSubmitError('Lịch nhận kho, gói thuê hoặc loại kho đã thay đổi. Vui lòng kiểm tra và lấy báo giá mới.')
+    setReservationSubmitError('Gói thuê hoặc loại kho đã thay đổi. Vui lòng kiểm tra và lấy báo giá mới.')
     if (bookingStep === 4) setBookingStep(2)
-  }, [serverQuote, bookingRentalPeriod, selectedTarget, selectedPackageId, bookingStep])
+  }, [serverQuote, selectedTarget, selectedPackageId, bookingStep])
 
   useEffect(() => {
     if (!bookOpen) return
@@ -964,6 +965,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   useEffect(() => {
     if (!isApiAuthenticated() || !bookOpen || !selectedTarget) return
+    if (serverQuote) { setRentalPackagesLoading(false); return }
     let cancelled = false
     setRentalPackagesLoading(true)
     setReservationSubmitError(null)
@@ -992,7 +994,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       })
       .finally(() => { if (!cancelled) setRentalPackagesLoading(false) })
     return () => { cancelled = true }
-  }, [bookOpen, moveInDate, earliestCheckInDate, selectedTarget?.facility.id])
+  }, [bookOpen, moveInDate, earliestCheckInDate, selectedTarget?.facility.id, serverQuote?.quoteId])
 
   // Support
   const [supportChatbotOpen, setSupportChatbotOpen] = useState(false)
@@ -1034,6 +1036,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   useEffect(() => {
     let cancelled = false
     let catalogRequest = 0
+    let warehouseRequest = 0
+    setCatalogLoading(true)
     const loadCatalog = async () => {
       const request = ++catalogRequest
       try {
@@ -1042,24 +1046,26 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         setGoodsCatalog(loadedGoodsCatalog)
         setCatalogError(null)
       } catch (error) {
-        if (!cancelled && request === catalogRequest) setCatalogError('Chưa cập nhật được danh mục hàng hóa. Vui lòng kiểm tra kết nối và thử lại.')
+        if (!cancelled && request === catalogRequest) setCatalogError(catalogLoadError(error))
       }
     }
     const loadWarehouses = async () => {
+      const request = ++warehouseRequest
       try {
         const facilityPage = await listCustomerFacilities()
         const unitTypePages = await Promise.all(facilityPage.data.map(facility => listCustomerUnitTypes(facility.id)))
-        if (cancelled) return
+        if (cancelled || request !== warehouseRequest) return
+        setWarehouseError(null)
         setBackendFacilities(facilityPage.data)
         setBackendUnitTypes(unitTypePages.flatMap(result => result.data))
+      } catch (error) {
+        if (!cancelled && request === warehouseRequest) setWarehouseError(catalogLoadError(error))
       } finally {
-        if (!cancelled) setCatalogLoading(false)
+        if (!cancelled && request === warehouseRequest) setCatalogLoading(false)
       }
     }
     void loadCatalog()
-    const refreshWarehouses = () => void loadWarehouses().catch(() => {
-      if (!cancelled) showToast('Chưa cập nhật được thông tin kho. Vui lòng kiểm tra kết nối và thử lại.')
-    })
+    const refreshWarehouses = () => void loadWarehouses()
     refreshWarehouses()
     const unsubscribe = subscribeGoodsCatalog(() => void loadCatalog())
     const timer = window.setInterval(() => { void loadCatalog(); refreshWarehouses() }, 30_000)
@@ -1073,7 +1079,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       window.removeEventListener('focus', focus)
       window.removeEventListener('online', focus)
     }
-  }, [])
+  }, [catalogRetry])
 
   const badgeFor = (status: string) => {
     const statusClass: Record<string, string> = {
@@ -1890,18 +1896,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       const selectedAppointment = new Date(`${moveInDate}T${bookingAppointmentTime}:00+07:00`)
       if (!isCheckInAppointmentAllowed(selectedAppointment, currentWindow)) {
         const suggested = firstBookableCheckInMinute(currentWindow)
-        setBookingStartedAt(submittedAt)
-        if (suggested) {
-          setMoveInDate(policyDateInput(suggested))
-          setBookingAppointmentTime(policyTimeInput(suggested))
-        }
-        setServerQuote(null)
-        setBookingReview(false)
-        setTermsAccepted(false)
-        setAcceptedSetupQuoteId(null)
-        setBookingStep(3)
         const message = suggested
-          ? `Lịch nhận kho cũ không còn hợp lệ do thời gian đã trôi qua khi nhập thông tin. Đã đề xuất ${formatPolicyDateTime(suggested)}. Vui lòng kiểm tra lịch và lấy lại báo giá trước khi xác nhận.`
+          ? `Lịch nhận kho không còn hợp lệ. Bạn có thể nhận kho sớm nhất từ ${formatPolicyDateTime(suggested)}. Vui lòng chọn lại ngày giờ nhận kho, giá và hàng hóa được giữ nguyên.`
           : 'Chưa có giờ nhận kho phù hợp trong thời hạn cho phép. Vui lòng liên hệ cơ sở.'
         setSchedulePolicyMessage(message)
         setReservationSubmitError(message)
@@ -2052,6 +2048,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       }
       if (acceptedSetupQuoteId !== serverQuote.quoteId) {
         throw new Error('Vui lòng đọc và đồng ý điều khoản trả kho trong setup trước khi xác nhận đặt kho.')
+      }
+      const scheduledCompatibility = await checkCompatibility({ ...selection, startDate: moveInDate })
+      setServerCompatibility(scheduledCompatibility)
+      if (scheduledCompatibility.result === 'INCOMPATIBLE' || scheduledCompatibility.availableUnitCount <= 0) {
+        setReservationSubmitError('Kho đã chọn không còn phù hợp hoặc hết chỗ trong lịch nhận mới. Vui lòng chọn ngày nhận khác. Giá và hàng hóa được giữ nguyên.')
+        return
       }
       const idempotencyKey = reservationIdempotencyKey.current || crypto.randomUUID()
       reservationIdempotencyKey.current = idempotencyKey
@@ -2377,6 +2379,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         </div>
       )}
 
+      {(page === 'browse-facilities' || page === 'browse-units') && <CustomerCatalogStatus loading={catalogLoading} warehouseError={warehouseError} goodsError={catalogError} onRetry={() => setCatalogRetry(current => current + 1)} onLogin={onLogout} />}
+
       {/* ── BROWSE FACILITIES ──────────────────────────────────── */}
       {page === 'browse-facilities' && (
         <div className="fade-in">
@@ -2468,16 +2472,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
         return (
           <div className="fade-in space-y-6">
-            {catalogLoading && (
-              <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm font-semibold text-blue-900">
-                Đang tải cơ sở và loại kho từ StorageHub...
-              </div>
-            )}
-            {catalogError && (
-              <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800">
-                <b>Không thể tải danh mục kho.</b> {catalogError}
-              </div>
-            )}
             <SectionHeader
               title={selectedFacility
                 ? (`Kho còn trống tại ${CUSTOMER_FACILITY_DISPLAY[selectedFacility.id]?.name ?? selectedFacility.name}`)
