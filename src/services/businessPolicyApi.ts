@@ -89,3 +89,10 @@ export async function inactiveBusinessPackagePolicy(id: string) {
 export async function deactivateBusinessPackagePolicy(id: string) {
   await apiRequest(`/api/business/policies/packages/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
+
+export async function deleteAllBusinessPackagePolicies(facilityId?: string) {
+  const params = new URLSearchParams()
+  if (facilityId) params.set('facilityId', facilityId)
+  const suffix = params.size ? `?${params}` : ''
+  await apiRequest(`/api/business/policies/packages/all${suffix}`, { method: 'DELETE' })
+}

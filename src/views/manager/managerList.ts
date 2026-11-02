@@ -1,10 +1,10 @@
-import { formatVnd, USD_TO_VND_RATE } from '../../i18n/currency'
+import { formatVnd } from '../../i18n/currency'
 
 export const MANAGER_PAGE_SIZE_OPTIONS = [10, 20, 50] as const
 
 export function normalizeManagerMoney(value?: number): number | undefined {
   if (!Number.isFinite(value) || Number(value) < 0) return undefined
-  return Number(value) >= USD_TO_VND_RATE ? Number(value) / USD_TO_VND_RATE : Number(value)
+  return Number(value)
 }
 
 export function normalizeManagerSearch(value: unknown): string {

@@ -583,3 +583,17 @@ main textarea:focus) {
   border-color: #f87171 !important;
   background-color: #fee2e2 !important;
 }
+
+/* Compact, distinct actions in the customer reservation header. */
+.reservation-action { padding: 6px 12px; min-height: 32px; font-size: 12px; line-height: 18px; }
+.reservation-action.reservation-action-receipt { border: 1px solid #047857; background: #047857; color: #ffffff; }
+.reservation-action.reservation-action-receipt:hover { border-color: #065f46; background: #065f46; }
+.reservation-action.reservation-action-document { border: 1px solid #1d4ed8; background: #1d4ed8; color: #ffffff; }
+.reservation-action.reservation-action-document:hover { border-color: #1e40af; background: #1e40af; }
+.reservation-action.reservation-action-cancel { border: 1px solid #b91c1c; background: #b91c1c; color: #ffffff; }
+.reservation-action.reservation-action-cancel:hover { border-color: #991b1b; background: #991b1b; }
+
+/* Customer navigation keeps its content at the final width from the first frame. */
+.customer-role-layout [data-layout-scroll-container] { scrollbar-gutter: stable; }
+.customer-role-layout [data-layout-scroll-container].fade-in,
+.customer-role-layout .customer-page .fade-in { animation: none; }

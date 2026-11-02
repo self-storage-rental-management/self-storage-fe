@@ -1,6 +1,6 @@
 import { managerDisplayError } from './managerPresentation'
 import { useEffect, useState } from 'react'
-import { managerUnitTypeLabel } from './managerI18n'
+import { managerStatusLabel, managerUnitTypeLabel } from './managerI18n'
 import {
   createUnitAssignment,
   changeUnitAssignment,
@@ -201,7 +201,7 @@ export default function ManagerUnitAssignmentPanel({ showToast, embedded = false
           ].map(([key, label]) => <span key={key} className={`rounded-full border px-2 py-1 ${flow === key ? 'border-amber-400 bg-amber-50 font-semibold text-amber-900' : 'border-stone-200 text-stone-500'}`}>{label}</span>)}
         </div>
         {selected.assignedStorageUnitId && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
-          Gian hiện tại: <b className="font-mono">{selected.assignedStorageUnitCode}</b> · {selected.assignedStorageUnitStatus || 'đang sử dụng'}.
+          Gian hiện tại: <b className="font-mono">{selected.assignedStorageUnitCode}</b> · {selected.assignedStorageUnitStatus ? managerStatusLabel(selected.assignedStorageUnitStatus, 'vi') : 'Đang sử dụng'}.
           Chỉ đổi khi gian bảo trì hoặc không còn phù hợp.
         </div>}
         {loadingUnits

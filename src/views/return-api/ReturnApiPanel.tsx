@@ -9,8 +9,10 @@ import RecoveryReturnSettlement from './RecoveryReturnSettlement'
 import RecoveryTaskLink from '../rental-api/RecoveryTaskLink'
 import {
   confirmReturn,
+  fastApproveReturn,
   feeKeys,
   inspectReturn,
+  sanitizeFees,
   listReturns,
   requestReturn,
   updateReturnRequest,
@@ -48,8 +50,8 @@ const returnStatusOptions: Array<[ApiReturn['status'] | 'all', string]> = [
   ['completed', 'Đã hoàn tất'],
 ]
 
-export function ReturnSummary({ record }: { record: ApiReturn }) {
-  if (record.sourceType === "RECOVERY") return <RecoveryReturnSummary record={record} />
+export function ReturnSummary({ record, hideTerminationFee = false }: { record: ApiReturn; hideTerminationFee?: boolean }) {
+  if (record.sourceType === "RECOVERY") return <RecoveryReturnSummary record={record} hideTerminationFee={hideTerminationFee} />
   const badgeClass =
     record.status === 'disputed'
       ? 'bg-rose-100 text-rose-800 border border-rose-300 font-bold'
@@ -67,12 +69,12 @@ export function ReturnSummary({ record }: { record: ApiReturn }) {
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         {([
           ['Cọc theo hợp đồng', record.depositAmount], ['Phí đã ghi nhận', record.totalDeductions],
-          ...(record.setupEarlyExit ? [['Tiền thuê thực thu được quyết toán', record.rentalRefundCredit], ['Phí chấm dứt sớm một lần', record.earlyTerminationFee]] as const : []),
+          ...(record.setupEarlyExit ? [['Tiền thuê thực thu được quyết toán', record.rentalRefundCredit], ...(!hideTerminationFee ? [['Phí chấm dứt sớm một lần', record.earlyTerminationFee]] as const : [])] as const : []),
           ['Khoản hoàn tiền', record.netRefundAmount], ['Khách cần đóng thêm', record.amountDueFromCustomer],
         ] as const).map(([label, amount]) => <div key={label} className="rounded-lg bg-stone-50 p-3"><p className="text-xs text-stone-500">{label}</p><p className="mt-1 text-sm font-bold text-stone-900">{amount == null ? 'Chưa xác định' : rentalMoney(amount, 'VND')}</p></div>)}
       </div>
       {record.setupExitRequested && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{record.setupEarlyExit
-        ? 'Quyết toán trả kho trong setup. Tiền thuê thực thu và cọc bảo đảm được trừ phí chấm dứt sớm một lần cùng các khoản phí có chứng cứ.'
+        ? hideTerminationFee ? 'Quyết toán trả kho trong setup theo bảng kê đã ghi nhận.' : 'Quyết toán trả kho trong setup. Tiền thuê thực thu và cọc bảo đảm được trừ phí chấm dứt sớm một lần cùng các khoản phí có chứng cứ.'
         : record.setupReturnedAt ? 'Kho được nghiệm thu sau hạn setup, áp dụng quyết toán của kỳ thuê đã bắt đầu.' : 'Staff cần xác nhận đã dọn hết hàng và bàn giao kho trống. Điều khoản setup áp dụng theo thời điểm nghiệm thu thực tế.'}</p>}
       {record.settlementBlocker && (
         <p role="status" className="rounded bg-amber-50 p-3">
@@ -83,7 +85,7 @@ export function ReturnSummary({ record }: { record: ApiReturn }) {
   )
 }
 
-function RecoveryReturnSummary({ record }: { record: ApiReturn }) {
+function RecoveryReturnSummary({ record, hideTerminationFee }: { record: ApiReturn; hideTerminationFee: boolean }) {
   const badgeClass =
     record.status === 'disputed'
       ? 'bg-rose-100 text-rose-800 border border-rose-300 font-bold'
@@ -101,12 +103,12 @@ function RecoveryReturnSummary({ record }: { record: ApiReturn }) {
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         {([
           ['Cọc bảo đảm thực thu', record.depositAmount], ['Phí đã ghi nhận', record.totalDeductions],
-          ...(record.setupEarlyExit ? [['Tiền thuê thực thu được quyết toán', record.rentalRefundCredit], ['Phí chấm dứt sớm một lần', record.earlyTerminationFee]] as const : []),
+          ...(record.setupEarlyExit ? [['Tiền thuê thực thu được quyết toán', record.rentalRefundCredit], ...(!hideTerminationFee ? [['Phí chấm dứt sớm một lần', record.earlyTerminationFee]] as const : [])] as const : []),
           ['Khoản hoàn tiền', record.netRefundAmount], ['Khách cần đóng thêm', record.amountDueFromCustomer],
         ] as const).map(([label, amount]) => <div key={label} className="rounded-lg bg-stone-50 p-3"><p className="text-xs text-stone-500">{label}</p><p className="mt-1 text-sm font-bold text-stone-900">{amount == null ? 'Chưa xác định' : rentalMoney(amount, 'VND')}</p></div>)}
       </div>
       {record.setupExitRequested && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{record.setupEarlyExit
-        ? 'Quyết toán trả kho trong setup. Tiền thuê thực thu và cọc bảo đảm được trừ phí chấm dứt sớm một lần cùng các khoản phí có chứng cứ.'
+        ? hideTerminationFee ? 'Quyết toán trả kho trong setup theo bảng kê đã ghi nhận.' : 'Quyết toán trả kho trong setup. Tiền thuê thực thu và cọc bảo đảm được trừ phí chấm dứt sớm một lần cùng các khoản phí có chứng cứ.'
         : record.setupReturnedAt ? 'Kho được nghiệm thu sau hạn setup, áp dụng quyết toán của kỳ thuê đã bắt đầu.' : 'Staff cần xác nhận đã dọn hết hàng và bàn giao kho trống. Điều khoản setup áp dụng theo thời điểm nghiệm thu thực tế.'}</p>}
       {record.settlementBlocker && (
         <p role="status" className="rounded bg-amber-50 p-3">
@@ -209,11 +211,83 @@ function ReturnWorkspace({
     actor.roles.includes(role.toUpperCase() as 'CUSTOMER' | 'STAFF' | 'MANAGER') ||
     (role === 'manager' && (actor.roles.includes('BUSINESS') || actor.roles.includes('ADMIN')))
   )
+
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set())
+  const [initializedExpansion, setInitializedExpansion] = useState(false)
+
+  useEffect(() => {
+    if (rows.length > 0 && !initializedExpansion) {
+      const activeIds = rows.filter((r) => r.status !== 'completed').map((r) => r.id)
+      setExpandedIds(new Set(activeIds.length > 0 ? activeIds : [rows[0].id]))
+      setInitializedExpansion(true)
+    }
+  }, [rows, initializedExpansion])
+
+  const allExpanded = rows.length > 0 && rows.every((r) => expandedIds.has(r.id))
+
+  const toggleAllExpanded = () => {
+    if (allExpanded) {
+      setExpandedIds(new Set())
+    } else {
+      setExpandedIds(new Set(rows.map((r) => r.id)))
+    }
+  }
+
+  const toggleExpand = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
   if (!readable) return null
 
   return (
     <div className={rentalId ? 'space-y-4' : 'space-y-4 rounded-xl border border-stone-200 bg-white p-5'}>
-      {!rentalId && <h3 className="border-b border-stone-200 pb-3 text-base font-bold">Trả kho & quyết toán</h3>}
+      {!rentalId ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 pb-3">
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-bold text-stone-900">Trả kho & quyết toán</h3>
+            {rows.length > 0 && (
+              <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-600">
+                {rows.length} hồ sơ
+              </span>
+            )}
+          </div>
+          {rows.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={toggleAllExpanded}
+                className="text-xs font-medium cursor-pointer"
+              >
+                {allExpanded ? '▲ Thu gọn tất cả' : '▼ Trải ra tất cả'}
+              </Button>
+            </div>
+          )}
+        </div>
+      ) : (
+        rows.length > 1 && (
+          <div className="flex justify-end pb-1">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={toggleAllExpanded}
+              className="text-xs font-medium cursor-pointer"
+            >
+              {allExpanded ? '▲ Thu gọn tất cả' : '▼ Trải ra tất cả'}
+            </Button>
+          </div>
+        )
+      )}
       {role === 'customer' && rentalId && read.data && ((rentalActive && !rows.some(record => record.status !== 'completed' || (record.sourceType === 'RECOVERY' && record.recoveryTaskStatus !== 'CLOSED'))) || editing) && (
         <form onSubmit={(event) => { event.preventDefault(); void run(() => editing ? updateReturnRequest(editing, date, notes) : requestReturn(rentalId, date, notes)) }} className="space-y-4 rounded-xl border border-stone-200 bg-stone-50 p-4">
           <VietnameseDateInput label="Ngày trả kho" value={date} onChange={setDate} />
@@ -228,17 +302,138 @@ function ReturnWorkspace({
       {!!read.error && <p role="alert">{returnError(read.error)}</p>}
       {feedback && <p role="status">{feedback}</p>}
       {!read.loading && !read.error && rows.length === 0 && <p className="rounded-xl bg-stone-50 p-5 text-center text-sm text-stone-500">Chưa có yêu cầu trả kho.</p>}
-      {rows.map((record) => <div key={record.id} className="rounded-xl border border-stone-200 bg-white p-4">
-        <ReturnActions role={role} record={record} run={run} busy={busy || read.loading || (recoveryBusy && !recoveryLocks.current.has(record.id))} recoveryLocked={recoveryBusy}
-          onRecoveryLocked={value => { if (value) recoveryLocks.current.add(record.id); else recoveryLocks.current.delete(record.id); recoveryLock.current = recoveryLocks.current.size > 0; setRecoveryBusy(recoveryLock.current) }}
-          onRecoveryChanged={() => { setFeedback('Đã cập nhật hồ sơ trả kho.'); read.refresh(); onChanged?.() }} />
-        {role === 'customer' && record.status === 'requested' && editing !== record.id && <div className="mt-3 flex justify-end border-t border-stone-100 pt-3"><Button type="button" variant="outline" disabled={busy || read.loading} onClick={() => { setEditing(record.id); setDate(record.scheduledDate); setNotes(record.customerNotes || '') }}>Chỉnh sửa yêu cầu</Button></div>}
-      </div>)}
-      {!rentalId && rows.length > 0 && <div className="flex gap-2"><Button disabled={busy || recoveryBusy || page === 0} onClick={() => { if (!recoveryLock.current) setPage((value) => value - 1) }}>Trang trước</Button><span>Trang {page + 1}</span><Button disabled={busy || recoveryBusy || !read.data || page + 1 >= read.data.pagination.totalPages} onClick={() => { if (!recoveryLock.current) setPage((value) => value + 1) }}>Trang sau</Button></div>}
+      {rows.map((record) => {
+        const isExpanded = expandedIds.has(record.id)
+        const isCompleted = record.status === 'completed'
+        const badgeClass =
+          record.status === 'disputed'
+            ? 'bg-rose-100 text-rose-800 border border-rose-300 font-bold'
+            : record.status === 'completed'
+            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+            : record.status === 'refund_pending'
+            ? 'bg-purple-100 text-purple-800 border border-purple-300 font-semibold'
+            : 'bg-amber-50 text-amber-800 border border-amber-200'
+
+        return (
+          <div key={record.id} className="rounded-xl border border-stone-200 bg-white shadow-xs transition overflow-hidden">
+            {/* ─── Compact Summary Header (Clickable) ─── */}
+            <div
+              className={`flex flex-wrap items-center justify-between gap-3 p-3.5 cursor-pointer transition select-none ${
+                isExpanded ? 'bg-stone-50/80 border-b border-stone-200' : 'hover:bg-stone-50/60'
+              }`}
+              onClick={() => toggleExpand(record.id)}
+            >
+              <div className="flex flex-wrap items-center gap-2.5">
+                <span className="text-sm font-bold text-stone-900 bg-stone-100 px-2.5 py-1 rounded-md border border-stone-200 font-mono">
+                  {record.unitNumber}
+                </span>
+                <span className="text-xs font-medium text-stone-500">
+                  {record.facilityName}
+                </span>
+                {record.customerName && (
+                  <span className="text-xs text-stone-700 bg-white px-2 py-0.5 rounded border border-stone-200">
+                    Khách: <strong className="font-semibold text-stone-800">{record.customerName}</strong>
+                  </span>
+                )}
+                <span className="text-xs text-stone-500">
+                  Hạn trả: <strong className="text-stone-700">{rentalDate(record.scheduledDate)}</strong>
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2.5 ml-auto">
+                {record.status === 'refund_pending' && record.netRefundAmount != null && (
+                  <span className="text-xs font-bold text-purple-700 bg-purple-50 px-2 py-1 rounded border border-purple-200">
+                    Hoàn cọc: {rentalMoney(record.netRefundAmount, 'VND')}
+                  </span>
+                )}
+                {record.status === 'payment_due' && record.amountDueFromCustomer != null && (
+                  <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-1 rounded border border-amber-200">
+                    Cần thu: {rentalMoney(record.amountDueFromCustomer, 'VND')}
+                  </span>
+                )}
+                <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${badgeClass}`}>
+                  {labels[record.status]}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggleExpand(record.id)
+                  }}
+                  className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium transition cursor-pointer ${
+                    isExpanded
+                      ? 'border-stone-300 bg-white text-stone-700 hover:bg-stone-100'
+                      : 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 font-semibold'
+                  }`}
+                  title={isExpanded ? 'Thu gọn hồ sơ này' : 'Trải ra xem chi tiết và xử lý'}
+                >
+                  {isExpanded ? '▲ Thu gọn' : '▼ Trải ra'}
+                </button>
+              </div>
+            </div>
+
+            {/* ─── Expanded Details & Actions ─── */}
+            {isExpanded && (
+              <div className="p-4 space-y-4">
+                <ReturnActions
+                  role={role}
+                  record={record}
+                  run={run}
+                  busy={busy || read.loading || (recoveryBusy && !recoveryLocks.current.has(record.id))}
+                  recoveryLocked={recoveryBusy}
+                  onRecoveryLocked={value => {
+                    if (value) recoveryLocks.current.add(record.id)
+                    else recoveryLocks.current.delete(record.id)
+                    recoveryLock.current = recoveryLocks.current.size > 0
+                    setRecoveryBusy(recoveryLock.current)
+                  }}
+                  onRecoveryChanged={() => {
+                    setFeedback('Đã cập nhật hồ sơ trả kho.')
+                    read.refresh()
+                    onChanged?.()
+                  }}
+                />
+                {role === 'customer' && record.status === 'requested' && editing !== record.id && (
+                  <div className="mt-3 flex justify-end border-t border-stone-100 pt-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={busy || read.loading}
+                      onClick={() => {
+                        setEditing(record.id)
+                        setDate(record.scheduledDate)
+                        setNotes(record.customerNotes || '')
+                      }}
+                    >
+                      Chỉnh sửa yêu cầu
+                    </Button>
+                  </div>
+                )}
+                <div className="flex justify-end border-t border-stone-100 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => toggleExpand(record.id)}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-stone-500 hover:text-stone-800 hover:underline cursor-pointer"
+                  >
+                    ▲ Thu gọn hồ sơ {record.unitNumber}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })}
+      {!rentalId && rows.length > 0 && (
+        <div className="flex gap-2">
+          <Button disabled={busy || recoveryBusy || page === 0} onClick={() => { if (!recoveryLock.current) setPage((value) => value - 1) }}>Trang trước</Button>
+          <span>Trang {page + 1}</span>
+          <Button disabled={busy || recoveryBusy || !read.data || page + 1 >= read.data.pagination.totalPages} onClick={() => { if (!recoveryLock.current) setPage((value) => value + 1) }}>Trang sau</Button>
+        </div>
+      )}
     </div>
   )
 }
-
 function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLocked, onRecoveryChanged }: { role: ReturnRole; record: ApiReturn; run: (work: () => Promise<ApiReturn>) => Promise<void>; busy: boolean; recoveryLocked: boolean; onRecoveryLocked: (locked: boolean) => void; onRecoveryChanged: () => void }) {
   const id = record.id
   const actor = getAuthenticatedActor()
@@ -276,15 +471,15 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
     }
     const evidencePhotos: string[] = []
     for (const file of evidenceFiles) {
-      const asset = await uploadReturnEvidence(id, file)
+      const asset = await uploadReturnEvidence(id, file, role)
       evidencePhotos.push(asset.id)
     }
-    return inspectReturn(id, { ...fees, inventoryMatch: inventory, damageClassification: damage, staffNotes: note, evidencePhotos, ...returned, proposedUnitStatus: unit, unitVacated })
+    return inspectReturn(id, { ...sanitizeFees(fees), inventoryMatch: inventory, damageClassification: damage, staffNotes: note, evidencePhotos, ...returned, proposedUnitStatus: unit, unitVacated })
   }
 
   return (
     <section className="space-y-4" aria-label="Xử lý trả kho">
-      <ReturnSummary record={record} />
+      <ReturnSummary record={record} hideTerminationFee={role === 'customer'} />
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
         <p className="font-semibold">Bước tiếp theo</p>
         <p className="mt-1">{recoveryNextStep ?? { requested: 'Yêu cầu đã được gửi. Cơ sở sẽ sắp xếp lịch và thực hiện nghiệm thu trước khi quyết toán.', scheduled: 'Đến cơ sở theo ngày hẹn để trả kho và bàn giao cho nhân viên nghiệm thu.', inspected: 'Nghiệm thu đã được ghi nhận. Chờ cơ sở gửi kết quả quyết toán để khách hàng xác nhận.', awaiting_business_review: 'Hồ sơ cũ chưa có bảng giá trả sớm snapshot. Chờ Business duyệt thủ công.', awaiting_customer_confirmation: 'Kiểm tra các khoản phí bên dưới, sau đó đồng ý quyết toán hoặc yêu cầu xem xét lại.', disputed: 'Hồ sơ đang có khiếu nại từ khách hàng. Cần Ban Điều Hành (BO) hoặc Quản lý giải quyết trước khi tiếp tục.', payment_due: 'Thanh toán khoản quyết toán còn thiếu để tiếp tục hoàn tất trả kho.', refund_pending: 'Cơ sở đang xử lý hoàn cọc. Hồ sơ chỉ hoàn tất khi khoản hoàn tiền được ghi nhận.', completed: 'Hồ sơ trả kho và quyết toán đã hoàn tất.' }[record.status]}</p>
@@ -309,7 +504,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
           <dl className="divide-y divide-stone-100 text-sm">
             {!recovery && record.setupEarlyExit && <>
               <div className="flex justify-between gap-3 py-2"><dt className="text-stone-500">Tiền thuê thực thu được quyết toán</dt><dd className="shrink-0 font-medium">{record.rentalRefundCredit == null ? 'Chưa xác định' : rentalMoney(record.rentalRefundCredit, 'VND')}</dd></div>
-              <div className="flex justify-between gap-3 py-2"><dt className="text-stone-500">Phí chấm dứt sớm một lần</dt><dd className="shrink-0 font-medium">{record.earlyTerminationFee == null ? 'Chưa xác định' : rentalMoney(record.earlyTerminationFee, 'VND')}</dd></div>
+              {role !== 'customer' && <div className="flex justify-between gap-3 py-2"><dt className="text-stone-500">Phí chấm dứt sớm một lần</dt><dd className="shrink-0 font-medium">{record.earlyTerminationFee == null ? 'Chưa xác định' : rentalMoney(record.earlyTerminationFee, 'VND')}</dd></div>}
             </>}
             {feeKeys.map((key, index) => <div key={key} className="flex justify-between gap-3 py-2"><dt className="text-stone-500">{['Phí hư hỏng', 'Phí vệ sinh', 'Phí mất đồ', 'Phí quá hạn', 'Phí còn thiếu'][index]}</dt><dd className="shrink-0 font-medium">{rentalMoney(record[key], 'VND')}</dd></div>)}
             <div className="flex justify-between gap-3 py-3 font-bold"><dt>Tổng phí ghi nhận</dt><dd>{rentalMoney(record.totalDeductions, 'VND')}</dd></div>
@@ -340,7 +535,13 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
             Bạn có thể duyệt cho khách trả kho ngay lập tức mà không cần qua nhiều bước nghiệm thu.
           </p>
           <div className="flex gap-2">
-            <Button size="sm" variant="primary" disabled={busy} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer" onClick={() => void run(() => Promise.reject(new Error('Cần hoàn tất nghiệm thu, xử lý khiếu nại và xác nhận quyết toán trước. Chỉ ghi nhận thu/hoàn tiền tại form có biên lai khi hồ sơ đủ điều kiện.')))}>
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={busy}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer"
+              onClick={() => void run(() => fastApproveReturn(id, role))}
+            >
               ⚡ Cho trả kho ngay (Đóng hồ sơ & giải phóng gian)
             </Button>
           </div>
@@ -356,7 +557,13 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
             Biên bản nghiệm thu đã lập. Bạn có thể xác nhận cho phép trả kho và hoàn tất hồ sơ ngay mà không cần đợi thêm.
           </p>
           <div className="flex gap-2">
-            <Button size="sm" variant="primary" disabled={busy} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer" onClick={() => void run(() => Promise.reject(new Error('Cần hoàn tất nghiệm thu, xử lý khiếu nại và xác nhận quyết toán trước. Chỉ ghi nhận thu/hoàn tiền tại form có biên lai khi hồ sơ đủ điều kiện.')))}>
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={busy}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer"
+              onClick={() => void run(() => confirmReturn(id, 'accepted', note.trim() || 'Nhân viên hỗ trợ xác nhận quyết toán trực tiếp tại quầy', role))}
+            >
               ✓ Xác nhận hoàn tất trả kho ngay
             </Button>
           </div>
@@ -372,7 +579,21 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
             Ý kiến khách: {record.customerDecisionNote || 'Cần xem xét lại'}. Bạn có thể bỏ qua khiếu nại và duyệt cho trả kho ngay.
           </p>
           <div className="flex gap-2">
-            <Button size="sm" variant="primary" disabled={busy} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer" onClick={() => void run(() => Promise.reject(new Error('Cần hoàn tất nghiệm thu, xử lý khiếu nại và xác nhận quyết toán trước. Chỉ ghi nhận thu/hoàn tiền tại form có biên lai khi hồ sơ đủ điều kiện.')))}>
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={busy}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer"
+              onClick={() => void run(() => reviewDispute(id, {
+                damageFee: 0,
+                cleaningFee: 0,
+                lostItemFee: 0,
+                overdueFee: 0,
+                outstandingFee: 0,
+                resolutionNote: note.trim() || 'Nhân viên duyệt bỏ qua khiếu nại và cho trả kho ngay',
+                proposedUnitStatus: 'available',
+              }))}
+            >
               ✓ Duyệt trả kho & Hoàn tất ngay
             </Button>
           </div>
