@@ -1042,9 +1042,6 @@ export default function StaffCheckInOperationsPanel({
                         </Button>
                       </>
                     )}
-                    {item.checkInStatus === "completed" && (
-                      <Badge variant="success">COMPLETED</Badge>
-                    )}
                   </div>
                 </Td>
               </Tr>
