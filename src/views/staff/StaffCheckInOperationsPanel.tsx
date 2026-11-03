@@ -15,6 +15,7 @@ import {
   uploadCheckInEvidence,
   verifyCheckInIdentity,
   type CheckInCase,
+  type CheckInPaymentMethod,
   type CheckInChecklist,
   type CheckInListStatus,
 } from "../../services/checkInApi"
@@ -273,7 +274,7 @@ export default function StaffCheckInOperationsPanel({
 
   const [keyLockReference, setKeyLockReference] = useState("")
 
-  const [paymentMethod, setPaymentMethod] = useState("CASH")
+  const [paymentMethod, setPaymentMethod] = useState<CheckInPaymentMethod>("CASH")
 
   const [noShowTarget, setNoShowTarget] = useState<CheckInCase | null>(null)
 
@@ -1190,7 +1191,7 @@ export default function StaffCheckInOperationsPanel({
                 <div><p className="font-semibold text-emerald-950">Thu tiền sau khi ký hợp đồng</p><p className="text-sm text-emerald-800">Số tiền cần thu: <b>{Number(handoverTarget.dueAtCheckIn ?? 0).toLocaleString('vi-VN')} đồng</b>.</p></div>
                 {(handoverTarget.dueAtCheckIn ?? 0) > 0 && !isReviewingCompletedStep ? (
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <Select label="Phương thức thanh toán" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}><option value="CASH">Tiền mặt</option><option value="BANK_TRANSFER">Chuyển khoản</option></Select>
+                    <Select label="Phương thức thanh toán" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as CheckInPaymentMethod)}><option value="CASH">Tiền mặt</option><option value="BANK_TRANSFER">Chuyển khoản</option></Select>
                     <label className="block text-sm font-medium">Biên lai / bằng chứng giao dịch (tối đa 25MB) *<input className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => {
                       const selected = event.target.files?.[0] || null
                       if (!validateUploadFile(selected, 'biên lai', setError)) {
