@@ -313,7 +313,7 @@ export interface CheckInPayment {
   purpose: 'RENTAL_BALANCE'
   status: PaymentStatus
   transactionReference: string
-  paymentMethod: string
+  paymentMethod: CheckInPaymentMethod
   paidAt: string | null
   processedAt: string | null
   initiatedByName: string
@@ -322,9 +322,11 @@ export interface CheckInPayment {
   invoiceIssuedAt: string | null
 }
 
+export type CheckInPaymentMethod = 'CASH' | 'BANK_TRANSFER'
+
 export async function recordCheckInRemainingPayment(checkInId: string, request: {
   amount: number
-  paymentMethod: string
+  paymentMethod: CheckInPaymentMethod
   paymentEvidenceFileId: string
   transactionReference?: string
   note?: string
