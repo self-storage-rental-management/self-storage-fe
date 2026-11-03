@@ -99,6 +99,13 @@ afterEach(() => {
 })
 
 describe("Manager inventory reads existing DB endpoints without local mutation", () => {
+  it("loads an archived type and its physical unit without rejecting the facility response", async () => {
+    transport([type("type-a", { status: "archived", monthlyPrice: 0 })], [unit("1")])
+    const inventory = await loadManagerInventory("facility-a")
+    expect(inventory.catalog[0]).toMatchObject({ status: "archived", counts: { available: 1 } })
+    expect(inventory.units[0].definition.status).toBe("archived")
+  })
+
   it("joins by actual type ID, preserves code/floor/zone/status, VND and missing measurements", async () => {
     const fetch = transport(
       [

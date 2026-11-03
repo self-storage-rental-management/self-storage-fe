@@ -1243,9 +1243,7 @@ export default function AdminLoginHistoryApiPanel({
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="text-lg">
-                      {risk.level === 'high' ? '🚨' : risk.level === 'warning' ? '⚠️' : '🛡️'}
-                    </span>
+                    {risk.level === 'warning' && <span className="text-lg">⚠️</span>}
                     <h4 className="font-bold text-sm">{risk.title}</h4>
                   </div>
                   <span
@@ -1269,7 +1267,7 @@ export default function AdminLoginHistoryApiPanel({
 
                 {risk.recommendedAction && (
                   <p className="mt-2 text-xs font-semibold pt-2 border-t border-red-200/60">
-                    💡 Khuyến nghị xử lý: {risk.recommendedAction}
+                    Khuyến nghị xử lý: {risk.recommendedAction}
                   </p>
                 )}
               </div>

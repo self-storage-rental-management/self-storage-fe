@@ -25,6 +25,14 @@ export interface LayoutNotification {
   isRead?: boolean
 }
 
+const sidebarRoleColors: Record<Role, string> = {
+  manager: 'text-blue-400',
+  staff: 'text-green-400',
+  customer: 'text-yellow-300',
+  business: 'text-orange-400',
+  admin: 'text-red-400',
+}
+
 function resolveNavPage(navItems: NavItem[], requested: string | null): string | null {
   if (!requested) return null
   if (requested === 'profile') return 'profile'
@@ -430,7 +438,7 @@ export default function Layout({
         {/* Role & Facility badge */}
         <div className="shrink-0 px-4 pt-4 pb-2 space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-normal text-stone-300">
+            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${sidebarRoleColors[user.role]}`}>
               {getTranslatedRole()}
             </span>
           </div>

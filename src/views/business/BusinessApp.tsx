@@ -1832,7 +1832,7 @@ export default function BusinessApp({
       setPricingCatalogVersion(version => version + 1)
       showToast(
         lang === "vi"
-          ? `Đã cập nhật biểu giá cho cơ sở "${editingPriceFacility.name}"! Nếu cơ sở đang ở trạng thái Thiết lập, bạn có thể bấm [🚀 Công bố cơ sở] để xuất bản ngay lên Cổng khách hàng.`
+          ? `Đã cập nhật biểu giá cho cơ sở "${editingPriceFacility.name}"! Nếu cơ sở đang ở trạng thái Thiết lập, bạn có thể bấm [Công bố cơ sở] để xuất bản ngay lên Cổng khách hàng.`
           : `Updated pricing for "${editingPriceFacility.name}"!`
       )
       return
@@ -3903,7 +3903,7 @@ export default function BusinessApp({
                             onClick={() => void handlePublishFacility(cleanF)}
                             title={lang === "vi" ? "Công bố cơ sở này lên Cổng khách hàng" : "Publish facility to customer portal"}
                           >
-                            🚀 {lang === "vi" ? "Công bố cơ sở" : "Publish"}
+                            {lang === "vi" ? "Công bố cơ sở" : "Publish"}
                           </Button>
                         )}
                         <Button
@@ -4081,9 +4081,6 @@ export default function BusinessApp({
                                     ? "Tạm dừng"
                                     : "Bản nháp"}
                           </Badge>
-                          <span className="text-[9px] text-stone-400 font-mono">
-                            [{item.publicationStatus || (isActive ? 'PUBLISHED' : 'INACTIVE')}]
-                          </span>
                         </div>
                       </div>
 
@@ -5774,21 +5771,6 @@ export default function BusinessApp({
 
                   return (
                     <div className="space-y-4">
-                      {facilityEditError && (
-                        <div
-                          role="alert"
-                          className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900 font-medium flex items-start gap-3 shadow-xs animate-shake"
-                        >
-                          <svg className="w-5 h-5 text-red-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                          </svg>
-                          <div className="flex-1 space-y-1">
-                            <p className="font-bold text-red-900">Không thể cập nhật cơ sở</p>
-                            <p className="text-red-700 leading-relaxed font-normal">{facilityEditError}</p>
-                          </div>
-                        </div>
-                      )}
-
                       {/* Thông tin cơ sở */}
                       <FacilityGeneralInfo
                         isEditing={true}
@@ -5829,8 +5811,14 @@ export default function BusinessApp({
                       />
 
                       {/* Sticky footer */}
-                      <div className="sticky -bottom-6 -mx-6 -mb-6 bg-white/95 backdrop-blur-xs px-6 py-3 border-t border-stone-200 flex flex-col sm:flex-row items-center justify-between gap-2.5 z-10">
-                        <div className="text-xs text-stone-500">
+                      <div className="sticky -bottom-6 -mx-6 -mb-6 bg-white/95 backdrop-blur-xs px-6 py-3 border-t border-stone-200 flex flex-col gap-2.5 z-10">
+                        {facilityEditError && (
+                          <p role="alert" className="w-full rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+                            {facilityEditError}
+                          </p>
+                        )}
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5">
+                          <div className="text-xs text-stone-500">
                           {!isEditDirty ? (
                             <span className="text-stone-400 italic">
                               Chưa có thay đổi nào so với dữ liệu gốc
@@ -5840,9 +5828,9 @@ export default function BusinessApp({
                               Có thay đổi chưa lưu
                             </span>
                           )}
-                        </div>
+                          </div>
 
-                        <div className="flex items-center gap-2 self-end sm:self-auto">
+                          <div className="flex items-center gap-2 self-end sm:self-auto">
                           <Button
                             variant="outline"
                             onClick={handleRequestCloseEdit}
@@ -5875,6 +5863,7 @@ export default function BusinessApp({
                               lang === "vi" ? "Lưu Thay Đổi" : "Save Changes"
                             )}
                           </Button>
+                          </div>
                         </div>
                       </div>
                     </div>

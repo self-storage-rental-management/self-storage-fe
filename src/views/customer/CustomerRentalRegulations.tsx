@@ -138,7 +138,7 @@ export default function CustomerRentalRegulations({ facilityName }: Props) {
             Hiệu lực thi hành và tính pháp lý
           </h5>
           <p>
-            1. Bản Quy định này có hiệu lực kể từ ngày StorageHub ban hành chính thức và được dẫn chiếu mặc định vào toàn bộ các Hợp đồng thuê kho, Phiếu xác nhận đặt giữ kho (Hold/Reservation) và Biên bản bàn giao kho.
+            1. Bản Quy định này có hiệu lực kể từ ngày StorageHub ban hành chính thức và được dẫn chiếu mặc định vào toàn bộ các Hợp đồng thuê kho, Phiếu xác nhận đặt giữ kho và Biên bản bàn giao kho.
           </p>
           <p>
             2. Khi có sự thay đổi, bổ sung điều khoản, StorageHub sẽ thông báo công khai trước ít nhất 15 ngày trên cổng quản trị hệ thống và gửi email thông báo đến các khách hàng đang có hợp đồng hiệu lực.

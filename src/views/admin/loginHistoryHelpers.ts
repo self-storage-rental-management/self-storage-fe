@@ -103,7 +103,7 @@ export function parseUserAgent(ua: string | null | undefined): ParsedUserAgent {
       deviceType: 'bot',
       iconType: 'bot',
       browserIcon: 'generic',
-      displayShort: `🤖 ${toolName}`,
+      displayShort: toolName,
       displayDevice: 'Công cụ lập trình tự động',
       isAutomated: true,
     }

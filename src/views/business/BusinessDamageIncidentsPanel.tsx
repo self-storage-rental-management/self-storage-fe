@@ -219,7 +219,6 @@ export default function BusinessDamageIncidentsPanel({ user, lang = 'vi', facili
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-200 pb-4">
         <div>
           <h2 className="text-xl font-bold text-stone-900 flex items-center gap-2">
-            <span>🛡️</span>
             {isVi ? 'Quản Lý Sự Cố & Hư Hỏng Kho' : 'Damage Incidents Management'}
           </h2>
           <p className="text-xs text-stone-500 mt-1">
@@ -419,7 +418,7 @@ export default function BusinessDamageIncidentsPanel({ user, lang = 'vi', facili
                           size="sm"
                           onClick={() => handleOpenStatusModal(inc)}
                         >
-                          ⚡ {isVi ? 'Cập nhật' : 'Update'}
+                          {isVi ? 'Cập nhật' : 'Update'}
                         </Button>
                       </div>
                     </Td>

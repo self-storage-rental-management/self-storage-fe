@@ -22,13 +22,15 @@ function render(role: Role, roleLabel: string) {
 
 describe('Manager sidebar role badge removal', () => {
   it.each([
-    ['customer', 'Customer', 'Khách Hàng'],
-    ['staff', 'Staff', 'Nhân Viên'],
-    ['business', 'Business', 'Quản Lý Vận Hành Kinh Doanh'],
-    ['admin', 'Admin', 'Quản Trị Viên'],
-  ] as const)('preserves the %s sidebar badge', (role, roleLabel, text) => {
+    ['customer', 'Customer', 'Khách Hàng', 'text-yellow-300'],
+    ['staff', 'Staff', 'Nhân Viên', 'text-green-400'],
+    ['manager', 'Manager', 'Quản Lý Cơ Sở', 'text-blue-400'],
+    ['business', 'Business', 'Quản Lý Vận Hành Kinh Doanh', 'text-orange-400'],
+    ['admin', 'Admin', 'Quản Trị Viên', 'text-red-400'],
+  ] as const)('colors the %s sidebar role', (role, roleLabel, text, color) => {
     const sidebar = render(role, roleLabel).match(/<aside\b[\s\S]*?<\/aside>/)?.[0]
     expect(sidebar).toContain('px-4 pt-4 pb-2')
     expect(sidebar).toContain(text)
+    expect(sidebar).toContain(`font-bold ${color}`)
   })
 })

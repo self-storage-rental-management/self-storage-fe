@@ -46,6 +46,8 @@ import {
 import { archiveManagerUnitType, createManagerUnitType, updateManagerUnitType } from "../../services/managerUnitTypeApi"
 import { listAccessibleUnitTypes, type CustomerUnitType } from "../../services/customerReservationApi"
 import { generateUnitTypeCode, previewPhysicalUnitCodes } from "./managerUnitCodeHelpers"
+import { validateUnitTypeDimensions } from "./managerUnitTypeDimensions"
+import { UNIT_SPECS } from "../../data/demoDatabase"
 import ManagerGoodsCatalogPanel from "./ManagerGoodsCatalogPanel"
 import { subscribeGoodsCatalog } from '../../services/goodsCatalogEvents'
 import { getManagerGoodsCatalog } from "../../services/managerGoodsCatalogApi"
@@ -361,6 +363,26 @@ function CreateUnitTypeModal({ open, facilityId, existingCodes = [], onClose, on
     )
   }, [form.code, existingCodes, initial])
 
+  const dimensionError = initial ? undefined : validateUnitTypeDimensions(form, true)
+  const area = Number(form.lengthM) * Number(form.widthM)
+  const volume = area * Number(form.heightM)
+  const applySizeTemplate = (size: keyof typeof UNIT_SPECS) => {
+    const template = UNIT_SPECS[size]
+    setForm(current => {
+      const name = current.name.trim() || template.name
+      return {
+        ...current, name,
+        code: isAutoCode && !initial ? generateUnitTypeCode(name, existingCodes) : current.code,
+        lengthM: String(template.lengthM), widthM: String(template.widthM), heightM: String(template.heightM),
+        maxLoadKg: String(template.maxLoadKg), aisleWidthM: String(template.aisleM),
+        rackCount: String(template.frameCount), rackLengthM: String(template.frameDimensions.lengthM ?? template.frameDimensions.depthM),
+        rackWidthM: String(template.frameDimensions.widthM), rackHeightM: String(template.frameDimensions.heightM),
+        trolleyType: template.cartEquipment, smallBoxCapacity: String(template.smallBoxes),
+        largeBoxCapacity: String(template.largeBoxes),
+      }
+    })
+  }
+
   const field = (key: keyof typeof form, label: string, type = 'text') => (
     <label className="block text-sm font-medium text-stone-700">{label}
       <input
@@ -374,6 +396,7 @@ function CreateUnitTypeModal({ open, facilityId, existingCodes = [], onClose, on
   )
   const submit = async () => {
     if (imageReading || isDuplicateCode) return
+    if (dimensionError) { setError(dimensionError); return }
     setBusy(true); setError(undefined)
     try {
       const input = {
@@ -487,19 +510,36 @@ function CreateUnitTypeModal({ open, facilityId, existingCodes = [], onClose, on
       </section>
       <section className="rounded-xl border border-stone-200 p-4 space-y-4">
         <h3 className="font-semibold text-stone-900">Kích thước và tải trọng</h3>
+        {!initial && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-stone-600">Điền nhanh theo mẫu:</span>
+            {(['S', 'M', 'L', 'XL'] as const).map(size => (
+              <Button key={size} type="button" variant="outline" size="sm" disabled={busy} onClick={() => applySizeTemplate(size)}>
+                {size}
+              </Button>
+            ))}
+            <span className="text-xs text-stone-500">Có thể chỉnh lại theo kích thước thực tế.</span>
+          </div>
+        )}
         <div className="grid gap-4 sm:grid-cols-3">
         {field('lengthM', 'Chiều dài (m)', 'number')}{field('widthM', 'Chiều rộng (m)', 'number')}{field('heightM', 'Chiều cao (m)', 'number')}
         </div><div className="grid gap-4 sm:grid-cols-2">{field('maxLoadKg', 'Tải trọng tối đa (kg)', 'number')}{field('aisleWidthM', 'Chiều rộng lối đi (m)', 'number')}</div>
+        {Number.isFinite(area) && Number.isFinite(volume) && area > 0 && volume > 0 && (
+          <p className="text-sm text-stone-600">Diện tích: <strong>{area.toLocaleString('vi-VN', { maximumFractionDigits: 2 })} m²</strong> · Thể tích: <strong>{volume.toLocaleString('vi-VN', { maximumFractionDigits: 2 })} m³</strong></p>
+        )}
+        {dimensionError && <p role="alert" className="text-sm text-red-700">{dimensionError}</p>}
       </section>
-      <section className="rounded-xl border border-stone-200 p-4 space-y-4">
-        <h3 className="font-semibold text-stone-900">Khung kệ và thiết bị hỗ trợ</h3>
+      <details className="rounded-xl border border-stone-200 p-4" open={initial ? true : undefined}>
+        <summary className="cursor-pointer font-semibold text-stone-900">Khung kệ và thiết bị hỗ trợ</summary>
+        <div className="mt-4 space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">{field('rackCount', 'Số khung kệ', 'number')}{field('trolleyType', 'Loại xe đẩy hỗ trợ')}</div>
         <div className="grid gap-4 sm:grid-cols-3">
         {field('rackLengthM', 'Dài khung (m)', 'number')}{field('rackWidthM', 'Rộng khung (m)', 'number')}{field('rackHeightM', 'Cao khung (m)', 'number')}
         </div><div className="grid gap-4 sm:grid-cols-2">
         {field('smallBoxCapacity', 'Sức chứa thùng nhỏ', 'number')}{field('largeBoxCapacity', 'Sức chứa thùng lớn', 'number')}
         </div>
-      </section>
+        </div>
+      </details>
       <section className="rounded-xl border border-stone-200 p-4 space-y-4">
         <h3 className="font-semibold text-stone-900">Số lượng và vị trí gian kho</h3>
         <div className="grid gap-4 sm:grid-cols-3">
@@ -586,7 +626,7 @@ function CreateUnitTypeModal({ open, facilityId, existingCodes = [], onClose, on
         })}
       </section>
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p>}
-      <div className="flex justify-end gap-2 border-t border-stone-200 pt-4"><Button variant="outline" disabled={busy || imageReading} onClick={onClose}>Hủy</Button><Button disabled={busy || imageReading || !form.code.trim() || !form.name.trim() || isDuplicateCode || selectedCategories.length === 0} onClick={() => void submit()}>{imageReading ? 'Đang đọc ảnh…' : busy ? 'Đang lưu...' : initial ? 'Lưu thay đổi' : 'Thêm loại kho'}</Button></div>
+      <div className="flex justify-end gap-2 border-t border-stone-200 pt-4"><Button variant="outline" disabled={busy || imageReading} onClick={onClose}>Hủy</Button><Button disabled={busy || imageReading || !!dimensionError || !form.code.trim() || !form.name.trim() || isDuplicateCode || selectedCategories.length === 0} onClick={() => void submit()}>{imageReading ? 'Đang đọc ảnh…' : busy ? 'Đang lưu...' : initial ? 'Lưu thay đổi' : 'Thêm loại kho'}</Button></div>
     </div>
   </Modal>
 }

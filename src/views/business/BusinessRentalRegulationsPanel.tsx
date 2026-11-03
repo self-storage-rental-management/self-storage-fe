@@ -139,12 +139,7 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
 
         {/* Quy Định Trả Kho & Gia Hạn Mẫu Hiển Thị Khách Hàng */}
         <div className="mt-4 pt-4 border-t border-stone-200/80 space-y-3">
-          <div className="flex items-center justify-between">
-            <h4 className="font-bold text-rose-900 text-sm">Quy định trả kho và gia hạn (Công bố khách hàng)</h4>
-            <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-200">
-              Hiển thị tại Customer Portal
-            </span>
-          </div>
+          <h4 className="font-bold text-rose-900 text-sm">Quy định trả kho và gia hạn (Công bố khách hàng)</h4>
           <div className="grid gap-3 sm:grid-cols-2 text-xs">
             <article className="rounded-xl border border-rose-200 bg-white p-3.5">
               <b className="text-slate-800 text-sm">Trả kho sau ngày hết hạn</b>
@@ -221,7 +216,7 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
           Hiệu lực thi hành và tính pháp lý
         </h4>
         <p className="text-xs text-slate-600 leading-relaxed">
-          1. Bản Quy định này có hiệu lực kể từ ngày StorageHub ban hành chính thức và được dẫn chiếu mặc định vào toàn bộ các Hợp đồng thuê kho, Phiếu xác nhận đặt giữ kho (Hold/Reservation) và Biên bản bàn giao kho.
+          1. Bản Quy định này có hiệu lực kể từ ngày StorageHub ban hành chính thức và được dẫn chiếu mặc định vào toàn bộ các Hợp đồng thuê kho, Phiếu xác nhận đặt giữ kho và Biên bản bàn giao kho.
         </p>
         <p className="text-xs text-slate-600 leading-relaxed">
           2. Khi có sự thay đổi, bổ sung điều khoản nhằm đáp ứng quy chuẩn kỹ thuật hoặc quy định mới của pháp luật, StorageHub sẽ thông báo công khai trước ít nhất 15 ngày trên cổng quản trị hệ thống và gửi email thông báo đến các khách hàng đang có hợp đồng hiệu lực.

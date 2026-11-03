@@ -10,7 +10,7 @@ describe('manager catalog before BO pricing', () => {
     expect(summarizeFacilityCatalog([type], units)[0]).toMatchObject({ total: 4, counts: { available: 4 }, status: 'awaiting_pricing' })
   })
   it('accepts all backend lifecycle states but rejects unknown status and another facility', () => {
-    for (const status of ['draft', 'awaiting_pricing', 'active', 'inactive']) expect(isFacilityCatalogType({ ...type, status }, 'facility-dn')).toBe(true)
+    for (const status of ['draft', 'awaiting_pricing', 'active', 'inactive', 'archived']) expect(isFacilityCatalogType({ ...type, status }, 'facility-dn')).toBe(true)
     expect(isFacilityCatalogType({ ...type, status: 'unexpected' }, 'facility-dn')).toBe(false)
     expect(isFacilityCatalogType(type, 'facility-q1')).toBe(false)
   })

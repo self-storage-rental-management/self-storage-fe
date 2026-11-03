@@ -15,7 +15,7 @@ export function FacilityCatalogTable({ rows }: { rows: FacilityCatalogRow[] }) {
   return <Table>
     <Thead><tr><Th>Loại gian kho</Th><Th>Dài × rộng × cao</Th><Th>Diện tích / thể tích</Th><Th>Tải trọng tối đa</Th><Th>Giá niêm yết</Th><Th>Số gian tại cơ sở</Th></tr></Thead>
     <Tbody>{rows.map(row => <Tr key={row.id}>
-      <Td><b>{facilityCatalogTypeName(row.name, row.code)}</b><p className="mt-1 text-xs text-stone-500">{{ draft: 'Bản nháp', awaiting_pricing: 'Chờ BO định giá', active: 'Đang áp dụng', inactive: 'Ngừng áp dụng' }[row.status]}</p></Td>
+      <Td><b>{facilityCatalogTypeName(row.name, row.code)}</b><p className="mt-1 text-xs text-stone-500">{{ draft: 'Bản nháp', awaiting_pricing: 'Chờ BO định giá', active: 'Đang áp dụng', inactive: 'Ngừng áp dụng', archived: 'Đã lưu trữ' }[row.status]}</p></Td>
       <Td>{[row.lengthM, row.widthM, row.heightM].some(value => value === null) ? 'Chưa có thông tin' : `${number(row.lengthM)} × ${number(row.widthM)} × ${number(row.heightM)} m`}</Td>
       <Td>{quantity(row.areaM2, 'm²')}<br />{quantity(row.volumeM3, 'm³')}</Td>
       <Td>{quantity(row.maxLoadKg, 'kg')}</Td>
