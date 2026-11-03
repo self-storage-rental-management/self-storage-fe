@@ -63,6 +63,7 @@ import {
   createCustomerReservation,
   createReservationQuote,
   getCustomerReservation,
+  deleteExpiredReservationHistory,
   listCustomerReservations,
   resendReservationOtp,
   uploadReservationGoodsImage,
@@ -90,6 +91,18 @@ type CustomerCatalogUnit = StorageUnit & {
   trolley: string
   trolleyDetail: string
 }
+
+async function loadCustomerReservationRecords() {
+  const currentPage = await listCustomerReservations(undefined, 0, 100)
+  // Read expired records after the active list so a deadline transition between
+  // requests is picked up by the history request.
+  const expiredPage = await listCustomerReservations('EXPIRED', 0, 100)
+  const records = new Map<string, CustomerReservation>()
+  currentPage.data.forEach(reservation => records.set(reservation.id, reservation))
+  expiredPage.data.forEach(reservation => records.set(reservation.id, reservation))
+  return [...records.values()]
+}
+
 type CustomerConfirmation = {
   title: string
   message: string
@@ -681,8 +694,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     let initialLoad = true
     const loadReservations = async () => {
       try {
-        const result = await listCustomerReservations(undefined, 0, 50)
-        if (!cancelled) setBackendReservations(result.data)
+        const reservations = await loadCustomerReservationRecords()
+        if (!cancelled) setBackendReservations(reservations)
       } catch (error) {
         if (!cancelled && initialLoad) {
           showToast(userFacingError(error, 'Không thể tải danh sách đặt kho.'))
@@ -748,7 +761,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const [reservationSizeFilter, setReservationSizeFilter] = useState('all')
   const [reservationSearch, setReservationSearch] = useState('')
   const [reservationPageNumber, setReservationPageNumber] = useState(1)
-  const reservationPageSize = 5
+  const reservationPageSize = 3
+  const [expiredReservationPageNumber, setExpiredReservationPageNumber] = useState(1)
+  const [completedReservationPageNumber, setCompletedReservationPageNumber] = useState(1)
   const [rentalFacilityFilter, setRentalFacilityFilter] = useState('all')
   const [rentalTypeFilter, setRentalTypeFilter] = useState('all')
   const [rentalDeadlineFilter, setRentalDeadlineFilter] = useState<'all' | 'upcoming' | 'overdue'>('all')
@@ -1101,7 +1116,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   // Data scoping for Customer (P1.4)
   const myHolds = holds.filter(h => h.customerId === user.id || h.customerName === user.name || h.customerEmail === user.email)
-  const visibleMyHolds = myHolds.filter(hold => !hold.customerArchivedAt && !['completed', 'COMPLETED'].includes(hold.status))
+  const visibleMyHolds = myHolds.filter(hold =>
+    (!hold.customerArchivedAt || hold.status === 'EXPIRED')
+  )
   const myRentals = rentals.filter(r => r.customerId === user.id || r.customerName === user.name || r.customerEmail === user.email)
   const visibleMyRentals = myRentals.filter(rental => !rental.customerArchivedAt && rental.status !== 'completed')
   const visibleMyContracts = contracts.filter(contract => !contract.customerArchivedAt && (
@@ -1151,8 +1168,15 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     const holdSize = storageSizeCode(assignedUnit?.type || hold.unitTypeName || hold.unitId)
     if (!matchesReservationSearch(reservationSearch, [hold.id, hold.unitTypeName, facilities.find(item => item.id === hold.facilityId)?.name])) return false
     return reservationSizeFilter === 'all' || holdSize === reservationSizeFilter
+  }).sort((left, right) => {
+    const rank = (status: string) => status === 'EXPIRED' ? 1 : ['COMPLETED', 'completed'].includes(status) ? 2 : 0
+    return rank(left.status) - rank(right.status)
   })
-  const pendingHandoverReservations = backendReservations.filter(reservation => reservation.status !== 'COMPLETED')
+  const pendingHandoverReservations = backendReservations
+    .sort((left, right) => {
+      const rank = (status: CustomerReservation['status']) => status === 'EXPIRED' ? 1 : status === 'COMPLETED' ? 2 : 0
+      return rank(left.status) - rank(right.status)
+    })
   const filteredBackendReservations = pendingHandoverReservations.filter(reservation => {
     if (reservationFacilityFilter !== 'all' && reservation.facilityId !== reservationFacilityFilter) return false
     const unitType = backendUnitTypes.find(item => item.id === reservation.unitTypeId)
@@ -1160,12 +1184,34 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     return reservationSizeFilter === 'all' || storageSizeCode(unitType?.name || unitType?.code || '') === reservationSizeFilter
   })
 
-  const reservationCount = isApiAuthenticated() ? filteredBackendReservations.length : filteredReservationHolds.length
+  const activeBackendReservations = filteredBackendReservations.filter(reservation => !['EXPIRED', 'COMPLETED'].includes(reservation.status))
+  const expiredBackendReservations = filteredBackendReservations.filter(reservation => reservation.status === 'EXPIRED')
+  const completedBackendReservations = filteredBackendReservations.filter(reservation => reservation.status === 'COMPLETED')
+  const activeReservationHolds = filteredReservationHolds.filter(hold => !['EXPIRED', 'COMPLETED', 'completed'].includes(hold.status))
+  const expiredReservationHolds = filteredReservationHolds.filter(hold => hold.status === 'EXPIRED')
+  const completedReservationHolds = filteredReservationHolds.filter(hold => ['COMPLETED', 'completed'].includes(hold.status))
+  const reservationCount = isApiAuthenticated() ? activeBackendReservations.length : activeReservationHolds.length
+  const expiredReservationCount = isApiAuthenticated() ? expiredBackendReservations.length : expiredReservationHolds.length
+  const completedReservationCount = isApiAuthenticated() ? completedBackendReservations.length : completedReservationHolds.length
   const reservationPagination = reservationPage(reservationCount, reservationPageNumber, reservationPageSize)
-  const pagedBackendReservations = filteredBackendReservations.slice(reservationPagination.start, reservationPagination.end)
-  const pagedReservationHolds = filteredReservationHolds.slice(reservationPagination.start, reservationPagination.end)
+  const expiredReservationPagination = reservationPage(expiredReservationCount, expiredReservationPageNumber, reservationPageSize)
+  const completedReservationPagination = reservationPage(completedReservationCount, completedReservationPageNumber, reservationPageSize)
+  const pagedBackendReservations = [
+    ...activeBackendReservations.slice(reservationPagination.start, reservationPagination.end),
+    ...expiredBackendReservations.slice(expiredReservationPagination.start, expiredReservationPagination.end),
+    ...completedBackendReservations.slice(completedReservationPagination.start, completedReservationPagination.end),
+  ]
+  const pagedReservationHolds = [
+    ...activeReservationHolds.slice(reservationPagination.start, reservationPagination.end),
+    ...expiredReservationHolds.slice(expiredReservationPagination.start, expiredReservationPagination.end),
+    ...completedReservationHolds.slice(completedReservationPagination.start, completedReservationPagination.end),
+  ]
   useEffect(() => { setReservationPageNumber(1) }, [reservationSearch, reservationFacilityFilter, reservationSizeFilter, reservationPageSize])
+  useEffect(() => { setExpiredReservationPageNumber(1) }, [reservationSearch, reservationFacilityFilter, reservationSizeFilter, reservationPageSize])
+  useEffect(() => { setCompletedReservationPageNumber(1) }, [reservationSearch, reservationFacilityFilter, reservationSizeFilter, reservationPageSize])
   useEffect(() => { setReservationPageNumber(current => Math.min(current, reservationPagination.pages)) }, [reservationPagination.pages])
+  useEffect(() => { setExpiredReservationPageNumber(current => Math.min(current, expiredReservationPagination.pages)) }, [expiredReservationPagination.pages])
+  useEffect(() => { setCompletedReservationPageNumber(current => Math.min(current, completedReservationPagination.pages)) }, [completedReservationPagination.pages])
 
   const activeUnassignedCapacityHolds = holds.filter(hold => {
     if (hold.assignedUnitId || ['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(hold.status)) return false
@@ -1263,7 +1309,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   useEffect(() => {
     if (isApiAuthenticated()) return
     visibleMyHolds
-      .filter(hold => ['CANCELLED', 'EXPIRED'].includes(hold.status))
+      .filter(hold => hold.status === 'CANCELLED')
       .forEach(hold => {
         try { archiveReservationHistory(hold.id, user) } catch { /* already archived */ }
       })
@@ -2156,18 +2202,25 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   const cancelBackendReservation = (reservation: CustomerReservation) => {
     void cancelCustomerReservation(reservation.id, 'Khách hàng chủ động hủy trên cổng khách hàng')
-      .then(() => listCustomerReservations(undefined, 0, 50))
-      .then(result => {
-        setBackendReservations(result.data)
+      .then(() => loadCustomerReservationRecords())
+      .then(reservations => {
+        setBackendReservations(reservations)
         setAvailabilityRevision(value => value + 1)
         showToast(`Đã hủy ${reservation.reservationCode}.`)
       })
       .catch(error => showToast(userFacingError(error, 'Không thể hủy đơn đặt kho.')))
   }
 
+  const deleteBackendExpiredReservation = (reservation: CustomerReservation) => {
+    void deleteExpiredReservationHistory(reservation.id)
+      .then(() => refreshBackendReservations())
+      .then(() => showToast(`Đã xóa ${reservation.reservationCode} khỏi danh sách ${reservation.status === 'COMPLETED' ? 'đơn hoàn thành' : 'đơn hết hạn'}.`))
+      .catch(error => showToast(userFacingError(error, 'Không thể xóa đơn đặt giữ kho.')))
+  }
+
   const refreshBackendReservations = async () => {
-    const result = await listCustomerReservations(undefined, 0, 50)
-    setBackendReservations(result.data)
+    const reservations = await loadCustomerReservationRecords()
+    setBackendReservations(reservations)
     setAvailabilityRevision(value => value + 1)
   }
 
@@ -2593,10 +2646,20 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           </Card>
 
           {isApiAuthenticated() ? (
-            <div className="grid gap-4">
-              {pagedBackendReservations.map(reservation => <CustomerReservationCard
-                key={reservation.id}
+            <div className="grid gap-5">
+              {[
+                { id: 'active', title: 'Đơn giữ kho hoạt động', subtitle: 'Các đơn đang trong quá trình xác thực, thanh toán hoặc chờ bàn giao.', rows: pagedBackendReservations.filter(reservation => !['EXPIRED', 'COMPLETED'].includes(reservation.status)), total: activeBackendReservations.length, pagination: reservationPagination, setPage: setReservationPageNumber, sectionClass: 'border-amber-300', headerClass: 'bg-amber-50', accentClass: 'bg-amber-500', badgeClass: 'bg-amber-200 text-amber-950', bodyClass: 'bg-amber-50/30', itemClass: 'rounded-xl border-l-4 border-l-amber-500 transition duration-200 hover:-translate-y-0.5 hover:bg-amber-50 hover:shadow-lg hover:ring-2 hover:ring-amber-200', active: true },
+                { id: 'expired', title: 'Đơn giữ kho hết hạn', subtitle: 'Các đơn đã quá thời hạn được lưu lại tại đây để bạn tra cứu.', rows: pagedBackendReservations.filter(reservation => reservation.status === 'EXPIRED'), total: expiredBackendReservations.length, pagination: expiredReservationPagination, setPage: setExpiredReservationPageNumber, sectionClass: 'border-red-300', headerClass: 'bg-red-50', accentClass: 'bg-red-500', badgeClass: 'bg-red-100 text-red-800', bodyClass: 'bg-red-50/30', itemClass: 'rounded-xl border-l-4 border-l-red-500 opacity-90 transition duration-200 hover:-translate-y-0.5 hover:bg-red-50 hover:opacity-100 hover:shadow-lg hover:ring-2 hover:ring-red-200', active: false },
+                { id: 'completed', title: 'Đơn giữ kho hoàn thành', subtitle: 'Các đơn đã hoàn tất nhận kho và được chuyển sang hồ sơ thuê.', rows: pagedBackendReservations.filter(reservation => reservation.status === 'COMPLETED'), total: completedBackendReservations.length, pagination: completedReservationPagination, setPage: setCompletedReservationPageNumber, sectionClass: 'border-emerald-300', headerClass: 'bg-emerald-50', accentClass: 'bg-emerald-500', badgeClass: 'bg-emerald-100 text-emerald-800', bodyClass: 'bg-emerald-50/30', itemClass: 'rounded-xl border-l-4 border-l-emerald-500 transition duration-200 hover:-translate-y-0.5 hover:bg-emerald-50 hover:shadow-lg hover:ring-2 hover:ring-emerald-200', active: false },
+              ].map(group => <section key={group.id} aria-labelledby={`reservation-group-${group.id}`} className={`overflow-hidden rounded-xl border-2 bg-white shadow-sm ${group.sectionClass}`}>
+                <header className={`flex items-center justify-between gap-3 border-b px-5 py-4 ${group.headerClass}`}>
+                  <div className="flex items-center gap-3"><span aria-hidden="true" className={`h-11 w-1.5 rounded-full ${group.accentClass}`} /><div><h2 id={`reservation-group-${group.id}`} className="text-lg font-bold text-stone-950">{group.title}</h2><p className="mt-0.5 text-sm text-stone-600">{group.subtitle}</p></div></div>
+                  <span className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-bold ${group.badgeClass}`}>{group.total} đơn</span>
+                </header>
+                {group.rows.length ? <div className={`grid gap-4 p-4 ${group.bodyClass}`}>
+                {group.rows.map(reservation => <div key={reservation.id}><CustomerReservationCard
                 reservation={reservation}
+                visualTone={group.id as 'active' | 'expired' | 'completed'}
                 facilityName={facilities.find(item => item.id === reservation.facilityId)?.name || reservation.facilityId}
                 unitTypeName={reservation.unitTypeName || unitTypes.find(item => item.id === reservation.unitTypeId)?.name || reservation.unitTypeId}
                 facilityDetails={backendFacilities.find(item => item.id === reservation.facilityId) || null}
@@ -2619,23 +2682,33 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   })
                 }}
                 onCancel={() => cancelBackendReservation(reservation)}
+                onDelete={() => deleteBackendExpiredReservation(reservation)}
                 onRefresh={refreshBackendReservations}
                 onReceiptConfirmed={reservationId => {
                   setReceiptRentalTarget(reservationId)
                   navigateTo('rental-records')
                 }}
-              />)}
-              {!filteredBackendReservations.length && <Card className="p-10 text-center"><h2 className="font-semibold text-stone-700">{pendingHandoverReservations.length ? 'Không tìm thấy đơn phù hợp' : 'Không có đơn đặt giữ kho đang chờ bàn giao'}</h2><p className="mt-1 text-sm text-stone-500">{pendingHandoverReservations.length ? 'Hãy thử từ khóa khác hoặc thay đổi bộ lọc.' : 'Kho đã bàn giao được theo dõi trong Hồ sơ thuê.'}</p></Card>}
+              /></div>)}
+                </div> : <p className="px-4 py-10 text-center text-sm text-stone-500">{group.id === 'active' ? 'Chưa có đơn giữ kho hoạt động.' : group.id === 'expired' ? 'Chưa có đơn giữ kho hết hạn.' : 'Chưa có đơn giữ kho hoàn thành.'}</p>}
+                {group.total > 0 && <nav aria-label={`Phân trang ${group.title.toLowerCase()}`} className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-100 px-4 py-3"><p className="text-sm text-stone-500">3 đơn mỗi trang</p><div className="flex items-center gap-3"><Button variant="outline" size="sm" disabled={group.pagination.page <= 1} onClick={() => group.setPage(group.pagination.page - 1)}>Trang trước</Button><span className="text-sm text-stone-600">Trang {group.pagination.page}/{group.pagination.pages} · Tổng {group.total} đơn</span><Button variant="outline" size="sm" disabled={group.pagination.page >= group.pagination.pages} onClick={() => group.setPage(group.pagination.page + 1)}>Trang sau</Button></div></nav>}
+              </section>)}
             </div>
           ) : filteredReservationHolds.length ? (
             <div className="grid gap-4">
-              {pagedReservationHolds.map(hold => {
+              {!pagedReservationHolds.some(hold => hold.status !== 'EXPIRED') && <div className="mt-2 border-b border-stone-200 pb-2"><h2 className="text-base font-bold text-stone-900">Đơn giữ kho hoạt động</h2><p className="text-xs text-stone-500">Hiện không có đơn giữ kho hoạt động phù hợp.</p></div>}
+              {pagedReservationHolds.map((hold, index) => {
                 const linkedRental = myRentals.find(rental => rental.holdId === hold.id)
                 const receiptConfirmed = Boolean(linkedRental?.receiptConfirmedAt)
                 const linkedRentalEnded = rentals.some(rental => rental.holdId === hold.id && rental.status === 'completed')
                 const holdInactive = ['CANCELLED', 'EXPIRED'].includes(hold.status) || linkedRentalEnded
-                return (
-                <Card id={`customer-record-${hold.id}`} tabIndex={-1} key={hold.id} className={`p-6 border-l-4 ${holdInactive ? 'inactive-record-card border-l-stone-300 bg-white text-stone-500' : 'border-l-amber-500'} ${focusedNotificationTarget === hold.id ? 'notification-target-reveal' : ''}`}>
+                return (<div key={hold.id} className="contents">
+                {(index === 0 || (hold.status === 'EXPIRED' && pagedReservationHolds[index - 1]?.status !== 'EXPIRED')) && (
+                  <div className="mt-2 border-b border-stone-200 pb-2">
+                    <h2 className="text-base font-bold text-stone-900">{hold.status === 'EXPIRED' ? 'Đơn giữ kho hết hạn' : 'Đơn giữ kho hoạt động'}</h2>
+                    <p className="text-xs text-stone-500">{hold.status === 'EXPIRED' ? 'Các đơn đã quá thời hạn được lưu lại tại đây để bạn tra cứu.' : 'Các đơn đang trong quá trình xác thực, thanh toán hoặc chờ bàn giao.'}</p>
+                  </div>
+                )}
+                <Card id={`customer-record-${hold.id}`} tabIndex={-1} className={`p-6 border-l-4 ${holdInactive ? 'inactive-record-card border-l-stone-300 bg-white text-stone-500' : 'border-l-amber-500'} ${focusedNotificationTarget === hold.id ? 'notification-target-reveal' : ''}`}>
                   <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_240px]">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
@@ -2869,8 +2942,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       {holdInactive && <Button variant="outline" size="sm" onClick={() => requestConfirmation({ title: 'Xóa lịch sử giữ kho', message: 'Xóa lịch sử này khỏi danh sách của bạn? Dữ liệu đối soát hệ thống vẫn được lưu.', confirmLabel: 'Xóa lịch sử', tone: 'danger', onConfirm: () => { try { archiveReservationHistory(hold.id, user); showToast('Đã xóa lịch sử giữ kho khỏi danh sách.') } catch (error) { showToast(userFacingError(error, 'Không thể xóa lịch sử.')) } } })}> {'Xóa lịch sử'}</Button>}
                     </div>
                   </div>
-                </Card>
+                </Card></div>
               )})}
+              {!pagedReservationHolds.some(hold => hold.status === 'EXPIRED') && <div className="mt-2 border-b border-stone-200 pb-2"><h2 className="text-base font-bold text-stone-900">Đơn giữ kho hết hạn</h2><p className="text-xs text-stone-500">Chưa có đơn giữ kho hết hạn phù hợp. Khi một đơn quá hạn, đơn sẽ được lưu tại khu vực này.</p></div>}
             </div>
           ) : (
             <Card className="p-10 text-center">
@@ -2880,12 +2954,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               {visibleMyHolds.length ? <Button className="mt-4" size="sm" variant="outline" onClick={() => { setReservationFacilityFilter('all'); setReservationSizeFilter('all') }}>Xóa bộ lọc</Button> : <Button className="mt-4" size="sm" onClick={() => navigateTo('browse-units')}>{'Khám phá gian kho'}</Button>}
             </Card>
           )}
-          <Card className="p-4">
-            <nav aria-label="Phân trang đơn giữ kho" className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-stone-500">5 đơn mỗi trang</p>
-              <div className="flex items-center gap-3"><Button variant="outline" size="sm" disabled={reservationPagination.page <= 1} onClick={() => setReservationPageNumber(reservationPagination.page - 1)}>Trang trước</Button><span aria-live="polite" className="text-sm text-stone-600">Trang {reservationPagination.page}/{reservationPagination.pages} · Tổng {reservationCount} đơn</span><Button variant="outline" size="sm" disabled={reservationPagination.page >= reservationPagination.pages} onClick={() => setReservationPageNumber(reservationPagination.page + 1)}>Trang sau</Button></div>
-            </nav>
-          </Card>
+          {!isApiAuthenticated() && <Card className="p-4"><p className="text-sm text-stone-500">Mỗi nhóm hiển thị 3 đơn mỗi trang.</p></Card>}
         </div>
       )}
 
