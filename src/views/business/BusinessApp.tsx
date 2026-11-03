@@ -1249,6 +1249,7 @@ export default function BusinessApp({
       } catch (error) {
         setPackageFormError(error instanceof Error ? error.message : 'Không thể tạo gói thuê.')
         showToast(error instanceof Error ? error.message : 'Không thể tạo gói thuê.')
+        try { await reloadPackagePolicies() } catch { }
         return
       }
     }
@@ -2754,6 +2755,37 @@ export default function BusinessApp({
       } catch { }
     }
 
+    if (backendFacilityId) {
+      setBackendFacilityIdsByCode(prev => ({
+        ...prev,
+        [code]: backendFacilityId!,
+      }))
+      setBackendFacilityStats(prev => ({
+        ...prev,
+        [code]: { total: 0, occupied: 0, price: null, revenue: 0 },
+      }))
+    }
+
+    if (isApiAuthenticated()) {
+      void (async () => {
+        try {
+          const fresh = await listAllFacilitiesApi()
+          setBackendFacilityIdsByCode(Object.fromEntries(
+            fresh.map(f => [f.code.trim().toUpperCase(), f.id])
+          ))
+          setBackendFacilityStats(Object.fromEntries(fresh.map(facility => [facility.code.trim().toUpperCase(), {
+            total: facility.totalUnits ?? 0,
+            occupied: facility.occupiedUnits ?? 0,
+            price: facility.minimumMonthlyPrice ?? null,
+            revenue: facility.monthRevenue ?? 0,
+          }])))
+        } catch { }
+        try {
+          await reloadPackagePolicies()
+        } catch { }
+      })()
+    }
+
     setCreateFacilityModal(false)
 
     const breakdownStr =
@@ -3548,8 +3580,11 @@ export default function BusinessApp({
     return facilitiesList.filter((f) => {
       if (facFilterCity !== "All" && f.city !== facFilterCity) return false
 
-      if (facFilterStatus !== "All" && f.status !== facFilterStatus)
-        return false
+      if (facFilterStatus !== "All") {
+        if (f.status !== facFilterStatus) return false
+      } else {
+        if (f.status === "inactive") return false
+      }
 
       if (facSearch.trim()) {
         const q = facSearch.toLowerCase()
@@ -3583,7 +3618,7 @@ export default function BusinessApp({
     const set = new Set<string>()
 
     facilitiesList.forEach((f) => {
-      if (f.city) set.add(f.city)
+      if (f.city && f.status !== "inactive") set.add(f.city)
     })
 
     return Array.from(set)
@@ -3657,8 +3692,8 @@ export default function BusinessApp({
             title={lang === "vi" ? "Quản Lý Cơ Sở" : "Facility Management"}
             subtitle={
               lang === "vi"
-                ? `${facilitiesList.length} cơ sở trong hệ thống – Thêm, sửa, xóa và theo dõi vận hành`
-                : `${facilitiesList.length} ${facilitiesList.length === 1 ? "facility" : "facilities"
+                ? `${facilitiesList.filter(f => f.status !== "inactive").length} cơ sở trong hệ thống – Thêm, sửa, xóa và theo dõi vận hành`
+                : `${facilitiesList.filter(f => f.status !== "inactive").length} ${facilitiesList.filter(f => f.status !== "inactive").length === 1 ? "facility" : "facilities"
                 } in the portfolio`
             }
             action={
@@ -3676,13 +3711,13 @@ export default function BusinessApp({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <StatCard
               title={lang === "vi" ? "Tổng số cơ sở" : "Total Locations"}
-              value={facilitiesList.length}
+              value={facilitiesList.filter(f => f.status !== "inactive").length}
               icon={Icon.building}
               iconBg="bg-blue-50"
             />
             <StatCard
               title={lang === "vi" ? "Tổng số gian kho" : "Total Units"}
-              value={totalUnits}
+              value={facilitiesList.filter(f => f.status !== "inactive").reduce((sum, facility) => sum + getFacilityTotalUnits(facility), 0)}
               icon={Icon.box}
               iconBg="bg-purple-50"
             />
@@ -3736,13 +3771,19 @@ export default function BusinessApp({
                   onChange={(e) => setFacFilterStatus(e.target.value)}
                 >
                   <option value="All">
-                    {lang === "vi" ? "Tất cả trạng thái" : "All Statuses"}
+                    {lang === "vi" ? "Tất cả cơ sở hoạt động" : "All Operational"}
                   </option>
                   <option value="active">
                     {lang === "vi" ? "Đang hoạt động" : "Active"}
                   </option>
+                  <option value="setup">
+                    {lang === "vi" ? "Đang thiết lập" : "Setup"}
+                  </option>
                   <option value="maintenance">
                     {lang === "vi" ? "Bảo trì" : "Maintenance"}
+                  </option>
+                  <option value="inactive">
+                    {lang === "vi" ? "Ngừng hoạt động" : "Inactive"}
                   </option>
                 </Select>
               </div>
@@ -3829,16 +3870,30 @@ export default function BusinessApp({
                           </h3>
                           <Badge
                             variant={
-                              cleanF.status === "active" ? "success" : "warning"
+                              cleanF.status === "active"
+                                ? "success"
+                                : cleanF.status === "setup"
+                                  ? "primary"
+                                  : cleanF.status === "maintenance"
+                                    ? "warning"
+                                    : "neutral"
                             }
                           >
                             {cleanF.status === "active"
                               ? lang === "vi"
                                 ? "Đang hoạt động"
                                 : "Active"
-                              : lang === "vi"
-                                ? "Bảo trì"
-                                : "Maintenance"}
+                              : cleanF.status === "setup"
+                                ? lang === "vi"
+                                  ? "Đang thiết lập"
+                                  : "Setup"
+                                : cleanF.status === "maintenance"
+                                  ? lang === "vi"
+                                    ? "Bảo trì"
+                                    : "Maintenance"
+                                  : lang === "vi"
+                                    ? "Ngừng hoạt động"
+                                    : "Inactive"}
                           </Badge>
                         </div>
 
@@ -3906,6 +3961,17 @@ export default function BusinessApp({
                             🚀 {lang === "vi" ? "Công bố cơ sở" : "Publish"}
                           </Button>
                         )}
+                        {cleanF.status === "inactive" && (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            className="w-full justify-center text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-xs"
+                            onClick={() => void handlePublishFacility(cleanF)}
+                            title={lang === "vi" ? "Khôi phục hoạt động cho cơ sở này" : "Reactivate facility"}
+                          >
+                            🔄 {lang === "vi" ? "Khôi phục HĐ" : "Reactivate"}
+                          </Button>
+                        )}
                         <Button
                           variant="outline"
                           size="sm"
@@ -3933,7 +3999,7 @@ export default function BusinessApp({
                             setDeleteFacilityModal(true)
                           }}
                         >
-                          {lang === "vi" ? (cleanF.status === "inactive" ? "Quản lý / Xóa" : "Xóa / Ngừng HĐ") : "Delete"}
+                          {lang === "vi" ? (cleanF.status === "inactive" ? "Quản lý / Xóa" : cleanF.status === "setup" ? "Xóa cơ sở" : "Xóa / Ngừng HĐ") : "Delete"}
                         </Button>
                       </div>
                     </div>

@@ -1494,7 +1494,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
               appointmentTime: hold.appointmentTime || '09:00'
             })
           }) : INITIAL_RESERVATIONS
-        let rawFacilities = Array.isArray(parsed.facilities) && parsed.facilities.length ? [...parsed.facilities] : []
+        const hasStoredFacilities = Array.isArray(parsed.facilities)
+        let rawFacilities = hasStoredFacilities && parsed.facilities.length ? [...parsed.facilities] : []
         try {
           const directFacsStr = localStorage.getItem('storagehub:vnd:facilities')
           if (DEMO_DATA_ENABLED && directFacsStr) {
@@ -1530,7 +1531,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           }
         } catch {}
 
-        const normalizedFacilities = rawFacilities.length ? normalizeStoredFacilities(rawFacilities as Facility[]) : (DEMO_DATA_ENABLED ? INITIAL_FACILITIES : [])
+        const normalizedFacilities = rawFacilities.length ? normalizeStoredFacilities(rawFacilities as Facility[]) : (hasStoredFacilities ? [] : (DEMO_DATA_ENABLED ? INITIAL_FACILITIES : []))
         const normalizedUnits = rawUnits.length ? normalizeStoredUnits(rawUnits as StorageUnit[]) : (DEMO_DATA_ENABLED ? INITIAL_UNITS : [])
 
         return {
