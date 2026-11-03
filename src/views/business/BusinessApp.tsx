@@ -6,6 +6,7 @@ import BusinessReturnsPanel from "./BusinessReturnsPanel"
 import BusinessRefundRequestsPanel from "./BusinessRefundRequestsPanel"
 import BusinessDamageIncidentsPanel from "./BusinessDamageIncidentsPanel"
 import BusinessRentalRegulationsPanel from "./BusinessRentalRegulationsPanel"
+import BusinessDashboardPanel from "./BusinessDashboardPanel"
 
 import {
   XAxis,
@@ -601,6 +602,15 @@ export default function BusinessApp({
   }
 
   const NAV: NavItem[] = [
+    // ── TỔNG QUAN & BÁO CÁO ──
+    {
+      id: "dashboard",
+      label: "Bảng Điều Khiển",
+      icon: Icon.chart,
+      group: "Tổng Quan & Báo Cáo",
+      permission: "facilities:read",
+    },
+
     // ── CƠ SỞ & MẶT BẰNG ──
     {
       id: "facilities",
@@ -658,10 +668,12 @@ export default function BusinessApp({
     },
   ]
 
-  const [page, setPage] = useState(() => getInitialPage(NAV, "facilities"))
+  const [page, setPage] = useState(() => getInitialPage(NAV, "dashboard"))
   const [integrationLocked, setIntegrationLocked] = useState(false)
 
   const [pricingModal, setPricingModal] = useState(false)
+  const [pricingCollapsedMap, setPricingCollapsedMap] = useState<Record<string, boolean>>({})
+  const [feeScheduleCollapsed, setFeeScheduleCollapsed] = useState(false)
 
   const [policiesList, setPoliciesList] = useState<PolicyItem[]>(() =>
     isApiAuthenticated() ? [] : loadInitialPolicies(),
@@ -3685,6 +3697,22 @@ export default function BusinessApp({
           <BusinessReturnsPanel user={user} />
         </div>
       )}
+      {/* ── BẢNG ĐIỀU KHIỂN & DOANH THU (DASHBOARD) ─────────── */}
+      {page === "dashboard" && (
+        <BusinessDashboardPanel
+          user={user}
+          lang={lang}
+          facilitiesList={facilitiesList}
+          backendFacilityStats={backendFacilityStats}
+          onNavigate={(targetPage, params) => {
+            setPage(targetPage)
+            if (targetPage === "pricing" && params?.facilityId) {
+              setPricingFacilityFilter(params.facilityId)
+            }
+          }}
+        />
+      )}
+
       {/* ── QUẢN LÝ CƠ SỞ (CRUD FACILITIES) ──────────────────── */}
       {page === "facilities" && (
         <div className="fade-in space-y-5">
@@ -4254,154 +4282,325 @@ export default function BusinessApp({
       )}
 
       {/* ── PRICING & FEES ────────────────────────────────────── */}
-      {page === "pricing" && (
-        <div className="fade-in space-y-4">
-          <SectionHeader
-            title={
-              lang === "vi" ? "Bảng Giá Niêm Yết & Biểu Phí" : "Pricing & Fees"
-            }
-            subtitle={
-              lang === "vi"
-                ? "Quản lý các phân tầng giá theo kích thước và biểu phí dịch vụ phát sinh"
-                : "Manage unit pricing tiers and fee schedules"
-            }
-            action={
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-slate-600 whitespace-nowrap">
-                  {lang === "vi" ? "Cơ sở áp dụng:" : "Facility:"}
-                </span>
-                <div className="w-56 sm:w-64">
-                  <Select
-                    value={pricingFacilityFilter}
-                    onChange={(e) => setPricingFacilityFilter(e.target.value)}
+      {page === "pricing" && (() => {
+        const currentPricingFacilities = selectedPricingFacility ? [selectedPricingFacility] : facilitiesList
+        const areAllPricingCollapsed =
+          currentPricingFacilities.length > 0 &&
+          currentPricingFacilities.every((fac) => Boolean(pricingCollapsedMap[fac.id]))
+
+        const toggleAllPricingCollapse = () => {
+          const nextCollapsed = !areAllPricingCollapsed
+          const updatedMap: Record<string, boolean> = { ...pricingCollapsedMap }
+          currentPricingFacilities.forEach((fac) => {
+            updatedMap[fac.id] = nextCollapsed
+          })
+          setPricingCollapsedMap(updatedMap)
+        }
+
+        return (
+          <div className="fade-in space-y-4">
+            <SectionHeader
+              title={
+                lang === "vi" ? "Bảng Giá Niêm Yết & Biểu Phí" : "Pricing & Fees"
+              }
+              subtitle={
+                lang === "vi"
+                  ? "Quản lý các phân tầng giá theo kích thước và biểu phí dịch vụ phát sinh"
+                  : "Manage unit pricing tiers and fee schedules"
+              }
+              action={
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={toggleAllPricingCollapse}
+                    className="text-xs"
+                    title={areAllPricingCollapsed ? "Mở rộng danh sách tất cả cơ sở" : "Thu gọn danh sách tất cả cơ sở"}
                   >
-                    <option value="all">
-                      {lang === "vi"
-                        ? "Toàn bộ cơ sở"
-                        : "All Facilities"}
-                    </option>
-                    {facilitiesList.map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.name} ({f.code || f.id})
-                      </option>
-                    ))}
-                  </Select>
+                    <span>{areAllPricingCollapsed ? "▼ Mở rộng tất cả" : "▲ Thu gọn tất cả"}</span>
+                  </Button>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-slate-600 whitespace-nowrap">
+                      {lang === "vi" ? "Cơ sở áp dụng:" : "Facility:"}
+                    </span>
+                    <div className="w-56 sm:w-64">
+                      <Select
+                        value={pricingFacilityFilter}
+                        onChange={(e) => setPricingFacilityFilter(e.target.value)}
+                      >
+                        <option value="all">
+                          {lang === "vi"
+                            ? "Toàn bộ cơ sở"
+                            : "All Facilities"}
+                        </option>
+                        {facilitiesList.map((f) => (
+                          <option key={f.id} value={f.id}>
+                            {f.name} ({f.code || f.id})
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+              }
+            />
+
+            {selectedPricingFacility && (
+              <div className="p-3.5 bg-amber-50/80 border border-amber-200/80 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs text-amber-900 shadow-xs">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-bold px-2 py-0.5 rounded bg-amber-200 text-amber-900 font-mono text-[11px] border border-amber-300">
+                    {selectedPricingFacility.code || selectedPricingFacility.id}
+                  </span>
+                  <span className="font-semibold text-slate-900 text-sm">
+                    {selectedPricingFacility.name}
+                  </span>
+                  <span className="text-slate-500">
+                    · {selectedPricingFacility.address} ({selectedPricingFacility.city})
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="text-slate-600">
+                    Quy mô: <b>{selectedPricingFacility.units} gian kho</b>
+                  </span>
+                  <span className="text-slate-600">
+                    Cước cơ sở từ:{" "}
+                    <b className="text-emerald-700">
+                      {backendFacilityStats[(selectedPricingFacility.code || '').toUpperCase()]?.price != null
+                        ? `${formatVndAmount(backendFacilityStats[(selectedPricingFacility.code || '').toUpperCase()].price!)}/tháng`
+                        : 'Chưa cấu hình'}
+                    </b>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenFacilityPriceModal(selectedPricingFacility)}
+                    className="text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white shadow-2xs cursor-pointer flex items-center gap-1.5"
+                  >
+                    <span>Chỉnh biểu giá cơ sở</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPricingFacilityFilter("all")}
+                    className="text-amber-800 hover:text-amber-950 font-semibold underline cursor-pointer"
+                  >
+                    {lang === "vi" ? "Xem toàn bộ cơ sở" : "View all facilities"}
+                  </button>
                 </div>
               </div>
-            }
-          />
+            )}
 
-          {selectedPricingFacility && (
-            <div className="p-3.5 bg-amber-50/80 border border-amber-200/80 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs text-amber-900 shadow-xs">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-bold px-2 py-0.5 rounded bg-amber-200 text-amber-900 font-mono text-[11px] border border-amber-300">
-                  {selectedPricingFacility.code || selectedPricingFacility.id}
-                </span>
-                <span className="font-semibold text-slate-900 text-sm">
-                  {selectedPricingFacility.name}
-                </span>
-                <span className="text-slate-500">
-                  · {selectedPricingFacility.address} ({selectedPricingFacility.city})
-                </span>
-              </div>
-              <div className="flex items-center gap-3 flex-wrap">
-                <span className="text-slate-600">
-                  Quy mô: <b>{selectedPricingFacility.units} gian kho</b>
-                </span>
-                <span className="text-slate-600">
-                  Cước cơ sở từ:{" "}
-                  <b className="text-emerald-700">
-                    {backendFacilityStats[(selectedPricingFacility.code || '').toUpperCase()]?.price != null
-                      ? `${formatVndAmount(backendFacilityStats[(selectedPricingFacility.code || '').toUpperCase()].price!)}/tháng`
-                      : 'Chưa cấu hình'}
-                  </b>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => handleOpenFacilityPriceModal(selectedPricingFacility)}
-                  className="text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white shadow-2xs cursor-pointer flex items-center gap-1.5"
-                >
+            <div className="space-y-4">
+              {pricingCatalogError && <p role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{pricingCatalogError}</p>}
+              {pricingCatalogLoading && <p role="status" className="p-4 text-sm text-stone-600">Đang tải bảng giá cơ sở...</p>}
+              {currentPricingFacilities.map((fac) => {
+                const types = pricingCatalogByCode[(fac.code || '').toUpperCase()] || []
+                const stat = backendFacilityStats[(fac.code || '').toUpperCase()]
+                const isCollapsed = Boolean(pricingCollapsedMap[fac.id])
 
-                  <span>Chỉnh biểu giá cơ sở</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPricingFacilityFilter("all")}
-                  className="text-amber-800 hover:text-amber-950 font-semibold underline cursor-pointer"
-                >
-                  {lang === "vi" ? "Xem toàn bộ cơ sở" : "View all facilities"}
-                </button>
-              </div>
+                return (
+                  <Card key={fac.id} className="overflow-hidden">
+                    <div
+                      className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 bg-stone-50 p-4 cursor-pointer hover:bg-stone-100/70 transition-colors select-none"
+                      onClick={() =>
+                        setPricingCollapsedMap((prev) => ({
+                          ...prev,
+                          [fac.id]: !isCollapsed,
+                        }))
+                      }
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-stone-400 font-bold text-xs">
+                          {isCollapsed ? "▶" : "▼"}
+                        </span>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <b>{fac.name}</b>
+                            <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-stone-200/80 text-stone-700">
+                              {fac.code || fac.id}
+                            </span>
+                          </div>
+                          <p className="mt-0.5 text-xs text-stone-500">{fac.address}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <span className="text-xs text-stone-500">
+                          Quy mô: <b>{fac.units || stat?.total || 0} gian</b>
+                        </span>
+                        <span className="text-xs text-stone-600">
+                          {types.length} loại kho
+                        </span>
+                        <span className="text-xs text-emerald-700 font-semibold">
+                          {stat?.price != null ? `Từ ${formatVndAmount(stat.price)}/th` : "Chưa cấu hình"}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            void handleOpenFacilityPriceModal(fac)
+                          }}
+                        >
+                          Chỉnh giá cơ sở này
+                        </Button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setPricingCollapsedMap((prev) => ({
+                              ...prev,
+                              [fac.id]: !isCollapsed,
+                            }))
+                          }}
+                          className="text-xs text-stone-500 hover:text-stone-800 font-semibold underline px-1 py-0.5"
+                        >
+                          {isCollapsed ? "Mở rộng" : "Thu gọn"}
+                        </button>
+                      </div>
+                    </div>
+
+                    {isCollapsed ? (
+                      <div
+                        className="px-4 py-2.5 bg-stone-50/40 hover:bg-amber-50/40 cursor-pointer flex items-center justify-between text-xs text-stone-500 transition-colors"
+                        onClick={() =>
+                          setPricingCollapsedMap((prev) => ({
+                            ...prev,
+                            [fac.id]: false,
+                          }))
+                        }
+                      >
+                        <span>
+                          Đang thu gọn · <b>{types.length}</b> phân tầng giá đã cấu hình · Cước từ{" "}
+                          <b className="text-emerald-700 font-mono">
+                            {stat?.price != null ? `${formatVndAmount(stat.price)}/tháng` : "Chưa cấu hình"}
+                          </b>
+                        </span>
+                        <span className="text-amber-800 font-semibold hover:underline">
+                          Nhấp để mở rộng bảng giá ▼
+                        </span>
+                      </div>
+                    ) : (
+                      <>
+                        {!pricingCatalogLoading && !pricingCatalogError && types.length === 0 && (
+                          <p className="p-5 text-sm text-stone-500">
+                            Chưa có loại kho thực tế để cấu hình giá.
+                          </p>
+                        )}
+                        {types.length > 0 && (
+                          <Table>
+                            <Thead>
+                              <tr>
+                                <Th>Loại kho</Th>
+                                <Th>Kích thước (D × R × C)</Th>
+                                <Th>Số gian</Th>
+                                <Th>Giá thuê / tháng</Th>
+                                <Th>Tiền cọc đảm bảo kho</Th>
+                              </tr>
+                            </Thead>
+                            <Tbody>
+                              {types.map((type) => (
+                                <Tr key={type.id}>
+                                  <Td>
+                                    <b>{type.code}</b> · {type.name}
+                                  </Td>
+                                  <Td>
+                                    {type.lengthM} × {type.widthM} × {type.heightM} m
+                                  </Td>
+                                  <Td>{type.totalCount ?? 0}</Td>
+                                  <Td className="font-mono">
+                                    {type.monthlyPrice > 0
+                                      ? formatVndAmount(type.monthlyPrice)
+                                      : "Chưa cấu hình"}
+                                  </Td>
+                                  <Td className="font-mono">
+                                    {type.monthlyPrice > 0
+                                      ? formatVndAmount(type.securityDepositAmount)
+                                      : "Chưa cấu hình"}
+                                  </Td>
+                                </Tr>
+                              ))}
+                            </Tbody>
+                          </Table>
+                        )}
+                      </>
+                    )}
+                  </Card>
+                )
+              })}
             </div>
-          )}
 
-          <div className="space-y-5">
-            {pricingCatalogError && <p role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{pricingCatalogError}</p>}
-            {pricingCatalogLoading && <p role="status" className="p-4 text-sm text-stone-600">Đang tải bảng giá cơ sở...</p>}
-            {(selectedPricingFacility ? [selectedPricingFacility] : facilitiesList).map(fac => {
-              const types = pricingCatalogByCode[(fac.code || '').toUpperCase()] || []
-              return <Card key={fac.id} className="overflow-hidden">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 bg-stone-50 p-4">
-                  <div><b>{fac.name}</b><p className="mt-1 text-xs text-stone-500">{fac.code} · {fac.address}</p></div>
-                  <Button variant="outline" onClick={() => void handleOpenFacilityPriceModal(fac)}>Chỉnh giá cơ sở này</Button>
+            <Card className="p-5">
+              <div
+                className="flex items-center justify-between cursor-pointer select-none mb-3"
+                onClick={() => setFeeScheduleCollapsed((prev) => !prev)}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-stone-400 font-bold text-xs">
+                    {feeScheduleCollapsed ? "▶" : "▼"}
+                  </span>
+                  <h3 className="font-semibold text-slate-800">
+                    {lang === "vi" ? "Biểu Phí Dịch Vụ Quy Định" : "Fee Schedule"}
+                  </h3>
+                  <Badge variant="muted">{visibleRuntimeFees.length} loại phí</Badge>
                 </div>
-                {!pricingCatalogLoading && !pricingCatalogError && types.length === 0 && <p className="p-5 text-sm text-stone-500">Chưa có loại kho thực tế để cấu hình giá.</p>}
-                {types.length > 0 && <Table><Thead><tr><Th>Loại kho</Th><Th>Kích thước (D × R × C)</Th><Th>Số gian</Th><Th>Giá thuê / tháng</Th><Th>Tiền cọc đảm bảo kho</Th></tr></Thead>
-                  <Tbody>{types.map(type => <Tr key={type.id}>
-                    <Td><b>{type.code}</b> · {type.name}</Td>
-                    <Td>{type.lengthM} × {type.widthM} × {type.heightM} m</Td>
-                    <Td>{type.totalCount ?? 0}</Td>
-                    <Td>{type.monthlyPrice > 0 ? formatVndAmount(type.monthlyPrice) : 'Chưa cấu hình'}</Td>
-                    <Td>{type.monthlyPrice > 0 ? formatVndAmount(type.securityDepositAmount) : 'Chưa cấu hình'}</Td>
-                  </Tr>)}</Tbody></Table>}
-              </Card>
-            })}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setFeeScheduleCollapsed((prev) => !prev)
+                  }}
+                  className="text-xs"
+                >
+                  {feeScheduleCollapsed ? "Mở rộng" : "Thu gọn"}
+                </Button>
+              </div>
+
+              {!feeScheduleCollapsed && (
+                <Table>
+                  <Thead>
+                    <tr>
+                      <Th>{lang === "vi" ? "Loại Phí" : "Fee Type"}</Th>
+                      <Th>{lang === "vi" ? "Mức Phí" : "Amount"}</Th>
+                      <Th>{lang === "vi" ? "Điều Kiện Áp Dụng" : "Trigger"}</Th>
+                      <Th>{lang === "vi" ? "Đối Tượng" : "Applies To"}</Th>
+                    </tr>
+                  </Thead>
+                  <Tbody>
+                    {visibleRuntimeFees.length === 0 ? (
+                      <Tr>
+                        <Td colSpan={4} className="text-center py-6 text-slate-400">
+                          {lang === "vi"
+                            ? "Chưa có biểu phí dịch vụ phát sinh ngoài giá thuê & cọc."
+                            : "No fee schedule configured."}
+                        </Td>
+                      </Tr>
+                    ) : (
+                      visibleRuntimeFees.map((f) => (
+                        <Tr key={f.type}>
+                          <Td className="font-medium text-slate-900">
+                            {getFeeType(f.type, lang)}
+                          </Td>
+                          <Td className="font-semibold text-emerald-700 font-mono">
+                            {f.amount}
+                          </Td>
+                          <Td className="text-slate-600">
+                            {getFeeTrigger(f.trigger, lang)}
+                          </Td>
+                          <Td>
+                            <Badge variant="muted">
+                              {getFeeApplies(f.applies, lang)}
+                            </Badge>
+                          </Td>
+                        </Tr>
+                      ))
+                    )}
+                  </Tbody>
+                </Table>
+              )}
+            </Card>
           </div>
-          <Card className="p-5">
-            <h3 className="font-semibold text-slate-800 mb-4">
-              {lang === "vi" ? "Biểu Phí Dịch Vụ Quy Định" : "Fee Schedule"}
-            </h3>
-            <Table>
-              <Thead>
-                <tr>
-                  <Th>{lang === "vi" ? "Loại Phí" : "Fee Type"}</Th>
-                  <Th>{lang === "vi" ? "Mức Phí" : "Amount"}</Th>
-                  <Th>{lang === "vi" ? "Điều Kiện Áp Dụng" : "Trigger"}</Th>
-                  <Th>{lang === "vi" ? "Đối Tượng" : "Applies To"}</Th>
-                </tr>
-              </Thead>
-              <Tbody>
-                {visibleRuntimeFees.length === 0 ? (
-                  <Tr>
-                    <Td colSpan={4} className="text-center py-6 text-slate-400">
-                      {lang === "vi" ? "Chưa có biểu phí dịch vụ phát sinh ngoài giá thuê & cọc." : "No fee schedule configured."}
-                    </Td>
-                  </Tr>
-                ) : (
-                  visibleRuntimeFees.map((f) => (
-                    <Tr key={f.type}>
-                      <Td className="font-medium text-slate-900">
-                        {getFeeType(f.type, lang)}
-                      </Td>
-                      <Td className="font-semibold text-emerald-700 font-mono">
-                        {f.amount}
-                      </Td>
-                      <Td className="text-slate-600">
-                        {getFeeTrigger(f.trigger, lang)}
-                      </Td>
-                      <Td>
-                        <Badge variant="muted">
-                          {getFeeApplies(f.applies, lang)}
-                        </Badge>
-                      </Td>
-                    </Tr>
-                  ))
-                )}
-              </Tbody>
-            </Table>
-          </Card>
-        </div>
-      )}
+        )
+      })()}
 
 
       {/* ── DAMAGE INCIDENTS (NHÓM 3) ── */}
