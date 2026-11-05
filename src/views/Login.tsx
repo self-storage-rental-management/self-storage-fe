@@ -20,11 +20,11 @@ import PasswordStrength from './auth/PasswordStrength'
 import AuthSidePanel from './auth/AuthSidePanel'
 
 export const DEMO_LOGIN_ACCOUNTS = [
-  { role: 'customer', label: 'Khách hàng', email: 'customer@storagehub.demo', password: 'Customer@1234!', color: 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100', icon: '👤' },
-  { role: 'staff', label: 'Nhân viên', email: 'staff@storagehub.demo', password: 'Staff@1234!', color: 'bg-emerald-50 text-emerald-900 border-emerald-300 hover:bg-emerald-100', icon: '🛠️' },
-  { role: 'manager', label: 'Quản lý', email: 'manager@storagehub.demo', password: 'Manager@1234!', color: 'bg-blue-50 text-blue-900 border-blue-300 hover:bg-blue-100', icon: '🏢' },
-  { role: 'business', label: 'Ban điều hành', email: 'business@storagehub.demo', password: 'Business@1234!', color: 'bg-pink-50 text-pink-900 border-pink-300 hover:bg-pink-100', icon: '📊' },
-  { role: 'admin', label: 'Quản trị viên', email: 'admin@storagehub.demo', password: 'Admin@1234!', color: 'bg-red-50 text-red-900 border-red-300 hover:bg-red-100', icon: '🛡️' },
+  { role: 'customer', label: 'Khách hàng', email: 'customer@storagehub.demo', password: 'Customer@1234!', color: 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100', icon: '' },
+  { role: 'staff', label: 'Nhân viên', email: 'staff@storagehub.demo', password: 'Staff@1234!', color: 'bg-emerald-50 text-emerald-900 border-emerald-300 hover:bg-emerald-100', icon: '' },
+  { role: 'manager', label: 'Quản lý', email: 'manager@storagehub.demo', password: 'Manager@1234!', color: 'bg-blue-50 text-blue-900 border-blue-300 hover:bg-blue-100', icon: '' },
+  { role: 'business', label: 'Ban điều hành', email: 'business@storagehub.demo', password: 'Business@1234!', color: 'bg-pink-50 text-pink-900 border-pink-300 hover:bg-pink-100', icon: '' },
+  { role: 'admin', label: 'Quản trị viên', email: 'admin@storagehub.demo', password: 'Admin@1234!', color: 'bg-red-50 text-red-900 border-red-300 hover:bg-red-100', icon: '' },
 ] as const
 
 interface LoginProps {

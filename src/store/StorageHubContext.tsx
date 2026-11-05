@@ -691,12 +691,12 @@ const INITIAL_RESERVATIONS: StorageReservation[] = [
     payment: {
       amount: Math.round(DEMO_MEDIUM_MONTHLY * 4 * 0.2 * 100) / 100,
       status: 'paid',
-      method: 'Phí giữ chỗ qua VietQR',
+      method: 'Đặt cọc giữ chỗ qua VietQR',
       transactionId: 'TX-DEP-2049',
       paidAt: new Date().toISOString()
     },
     expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-    evidence: ['RSV-2049 · Đã phí giữ chỗ 20%, gian kho đã được xác định từ lúc đặt'],
+    evidence: ['RSV-2049 · Đã đặt cọc giữ chỗ 20%, gian kho đã được xác định từ lúc đặt'],
     createdAt: new Date().toISOString()
   }
 ]
@@ -1011,8 +1011,8 @@ const INITIAL_RENTALS: RentalRecord[] = [
 ]
 
 const RETURN_TEST_CASES: ReturnCase[] = [
-  { id: 'RET-TEST-DEDUCT', rentalId: 'RNT-TEST-RETURN-DEDUCT', unitId: 'A-105', facilityId: 'fac-001', facilityName: 'Kho Việt - Cơ sở Quận 1', customerId: 'demo-customer', customerName: 'Demo Customer', customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456', requestedAt: new Date().toISOString(), scheduledDate: demoDateOffset(0), status: 'requested', initialConditionSnapshot: 'Kho sạch, khóa và tường nguyên vẹn.', packageCount: 4, initialWeightKg: 40, damageFee: 0, outstandingFee: 0, depositAmount: 2314000, netRefundAmount: 2314000, evidence: ['TEST · Khấu trừ phí trễ trong tiền đảm bảo'], customerConfirmed: false },
-  { id: 'RET-TEST-EXCESS', rentalId: 'RNT-TEST-RETURN-EXCESS', unitId: 'A-106', facilityId: 'fac-001', facilityName: 'Kho Việt - Cơ sở Quận 1', customerId: 'demo-customer', customerName: 'Demo Customer', customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456', requestedAt: new Date().toISOString(), scheduledDate: demoDateOffset(0), status: 'requested', initialConditionSnapshot: 'Kho sạch, khóa và tường nguyên vẹn.', packageCount: 4, initialWeightKg: 40, damageFee: 0, outstandingFee: 0, depositAmount: 2314000, netRefundAmount: 2314000, evidence: ['TEST · Phí trễ vượt tiền đảm bảo'], customerConfirmed: false }
+  { id: 'RET-TEST-DEDUCT', rentalId: 'RNT-TEST-RETURN-DEDUCT', unitId: 'A-105', facilityId: 'fac-001', facilityName: 'Kho Việt - Cơ sở Quận 1', customerId: 'demo-customer', customerName: 'Demo Customer', customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456', requestedAt: new Date().toISOString(), scheduledDate: demoDateOffset(0), status: 'requested', initialConditionSnapshot: 'Kho sạch, khóa và tường nguyên vẹn.', packageCount: 4, initialWeightKg: 40, damageFee: 0, outstandingFee: 0, depositAmount: 5_500_000, netRefundAmount: 5_500_000, evidence: ['TEST · Khấu trừ phí trễ trong tiền đảm bảo'], customerConfirmed: false },
+  { id: 'RET-TEST-EXCESS', rentalId: 'RNT-TEST-RETURN-EXCESS', unitId: 'A-106', facilityId: 'fac-001', facilityName: 'Kho Việt - Cơ sở Quận 1', customerId: 'demo-customer', customerName: 'Demo Customer', customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456', requestedAt: new Date().toISOString(), scheduledDate: demoDateOffset(0), status: 'requested', initialConditionSnapshot: 'Kho sạch, khóa và tường nguyên vẹn.', packageCount: 4, initialWeightKg: 40, damageFee: 0, outstandingFee: 0, depositAmount: 5_500_000, netRefundAmount: 5_500_000, evidence: ['TEST · Phí trễ vượt tiền đảm bảo'], customerConfirmed: false }
 ]
 
 const mergeReturnTestCases = (returns: ReturnCase[]) => [...RETURN_TEST_CASES.filter(sample => !returns.some(item => item.id === sample.id)), ...returns]
@@ -1089,7 +1089,7 @@ const INITIAL_ACTIVITIES: ActivityRecord[] = [
     facilityId: 'fac-001',
     entityType: 'hold',
     entityId: 'RSV-2048',
-    notes: `Khách hàng đặt cỡ kho Small Storage, phí giữ chỗ 20% (${formatVnd(936000)}) thành công.`,
+    notes: `Khách hàng đặt cỡ kho Small Storage, cọc giữ chỗ 20% (${formatVnd(6_600_000)}) thành công.`,
     timestamp: '2026-09-17 08:30:00'
   },
   {
@@ -1987,7 +1987,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           facilityId: rental.facilityId,
           entityType: 'rental' as const,
           entityId: rental.id,
-          notes: `Hết ${rental.freeSetupDays || 0} ngày setup miễn phí, hợp đồng tự chuyển sang ACTIVE.`,
+          notes: `Hết ${rental.freeSetupDays || 0} ngày chuẩn bị miễn phí, hợp đồng tự chuyển sang ACTIVE.`,
           timestamp: new Date(nowMs).toISOString(),
         }))
         const inventoryTasks: FacilityTask[] = inventoryTaskRentals.map(rental => ({
@@ -1995,7 +1995,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           facilityId: rental.facilityId,
           facilityName: rental.facilityName,
           type: 'checkin',
-          title: 'Kiểm kê hàng hóa sau setup',
+          title: 'Kiểm kê hàng hóa sau thời gian chuẩn bị',
           referenceId: rental.id,
           dueAt: rentals.find(item => item.id === rental.id)?.inventoryDueAt || new Date(nowMs + 3 * 86_400_000).toISOString(),
           priority: 'high',
@@ -2222,7 +2222,10 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const remainingAmount = rentalTermAmount - reservationDepositAmount + securityDepositAmount
     const totalInitialAmount = rentalTermAmount + securityDepositAmount
 
-    const holdId = `RSV-${Date.now().toString().slice(-4)}`
+    let holdId = ''
+    do {
+      holdId = `RSV-${String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, '0')}`
+    } while (state.holds.some(hold => hold.id === holdId))
     const quoteId = `QUO-${Date.now().toString().slice(-4)}`
     const requiresGoodsReview = Boolean(params.goods.items?.some(item => item.category === 'OTHER' || item.requiresStaffReview))
     const emailExpiresAt = new Date(nowTime + 10 * 60 * 1000).toISOString()
@@ -2438,7 +2441,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     if (!['DEPOSIT_PAID', 'UNIT_RESERVED'].includes(reservation.status)) {
       throw new Error('Chỉ đơn đã thanh toán cọc và còn hiệu lực mới được phân kho.')
     }
-    if (reservation.payment.status !== 'paid') throw new Error('Đơn chưa thanh toán phí giữ chỗ.')
+    if (reservation.payment.status !== 'paid') throw new Error('Đơn chưa thanh toán đặt cọc giữ chỗ.')
     if (unit.facilityId !== reservation.facilityId) throw new Error('Gian kho không thuộc cơ sở của đơn đặt.')
     if (!unitMatchesReservation(unit, reservation)) throw new Error('Loại gian kho không khớp với loại khách đã đặt.')
     if (reservation.assignedUnitId !== unit.id && unit.status !== 'available') {
@@ -2689,7 +2692,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     if (params.staffUser.role !== 'staff') {
       throw new Error('Chỉ nhân viên cơ sở được ghi nhận hợp đồng giấy.')
     }
-    if (!params.identityVerified) throw new Error('Cần đối chiếu bản gốc CCCD/Hộ chiếu trước khi ký hợp đồng.')
+    if (!params.identityVerified) throw new Error('Cần đối chiếu bản gốc CCCD/CMND trước khi ký hợp đồng.')
     if (!reservation) throw new Error('Không tìm thấy đơn đặt giữ kho.')
     if (!params.contractNumber.trim()) throw new Error('Vui lòng nhập số hợp đồng.')
     if (!params.scannedFileUrl) throw new Error('Vui lòng tải lên bản scan hợp đồng giấy đã ký.')
@@ -2762,7 +2765,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
             facilityId: reservation.facilityId,
             entityType: 'hold',
             entityId: reservation.id,
-            notes: `Nhân viên lưu bản scan hợp đồng ${contract.contractNumber}. Tiền cọc đảm bảo kho: ${formatVnd(contract.securityDeposit)}.`,
+            notes: `Nhân viên lưu bản scan hợp đồng ${contract.contractNumber}. Tiền cọc đảm bảo thuê: ${formatVnd(contract.securityDeposit)}.`,
             timestamp: now.toLocaleString('vi-VN')
           },
           ...prev.activities
@@ -2790,7 +2793,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     if (!reservation) throw new Error('Không tìm thấy đơn đặt chỗ.')
     if (paymentDetails.amount <= 0) throw new Error('Số tiền thanh toán phải lớn hơn 0.')
     if (Math.abs(paymentDetails.amount - reservation.remainingAmount) > 0.01) {
-      throw new Error(`Số tiền cần thu chính xác là ${formatVnd(reservation.remainingAmount)}, gồm tiền thuê còn lại và tiền cọc đảm bảo kho.`)
+      throw new Error(`Số tiền cần thu chính xác là ${formatVnd(reservation.remainingAmount)}, gồm tiền thuê còn lại và tiền cọc đảm bảo thuê.`)
     }
     if (!paymentDetails.transactionReference.trim()) throw new Error('Cần nhập mã giao dịch hoặc số phiếu thu.')
 
@@ -2810,7 +2813,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       status: 'PAID',
       paidAt: now.toISOString(),
       recordedBy: staffUser.id,
-      description: `Tiền thuê còn lại và tiền cọc đảm bảo kho ${formatVnd(reservation.securityDepositAmount)}`
+      description: `Tiền thuê còn lại và tiền cọc đảm bảo thuê ${formatVnd(reservation.securityDepositAmount)}`
     }
 
     setState(prev => {
@@ -2862,7 +2865,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
             facilityId: reservation.facilityId,
             entityType: 'payment',
             entityId: txId,
-            notes: `Nhân viên ${staffUser.name} lập phiếu thu ${formatVnd(paymentDetails.amount)} (${paymentDetails.paymentMethod} - ${paymentDetails.transactionReference}), gồm tiền thuê còn lại và tiền cọc đảm bảo kho ${formatVnd(reservation.securityDepositAmount)}.`,
+            notes: `Nhân viên ${staffUser.name} lập phiếu thu ${formatVnd(paymentDetails.amount)} (${paymentDetails.paymentMethod} - ${paymentDetails.transactionReference}), gồm tiền thuê còn lại và tiền cọc đảm bảo thuê ${formatVnd(reservation.securityDepositAmount)}.`,
             timestamp: now.toLocaleString('vi-VN')
           },
           ...prev.activities
@@ -4648,7 +4651,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const volumeM3 = actor.role === 'manager' ? canonicalType!.volumeM3 : data.volumeM3 ?? Math.round(lengthM * widthM * heightM * 100) / 100
     const maxLoadKg = actor.role === 'manager' ? canonicalType!.maxLoadKg : data.maxLoadKg ?? (type === 'Medium' ? 1200 : type === 'Large' ? 2400 : type === 'Extra Large' ? 3600 : 600)
     
-    let basePrice = data.price ?? (type === 'Medium' ? 9_500_000 : type === 'Large' ? 15_000_000 : type === 'Extra Large' ? 22_500_000 : 5_500_000)
+    const basePrice = data.price ?? (type === 'Medium' ? 9_500_000 : type === 'Large' ? 15_000_000 : type === 'Extra Large' ? 22_500_000 : 5_500_000)
 
     const newUnit: StorageUnit = {
       id: code,
@@ -4666,7 +4669,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       allowedGoods: actor.role === 'manager' ? [...policyTemplate!.allowedGoods] : data.allowedGoods || ['Đồ gia dụng', 'Thiết bị văn phòng', 'Tài liệu, hồ sơ', 'Hàng thương mại điện tử'],
       prohibitedGoods: actor.role === 'manager' ? [...policyTemplate!.prohibitedGoods] : data.prohibitedGoods || ['Chất dễ cháy nổ', 'Hóa chất độc hại', 'Hàng cấm theo luật', 'Thực phẩm tươi sống'],
       price: actor.role === 'manager' ? canonicalType!.monthlyPrice : basePrice,
-      deposit: actor.role === 'manager' ? policyTemplate!.deposit : data.deposit ? (data.deposit) : basePrice,
+      deposit: actor.role === 'manager' ? policyTemplate!.deposit : data.deposit ?? basePrice,
       climate: data.climate ?? (targetFacility?.climate ?? true),
       status: actor.role === 'manager' ? 'available' : data.status || 'available',
       reservedPeriods: [],
@@ -4756,7 +4759,9 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       const nextUnits = prev.units.map(u => {
         if (u.id !== unitId && u.code !== unitId) return u
         let price = permittedUpdates.price !== undefined ? permittedUpdates.price : u.price
+        price = Math.max(0, price)
         let deposit = permittedUpdates.deposit !== undefined ? permittedUpdates.deposit : u.deposit
+        deposit = Math.max(0, deposit)
         return {
           ...u,
           ...permittedUpdates,

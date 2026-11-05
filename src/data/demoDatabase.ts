@@ -627,8 +627,8 @@ export const OVERDUE: OverdueAccount[] = [
     phone: '+84 912 345 678',
     unit: 'A-210',
     facility: 'Kho Việt - Cơ sở Quận 1',
-    amount: 2314000,
-    baseAmount: 2314000,
+    amount: 5_500_000,
+    baseAmount: 5_500_000,
     lateFee: 650000,
     days: 13,
     overdueDays: 13,
@@ -648,8 +648,8 @@ export const OVERDUE: OverdueAccount[] = [
     phone: '+84 909 888 222',
     unit: 'B-108',
     facility: 'Kho Việt - Cơ sở Bình Dương',
-    amount: 3510000,
-    baseAmount: 3510000,
+    amount: 9_500_000,
+    baseAmount: 9_500_000,
     lateFee: 910000,
     days: 17,
     overdueDays: 17,
@@ -669,8 +669,8 @@ export const OVERDUE: OverdueAccount[] = [
     phone: '+84 902 119 922',
     unit: 'C-105',
     facility: 'Kho Việt - Cơ sở Quận 1',
-    amount: 5720000,
-    baseAmount: 5720000,
+    amount: 15_000_000,
+    baseAmount: 15_000_000,
     lateFee: 1300000,
     days: 34,
     overdueDays: 34,
@@ -690,8 +690,8 @@ export const OVERDUE: OverdueAccount[] = [
     phone: '+84 938 445 566',
     unit: 'A-304',
     facility: 'Kho Việt - Cơ sở Quận 1',
-    amount: 2314000,
-    baseAmount: 2314000,
+    amount: 5_500_000,
+    baseAmount: 5_500_000,
     lateFee: 0,
     days: 4,
     overdueDays: 4,
@@ -725,9 +725,6 @@ export const CONVERSION_DATA = [
   { month: 'Tháng 8', visits: 0, bookings: 0, rate: 0 },
   { month: 'Tháng 9', visits: 0, bookings: 0, rate: 0 }
 ]
-
-// export const PRICING_TIERS = [
-// ]
 
 export interface PricingTierItem {
   id: string

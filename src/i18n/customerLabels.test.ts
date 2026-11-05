@@ -8,7 +8,7 @@ describe('Nhãn giao diện khách hàng', () => {
     expect(customerFacilityAddress('NEW', 'Kho mới', 'Địa chỉ mới')).toBe('Địa chỉ mới')
     expect(isCustomerVisiblePolicy({ name: 'Thời gian ân hạn' })).toBe(false)
     expect(isCustomerVisiblePolicy({ name: 'Notice to Vacate' })).toBe(false)
-    expect(isCustomerVisiblePolicy({ name: 'Tiền cọc đảm bảo' })).toBe(true)
+    expect(isCustomerVisiblePolicy({ name: 'Tiền cọc đảm bảo thuê' })).toBe(true)
   })
   it('giữ tên cơ sở cũ theo mã, không thay đổi cơ sở mới', () => {
     expect(customerFacilityName('HCM-Q1-F01', 'StorageHub Quan 1')).toBe('Kho Việt - Cơ sở Quận 1')

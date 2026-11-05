@@ -186,7 +186,7 @@ export default function RenewalDetail({
                   <div className="rounded-lg border border-stone-200 p-3"><dt className="text-stone-600">Tiền thuê còn lại khi ký</dt><dd className="mt-1 text-lg font-semibold text-stone-900">{rentalMoney(terms.remainingRentalAmount, terms.currency)}</dd></div>
                 </> : <div className="rounded-lg border border-amber-200 bg-amber-50 p-3"><dt className="text-amber-900">Tiền cần thanh toán</dt><dd className="mt-1 text-lg font-semibold text-amber-950">{rentalMoney(terms.totalAfterDiscount, terms.currency)}</dd></div>}
               </dl>
-              <p className="mt-2 text-xs leading-5 text-stone-600">{hasDeposit && 'Tiền thuê gia hạn trả trước được trừ vào tiền thuê kỳ mới. '}Không thu lại cọc bảo đảm kho đang giữ. Phí quá hạn và phí phát sinh hợp lệ, nếu có, được ghi riêng trong bảng kê thanh toán.</p>
+              <p className="mt-2 text-xs leading-5 text-stone-600">{hasDeposit && 'Tiền thuê gia hạn trả trước được trừ vào tiền thuê kỳ mới. '}Không thu lại tiền cọc đảm bảo thuê đang giữ. Phí quá hạn và phí phát sinh hợp lệ, nếu có, được ghi riêng trong bảng kê thanh toán.</p>
             </section>
             {isManager && <p className="rounded-lg bg-stone-50 p-3 text-xs text-stone-600">Đây là số tiền theo báo giá, chưa xác nhận đã phát sinh nghĩa vụ hoặc đã thu tiền.</p>}
           </div>

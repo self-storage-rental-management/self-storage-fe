@@ -163,22 +163,15 @@ describe('Business Owner (BO) Business Rules & Logic', () => {
     })
   })
 
-  describe('Pricing Normalization & Currency Conversion', () => {
-    const USD_TO_VND_RATE = 26000
-
-    it('normalizes VND monthly price to base currency to prevent formatVnd inflation', () => {
+  describe('Pricing in VND', () => {
+    it('keeps VND monthly prices unchanged', () => {
       const rawVndPrice = 1600000 // 1.6M VND
-      const normalizedPrice = rawVndPrice > 10000 ? rawVndPrice / USD_TO_VND_RATE : rawVndPrice
-      
-      // formatVnd(normalizedPrice) will calculate: Math.round(normalizedPrice * USD_TO_VND_RATE)
-      const formattedVnd = Math.round(normalizedPrice * USD_TO_VND_RATE)
-      expect(formattedVnd).toBe(1600000)
+      expect(rawVndPrice).toBe(1600000)
     })
 
-    it('keeps standard USD base amounts unchanged if <= 10000', () => {
-      const basePrice = 61.54 // ~$61.54
-      const normalized = basePrice > 10000 ? basePrice / USD_TO_VND_RATE : basePrice
-      expect(normalized).toBe(61.54)
+    it('does not interpret small VND amounts as another currency', () => {
+      const price = 650000
+      expect(price).toBe(650000)
     })
   })
 
@@ -211,7 +204,6 @@ describe('Business Owner (BO) Business Rules & Logic', () => {
   })
 
   describe('Facility Price & Details View Synchronization', () => {
-    const USD_TO_VND_RATE = 26000
     const UNIT_SPECS = {
       S: { priceMonthly: 5500000, priceFormatted: '5.500.000đ' },
       M: { priceMonthly: 9500000, priceFormatted: '9.500.000đ' },
@@ -242,8 +234,7 @@ describe('Business Owner (BO) Business Rules & Logic', () => {
       )
       if (matchingUnits.length > 0 && matchingUnits[0].price) {
         const rawP = matchingUnits[0].price
-        const vnd = rawP > 10000 ? rawP : Math.round(rawP * USD_TO_VND_RATE)
-        return `${Math.round(vnd).toLocaleString('vi-VN')}đ`
+        return `${Math.round(rawP).toLocaleString('vi-VN')}đ`
       }
 
       const dist = fac.unitDistribution
@@ -275,7 +266,7 @@ describe('Business Owner (BO) Business Rules & Logic', () => {
         id: `HN-F01-XL-${i + 1}`,
         facilityId: 'HN-F01',
         size: 'XL',
-        price: 22500000 / USD_TO_VND_RATE,
+        price: 22500000,
       }))
 
       // Initial price in detail view is 22.500.000đ
@@ -291,7 +282,7 @@ describe('Business Owner (BO) Business Rules & Logic', () => {
       }
       const unitsUpdated = unitsInitial.map((u) => ({
         ...u,
-        price: updatedPriceNum / USD_TO_VND_RATE,
+        price: updatedPriceNum,
       }))
 
       // Detail view now correctly reflects 15.550.000đ instead of hardcoded 22.500.000đ

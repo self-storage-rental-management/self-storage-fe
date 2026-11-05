@@ -22,7 +22,7 @@ export function isCustomerVisiblePolicy(policy: { name: string }): boolean {
 export function vietnamesePolicy<T extends { name: string; value: string; scope: string }>(policy: T): T {
   const names: Record<string, string> = {
     'Grace Period': 'Thời gian ân hạn', 'Late Fee': 'Phí thanh toán trễ',
-    'Security Deposit': 'Tiền cọc đảm bảo', 'Notice to Vacate': 'Thời hạn báo trước khi trả kho',
+    'Security Deposit': 'Tiền cọc đảm bảo thuê', 'Notice to Vacate': 'Thời hạn báo trước khi trả kho',
     'Minimum Lease': 'Kỳ thuê tối thiểu',
   }
   return { ...policy, name: names[policy.name] || policy.name,
