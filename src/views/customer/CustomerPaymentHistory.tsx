@@ -2,7 +2,7 @@ import { formatCustomerDateTime } from '../../i18n/customerDate'
 import { userFacingError } from '../../presentation/userFacingError'
 import { useEffect, useState } from "react"
 import { Button, Card, Modal, SectionHeader, Table, Thead, Tbody, Th, Td, Tr } from "../../components/ui"
-import { formatVndAmount as formatVnd } from "../../i18n/currency"
+import { formatVndAmount } from "../../i18n/currency"
 import {
   loadCustomerPaymentHistory,
   paymentCategories,
@@ -36,7 +36,7 @@ function ShortCode({ value }: { value: string }) {
 }
 
 const historyAmount = (amount: number | null) =>
-  amount === null ? "Chưa có thông tin số tiền" : formatVnd(amount)
+  amount === null ? "Chưa có thông tin số tiền" : formatVndAmount(amount)
 
 const reservationHistoryWarning = "Chưa tải được đầy đủ lịch sử thanh toán đơn giữ kho."
 

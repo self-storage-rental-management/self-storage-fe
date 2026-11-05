@@ -18,7 +18,7 @@ import { requestVnpayRefund } from '../../services/vnpayRefundApi'
 import { ApiClientError } from '../../services/apiClient'
 
 const typeLabels: Record<ManagerPaymentHistoryType, string> = {
-  RESERVATION_DEPOSIT: 'Phí giữ chỗ',
+  RESERVATION_DEPOSIT: 'Đặt cọc giữ chỗ',
   RENTAL_BALANCE: 'Nhận kho',
   MONTHLY_RENT: 'Tiền thuê',
   RENEWAL: 'Gia hạn',

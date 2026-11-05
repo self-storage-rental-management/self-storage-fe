@@ -55,7 +55,7 @@ const statusLabels: Record<InventoryUnit["status"], string> = {
   available: "Còn trống",
   occupied: "Đang sử dụng",
   reserved: "Đã giữ cho khách",
-  assigned: "Đã phân gian",
+  assigned: "Đã phân kho",
   held: "Đang giữ tạm thời",
   maintenance: "Đang bảo trì",
   inactive: "Tạm ngưng",
@@ -223,7 +223,7 @@ function InventoryRead({
                 <div><dt className="text-xs text-stone-500">Khung kệ</dt><dd className="mt-1 font-medium">{detail.rackCount} kệ, kích thước {detail.rackLengthM} × {detail.rackWidthM} × {detail.rackHeightM} m</dd></div>
                 <div><dt className="text-xs text-stone-500">Lối đi và xe đẩy</dt><dd className="mt-1 font-medium">Rộng {detail.aisleWidthM ?? '-'} m · {detail.trolleyType || 'Chưa khai báo'}</dd></div>
                 <div><dt className="text-xs text-stone-500">Sức chứa dự kiến</dt><dd className="mt-1 font-medium">{detail.smallBoxCapacity ?? 0} thùng nhỏ · {detail.largeBoxCapacity ?? 0} thùng lớn</dd></div>
-                <div><dt className="text-xs text-stone-500">Tiền cọc đảm bảo kho</dt><dd className="mt-1 font-medium">{formatVndAmount(detail.securityDepositAmount)}</dd></div>
+                <div><dt className="text-xs text-stone-500">Tiền cọc đảm bảo thuê</dt><dd className="mt-1 font-medium">{formatVndAmount(detail.securityDepositAmount)}</dd></div>
               </dl>
             </div> : <p className="p-4 text-sm text-stone-500">Đang tải thông tin chi tiết loại kho...</p>}
           </article>
@@ -471,7 +471,7 @@ function CreateUnitTypeModal({ open, facilityId, existingCodes = [], onClose, on
               onChange={event => setForm(current => ({ ...current, code: event.target.value.toUpperCase() }))}
             />
             {isDuplicateCode && (
-              <p className="mt-1 text-xs text-red-600 font-medium">⚠️ Mã loại kho này đã tồn tại trong cơ sở.</p>
+              <p className="mt-1 text-xs text-red-600 font-medium">Mã loại kho này đã tồn tại trong cơ sở.</p>
             )}
           </div>
         </div>
@@ -681,7 +681,7 @@ export function InventoryContent({
         />
         <StatCard title="Đang sử dụng" value={occupied} icon={Icon.key} />
         <StatCard
-          title="Đã phân gian"
+          title="Đã phân kho"
           value={count("reserved") + count("assigned")}
           icon={Icon.calendar}
         />
@@ -707,7 +707,7 @@ export function InventoryContent({
             ["all", "Tất cả trạng thái"],
             ["available", statusLabels.available],
             ["occupied", statusLabels.occupied],
-            ["allocated", "Đã phân gian / giữ chỗ"],
+            ["allocated", "Đã phân kho / giữ chỗ"],
             ["held", statusLabels.held],
             ["maintenance", statusLabels.maintenance],
             ["inactive", statusLabels.inactive],

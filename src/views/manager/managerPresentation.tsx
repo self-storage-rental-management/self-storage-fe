@@ -31,7 +31,7 @@ const phrases: [RegExp, string][] = [
   [/nhật ký nguồn vẫn bất biến/g, 'dữ liệu gốc vẫn được giữ lại'],
   [/\bCustomer\b/g, 'khách hàng'], [/\bStaff\b/g, 'nhân viên'], [/\bManager\b/g, 'quản lý cơ sở'],
   [/\bUnitType\b/g, 'loại gian kho'], [/\bStorageUnit\b/g, 'gian kho'],
-  [/\breservation\b|\bReservation\b/g, 'đặt chỗ'], [/\bassignment\b|\bAssignment\b|\bASSIGNMENT\b/g, 'phân gian'],
+  [/\breservation\b|\bReservation\b/g, 'đặt chỗ'], [/\bassignment\b|\bAssignment\b|\bASSIGNMENT\b/g, 'phân kho'],
   [/\bcheck-in\b|\bCheck-in\b/g, 'nhận kho'], [/\brental\b/g, 'hồ sơ thuê'],
   [/\bcutoff\b|\bCutoff\b/g, 'mốc thu hồi'], [/\bCASH\b/g, 'tiền mặt'],
   [/\bpolicy\b|\bPolicy\b/g, 'chính sách'], [/\bworkflow\b/g, 'quy trình xử lý'],

@@ -1119,7 +1119,7 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
             >
               <p className="font-bold">
                 {confirmStatusModal.status === 'ACTIVE'
-                  ? '⚠️ Cảnh báo hành động tạm khóa tài khoản:'
+                  ? 'Cảnh báo hành động tạm khóa tài khoản:'
                   : '✓ Thông báo mở khóa tài khoản:'}
               </p>
               <p className="mt-1">

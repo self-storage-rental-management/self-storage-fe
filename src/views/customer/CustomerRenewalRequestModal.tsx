@@ -205,7 +205,7 @@ export default function CustomerRenewalRequestModal({
             <details className="mt-2 text-sm text-stone-500">
               <summary className="w-fit cursor-pointer rounded py-1 focus-visible:outline-2 focus-visible:outline-amber-600">Xem điều khoản gia hạn</summary>
               <div className="mt-2 space-y-2 leading-5">
-                <p>Khoản trả trước được trừ vào tiền thuê kỳ mới. Không thu lại cọc bảo đảm kho đang giữ.</p>
+                <p>Khoản trả trước được trừ vào tiền thuê kỳ mới. Không thu lại tiền cọc đảm bảo thuê đang giữ.</p>
                 <p>Phí quá hạn và phí phát sinh hợp lệ, nếu có, được ghi riêng trong bảng kê thanh toán.</p>
                 <p>Hạn ký không vượt quá hạn xử lý quá hạn của hồ sơ. Gia hạn chỉ hoàn tất khi đủ tiền và hợp đồng đã ký được ghi nhận.</p>
               </div>

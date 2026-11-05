@@ -82,7 +82,7 @@ import {
 
 import StaffFileUpload from "./StaffFileUpload"
 
-import { formatVnd } from "../../i18n/currency"
+import { formatVndAmount } from "../../i18n/currency"
 
 import { useStorageHub } from "../../store/StorageHubContext"
 
@@ -185,7 +185,7 @@ const formatTime = (value?: string) => {
     : value
 }
 
-const formatMoney = formatVnd
+const formatMoney = formatVndAmount
 
 const addDays = (dateLabel: string, days: number) => {
   const date = new Date(dateLabel)
@@ -3210,7 +3210,7 @@ export default function StaffApp({
                           setSettlementModalOpen(true)
                         }}
                       >
-                        {"🧾 Quyết toán"}
+                        {"Quyết toán"}
                       </Button>
                     </Td>
                   </Tr>
@@ -3336,7 +3336,7 @@ export default function StaffApp({
                 <p className="text-xs">
                   {selectedReservation.emailVerified
                     ? "✓ Đã xác nhận"
-                    : "⚠ Chưa xác nhận"}
+                    : "Chưa xác nhận"}
                 </p>
               </div>
               <div className="rounded-lg bg-slate-50 p-3">
@@ -3724,9 +3724,9 @@ export default function StaffApp({
                     onChange={(e) => setReturnCeilingStatus(e.target.value as any)}
                     className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs bg-white"
                   >
-                    <option value="dry_intact">{"🟢 Khô ráo, kín gió, nguyên vẹn"}</option>
-                    <option value="stained">{"🟡 Có vết loang ố nước cũ / ẩm"}</option>
-                    <option value="leaking">{"🔴 Dột nước / thấm dột mái (Lỗi cơ sở)"}</option>
+                    <option value="dry_intact">Khô ráo, kín gió, nguyên vẹn</option>
+                    <option value="stained">Có vết loang ố nước cũ / ẩm</option>
+                    <option value="leaking">Dột nước / thấm dột mái (Lỗi cơ sở)</option>
                   </select>
                 </div>
                 <div>
@@ -3739,9 +3739,9 @@ export default function StaffApp({
                     onChange={(e) => setReturnWallStatus(e.target.value as any)}
                     className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs bg-white"
                   >
-                    <option value="dry_intact">{"🟢 Khô ráo, sạch sẽ"}</option>
-                    <option value="damp_seepage">{"🔴 Thấm ẩm tường ngoài (Lỗi cơ sở)"}</option>
-                    <option value="cracked">{"🟠 Móp méo / nứt vỡ vách"}</option>
+                    <option value="dry_intact">Khô ráo, sạch sẽ</option>
+                    <option value="damp_seepage">Thấm ẩm tường ngoài (Lỗi cơ sở)</option>
+                    <option value="cracked">Móp méo / nứt vỡ vách</option>
                   </select>
                 </div>
                 <div>
@@ -3754,9 +3754,9 @@ export default function StaffApp({
                     onChange={(e) => setReturnFloorStatus(e.target.value as any)}
                     className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs bg-white"
                   >
-                    <option value="dry_intact">{"🟢 Khô ráo, chịu lực tốt"}</option>
-                    <option value="cracked">{"🔴 Nứt vỡ sàn / bong gạch lát"}</option>
-                    <option value="water_pooling">{"🔴 Có đọng vũng nước / ngấm sàn"}</option>
+                    <option value="dry_intact">Khô ráo, chịu lực tốt</option>
+                    <option value="cracked">Nứt vỡ sàn / bong gạch lát</option>
+                    <option value="water_pooling">Có đọng vũng nước / ngấm sàn</option>
                   </select>
                 </div>
               </div>
@@ -3797,10 +3797,10 @@ export default function StaffApp({
                   }}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs bg-white"
                 >
-                  <option value="none">{"🟢 Không phát sinh ẩm mốc / Hàng hóa & kho bình thường"}</option>
-                  <option value="facility_fault">{"🔴 Do lỗi cơ sở kho (Thấm dột trần/vách hoặc sự cố điều hòa/hút ẩm)"}</option>
-                  <option value="customer_fault">{"🟠 Do lỗi khách hàng (Đóng gói còn ẩm, nông sản lên men, hàng cấm)"}</option>
-                  <option value="climate_standard_uncontrolled">{"🟡 Kho tiêu chuẩn - Độ ẩm tự nhiên mùa nồm (không áp dụng cam kết thời gian xử lý)"}</option>
+                  <option value="none">Không phát sinh ẩm mốc / Hàng hóa & kho bình thường</option>
+                  <option value="facility_fault">Do lỗi cơ sở kho (Thấm dột trần/vách hoặc sự cố điều hòa/hút ẩm)</option>
+                  <option value="customer_fault">Do lỗi khách hàng (Đóng gói còn ẩm, nông sản lên men, hàng cấm)</option>
+                  <option value="climate_standard_uncontrolled">Kho tiêu chuẩn - Độ ẩm tự nhiên mùa nồm (không áp dụng cam kết thời gian xử lý)</option>
                 </select>
               </div>
 
@@ -3984,7 +3984,7 @@ export default function StaffApp({
 
             {selectedSharedReturn?.status === "disputed" ? (
               <div className="rounded-lg border border-red-300 bg-red-50 p-3.5 text-sm text-red-900">
-                <p className="font-bold">⚠️ Đang khiếu nại - Cần BO giải quyết</p>
+                <p className="font-bold">Đang khiếu nại - Cần BO giải quyết</p>
                 <p className="mt-1 text-xs leading-relaxed text-red-800">
                   Khách hàng đã gửi khiếu nại về các khoản phí quyết toán ({selectedSharedReturn?.customerDecisionNote || "Cần xem xét lại"}). Quản lý cơ sở hoặc Ban Điều Hành (BO) là người xem xét thẩm định. Nhân viên không đóng hồ sơ hoặc hoàn cọc tại bước này để tránh xung đột dữ liệu (lỗi 409 Conflict).
                 </p>
@@ -4060,7 +4060,7 @@ export default function StaffApp({
                     setSettlementModalOpen(true)
                   }}
                 >
-                  🧾 Xem hóa đơn & biên lai
+                  Xem hóa đơn & biên lai
                 </Button>
               )}
               <Button variant="outline" onClick={() => setInspectModal(false)}>
@@ -4414,7 +4414,7 @@ export default function StaffApp({
             </div>
             <div className="space-y-2 rounded-lg border border-blue-200 bg-blue-50/50 p-3">
               {([
-                ["identity", "Đã đối chiếu CCCD/Hộ chiếu gốc"],
+                ["identity", "Đã đối chiếu CCCD/CMND gốc"],
 
                 [
                   "reservation",

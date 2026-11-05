@@ -71,7 +71,7 @@ export default function ManagerMovesApiPanel({ facilityId }: { facilityId?: stri
     {tab === 'credentials' ? <ManagerAccessCredentialsPanel facilityId={facilityId} /> : tab === 'checkins' ? (
       <Card>
         <Table>
-          <Thead><Tr><Th>Khách hàng / Đơn</Th><Th>Gian kho</Th><Th>Trạng thái</Th><Th>Setup</Th><Th>Kiểm kê</Th><Th>Check-in</Th></Tr></Thead>
+          <Thead><Tr><Th>Khách hàng / Đơn</Th><Th>Gian kho</Th><Th>Trạng thái</Th><Th>Hạn chuẩn bị</Th><Th>Kiểm kê</Th><Th>Check-in</Th></Tr></Thead>
           <Tbody>
             {!loading && !checkIns.length && <Tr><Td colSpan={6} className="py-8 text-center text-stone-500">Chưa có hồ sơ nhận kho từ Backend.</Td></Tr>}
             {checkIns.map(item => <Tr key={item.checkInId || item.reservationId}>

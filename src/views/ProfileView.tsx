@@ -164,8 +164,8 @@ export const ROLE_NOTIFICATION_CONFIGS: Record<Role, RoleNotificationConfig> = {
       },
       {
         id: 'mgr_reservation_assignment',
-        title: 'Đơn Đặt Giữ Kho Mới Chờ Phân Gian',
-        description: 'Thông báo ngay khi khách thuê phí giữ chỗ thành công và đang chờ Quản lý chỉ định mã kho vật lý phù hợp.',
+        title: 'Đơn Đặt Giữ Kho Mới Chờ Phân Kho',
+        description: 'Thông báo ngay khi khách đặt cọc giữ chỗ thành công và đang chờ Quản lý chỉ định mã kho vật lý phù hợp.',
         defaultEnabled: true,
         badge: 'Đơn mới',
         badgeColor: 'bg-amber-50 text-amber-700 border-amber-200'
@@ -915,7 +915,7 @@ setSavingProfile(true)
                         {unitTypeName && <p className="text-xs text-stone-600 font-normal">{unitTypeName}</p>}
                       </div>
                       <Badge variant={rental.status === 'active' ? 'success' : 'warning'}>
-                        {rental.status === 'setup' ? 'Đang setup miễn phí' : rental.status === 'active' ? 'Đang thuê' : 'Đang trả kho'}
+                        {rental.status === 'setup' ? 'Đang trong thời gian chuẩn bị miễn phí' : rental.status === 'active' ? 'Đang thuê' : 'Đang trả kho'}
                       </Badge>
                     </div>
                     <p className="mt-2 text-sm font-semibold text-stone-700">{facName}</p>

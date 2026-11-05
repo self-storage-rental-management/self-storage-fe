@@ -430,14 +430,13 @@ export default function Layout({
         {/* Role & Facility badge */}
         <div className="shrink-0 px-4 pt-4 pb-2 space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-normal text-stone-300">
+            <span className="inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold text-white" style={{ borderColor: taskbarColor, backgroundColor: `${taskbarColor}33` }}>
               {getTranslatedRole()}
             </span>
           </div>
           {(user.role === 'manager' || user.role === 'staff') && (
             user.facility ? (
               <div className="flex items-center gap-1.5 px-2 py-1 text-xs text-stone-300">
-                <span>🏢</span>
                 <span className="truncate font-normal" title={user.facility}>{user.facility}</span>
               </div>
             ) : (

@@ -27,7 +27,7 @@ export default function ReservationReceipt({ payment, reservationCode }: { payme
       ? `VNPay (${payment.paymentMethod})`
       : 'VNPay'
   return <PaymentReceiptCard
-    title={isRemainingRental ? 'Biên lai thanh toán phần còn lại khi nhận kho' : accepted ? 'Biên lai phí giữ chỗ' : 'Chi tiết giao dịch cần đối soát'}
+    title={isRemainingRental ? 'Biên lai thanh toán phần còn lại khi nhận kho' : accepted ? 'Biên lai đặt cọc giữ chỗ' : 'Chi tiết giao dịch cần đối soát'}
     reference={reservationCode} confirmed={accepted || isRemainingRental}
     status={isRemainingRental ? 'Đã ghi nhận thanh toán nhận kho' : accepted ? 'Đơn đã xác nhận cọc' : 'Đơn chưa xác nhận'}
     fields={[
@@ -37,7 +37,7 @@ export default function ReservationReceipt({ payment, reservationCode }: { payme
       ['Thời điểm StorageHub xử lý', payment.processedAt ? formatCustomerDateTime(new Date(payment.processedAt)) : '-'],
       ['Phương thức thanh toán', paymentMethodLabel(payment.paymentMethod)],
       ['Người ghi nhận', payment.initiatedByName || '-'],
-      ['Nội dung', isRemainingRental ? 'Thanh toán phần còn lại khi nhận kho' : accepted ? 'Phí giữ chỗ đã được đơn xác nhận' : 'Giao dịch phí giữ chỗ cần đối soát'], ['Số tiền', formatVnd(payment.amount)], ['Tiền tệ', paymentCurrencyLabel(payment.currency)],
+      ['Nội dung', isRemainingRental ? 'Thanh toán phần còn lại khi nhận kho' : accepted ? 'Đặt cọc giữ chỗ đã được đơn xác nhận' : 'Giao dịch đặt cọc giữ chỗ cần đối soát'], ['Số tiền', formatVnd(payment.amount)], ['Tiền tệ', paymentCurrencyLabel(payment.currency)],
       ['Số hóa đơn', payment.invoiceNumber || '-'], ['Trạng thái hóa đơn', payment.invoiceStatus || 'DRAFT'],
       ['Ngày phát hành hóa đơn', payment.invoiceIssuedAt ? formatCustomerDateTime(new Date(payment.invoiceIssuedAt)) : '-'],
     ]}
