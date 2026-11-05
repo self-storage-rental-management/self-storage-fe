@@ -6,8 +6,8 @@ import { renewalWorkflowLabel } from './renewalStatusPresentation'
 import ManagerContractPreview from './ManagerContractPreview'
 
 const shortLabels: Record<RenewalApiRecord['status'], string> = {
-  pending: 'Đang kiểm tra', accepted: 'Chờ thanh toán', deposit_paid: 'Chờ ký gia hạn',
-  full_rent_paid: 'Chờ ký gia hạn', approved: 'Mở thanh toán', appointment_scheduled: 'Đã hẹn ký',
+  pending: 'Đang kiểm tra', accepted: 'Chờ thanh toán', deposit_paid: 'Đã thanh toán',
+  full_rent_paid: 'Đã thanh toán', approved: 'Mở thanh toán', appointment_scheduled: 'Đang xử lý',
   payment_processing: 'Chờ kết quả thanh toán', payment_failed: 'Chờ thanh toán lại',
   payment_expired: 'Hết hạn', rejected: 'Đã đóng', cancelled: 'Đã hủy', completed: 'Hoàn tất',
 }
@@ -53,7 +53,9 @@ export default function CustomerRenewalGroups({ rows, onDetail }: {
           <td className="max-w-[300px] px-4 py-4"><p className="break-words font-medium text-stone-800">{row.storageUnit.code}</p><p className="mt-1 text-xs text-stone-500">{row.facility.name}</p></td>
           <td className="whitespace-nowrap px-4 py-4 text-stone-700">{rentalDate(row.newEndDate)}</td>
           <td className="px-4 py-4 text-center"><button type="button" className="mx-auto inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-2 text-sm font-medium text-amber-800 hover:bg-amber-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-500" aria-label={`Xem trước hợp đồng gia hạn ${row.displayCode || row.id}`} onClick={() => setPreviewId(row.id)}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="show-icon h-4 w-4 shrink-0"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6ZM14 3v6h6M8 13h8M8 17h5" strokeLinecap="round" strokeLinejoin="round"/></svg>Xem trước</button></td>
-          <td className="px-4 py-4 text-right"><Button size="sm" variant="outline" onClick={() => onDetail(row.id)}>Chi tiết</Button></td>
+          <td className="px-4 py-4 text-right">
+            <Button size="sm" variant="outline" onClick={() => onDetail(row.id)}>Chi tiết</Button>
+          </td>
         </tr>)}</tbody>
       </table></div> : <p className="px-4 py-8 text-center text-sm text-stone-500">{group.active ? 'Không có yêu cầu gia hạn đang diễn ra.' : 'Chưa có hồ sơ gia hạn đã kết thúc.'}</p>}
       <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-100 p-4 text-sm text-stone-600">
