@@ -586,6 +586,17 @@ main textarea:focus) {
 
 /* Compact, distinct actions in the customer reservation header. */
 .reservation-action { padding: 6px 12px; min-height: 32px; font-size: 12px; line-height: 18px; }
+.reservation-card-actions > button {
+  width: auto !important;
+  max-width: 100%;
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 6px 10px !important;
+  font-size: 12px !important;
+  line-height: 20px !important;
+  font-weight: 600 !important;
+  justify-content: center;
+}
 .reservation-action.reservation-action-receipt { border: 1px solid #047857; background: #047857; color: #ffffff; }
 .reservation-action.reservation-action-receipt:hover { border-color: #065f46; background: #065f46; }
 .reservation-action.reservation-action-document { border: 1px solid #1d4ed8; background: #1d4ed8; color: #ffffff; }

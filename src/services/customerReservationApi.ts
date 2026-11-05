@@ -639,6 +639,9 @@ export async function getCustomerReservation(reservationId: string) {
   )
   return checkedReservationDetail(response.data)
 }
+export async function deleteExpiredReservationHistory(reservationId: string) {
+  await apiRequest<ApiEnvelope<null>>(`/api/customer/reservations/${reservationId}/history`, { method: 'DELETE' })
+}
 export async function confirmCustomerReceipt(reservationId: string) {
   const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
     `/api/customer/reservations/${encodeURIComponent(reservationId)}/receipt-confirmation`,
