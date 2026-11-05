@@ -353,17 +353,25 @@ function WorkspaceData({
       {counts.error ? (
         <ApiReadState {...counts} retry={counts.refresh} />
       ) : null}
-      <div className="grid grid-cols-2 gap-2 rounded-xl bg-white p-1.5">
+      <div className="grid grid-cols-2 gap-2 rounded-2xl border border-stone-200 bg-stone-100/90 p-1.5 shadow-sm">
         <Button
           variant={tab === "rental" ? "primary" : "outline"}
-          className="!border-0"
+          className={`h-11 rounded-xl text-sm font-semibold transition-all duration-150 ${
+            tab === "rental"
+              ? "!border-amber-600 !bg-amber-600 !text-white shadow-md font-bold"
+              : "!border !border-stone-300 !bg-white !text-stone-700 shadow-sm hover:!bg-stone-50 hover:!text-stone-950 hover:!border-stone-400"
+          }`}
           onClick={() => setTab("rental")}
         >
           Hồ sơ thuê
         </Button>
         <Button
           variant={tab === "renewal" ? "primary" : "outline"}
-          className="!border-0"
+          className={`h-11 rounded-xl text-sm font-semibold transition-all duration-150 ${
+            tab === "renewal"
+              ? "!border-amber-600 !bg-amber-600 !text-white shadow-md font-bold"
+              : "!border !border-stone-300 !bg-white !text-stone-700 shadow-sm hover:!bg-stone-50 hover:!text-stone-950 hover:!border-stone-400"
+          }`}
           onClick={() => setTab("renewal")}
         >
           Yêu cầu gia hạn
@@ -613,9 +621,13 @@ function WorkspaceData({
             }
             refresh()
           }}
-          onNavigateToRenewals={() => {
+          onNavigateToRenewals={(renewalId?: string) => {
             setAction(undefined)
-            setDetail(undefined)
+            if (renewalId) {
+              setDetail({ kind: "renewal", id: renewalId })
+            } else {
+              setDetail(undefined)
+            }
             setTab("renewal")
           }}
         />

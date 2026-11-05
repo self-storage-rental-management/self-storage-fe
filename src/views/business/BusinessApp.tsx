@@ -78,6 +78,8 @@ import {
   FacilityGeneralInfo,
   FacilityOperations,
   FacilityImageManager,
+  isFacilityPhoneValid,
+  isFacilityAccessHoursValid,
 } from "./facility/FacilityFormFields"
 import { DEMO_DATA_ENABLED } from "../../config/runtime"
 import { createFacilityApi, listAllFacilitiesApi, priceBusinessUnitTypeApi, updateBusinessFacilityApi, deleteBusinessFacilityApi, publishBusinessFacilityApi } from "../../services/facilityApi"
@@ -2613,6 +2615,24 @@ export default function BusinessApp({
       return
     }
 
+    if (formFacPhone.trim() && !isFacilityPhoneValid(formFacPhone)) {
+      showToast(
+        lang === "vi"
+          ? "Số điện thoại cơ sở không đúng định dạng VN (10-11 chữ số hoặc hotline 1800/1900)!"
+          : "Invalid facility phone format!",
+      )
+      return
+    }
+
+    if (formFacAccessHours.trim() && !isFacilityAccessHoursValid(formFacAccessHours)) {
+      showToast(
+        lang === "vi"
+          ? "Khung giờ mở cửa không đúng định dạng (VD: 08:00 - 17:00 hoặc 24/7)!"
+          : "Invalid access hours format (e.g. 08:00 - 17:00 or 24/7)!",
+      )
+      return
+    }
+
     const totalCalculatedUnits = formFacUnitSpecs.reduce((sum, s) => sum + s.count, 0)
 
     
@@ -3116,6 +3136,40 @@ export default function BusinessApp({
   const handleUpdateFacility = async () => {
     if (!selectedFacility || isUpdatingFacility) return
     setFacilityEditError(undefined)
+
+    if (!formFacName.trim()) {
+      showToast(lang === "vi" ? "Vui lòng nhập tên cơ sở / chi nhánh kho!" : "Please enter facility name!")
+      return
+    }
+
+    if (!formFacAddress.trim()) {
+      showToast(lang === "vi" ? "Vui lòng nhập địa chỉ cơ sở!" : "Please enter facility address!")
+      return
+    }
+
+    if (!formFacCity.trim()) {
+      showToast(lang === "vi" ? "Vui lòng chọn hoặc nhập Tỉnh/Thành phố!" : "Please enter city!")
+      return
+    }
+
+    if (formFacPhone.trim() && !isFacilityPhoneValid(formFacPhone)) {
+      showToast(
+        lang === "vi"
+          ? "Số điện thoại cơ sở không đúng định dạng VN (10-11 chữ số hoặc hotline 1800/1900)!"
+          : "Invalid facility phone format!",
+      )
+      return
+    }
+
+    if (formFacAccessHours.trim() && !isFacilityAccessHoursValid(formFacAccessHours)) {
+      showToast(
+        lang === "vi"
+          ? "Khung giờ mở cửa không đúng định dạng (VD: 08:00 - 17:00 hoặc 24/7)!"
+          : "Invalid access hours format (e.g. 08:00 - 17:00 or 24/7)!",
+      )
+      return
+    }
+
     setIsUpdatingFacility(true)
 
     if (isApiAuthenticated()) {
@@ -5975,7 +6029,10 @@ export default function BusinessApp({
                         !formFacName.trim() ||
                         !formFacCode.trim() ||
                         !formFacAddress.trim() ||
-                                                facilitiesList.some(
+                        !formFacCity.trim() ||
+                        (formFacPhone.trim() !== "" && !isFacilityPhoneValid(formFacPhone)) ||
+                        (formFacAccessHours.trim() !== "" && !isFacilityAccessHoursValid(formFacAccessHours)) ||
+                        facilitiesList.some(
                           (f) => (f.code || f.id).toUpperCase() === formFacCode.trim().toUpperCase()
                         )
                       }
@@ -6124,7 +6181,10 @@ export default function BusinessApp({
                               !formFacName.trim() ||
                               !formFacCode.trim() ||
                               !formFacAddress.trim() ||
-                              hasDuplicateCode
+                              !formFacCity.trim() ||
+                              hasDuplicateCode ||
+                              (formFacPhone.trim() !== "" && !isFacilityPhoneValid(formFacPhone)) ||
+                              (formFacAccessHours.trim() !== "" && !isFacilityAccessHoursValid(formFacAccessHours))
                             }
                             onClick={handleUpdateFacility}
                           >
