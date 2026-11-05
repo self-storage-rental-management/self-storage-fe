@@ -1,4 +1,4 @@
-# Endpoint D1–D5: wiring FE và trạng thái BE local
+# Endpoint D1-D5: wiring FE và trạng thái BE local
 
 > Trạng thái mới lúc 22:50: ledger/communication đã bật trên storagehub_local; ba role đọc ledger HTTP 200, financialSummary vẫn UNKNOWN và policy BO chưa công bố. Xem [báo cáo rollout](RENTAL_LEDGER_LOCAL_ROLLOUT_20261010.md). Các mục tắt module/thiếu schema bên dưới là audit lịch sử trước rollout, không còn là trạng thái phiên hiện tại.
 
@@ -11,7 +11,7 @@ Phạm vi: Rental D1, Renewal D2/D3, Overdue D4, Support D5 và các endpoint b�
 ## Kết luận
 
 - Đã in đậm 12 nhãn `<dt>` của chi tiết hồ sơ thuê; không đổi giá trị hoặc logic hiển thị.
-- Không tìm thấy endpoint nghiệp vụ chính của D1–D5 hoàn toàn thiếu lời gọi FE trong các controller/client đã đối chiếu. Đây là kiểm chứng wiring tĩnh, không phải chứng nhận mọi flow chạy thành công.
+- Không tìm thấy endpoint nghiệp vụ chính của D1-D5 hoàn toàn thiếu lời gọi FE trong các controller/client đã đối chiếu. Đây là kiểm chứng wiring tĩnh, không phải chứng nhận mọi flow chạy thành công.
 - Có **1 endpoint đọc chưa có caller riêng**, nhưng nó là alias của endpoint đã dùng.
 - Có **2 endpoint GET có client nhưng không được UI gọi**, vì UI dùng bản `/stored` để đọc/đối chiếu chính sách.
 - Ledger, notification acknowledgement và communication policy đã có wiring FE, nhưng BE local chưa bật module tương ứng. Không phân loại chúng là “chưa nối FE”.
@@ -27,7 +27,7 @@ Phạm vi: Rental D1, Renewal D2/D3, Overdue D4, Support D5 và các endpoint b�
 
 Bằng chứng source:
 
-- BE CustomerRenewalOperationController.java:32–33: appointmentDetail gọi detail.
+- BE CustomerRenewalOperationController.java:32-33: appointmentDetail gọi detail.
 - FE renewalOperationsApi.ts: `getRenewalOperations`.
 - FE RenewalOperationsPanel.tsx: hiển thị lịch từ operation state, gọi getRenewalOperations.
 - FE duongIntegrationApi.ts: `getIntegrationPolicy`, `getStoredIntegrationPolicy`.
@@ -92,7 +92,7 @@ Chạy logic của connectivity-inventory.cjs trong bộ nhớ, đọc source FE
 
 Parser ban đầu chưa mở rộng role/kind/suffix trong duongIntegrationApi.ts, nên báo sai các ledger, stored policy và coordination là thiếu caller. Đã đối chiếu thủ công template, role allowlist, kind allowlist, method và nơi import/render trước kết luận.
 
-GET `/api/customer/rentals/{id}` của CustomerRentalController legacy không có client detail riêng trong source hiện tại. Đây là endpoint shared của flow Customer gốc, không tự tính thành gap D1–D5 hoặc sửa controller/client teammate. D1 detail dùng `/api/customer/rental-records/{id}`.
+GET `/api/customer/rentals/{id}` của CustomerRentalController legacy không có client detail riêng trong source hiện tại. Đây là endpoint shared của flow Customer gốc, không tự tính thành gap D1-D5 hoặc sửa controller/client teammate. D1 detail dùng `/api/customer/rental-records/{id}`.
 
 ## 6. Sửa giao diện và kiểm thử
 

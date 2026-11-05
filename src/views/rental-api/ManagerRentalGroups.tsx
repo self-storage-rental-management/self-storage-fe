@@ -24,7 +24,7 @@ export default function ManagerRentalGroups({ kind, rows, onDetail }: {
   const groups = [
     {
       id: 'ongoing', title: kind === 'renewal' ? 'Đang xử lý' : 'Đang thuê và xử lý',
-      subtitle: kind === 'renewal' ? 'Yêu cầu đang trong quá trình gia hạn.' : 'Hồ sơ đang thuê, trong setup hoặc đang trả kho.',
+      subtitle: kind === 'renewal' ? 'Yêu cầu đang trong quá trình gia hạn.' : 'Hồ sơ đang thuê, trong thời gian chuẩn bị hoặc đang trả kho.',
       rows: rows.filter(row => !managerRecordIsHistory(row, kind)),
     },
     {

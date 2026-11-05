@@ -37,7 +37,7 @@ describe('customer reservation layout regression', () => {
       responseCode: '00', transactionStatus: '00', gatewayPayDate: '20261101165500', message: '',
       processedAt: '2026-11-01T09:55:00Z', lastReconciledAt: null }
     const html = renderToStaticMarkup(<ReservationReceipt payment={payment} reservationCode={base.reservationCode} />)
-    for (const text of ['Biên lai phí giữ chỗ', 'transaction-1', 'RSV-TEST', 'Thời điểm VNPay ghi nhận', '01/11/2026 16:55:00', 'Đơn đã xác nhận cọc']) expect(html).toContain(text)
+    for (const text of ['Biên lai đặt cọc giữ chỗ', 'transaction-1', 'RSV-TEST', 'Thời điểm VNPay ghi nhận', '01/11/2026 16:55:00', 'Đơn đã xác nhận cọc']) expect(html).toContain(text)
     expect(html).toContain('6.402.000 ₫')
     expect(html).not.toContain('166.452.000.000')
     for (const paymentStatus of ['FAILED', 'NOT_RECEIVED'] as const) {
@@ -50,21 +50,21 @@ describe('customer reservation layout regression', () => {
   it('shows countdown rather than only the expiry date', () => {
     const html = render('AWAITING_PAYMENT')
     expect(html).toContain('role="timer"')
-    expect(html).toContain('Thời gian thanh toán phí giữ chỗ còn lại')
+    expect(html).toContain('Thời gian thanh toán đặt cọc giữ chỗ còn lại')
     expect(html).not.toContain('Thanh toán mô phỏng')
   })
   it('restores the amber card, financial breakdown and six-step progress for real reservations', () => {
     const html = render('AWAITING_EMAIL')
-    for (const text of ['border-l-amber-500', 'RSV-TEST', 'Kho HCM', 'Báo giá đặt kho', 'Khoản thu khi nhận kho', 'Tiến trình đơn đặt kho', 'Quản lý phân kho', 'Nhận kho và ký', 'Đã bàn giao', 'Xác minh email']) {
+    for (const text of ['border-l-amber-500', 'RSV-TEST', 'Kho HCM', 'Báo giá đặt kho', 'Số tiền còn lại phải thanh toán khi bàn giao kho', 'Tiến trình đơn đặt kho', 'Quản lý phân kho', 'Nhận kho và ký', 'Đã bàn giao', 'Xác minh email']) {
       expect(html).toContain(text)
     }
     expect(html).toContain('aria-current="step"')
     expect(html).not.toContain('Chưa có đơn')
   })
   it('opens payment only for backend AWAITING_PAYMENT, not for email/review/confirmed', () => {
-    expect(render('AWAITING_PAYMENT')).toContain('>Thanh toán phí giữ chỗ</button>')
+    expect(render('AWAITING_PAYMENT')).toContain('>Thanh toán đặt cọc giữ chỗ</button>')
     for (const status of ['AWAITING_EMAIL', 'AWAITING_REVIEW', 'CONFIRMED', 'EXPIRED'] as const) {
-      expect(render(status)).not.toContain('>Thanh toán phí giữ chỗ</button>')
+      expect(render(status)).not.toContain('>Thanh toán đặt cọc giữ chỗ</button>')
     }
   })
   it('shows hold confirmation only after the reservation deposit is confirmed', () => {
@@ -104,7 +104,7 @@ describe('customer reservation layout regression', () => {
 it('pre-handover reservation shows setup-adjusted estimated dates without repricing', () => {
  const html = renderToStaticMarkup(<CustomerReservationCard reservation={{ ...base, rentalPeriodConfirmed: false, appointmentAt: '2026-10-30T03:00:00Z', freeSetupDays: 6 }} facilityName="Kho HCM" unitTypeName="Kho nhỏ" onVerify={() => {}} onCancel={() => {}} onRefresh={async () => {}} />)
  expect(html).toContain('05/11/2026')
- expect(html).toContain('Kỳ thuê dự kiến sau setup')
+ expect(html).toContain('Kỳ thuê dự kiến sau thời gian chuẩn bị')
  expect(html).toContain('4.000.000 ₫')
  expect(html).not.toContain('Kỳ thuê bắt đầu từ ngày kho có thể sẵn sàng sớm nhất')
 })
@@ -116,8 +116,8 @@ it('pre-handover reservation shows setup-adjusted estimated dates without repric
    expect(html).toContain('role="tab" id="reservation-quote-tab-reservation-1"')
    expect(html).toContain('aria-labelledby="reservation-quote-tab-reservation-1" hidden=""')
    const invoice = html.slice(html.indexOf('role="tabpanel" id="reservation-quote-reservation-1"'))
-   expect(invoice).toContain('Tổng nghĩa vụ tài chính')
-   expect(html).toContain('Thanh toán phí giữ chỗ')
+   expect(invoice).toContain('Tổng chi phí phải thanh toán')
+   expect(html).toContain('Thanh toán đặt cọc giữ chỗ')
    expect(invoice).not.toContain('Thông tin hàng hóa đã khai báo')
    expect(html.split('>Thông tin khách hàng</h3>')).toHaveLength(2)
  })

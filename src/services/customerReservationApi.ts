@@ -374,6 +374,8 @@ export interface CustomerReservationDetail {
   cancelReason: string | null
   goodsItems: ReservationGoodsItem[]
   payments: ReservationPaymentResult[]
+  checkInStatus?: string | null
+  rentalStatus?: string | null
 }
 
 export interface ReservationEmailVerificationResult {
@@ -655,6 +657,14 @@ export async function updateSetupGoods(
   const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
     `/api/customer/reservations/${encodeURIComponent(reservationId)}/setup-goods`,
     { method: 'POST', body: JSON.stringify(input) },
+  )
+  return checkedReservationDetail(response.data)
+}
+
+export async function markCustomerPreparationComplete(reservationId: string, note?: string) {
+  const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
+    `/api/customer/reservations/${encodeURIComponent(reservationId)}/preparation-complete`,
+    { method: 'POST', body: JSON.stringify({ note: note?.trim() || null }) },
   )
   return checkedReservationDetail(response.data)
 }

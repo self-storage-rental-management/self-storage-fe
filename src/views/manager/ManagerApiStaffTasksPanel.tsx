@@ -190,7 +190,7 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <Card className="p-4"><p className="text-sm text-stone-500">Tổng nhiệm vụ</p><p className="mt-1 text-2xl font-bold">{loading ? '…' : taskError || recoveryError ? '-' : tasks.length + recoveryTasks.length}</p></Card>
         <Card className="p-4"><p className="text-sm text-stone-500">Đang xử lý</p><p className="mt-1 text-2xl font-bold">{loading ? '…' : taskError || recoveryError ? '-' : openTasks.length + recoveryTasks.filter(task => task.status !== 'CLOSED').length}</p></Card>
-        <Card className="col-span-2 p-4 lg:col-span-1"><p className="text-sm text-stone-500">Nhân viên đủ điều kiện</p><p className="mt-1 text-2xl font-bold">{loading ? '…' : staffReadFailed ? '—' : staff.length}</p></Card>
+        <Card className="col-span-2 p-4 lg:col-span-1"><p className="text-sm text-stone-500">Nhân viên đủ điều kiện</p><p className="mt-1 text-2xl font-bold">{loading ? '…' : staffReadFailed ? '-' : staff.length}</p></Card>
       </div>
 
       <Card className="overflow-x-auto">
