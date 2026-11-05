@@ -430,7 +430,10 @@ export default function Layout({
         {/* Role & Facility badge */}
         <div className="shrink-0 px-4 pt-4 pb-2 space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold text-white" style={{ borderColor: taskbarColor, backgroundColor: `${taskbarColor}33` }}>
+            <span
+              className="inline-flex items-center rounded-md border px-3 py-1.5 text-xs font-semibold"
+              style={{ color: taskbarColor, borderColor: taskbarColor, backgroundColor: `${taskbarColor}18` }}
+            >
               {getTranslatedRole()}
             </span>
           </div>
