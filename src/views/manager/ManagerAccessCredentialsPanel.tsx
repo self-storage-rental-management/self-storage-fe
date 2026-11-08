@@ -43,7 +43,7 @@ export default function ManagerAccessCredentialsPanel({ facilityId }: { facility
             <Td><b>{typeLabel[item.type]}</b><p className="text-xs font-mono text-stone-500">{item.reference}</p></Td>
             <Td className="font-mono">{item.storageUnitCode}</Td>
             <Td>{new Date(item.issuedAt).toLocaleString('vi-VN')}</Td>
-            <Td>{item.revokedAt ? new Date(item.revokedAt).toLocaleString('vi-VN') : '—'}</Td>
+            <Td>{item.revokedAt ? new Date(item.revokedAt).toLocaleString('vi-VN') : '-'}</Td>
             <Td><Badge variant={item.status === 'ACTIVE' ? 'success' : 'muted'}>{item.status === 'ACTIVE' ? 'Đang hoạt động' : 'Đã thu hồi'}</Badge></Td>
             <Td>{item.issuedByName}</Td>
           </Tr>)}

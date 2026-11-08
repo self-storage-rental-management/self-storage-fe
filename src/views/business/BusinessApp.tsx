@@ -331,7 +331,7 @@ const getFeeType = (type: string, lang: string) => {
 
 const getFeeTrigger = (trigger: string, lang: string) => {
   if (lang !== "vi") return trigger
-  // Trigger strings are already in Vietnamese in FEES data — return as-is
+  // Trigger strings are already in Vietnamese in FEES data - return as-is
   return trigger
 }
 
@@ -1471,7 +1471,7 @@ export default function BusinessApp({
     [],
   )
 
-  // Map ngày thanh toán vào tháng báo cáo (Tháng 4 – Tháng 9)
+  // Map ngày thanh toán vào tháng báo cáo (Tháng 4 - Tháng 9)
   const getPaymentReportingMonth = useCallback((dateStr?: string): string => {
     if (!dateStr) return "Tháng 9"
     const d = new Date(dateStr)
@@ -1633,7 +1633,7 @@ export default function BusinessApp({
           growthNum = diff / 100
         }
       } else {
-        growthStr = "—"
+        growthStr = "-"
       }
 
       previousMonthRevenue = monthRevenue
@@ -1831,7 +1831,7 @@ export default function BusinessApp({
         return !value || value.monthlyPrice <= 0 || value.securityDepositAmount < 0
       })
       if (invalid) {
-        showToast('Giá thuê phải lớn hơn 0 và tiền cọc đảm bảo kho không được âm.')
+        showToast('Giá thuê phải lớn hơn 0 và tiền cọc đảm bảo thuê không được âm.')
         return
       }
       try {
@@ -3763,8 +3763,8 @@ export default function BusinessApp({
             title={lang === "vi" ? "Quản Lý Cơ Sở" : "Facility Management"}
             subtitle={
               lang === "vi"
-                ? `${facilitiesList.filter(f => f.status !== "inactive").length} cơ sở trong hệ thống – Thêm, sửa, xóa và theo dõi vận hành`
-                : `${facilitiesList.filter(f => f.status !== "inactive").length} ${facilitiesList.filter(f => f.status !== "inactive").length === 1 ? "facility" : "facilities"
+? `${facilitiesList.filter(f => f.status !== "inactive").length} cơ sở trong hệ thống - Thêm, sửa, xóa và theo dõi vận hành`
+                : `${facilitiesList.filter(f => f.status !== "inactive").length} ${facilitiesList.filter(f => f.status !== "inactive").length === 1 ? "facility" : "facilities"}
                 } in the portfolio`
             }
             action={
@@ -4041,6 +4041,7 @@ export default function BusinessApp({
                             title={lang === "vi" ? "Khôi phục hoạt động cho cơ sở này" : "Reactivate facility"}
                           >
                             {lang === "vi" ? "Khôi phục HĐ" : "Reactivate"}
+
                           </Button>
                         )}
                         <Button
@@ -4262,13 +4263,13 @@ export default function BusinessApp({
                           </span>
                         </div>
                         <div className="flex items-center justify-between border-t border-stone-100 pt-1.5">
-                          <span className="text-[11px] text-slate-600 font-medium">Phí giữ chỗ:</span>
+                          <span className="text-[11px] text-slate-600 font-medium">Đặt cọc giữ chỗ:</span>
                           <span className="font-mono font-bold text-amber-800">
                             {item.depositPercent ?? 20}%
                           </span>
                         </div>
                         <div className="flex items-center justify-between border-t border-stone-100 pt-1.5">
-                          <span className="text-[11px] text-slate-600 font-medium">Setup miễn phí:</span>
+                          <span className="text-[11px] text-slate-600 font-medium">Hạn chuẩn bị (Miễn phí):</span>
                           <span className="font-mono font-bold text-blue-800">
                             {item.freeSetupDays == null ? 'Theo kỳ hạn' : `${item.freeSetupDays} ngày`}
                           </span>
@@ -4651,6 +4652,7 @@ export default function BusinessApp({
                 </Table>
               )}
             </Card>
+
           </div>
         )
       })()}
@@ -4792,7 +4794,7 @@ export default function BusinessApp({
                         </span>
                       </div>
                     </label>
-                    <label className="text-[11px] font-semibold text-slate-700">Tiền cọc đảm bảo kho (VNĐ)
+                    <label className="text-[11px] font-semibold text-slate-700">Tiền cọc đảm bảo thuê (VNĐ)
                       <div className="relative mt-1">
                         <input
                           type="text"
@@ -5413,7 +5415,7 @@ export default function BusinessApp({
               onChange={(e) => setFormCreateDurationMonths(Number(e.target.value))}
             />
             <Input
-              label={lang === "vi" ? "Setup miễn phí (ngày)" : "Free setup (days)"}
+              label={lang === "vi" ? "Hạn chuẩn bị (miễn phí, ngày)" : "Free preparation period (days)"}
               type="number"
               min={0}
               max={365}
@@ -5438,7 +5440,7 @@ export default function BusinessApp({
               onChange={(e) => setFormCreateDurationRenewalPercent(Number(e.target.value))}
             />
             <Input
-              label={lang === "vi" ? "Phí giữ chỗ (%)" : "Deposit (%)"}
+              label={lang === "vi" ? "Đặt cọc giữ chỗ (%)" : "Deposit (%)"}
               type="number"
               min={5}
               max={50}
@@ -5658,7 +5660,7 @@ export default function BusinessApp({
 
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <Input
-                label="Setup miễn phí (ngày)"
+                label="Hạn chuẩn bị (miễn phí, ngày)"
                 type="number"
                 min={0}
                 max={365}
@@ -5685,7 +5687,7 @@ export default function BusinessApp({
               />
 
               <Input
-                label="Phí giữ chỗ (%)"
+                label="Đặt cọc giữ chỗ (%)"
                 type="number"
                 min={5}
                 max={50}
@@ -6616,7 +6618,7 @@ export default function BusinessApp({
                           ["Đang sử dụng", measure(type.occupiedCount, "gian")],
                           ["Còn trống", measure(type.availableCount, "gian")],
                           ["Giá thuê mỗi tháng", Number(type.monthlyPrice) > 0 ? formatCurrency(type.monthlyPrice) : "Chờ BO định giá"],
-                          ["Tiền cọc đảm bảo kho", Number(type.securityDepositAmount) > 0 ? formatCurrency(type.securityDepositAmount) : "Chưa cấu hình"],
+                          ["Tiền cọc đảm bảo thuê", Number(type.securityDepositAmount) > 0 ? formatCurrency(type.securityDepositAmount) : "Chưa cấu hình"],
                           ["Trạng thái loại kho", ({ active: "Đã công bố", awaiting_pricing: "Chờ BO định giá / duyệt", draft: "Đang thiết lập", inactive: "Ngừng hoạt động" } as Record<string, string>)[type.status] || type.status],
                         ]},
                       ]
@@ -6756,7 +6758,7 @@ export default function BusinessApp({
                           </article>
 
                           <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-2xs">
-                            <h5 className="font-bold text-xs uppercase tracking-wider text-slate-700">Tiền cọc đảm bảo kho</h5>
+                            <h5 className="font-bold text-xs uppercase tracking-wider text-slate-700">Tiền cọc đảm bảo thuê</h5>
                             <p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">
                               {repType && Number(repType.securityDepositAmount) > 0
                                 ? formatVndAmount(repType.securityDepositAmount)
@@ -6802,7 +6804,7 @@ export default function BusinessApp({
                               {isApiAuthenticated() ? <li>Chưa có chính sách phí quá hạn được backend công bố cho cơ sở này.</li> : <>
                                 <li>Thời gian quá hạn tính từ ngày kế tiếp ngày hết hạn đến khi bàn giao và nghiệm thu kho thực tế.</li>
                                 <li>Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30 ngày).</li>
-                                <li>Tổng phí bằng số ngày quá hạn nhân với phí mỗi ngày. Khoản còn thiếu sau khấu trừ tiền cọc đảm bảo kho được đưa vào quyết toán.</li>
+                                <li>Tổng phí bằng số ngày quá hạn nhân với phí mỗi ngày. Khoản còn thiếu sau khấu trừ tiền cọc đảm bảo thuê được đưa vào quyết toán.</li>
                               </>}
                             </ul>
                           </article>

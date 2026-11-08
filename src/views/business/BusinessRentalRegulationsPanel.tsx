@@ -123,13 +123,13 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
           </div>
 
           <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Phí Giữ Chỗ</span>
-            <div className="text-base font-extrabold text-amber-600 font-mono mt-1">{config ? `${Math.round(config.defaultDepositRatio * 100)}%` : '10% – 30%'}</div>
+<span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Phí Giữ Chỗ (20%)</span>
+            <div className="text-base font-extrabold text-amber-600 font-mono mt-1">{config ? `${Math.round(config.defaultDepositRatio * 100)}%` : '10% - 30%'}</div>
             <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Cấu hình theo từng gói thuê (mặc định 20%). Trừ trực tiếp vào tiền thuê khi nhận kho.</p>
           </div>
 
           <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Tiền Cọc Đảm Bảo Kho</span>
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Tiền Cọc Đảm Bảo Thuê</span>
             <div className="text-base font-extrabold text-emerald-700 font-mono mt-1">Theo loại kho</div>
             <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Thu khi nhận kho, hoàn trả lại sau kiểm tra nghiệm thu trả kho, vệ sinh và công nợ.</p>
           </div>
@@ -161,7 +161,7 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
               <ul className="mt-2 list-disc space-y-1.5 pl-4 text-stone-700 leading-relaxed">
                 <li>Thời gian quá hạn tính từ ngày kế tiếp ngày hết hạn đến khi bàn giao và nghiệm thu kho thực tế.</li>
                 <li>Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30 ngày).</li>
-                <li>Tổng phí bằng số ngày quá hạn nhân với phí mỗi ngày. Khoản còn thiếu sau khấu trừ tiền cọc đảm bảo kho được đưa vào quyết toán.</li>
+                <li>Tổng phí bằng số ngày quá hạn nhân với phí mỗi ngày. Khoản còn thiếu sau khấu trừ tiền cọc đảm bảo thuê được đưa vào quyết toán.</li>
               </ul>
             </article>
             <article className="rounded-xl border border-amber-200 bg-white p-3.5">
@@ -173,7 +173,7 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
             </article>
           </div>
           <p className="rounded-lg bg-rose-50 border border-rose-200/70 p-3 text-xs leading-5 text-rose-900 font-medium">
-            Ví dụ tính phạt mẫu (giá kho 3.000.000 đ/tháng): 3.000.000 đ ÷ 30 × 50% = 50.000 đ/ngày. Trễ 4 ngày tương ứng 200.000 đ (khấu trừ trực tiếp vào tiền cọc đảm bảo kho khi quyết toán).
+            Ví dụ tính phạt mẫu (giá kho 3.000.000 đ/tháng): 3.000.000 đ ÷ 30 × 50% = 50.000 đ/ngày. Trễ 4 ngày tương ứng 200.000 đ (khấu trừ trực tiếp vào tiền cọc đảm bảo thuê khi quyết toán).
           </p>
         </div>
       </Card>

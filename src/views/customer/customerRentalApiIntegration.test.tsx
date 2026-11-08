@@ -5,7 +5,7 @@ import { CUSTOMER_RENTAL_API_PAGE, resolveCustomerInitialPage } from "./customer
 import CustomerRentalsApiPanel from "./CustomerRentalsApiPanel"
 
 vi.mock("../rental-api/RentalApiWorkspace", () => ({
-  default: ({ role }: { role: string }) => <div data-role={role}>D1–D4 API workspace</div>,
+  default: ({ role }: { role: string }) => <div data-role={role}>D1-D4 API workspace</div>,
 }))
 
 describe("Customer Rental API integration", () => {
@@ -29,7 +29,7 @@ describe("Customer Rental API integration", () => {
   it("keeps the Customer API workspace implemented and customer-scoped", () => {
     const html = renderToStaticMarkup(<CustomerRentalsApiPanel />)
     expect(html).toContain('data-role="customer"')
-    expect(html).toContain("D1–D4 API workspace")
+    expect(html).toContain("D1-D4 API workspace")
   })
   it("keeps the demo lifecycle page separate from the authenticated API workspace", () => {
     const source = readFileSync(new URL("./CustomerApp.tsx", import.meta.url), "utf8")

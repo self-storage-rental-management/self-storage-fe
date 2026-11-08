@@ -192,7 +192,7 @@ export default function CustomerRenewalRequestModal({
               />
             </div>
           </div>
-          {quote && <div className="mt-3 px-2"><QuoteLine label="Thời gian gia hạn" value={<>{rentalDate(quote.extensionStartDate)} – {rentalDate(quote.newEndDate)}</>} /></div>}
+          {quote && <div className="mt-3 px-2"><QuoteLine label="Thời gian gia hạn" value={<>{rentalDate(quote.extensionStartDate)} - {rentalDate(quote.newEndDate)}</>} /></div>}
           </section>
         )}
         {options.data?.length === 0 && (
@@ -244,6 +244,7 @@ export default function CustomerRenewalRequestModal({
                 <p>• Tiền gia hạn được tính theo biểu giá ưu đãi đã niêm yết của cơ sở.</p>
                 <p>• Tiền cọc bảo đảm kho hiện tại được giữ nguyên để bảo đảm cho kỳ thuê mới mà không cần thu lại.</p>
                 <p>• Kỳ thuê mới có hiệu lực liên tục tiếp nối kỳ thuê hiện tại sau khi xác nhận thanh toán.</p>
+
               </div>
             </details>
           </section>

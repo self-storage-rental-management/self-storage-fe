@@ -3,7 +3,7 @@ import type { AdminApiLoginHistory } from '../../services/adminApi'
 // ─── Formatting Dates ─────────────────────────────────────────────────────────
 
 export function formatFullDateTime(value: string | null | undefined): string {
-  if (!value) return '—'
+  if (!value) return '-'
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return String(value)
   return date.toLocaleString('vi-VN', {
@@ -17,23 +17,23 @@ export function formatFullDateTime(value: string | null | undefined): string {
 }
 
 export function formatTimeOnly(value: string | null | undefined): string {
-  if (!value) return '—'
+  if (!value) return '-'
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '—'
+  if (Number.isNaN(date.getTime())) return '-'
   return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
 
 export function formatDateOnly(value: string | null | undefined): string {
-  if (!value) return '—'
+  if (!value) return '-'
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '—'
+  if (Number.isNaN(date.getTime())) return '-'
   return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
 export function formatTimeAgo(value: string | null | undefined): string {
-  if (!value) return '—'
+  if (!value) return '-'
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '—'
+  if (Number.isNaN(date.getTime())) return '-'
   const diffSec = Math.floor((Date.now() - date.getTime()) / 1000)
   if (diffSec < 60) return 'Vừa xong'
   if (diffSec < 3600) return `${Math.floor(diffSec / 60)} phút trước`
@@ -58,7 +58,7 @@ export interface ParsedUserAgent {
 }
 
 export function parseUserAgent(ua: string | null | undefined): ParsedUserAgent {
-  if (!ua || ua === '—') {
+  if (!ua || ua === '-') {
     return {
       browser: 'Không xác định',
       browserVersion: '',
@@ -448,8 +448,8 @@ export function exportLoginHistoryToCsv(filename: string, logs: AdminApiLoginHis
       item.roles.join(', ') || 'Chưa phân quyền',
       item.success ? 'Thành công' : 'Thất bại',
       risk.badgeText,
-      item.failureReason || '—',
-      item.ipAddress || '—',
+      item.failureReason || '-',
+      item.ipAddress || '-',
       ip.networkType,
       `${ip.city}, ${ip.country}`,
       ua.browserDisplay,

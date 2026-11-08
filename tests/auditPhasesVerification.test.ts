@@ -28,7 +28,7 @@ describe('FE Audit Phases Comprehensive Verification', () => {
     vi.unstubAllGlobals()
   })
 
-  describe('Phase 1 — Facility & Storage Allocation', () => {
+  describe('Phase 1 - Facility & Storage Allocation', () => {
     it('should generate default rental packages for S, M, L, XL with valid attributes', () => {
       const packagesS = generateDefaultRentalPackages('fac-test', 'S', 5500000)
       expect(packagesS.length).toBe(5) // 1, 3, 6, 12, 24 months
@@ -67,7 +67,7 @@ describe('FE Audit Phases Comprehensive Verification', () => {
     })
   })
 
-  describe('Phase 2 — Base Pricing', () => {
+  describe('Phase 2 - Base Pricing', () => {
     it('should not mutate imported UNIT_SPECS demo object', () => {
       const originalPriceS = UNIT_SPECS.S.priceMonthly
 
@@ -88,7 +88,7 @@ describe('FE Audit Phases Comprehensive Verification', () => {
     })
   })
 
-  describe('Phase 3 — Rental Package Consistency', () => {
+  describe('Phase 3 - Rental Package Consistency', () => {
     it('should read updated global duration discounts when generating default packages', () => {
       // Simulate BO updating duration discounts in localStorage
       const customDiscounts = [
@@ -110,7 +110,7 @@ describe('FE Audit Phases Comprehensive Verification', () => {
     })
   })
 
-  describe('Phase 5 — Customer Booking & Renewal Financial Calculations', () => {
+  describe('Phase 5 - Customer Booking & Renewal Financial Calculations', () => {
     it('should calculate 20% reservation deposit and 1 month security deposit accurately', () => {
       const baseMonthlyPrice = 5500000
       const rentalMonths = 6

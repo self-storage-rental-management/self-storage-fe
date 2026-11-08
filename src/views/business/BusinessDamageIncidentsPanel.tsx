@@ -219,7 +219,6 @@ export default function BusinessDamageIncidentsPanel({ user, lang = 'vi', facili
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-200 pb-4">
         <div>
           <h2 className="text-xl font-bold text-stone-900 flex items-center gap-2">
-            
             {isVi ? 'Quản Lý Sự Cố & Hư Hỏng Kho' : 'Damage Incidents Management'}
           </h2>
           <p className="text-xs text-stone-500 mt-1">
@@ -554,7 +553,7 @@ export default function BusinessDamageIncidentsPanel({ user, lang = 'vi', facili
         <Modal
           open={statusModalOpen}
           onClose={() => setStatusModalOpen(false)}
-          title={`${isVi ? 'Cập Nhật Trạng Thái' : 'Update Status'} — ${activeIncident.incidentCode}`}
+          title={`${isVi ? 'Cập Nhật Trạng Thái' : 'Update Status'} - ${activeIncident.incidentCode}`}
         >
           <div className="space-y-4 text-xs">
             <div className="bg-stone-50 p-3 rounded-lg border border-stone-200 space-y-1">
@@ -626,7 +625,7 @@ export default function BusinessDamageIncidentsPanel({ user, lang = 'vi', facili
         <Modal
           open={detailModalOpen}
           onClose={() => setDetailModalOpen(false)}
-          title={`${isVi ? 'Chi Tiết Sự Cố' : 'Incident Details'} — ${activeIncident.incidentCode}`}
+          title={`${isVi ? 'Chi Tiết Sự Cố' : 'Incident Details'} - ${activeIncident.incidentCode}`}
         >
           <div className="space-y-3 text-xs">
             <div className="grid grid-cols-2 gap-2 bg-stone-50 p-3 rounded-lg border border-stone-200">
