@@ -48,6 +48,7 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
   const [receiptOpen, setReceiptOpen] = useState(false)
   const [returnFailure, setReturnFailure] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [acceptedNoRefund, setAcceptedNoRefund] = useState(false)
   const paymentKey = useRef<string | null>(null)
   const onRefreshRef = useRef(onRefresh)
   useEffect(() => { onRefreshRef.current = onRefresh }, [onRefresh])
@@ -113,7 +114,7 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
   }, [reservation.status, countdown.expired])
 
   const pay = async () => {
-    if (busy || countdown.expired || reservation.status !== 'AWAITING_PAYMENT' || !snapshot) return
+    if (busy || countdown.expired || !acceptedNoRefund || reservation.status !== 'AWAITING_PAYMENT' || !snapshot) return
     setBusy(true)
     try {
       paymentKey.current ??= crypto.randomUUID()
@@ -132,10 +133,10 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
       <p className="font-bold">Thời gian thanh toán phí giữ chỗ còn lại</p>
       <p role="timer" className="mt-1 text-2xl font-extrabold tabular-nums">{countdown.text}</p>
       <p className="mt-1">{countdown.expired ? 'Đã hết thời hạn. Đang chờ cập nhật trạng thái đơn.' : 'Vui lòng hoàn tất thanh toán trước khi hết thời hạn.'}</p>
-      <Button className="mt-2" size="sm" disabled={busy || countdown.expired} onClick={() => setPayOpen(true)}>Thanh toán phí giữ chỗ</Button>
+      <Button className="mt-2" size="sm" disabled={busy || countdown.expired} onClick={() => { setAcceptedNoRefund(false); setPayOpen(true) }}>Thanh toán phí giữ chỗ</Button>
     </div>}
     {payment?.paymentStatus === 'PAID' && <Button variant="outline" size="sm" className="reservation-action reservation-action-receipt min-h-10 w-full justify-center" onClick={() => setReceiptOpen(true)}>{bookingDepositAccepted(payment) ? 'Xem biên lai thanh toán' : 'Xem giao dịch cần đối soát'}</Button>}
-    <Modal size="2xl" open={payOpen} onClose={() => { if (!busy) setPayOpen(false) }} title="Thanh toán phí giữ chỗ">
+    <Modal size="2xl" open={payOpen} onClose={() => { if (!busy) { setPayOpen(false); setAcceptedNoRefund(false) } }} title="Thanh toán phí giữ chỗ">
       <div className="space-y-4">
         <div className="grid gap-1 text-sm"><p>Đơn giữ kho: <b>{reservation.reservationCode}</b></p><p>Cơ sở: <b>{facilityName}</b></p><p>Loại kho: <b>{unitTypeName}</b></p><p>{reservation.rentalPeriodConfirmed ? 'Kỳ thuê đã chốt:' : 'Kỳ thuê dự kiến sau setup:'} <b>{snapshot.startDate.split('-').reverse().join('/')} đến {snapshot.endDate.split('-').reverse().join('/')}</b></p></div>
         <section className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm">
@@ -165,8 +166,38 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
           <p className="mt-1 text-xs text-stone-600">Phí giữ chỗ được trừ vào tổng nghĩa vụ tài chính đã gồm tiền thuê và cọc đảm bảo kho.</p>
         </div>
         <div className="rounded-lg bg-red-700 p-3 text-center text-white"><p className="text-xs font-bold uppercase tracking-wide">Thời gian thanh toán còn lại</p><p className="mt-1 text-2xl font-extrabold tabular-nums">{countdown.text}</p></div>
+        {/* Thông báo không hoàn tiền trước khi thanh toán */}
+        <div className="rounded-xl border-2 border-rose-300 bg-rose-50 p-4 text-rose-950">
+          <div className="flex items-start gap-3">
+            
+            <div className="space-y-1.5 text-xs">
+              <p className="font-bold uppercase tracking-wider text-rose-900">
+                Thông báo quan trọng: Quy định không hoàn phí giữ chỗ
+              </p>
+              <p className="leading-relaxed text-rose-900 font-medium">
+                Khoản thanh toán ngay <b>{formatVnd(snapshot.reservationDepositAmount)}</b> là phí cam kết giữ chỗ gian kho đã chọn. Khoản tiền này <b>KHÔNG ĐƯỢC HOÀN LẠI</b> trong mọi trường hợp quý khách tự ý hủy đơn, đổi ý hoặc không đến nhận kho đúng thời hạn quy định.
+              </p>
+              <p className="text-[11px] leading-relaxed text-rose-800">
+                Toàn bộ số tiền này sẽ được <b>khấu trừ 100%</b> vào tổng nghĩa vụ tài chính khi quý khách đến cơ sở làm thủ tục nhận kho đúng hẹn.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <label className="flex items-start gap-2.5 rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs text-stone-800 cursor-pointer select-none hover:bg-stone-100 transition">
+          <input
+            type="checkbox"
+            className="mt-0.5 h-4 w-4 rounded border-stone-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+            checked={acceptedNoRefund}
+            onChange={(e) => setAcceptedNoRefund(e.target.checked)}
+          />
+          <span className="leading-tight">
+            Tôi xác nhận đã đọc, hiểu rõ và đồng ý rằng <b>khoản phí giữ chỗ sẽ không được hoàn lại</b> nếu tôi tự ý hủy đơn hoặc không đến nhận kho đúng hạn.
+          </span>
+        </label>
+
         <p className="text-sm text-stone-600">Bạn sẽ được chuyển sang VNPay Sandbox. Sau khi hoàn tất, VNPay sẽ đưa bạn trở lại StorageHub và cập nhật biên lai tự động.</p>
-        <Button className="w-full" disabled={busy || countdown.expired} onClick={() => void pay()}>{busy ? 'Đang chuyển sang VNPay…' : `Thanh toán qua VNPay ${formatVnd(snapshot.reservationDepositAmount)}`}</Button>
+        <Button className="w-full" disabled={busy || countdown.expired || !acceptedNoRefund} onClick={() => void pay()}>{busy ? 'Đang chuyển sang VNPay…' : `Thanh toán qua VNPay ${formatVnd(snapshot.reservationDepositAmount)}`}</Button>
       </div>
     </Modal>
     <Modal size="3xl" open={receiptOpen} onClose={() => setReceiptOpen(false)} title={payment && bookingDepositAccepted(payment) ? 'Biên lai thanh toán' : 'Chi tiết giao dịch'}>
