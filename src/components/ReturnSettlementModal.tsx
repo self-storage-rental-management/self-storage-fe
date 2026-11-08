@@ -294,7 +294,6 @@ export default function ReturnSettlementModal({
               <div className="flex items-start justify-between border-b border-stone-200 pb-4">
                 <div>
                   <div className="flex items-center gap-2">
-                    
                     <h4 className="text-lg font-bold text-stone-900">
                       {netRefund > 0
                         ? 'BIÊN LAI HOÀN CỌC TRẢ KHO'
@@ -400,7 +399,7 @@ export default function ReturnSettlementModal({
                     {/* Giao dịch cọc ban đầu */}
                     {!apiRecord && <Tr>
                       <Td className="text-xs text-stone-500">{docDate}</Td>
-                      <Td className="font-semibold text-stone-800">Cọc đảm bảo hợp đồng</Td>
+                      <Td className="font-semibold text-stone-800">Tiền cọc đảm bảo thuê</Td>
                       <Td className="font-mono text-xs text-stone-500">DEP-{returnCase.rentalId}</Td>
                       <Td className="text-xs">{apiRecord ? receiptMethod : 'Chuyển khoản'}</Td>
                       <Td className="text-right font-semibold text-stone-800">+{formatVnd(deposit)}</Td>

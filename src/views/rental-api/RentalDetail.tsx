@@ -121,14 +121,14 @@ export default function RentalDetail({
             <dd>{rentalPeriodText(rental, showTechnicalWarnings)}</dd>
           </div>
           {rental.setupStartedAt && rental.setupEndsAt && <div>
-            <dt>Setup miễn phí</dt>
+            <dt>Hạn chuẩn bị (Miễn phí)</dt>
             <dd className="space-y-3">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-lg border border-stone-200 bg-stone-50 p-3"><p className="text-xs text-stone-500">Bàn giao thực tế</p><p className="mt-1 font-semibold">{rentalDate(vietnamDateInput(rental.setupStartedAt))}</p><p className="mt-1 text-xs text-stone-500">{new Date(rental.setupStartedAt).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })}</p></div>
-                <div className="rounded-lg border border-stone-200 bg-stone-50 p-3"><p className="text-xs text-stone-500">Ngày cuối setup miễn phí</p><p className="mt-1 font-semibold">{rentalDate(vietnamDateInput(new Date(new Date(rental.setupEndsAt).getTime() - 1)))}</p></div>
+                <div className="rounded-lg border border-stone-200 bg-stone-50 p-3"><p className="text-xs text-stone-500">Ngày cuối thời gian chuẩn bị miễn phí</p><p className="mt-1 font-semibold">{rentalDate(vietnamDateInput(new Date(new Date(rental.setupEndsAt).getTime() - 1)))}</p></div>
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3"><span className="text-sm text-emerald-800">Bắt đầu kỳ thuê có tính tiền</span><span className="font-bold text-emerald-900">{rentalDate(rental.startDate)}</span></div>
-              {rental.moveInCompletedAt && <p className="border-t border-stone-100 pt-3 text-xs text-stone-500">Đã báo hoàn tất setup lúc {new Date(rental.moveInCompletedAt).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })} ngày {rentalDate(vietnamDateInput(rental.moveInCompletedAt))}</p>}
+              {rental.moveInCompletedAt && <p className="border-t border-stone-100 pt-3 text-xs text-stone-500">Đã báo hoàn tất chuẩn bị lúc {new Date(rental.moveInCompletedAt).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })} ngày {rentalDate(vietnamDateInput(rental.moveInCompletedAt))}</p>}
             </dd>
           </div>}
           {rental.inventoryPending && <div>
@@ -139,7 +139,7 @@ export default function RentalDetail({
             </dd>
           </div>}
           {rental.setupExitReviewRequired && <div>
-            <dt>Xử lý hủy/trả trong setup</dt>
+            <dt>Xử lý hủy/trả trong thời gian chuẩn bị</dt>
             <dd><Badge variant="warning">Chờ Business quyết định</Badge><p className="mt-2 text-xs leading-5 text-stone-500">{rental.moveInCompletedAt ? 'Hàng đã chuyển vào: phải dọn hàng và kiểm tra trả kho trước khi quyết toán.' : 'Hàng chưa chuyển vào: xử lý như hủy sau check-in, không cần kiểm kê hàng.'} Không tự động hoàn tiền.</p></dd>
           </div>}
           <div>
@@ -174,7 +174,7 @@ export default function RentalDetail({
       {evidence && evidence.customer && <Card className="rounded-xl p-5">
         <h3 className="mb-4 border-b border-stone-200 pb-3 text-base font-bold">Thông tin khách hàng</h3>
         <dl className="grid gap-4 sm:grid-cols-2">
-          {[['Họ và tên', evidence.customer.fullName], ['Email', evidence.customer.email], ['Số điện thoại', evidence.customer.phone || 'Chưa cập nhật'], ['Địa chỉ', evidence.customer.address || 'Chưa cập nhật'], ['CCCD hoặc hộ chiếu', evidence.customer.identityDocumentNumber || 'Chưa cập nhật']].map(([label, value]) => <div key={label}><dt className="text-xs text-stone-500">{label}</dt><dd className="mt-1 font-semibold text-stone-900">{value}</dd></div>)}
+          {[['Họ và tên', evidence.customer.fullName], ['Email', evidence.customer.email], ['Số điện thoại', evidence.customer.phone || 'Chưa cập nhật'], ['Địa chỉ', evidence.customer.address || 'Chưa cập nhật'], ['CCCD/CMND', evidence.customer.identityDocumentNumber || 'Chưa cập nhật']].map(([label, value]) => <div key={label}><dt className="text-xs text-stone-500">{label}</dt><dd className="mt-1 font-semibold text-stone-900">{value}</dd></div>)}
         </dl>
       </Card>}
       {evidence && <Card className="rounded-xl p-5">
@@ -201,15 +201,15 @@ export default function RentalDetail({
           {agreed ? (
             <div className="space-y-5">
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-stone-900 px-5 py-5 text-white">
-                <div><p className="text-sm font-semibold">Tổng tiền theo thỏa thuận</p><p className="mt-1 text-xs text-stone-300">Đã gồm cọc bảo đảm kho</p></div>
+                <div><p className="text-sm font-semibold">Tổng tiền theo thỏa thuận</p><p className="mt-1 text-xs text-stone-300">Đã gồm tiền cọc đảm bảo thuê</p></div>
                 <p className="text-2xl font-bold tabular-nums">{rentalMoney(agreed.totalInitialObligation, evidence.currency)}</p>
               </div>
               <div className="divide-y divide-stone-100 px-1">
-                {[["Tiền thuê toàn kỳ", agreed.netRentalAmount], ["Cọc bảo đảm kho", agreed.securityDepositAmount]].map(([label, amount]) => <div key={String(label)} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"><span className="text-stone-600">{label}</span><span className="font-semibold tabular-nums text-stone-900">{rentalMoney(Number(amount), evidence.currency)}</span></div>)}
+                {[["Tiền thuê toàn kỳ", agreed.netRentalAmount], ["Tiền cọc đảm bảo thuê", agreed.securityDepositAmount]].map(([label, amount]) => <div key={String(label)} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"><span className="text-stone-600">{label}</span><span className="font-semibold tabular-nums text-stone-900">{rentalMoney(Number(amount), evidence.currency)}</span></div>)}
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
-                <section className="rounded-xl border border-stone-200 p-5"><p className="text-xs font-bold uppercase tracking-wide text-stone-500">Chặng 1 · Khi giữ chỗ</p><p className="mt-3 text-sm text-stone-700">Phí giữ chỗ</p><p className="mt-2 text-xl font-bold tabular-nums text-stone-900">{rentalMoney(agreed.reservationDepositAmount, evidence.currency)}</p></section>
-                <section className="rounded-xl border border-amber-300 bg-amber-50 p-5"><p className="text-xs font-bold uppercase tracking-wide text-amber-800">Chặng 2 · Khi nhận kho</p><p className="mt-3 text-sm text-stone-700">Tổng tiền trừ phí giữ chỗ</p><p className="mt-2 text-xl font-bold tabular-nums text-amber-800">{rentalMoney(agreed.dueAtCheckIn, evidence.currency)}</p></section>
+                <section className="rounded-xl border border-stone-200 p-5"><p className="text-xs font-bold uppercase tracking-wide text-stone-500">Chặng 1 · Khi giữ chỗ</p><p className="mt-3 text-sm text-stone-700">Đặt cọc giữ chỗ (20%)</p><p className="mt-2 text-xl font-bold tabular-nums text-stone-900">{rentalMoney(agreed.reservationDepositAmount, evidence.currency)}</p></section>
+                <section className="rounded-xl border border-amber-300 bg-amber-50 p-5"><p className="text-xs font-bold uppercase tracking-wide text-amber-800">Chặng 2 · Khi nhận kho</p><p className="mt-3 text-sm text-stone-700">Số tiền còn lại phải thanh toán khi bàn giao kho</p><p className="mt-2 text-xl font-bold tabular-nums text-amber-800">{rentalMoney(agreed.dueAtCheckIn, evidence.currency)}</p></section>
               </div>
             </div>
           ) : <p>Không có dữ liệu</p>}

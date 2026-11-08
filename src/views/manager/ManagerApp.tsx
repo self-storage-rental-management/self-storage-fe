@@ -31,7 +31,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
   const nav: NavItem[] = [
     { id: 'dashboard', label: 'Tổng quan', icon: Icon.home, group: 'Tổng quan', permission: 'dashboard:read' },
     { id: 'inventory', label: 'Thông tin kho', icon: Icon.box, group: 'Vận hành', permission: 'inventory:update' },
-    ...(isApiAuthenticated() ? [{ id: 'unit-assignment', label: 'Phân gian', icon: Icon.policy, group: 'Vận hành', permission: 'storage_units:assign' as const }] : []),
+    ...(isApiAuthenticated() ? [{ id: 'unit-assignment', label: 'Phân kho', icon: Icon.policy, group: 'Vận hành', permission: 'storage_units:assign' as const }] : []),
     { id: 'rentals', label: 'Hồ sơ thuê & Gia hạn', icon: Icon.policy, group: 'Vận hành', permission: isApiAuthenticated() ? 'rentals:read' : 'rentals:update' },
     { id: 'payments', label: isApiAuthenticated() ? 'Lịch sử thanh toán' : 'Lịch sử thanh toán & Công nợ', icon: Icon.dollar, group: 'Tài chính', permission: isApiAuthenticated() ? 'payments:read' : 'payments:collect' },
     ...(isApiAuthenticated() ? [{ id: 'overdue-cases', label: 'Theo dõi quá hạn', icon: Icon.alert, group: 'Tài chính', permission: 'rentals:read' as const }] : []),
@@ -55,7 +55,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     const pageTitles: Record<string, string> = {
       dashboard: 'Tổng quan cơ sở',
       inventory: 'Thông tin kho',
-      'unit-assignment': 'Phân gian',
+      'unit-assignment': 'Phân kho',
       rentals: 'Hồ sơ thuê & Gia hạn',
       moves: 'Nhận kho & Trả kho',
       payments: 'Lịch sử thanh toán',
