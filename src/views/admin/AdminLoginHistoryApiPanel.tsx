@@ -1056,6 +1056,7 @@ export default function AdminLoginHistoryApiPanel({
                           ) : isWarning ? (
                             <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
                               <span />
+
                               <span>{risk.badgeText}</span>
                             </span>
                           ) : (
@@ -1243,6 +1244,7 @@ export default function AdminLoginHistoryApiPanel({
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
+
                     <h4 className="font-bold text-sm">{risk.title}</h4>
                   </div>
                   <span

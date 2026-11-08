@@ -122,6 +122,25 @@ export function generateFacilityCode(
   return candidate
 }
 
+export function isFacilityPhoneValid(phone: string): boolean {
+  if (!phone.trim()) return true
+  const clean = phone.replace(/[\s().-]/g, '')
+  return /^(?:0(?:2\d{8,9}|[35789]\d{8})|\+?84(?:2\d{8,9}|[35789]\d{8})|(?:1900|1800)\d{4,6})$/.test(clean)
+}
+
+export function isFacilityAccessHoursValid(hours: string): boolean {
+  if (!hours.trim()) return true
+  const trimmed = hours.trim()
+  if (trimmed === '24/7') return true
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})$/)
+  if (!match) return false
+  const [, h1, m1, h2, m2] = match
+  const hour1 = Number(h1), min1 = Number(m1)
+  const hour2 = Number(h2), min2 = Number(m2)
+  return hour1 >= 0 && hour1 <= 23 && min1 >= 0 && min1 <= 59 &&
+         hour2 >= 0 && hour2 <= 23 && min2 >= 0 && min2 <= 59
+}
+
 export const FacilityGeneralInfo: React.FC<FacilityGeneralInfoProps> = ({
   isEditing,
   code,
@@ -188,7 +207,7 @@ export const FacilityGeneralInfo: React.FC<FacilityGeneralInfoProps> = ({
   )
 
   // Validate Vietnamese phone number
-  const isPhoneValid = !phone.trim() || /^(0[35789]\d{8}|(024|028)\d{8}|(1900|1800)\d{4,6})$/.test(phone.replace(/\s+/g, ''))
+  const isPhoneValid = isFacilityPhoneValid(phone)
 
   // Check code modified warning in Edit mode
   const isCodeModified = isEditing && initialCode && code.trim().toUpperCase() !== initialCode.trim().toUpperCase()
@@ -416,6 +435,7 @@ export const FacilityOperations: React.FC<FacilityOperationsProps> = ({
   lang = 'vi',
 }) => {
   const { open: openTime, close: closeTime } = parseHours(accessHours)
+  const isHoursValid = isFacilityAccessHoursValid(accessHours)
 
   const handleOpenTimeChange = (newOpen: string) => {
     const current = parseHours(accessHours)
@@ -494,6 +514,11 @@ export const FacilityOperations: React.FC<FacilityOperationsProps> = ({
               </button>
             ))}
           </div>
+          {!isHoursValid && (
+            <p className="text-[10px] font-semibold text-red-600 mt-1">
+              {lang === 'vi' ? 'Định dạng giờ mở cửa không hợp lệ (VD: 08:00 - 17:00 hoặc 24/7)' : 'Invalid opening hours format (e.g. 08:00 - 17:00 or 24/7)'}
+            </p>
+          )}
         </div>
         {/* Trạng thái hoạt động (chỉ dùng Tiếng Việt) */}
         <div>

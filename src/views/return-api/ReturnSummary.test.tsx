@@ -26,7 +26,7 @@ describe('Return summary', () => {
   it('uses the actual inspection cutoff returned by backend rather than the request date', () => {
     const html = renderToStaticMarkup(<ReturnSummary record={{ ...record, setupExitRequested: true,
       setupEarlyExit: false, setupReturnedAt: '2026-10-30T00:00:00Z', rentalRefundCredit: 0, earlyTerminationFee: 0 }} />)
-    expect(html).toContain('sau hạn setup')
+    expect(html).toContain('sau hạn chuẩn bị')
     expect(html).not.toContain('Phí chấm dứt sớm một lần')
   })
 

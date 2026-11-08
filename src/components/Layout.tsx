@@ -122,6 +122,16 @@ export default function Layout({
   const notificationAreaRef = useRef<HTMLDivElement>(null)
   const contentScrollRef = useRef<HTMLElement>(null)
   useEffect(() => {
+    const originalHtmlOverflow = document.documentElement.style.overflow
+    const originalBodyOverflow = document.body.style.overflow
+    document.documentElement.style.overflow = 'hidden'
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.documentElement.style.overflow = originalHtmlOverflow
+      document.body.style.overflow = originalBodyOverflow
+    }
+  }, [])
+  useEffect(() => {
     if (!notificationsOpen) return
     const closeOutside = (event: PointerEvent) => {
       if (event.target instanceof Node) {
@@ -407,7 +417,7 @@ export default function Layout({
   }
 
   return (
-    <div className={`flex h-dvh min-h-0 w-full min-w-0 max-w-full overflow-hidden bg-[#f3f2eb] ${user.role === 'customer' ? 'customer-role-layout' : ''}`}>
+    <div className={`flex h-screen min-h-screen max-h-screen min-h-0 w-full min-w-0 max-w-full overflow-hidden bg-[#f3f2eb] ${user.role === 'customer' ? 'customer-role-layout' : ''}`}>
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -419,7 +429,7 @@ export default function Layout({
       {/* Sidebar */}
       <aside
         style={{ borderTopColor: taskbarColor }}
-        className={`fixed lg:static inset-y-0 left-0 z-30 min-h-0 w-64 shrink-0 border-t-2 bg-[#292a27] border-r border-white/10 text-white flex flex-col overflow-hidden transition-transform duration-200
+        className={`fixed lg:static inset-y-0 left-0 z-30 h-full min-h-0 w-64 shrink-0 border-t-2 bg-[#292a27] border-r border-white/10 text-white flex flex-col overflow-hidden transition-transform duration-200
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
       >
         {/* Logo */}
@@ -520,7 +530,7 @@ export default function Layout({
       </aside>
 
       {/* Main */}
-      <div className={`flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden ${user.role === 'customer' ? 'basis-0 w-0' : ''}`}>
+      <div className={`flex-1 flex flex-col h-full min-h-0 min-w-0 overflow-hidden ${user.role === 'customer' ? 'basis-0 w-0' : ''}`}>
         {/* Top bar */}
         <header className="bg-white border-b border-[#deddd2] h-16 flex items-center px-4 lg:px-7 gap-3 lg:gap-4 flex-shrink-0">
           <button

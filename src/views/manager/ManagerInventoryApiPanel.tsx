@@ -361,6 +361,23 @@ function CreateUnitTypeModal({ open, facilityId, existingCodes = [], onClose, on
     )
   }, [form.code, existingCodes, initial])
 
+  const validationErrors = useMemo(() => {
+    const list: string[] = []
+    if (!form.name.trim()) list.push("Tên loại kho không được để trống")
+    if (!form.code.trim()) list.push("Mã loại kho không được để trống")
+    if (isDuplicateCode) list.push("Mã loại kho đã tồn tại trong cơ sở")
+    if (selectedCategories.length === 0) list.push("Vui lòng chọn ít nhất 1 loại hàng được nhận")
+    if (Number(form.lengthM) <= 0) list.push("Chiều dài kho phải lớn hơn 0 m")
+    if (Number(form.widthM) <= 0) list.push("Chiều rộng kho phải lớn hơn 0 m")
+    if (Number(form.heightM) <= 0) list.push("Chiều cao kho phải lớn hơn 0 m")
+    if (Number(form.maxLoadKg) <= 0) list.push("Tải trọng tối đa phải lớn hơn 0 kg")
+    if (Number(form.aisleWidthM) <= 0) list.push("Chiều rộng lối đi phải lớn hơn 0 m")
+    if (!form.trolleyType.trim()) list.push("Loại xe đẩy hỗ trợ không được để trống")
+    return list
+  }, [form, isDuplicateCode, selectedCategories])
+
+  const isFormValid = validationErrors.length === 0
+
   const field = (key: keyof typeof form, label: string, type = 'text') => (
     <label className="block text-sm font-medium text-stone-700">{label}
       <input
@@ -373,7 +390,7 @@ function CreateUnitTypeModal({ open, facilityId, existingCodes = [], onClose, on
     </label>
   )
   const submit = async () => {
-    if (imageReading || isDuplicateCode) return
+    if (imageReading || !isFormValid) return
     setBusy(true); setError(undefined)
     try {
       const input = {
@@ -405,13 +422,16 @@ function CreateUnitTypeModal({ open, facilityId, existingCodes = [], onClose, on
           <label className="block text-sm font-medium text-stone-700">
             Tên loại kho *
             <input
-              className={`${inputClass} mt-1`}
+              className={`${inputClass} mt-1 ${!form.name.trim() ? "border-amber-400 focus:ring-amber-500" : ""}`}
               disabled={busy}
               type="text"
               placeholder="VD: Kho Đồ Gia Đình, Kho Mini..."
               value={form.name}
               onChange={event => handleNameChange(event.target.value)}
             />
+            {!form.name.trim() && (
+              <p className="mt-1 text-xs text-amber-600 font-medium">Vui lòng nhập tên loại kho.</p>
+            )}
           </label>
 
           {/* Mã loại kho (Phương án 2) */}
@@ -584,9 +604,29 @@ function CreateUnitTypeModal({ open, facilityId, existingCodes = [], onClose, on
             {checked && <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{materials.map(material => <label key={material.id} className="flex items-center gap-2 rounded bg-stone-50 px-3 py-2 text-sm"><input type="checkbox" checked={selectedMaterials.includes(material.id)} onChange={event => setSelectedMaterials(current => event.target.checked ? [...new Set([...current, material.id])] : current.filter(id => id !== material.id))} />{material.label}{material.fragile ? ' · Dễ vỡ' : ''}</label>)}</div>}
           </div>
         })}
+        {selectedCategories.length === 0 && (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs font-semibold text-amber-800">
+            ⚠️ Vui lòng chọn ít nhất 1 loại hàng hóa mà loại kho này chấp nhận lưu trữ.
+          </p>
+        )}
       </section>
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p>}
-      <div className="flex justify-end gap-2 border-t border-stone-200 pt-4"><Button variant="outline" disabled={busy || imageReading} onClick={onClose}>Hủy</Button><Button disabled={busy || imageReading || !form.code.trim() || !form.name.trim() || isDuplicateCode || selectedCategories.length === 0} onClick={() => void submit()}>{imageReading ? 'Đang đọc ảnh…' : busy ? 'Đang lưu...' : initial ? 'Lưu thay đổi' : 'Thêm loại kho'}</Button></div>
+      {validationErrors.length > 0 && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+          <div className="font-semibold flex items-center gap-1.5 mb-1.5 text-amber-800">
+            <svg className="w-4 h-4 text-amber-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <span>Chưa đủ điều kiện lưu ({validationErrors.length} mục cần hoàn tất):</span>
+          </div>
+          <ul className="list-disc list-inside space-y-0.5 text-amber-800 pl-1">
+            {validationErrors.map((msg, idx) => (
+              <li key={idx}>{msg}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <div className="flex justify-end gap-2 border-t border-stone-200 pt-4"><Button variant="outline" disabled={busy || imageReading} onClick={onClose}>Hủy</Button><Button disabled={busy || imageReading || !isFormValid} onClick={() => void submit()}>{imageReading ? 'Đang đọc ảnh…' : busy ? 'Đang lưu...' : initial ? 'Lưu thay đổi' : 'Thêm loại kho'}</Button></div>
     </div>
   </Modal>
 }

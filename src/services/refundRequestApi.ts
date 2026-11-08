@@ -5,9 +5,9 @@ import { isUuid } from './renewalOperationsApi'
 export type RefundRequestStatus = 'REQUESTED' | 'PENDING_ESCALATION' | 'APPROVED' | 'REJECTED' | 'PROCESSING' | 'REFUNDED' | 'FAILED'
 export interface RefundRequestView {
   id: string
-  paymentId: string
+  paymentId: string | null
   returnCaseId: string | null
-  requestedBy: string
+  requestedBy: string | null
   approvedBy: string | null
   amount: number
   reason: string
@@ -31,20 +31,37 @@ const actor = () => {
 }
 const valid = (v: unknown): v is RefundRequestView => {
   if (!v || typeof v !== 'object') return false
-  const x = v as RefundRequestView
-  return isUuid(x.id) && isUuid(x.paymentId) && isUuid(x.requestedBy) && typeof x.amount === 'number' && x.amount >= 0 &&
-    typeof x.reason === 'string' && statuses.includes(x.status) && typeof x.createdAt === 'string' &&
-    (x.returnCaseId === null || isUuid(x.returnCaseId)) && (x.approvedBy === null || isUuid(x.approvedBy))
+  const x = v as Record<string, unknown>
+  return typeof x.id === 'string' && isUuid(x.id) &&
+    (x.paymentId === null || x.paymentId === undefined || (typeof x.paymentId === 'string' && isUuid(x.paymentId))) &&
+    (x.requestedBy === null || x.requestedBy === undefined || (typeof x.requestedBy === 'string' && isUuid(x.requestedBy))) &&
+    typeof x.amount === 'number' && Number.isFinite(x.amount) && x.amount >= 0 &&
+    typeof x.reason === 'string' &&
+    typeof x.status === 'string' && statuses.includes(x.status as RefundRequestStatus) &&
+    typeof x.createdAt === 'string' &&
+    (x.returnCaseId === null || x.returnCaseId === undefined || (typeof x.returnCaseId === 'string' && isUuid(x.returnCaseId))) &&
+    (x.approvedBy === null || x.approvedBy === undefined || (typeof x.approvedBy === 'string' && isUuid(x.approvedBy)))
 }
-export async function listRefundRequests(status?: RefundRequestStatus) {
+
+function extractRefundList(response: unknown): unknown[] | null {
+  if (Array.isArray(response)) return response
+  if (response && typeof response === 'object' && 'data' in response && Array.isArray((response as { data: unknown }).data)) {
+    return (response as { data: unknown[] }).data
+  }
+  return null
+}
+
+export async function listRefundRequests(status?: RefundRequestStatus): Promise<RefundRequestView[]> {
   actor()
   if (status !== undefined && !statuses.includes(status)) throw new Error('Trạng thái refund không hợp lệ.')
   const suffix = status ? `?status=${encodeURIComponent(status)}` : ''
   const response = await apiRequest<unknown>(`/api/business/refund-requests${suffix}`)
-  if (!Array.isArray(response)) throw new ApiClientError('Backend trả về danh sách refund request không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
-  if (!response.every(valid)) throw new ApiClientError('Backend trả về refund request không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
-  return response
+  const rawList = extractRefundList(response)
+  if (!rawList) throw new ApiClientError('Backend trả về danh sách refund request không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+  if (!rawList.every(valid)) throw new ApiClientError('Backend trả về refund request không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+  return rawList
 }
+
 export async function approveRefundRequest(id: string, resolutionNote = '') {
   actor()
   if (!isUuid(id) || resolutionNote.length > 500) throw new Error('Yêu cầu hoàn tiền hoặc ghi chú không hợp lệ.')
