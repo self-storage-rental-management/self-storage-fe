@@ -291,6 +291,8 @@ export async function confirmCheckInPayment(checkInId: string, note?: string) {
 export async function startCheckInSetup(checkInId: string, request: {
   lockReference: string
   note?: string
+  initialUnitCondition?: string
+  evidenceReferences?: string[]
 }) {
   return assertEnvelope(await apiRequest<unknown>(
     `/api/staff/check-ins/${encodeURIComponent(checkInId)}/setup/start`,

@@ -1,4 +1,4 @@
-# Sửa theo thứ tự: D1–D5, ngày 10/10/2026
+# Sửa theo thứ tự: D1-D5, ngày 10/10/2026
 
 > Trạng thái mới lúc 22:50: đủ 7 bảng trên storagehub_local, ledger/communication đã bật và API ledger HTTP 200. Policy BO chưa công bố và coverage vẫn UNKNOWN. Xem [báo cáo rollout](RENTAL_LEDGER_LOCAL_ROLLOUT_20261010.md); các mục thiếu schema/tắt module bên dưới là lịch sử trước rollout.
 

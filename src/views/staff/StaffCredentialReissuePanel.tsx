@@ -10,7 +10,7 @@ import {
 import { staffErrorMessage } from './staffPresentation'
 
 const verificationMethods: Array<{ value: ReissueAccessCredentialRequest['verificationMethod']; label: string }> = [
-  { value: 'ID_DOCUMENT', label: 'Đối chiếu CCCD/hộ chiếu' },
+  { value: 'ID_DOCUMENT', label: 'Đối chiếu CCCD/CMND' },
   { value: 'CUSTOMER_ACCOUNT', label: 'Đối chiếu tài khoản khách hàng' },
   { value: 'AUTHORIZED_REPRESENTATIVE', label: 'Đối chiếu người được ủy quyền' },
   { value: 'OTHER', label: 'Phương thức khác theo quy trình' },
@@ -116,7 +116,7 @@ export default function StaffCredentialReissuePanel({ showToast }: { showToast: 
         <div className="mt-4 space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
           <div className="flex flex-wrap items-center gap-2 text-sm"><b>{selected.customerName}</b><span>·</span><span>{selected.storageUnitCode}</span><Badge variant="warning">{typeLabel[selected.type]}</Badge><span className="font-mono text-xs">Cũ: {selected.reference}</span></div>
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-white/70 p-3 text-sm">
-            <div><b>Kiểm soát truy cập</b><p className="mt-1 text-xs text-amber-900">Ghi log mỗi lượt mở khóa trong setup, backend chỉ cho phép trong giờ mở cửa cơ sở.</p></div>
+            <div><b>Kiểm soát truy cập</b><p className="mt-1 text-xs text-amber-900">Ghi log mỗi lượt mở khóa trong thời gian chuẩn bị, backend chỉ cho phép trong giờ mở cửa cơ sở.</p></div>
             <Button variant="outline" size="sm" disabled={busy} onClick={() => {
               void recordCredentialAccess(selected.id, { source: 'STAFF_CREDENTIAL_PANEL' })
                 .then((result) => {
@@ -125,7 +125,7 @@ export default function StaffCredentialReissuePanel({ showToast }: { showToast: 
                 })
                 .catch((reasonValue) => setError(staffErrorMessage(reasonValue, 'Không thể ghi nhận lượt truy cập.')))
             }}>Ghi nhận truy cập hiện tại</Button>
-            {accessResult && <p className={`basis-full text-xs ${accessResult.allowed ? 'text-emerald-800' : 'text-red-800'}`} role="status">{accessResult.allowed ? 'Được phép' : 'Bị từ chối'} · {accessResult.reason}{accessResult.duringSetup ? ' · đang trong setup' : ''}</p>}
+            {accessResult && <p className={`basis-full text-xs ${accessResult.allowed ? 'text-emerald-800' : 'text-red-800'}`} role="status">{accessResult.allowed ? 'Được phép' : 'Bị từ chối'} · {accessResult.reason}{accessResult.duringSetup ? ' · đang trong thời gian chuẩn bị' : ''}</p>}
           </div>
           <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={identityVerified} disabled={busy} onChange={(event) => setIdentityVerified(event.target.checked)} className="mt-1" /> <span><b>Đã xác minh khách hàng</b><span className="block text-xs text-amber-900">Chỉ tiếp tục sau khi đối chiếu khách hàng hoặc người được ủy quyền theo quy trình.</span></span></label>
           <div className="grid gap-3 md:grid-cols-2">

@@ -38,13 +38,29 @@ export const CUSTOMER_UNIT_AMENITIES: Record<CustomerUnitSizeCode, CustomerUnitA
   },
 }
 
+export const CUSTOMER_UNIT_IMAGES: Record<CustomerUnitSizeCode, string> = {
+  S: '/images/customer-units/kho-s.jpg',
+  M: '/images/customer-units/kho-m.jpg',
+  L: '/images/customer-units/kho-l.jpg',
+  XL: '/images/customer-units/kho-xl.jpg',
+}
+
 export function customerUnitAmenities(sizeCode?: string): CustomerUnitAmenities | undefined {
   const normalized = sizeCode?.toUpperCase() as CustomerUnitSizeCode | undefined
   return normalized ? CUSTOMER_UNIT_AMENITIES[normalized] : undefined
+}
+
+export function customerUnitImage(sizeCode?: string): string {
+  const normalized = sizeCode?.toUpperCase() as CustomerUnitSizeCode | undefined
+  return (normalized && CUSTOMER_UNIT_IMAGES[normalized]) || CUSTOMER_UNIT_IMAGES.XL
 }
 
 export function customerFacilityImage(code?: string): string {
   return code?.toUpperCase().startsWith('BD-')
     ? '/images/facilities/binh-duong.jpg'
     : '/images/customer-units/kho-s.jpg'
+}
+
+export function resolveCustomerFacilityImage(imageUrl: string | null | undefined, code?: string): string {
+  return imageUrl?.trim() || customerFacilityImage(code)
 }

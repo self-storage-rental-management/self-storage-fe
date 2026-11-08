@@ -26,7 +26,7 @@ describe('Booking acceptance uses Payment and Reservation response fields', () =
       const html = renderToStaticMarkup(<ReservationReceipt payment={payment} reservationCode="RSV-TEST" />)
       expect(html).toContain('Chi tiết giao dịch cần đối soát')
       expect(html).toContain('Đơn chưa xác nhận')
-      expect(html).not.toContain('Biên lai phí giữ chỗ')
+      expect(html).not.toContain('Biên lai đặt cọc giữ chỗ')
       expect(html).not.toContain('Đơn đã xác nhận cọc')
     },
   )
@@ -52,8 +52,8 @@ describe('VNPay history nullable processing timestamp', () => {
     expect(html).toContain('Phương thức thanh toán')
     expect(html).not.toContain('Hệ thống tự động qua VNPay')
     expect(html).not.toContain('>VNPay<')
-    expect(html).toMatch(/Phương thức thanh toán<\/dt><dd[^>]*>—<\/dd>/)
-    expect(html).toMatch(/Người ghi nhận<\/dt><dd[^>]*>—<\/dd>/)
+    expect(html).toMatch(/Phương thức thanh toán<\/dt><dd[^>]*>-<\/dd>/)
+    expect(html).toMatch(/Người ghi nhận<\/dt><dd[^>]*>-<\/dd>/)
   })
   it('shows the bank returned by VNPay', () => {
     const html = renderToStaticMarkup(<ReservationReceipt payment={{ ...paid, paymentMethod: 'NCB' }} reservationCode="RSV-TEST" />)
