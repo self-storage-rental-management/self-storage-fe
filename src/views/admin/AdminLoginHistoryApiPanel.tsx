@@ -1055,7 +1055,7 @@ export default function AdminLoginHistoryApiPanel({
                             </span>
                           ) : isWarning ? (
                             <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
-                              <span>⚠️</span>
+                              
                               <span>{risk.badgeText}</span>
                             </span>
                           ) : (
@@ -1244,7 +1244,7 @@ export default function AdminLoginHistoryApiPanel({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-lg">
-                      {risk.level === 'high' ? '🚨' : risk.level === 'warning' ? '⚠️' : '🛡️'}
+                      
                     </span>
                     <h4 className="font-bold text-sm">{risk.title}</h4>
                   </div>
@@ -1269,7 +1269,7 @@ export default function AdminLoginHistoryApiPanel({
 
                 {risk.recommendedAction && (
                   <p className="mt-2 text-xs font-semibold pt-2 border-t border-red-200/60">
-                    💡 Khuyến nghị xử lý: {risk.recommendedAction}
+                    Khuyến nghị xử lý: {risk.recommendedAction}
                   </p>
                 )}
               </div>
@@ -1396,7 +1396,7 @@ export default function AdminLoginHistoryApiPanel({
       >
         <div className="space-y-4">
           <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
-            <p className="font-bold">⚠️ Lưu ý quản trị an ninh:</p>
+            <p className="font-bold">Lưu ý quản trị an ninh:</p>
             <p className="mt-1">
               Hành động này sẽ buộc đăng xuất tất cả các tài khoản đang làm việc trên mọi thiết bị ngoại trừ phiên hiện tại của bạn.
             </p>

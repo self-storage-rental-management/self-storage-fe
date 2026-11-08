@@ -38,7 +38,7 @@ export const statusLabels: Record<string, string> = {
   inspected: 'Đã nghiệm thu hiện trường',
   awaiting_business_review: 'Chờ Business duyệt bảng giá cũ',
   awaiting_customer_confirmation: 'Chờ khách xác nhận quyết toán',
-  disputed: 'Đang khiếu nại - Cần BO giải quyết',
+  disputed: 'Đang khiếu nại (Chờ Quản lý thẩm định)',
   payment_due: 'Chờ khách nộp phụ phí',
   refund_pending: 'Chờ giải ngân hoàn cọc',
   completed: 'Đã hoàn tất thanh lý & trả kho',
@@ -373,7 +373,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
 
   // Normalized list of return items
   const displayItems = useMemo<typeof SAMPLE_RETURNS>(() => {
-    if (useApi && !apiError && !apiLoading) {
+    if (useApi && !apiError && (apiRows.length > 0 || !apiLoading)) {
       return apiRows.map((r) => ({
         id: r.id,
         rentalId: r.rentalId,
@@ -445,6 +445,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
 
   // Quick stats
   const totalCount = displayItems.length
+  const awaitingBusinessCount = displayItems.filter((i) => i.status === 'awaiting_business_review' || Boolean(i.setupExitReviewRequired)).length
   const disputedCount = displayItems.filter((i) => i.status === 'disputed').length
   const refundPendingCount = displayItems.filter((i) => i.status === 'refund_pending').length
   const awaitingCustCount = displayItems.filter((i) => i.status === 'awaiting_customer_confirmation' || i.status === 'inspected').length
@@ -1152,13 +1153,13 @@ export default function BusinessReturnsPanel({ user }: Props) {
 
         <Card className="p-4 bg-amber-50/80 border border-amber-300 shadow-2xs">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-bold text-amber-800 uppercase tracking-wider">Khiếu nại cần BO xử lý</p>
-            {disputedCount > 0 && (
-              <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
+            <p className="text-xs font-bold text-amber-800 uppercase tracking-wider">Cần BO thẩm định & duyệt</p>
+            {awaitingBusinessCount > 0 && (
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping" />
             )}
           </div>
-          <p className="mt-1.5 text-2xl font-black text-amber-950">{disputedCount}</p>
-          <p className="text-[11px] text-amber-700 mt-1">Khách yêu cầu xem xét lại phí</p>
+          <p className="mt-1.5 text-2xl font-black text-amber-950">{awaitingBusinessCount}</p>
+          <p className="text-[11px] text-amber-700 mt-1">Bảng giá cũ & duyệt hủy setup</p>
         </Card>
 
         <Card className="p-4 bg-purple-50/80 border border-purple-200 shadow-2xs">
@@ -1198,12 +1199,13 @@ export default function BusinessReturnsPanel({ user }: Props) {
               className="px-3 py-2 border border-[#cfcdc1] rounded-lg text-sm bg-white font-medium focus:outline-none cursor-pointer"
             >
               <option value="all">Tất cả trạng thái quy trình</option>
-              <option value="disputed">⚠️ Đang khiếu nại (Cần BO giải quyết)</option>
-              <option value="refund_pending">💰 Chờ giải ngân hoàn cọc</option>
-              <option value="payment_due">💵 Chờ khách đóng thêm tiền</option>
+              <option value="awaiting_business_review">Chờ Business duyệt bảng giá cũ</option>
+              <option value="disputed">Đang khiếu nại (Chờ Quản lý thẩm định)</option>
+              <option value="refund_pending">Chờ giải ngân hoàn cọc</option>
+              <option value="payment_due">Chờ khách đóng thêm tiền</option>
               <option value="awaiting_customer_confirmation">⏳ Chờ khách xác nhận biên bản</option>
-              <option value="scheduled">📋 Đã hẹn nghiệm thu hiện trường</option>
-              <option value="completed">✅ Đã hoàn tất thanh lý</option>
+              <option value="scheduled">Đã hẹn nghiệm thu hiện trường</option>
+              <option value="completed">Đã hoàn tất thanh lý</option>
             </select>
 
             <select
@@ -1229,7 +1231,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
               onClick={handleClearInProgressData}
               title="Xóa toàn bộ các hồ sơ đang chạy dở và làm mới từ máy chủ"
             >
-              🗑️ Xóa dữ liệu chạy dở
+              Xóa dữ liệu chạy dở
             </Button>}
             {!isBusiness && <Button
               variant="outline"
@@ -1324,14 +1326,32 @@ export default function BusinessReturnsPanel({ user }: Props) {
                       </Badge>
                     </Td>
                     <Td className="text-right whitespace-nowrap space-x-1.5">
-                      {item.status === 'disputed' && !isBusiness ? (
+                      {isBusiness && item.setupExitReviewRequired ? (
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          className="bg-amber-600 hover:bg-amber-700 text-white font-bold cursor-pointer shadow-2xs"
+                          onClick={() => handleOpenDetail(item, 'overview')}
+                        >
+                          Duyệt hủy setup
+                        </Button>
+                      ) : isBusiness && (item.legacyPricingReviewRequired || item.status === 'awaiting_business_review') ? (
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          className="bg-rose-600 hover:bg-rose-700 text-white font-bold cursor-pointer shadow-2xs"
+                          onClick={() => handleOpenDetail(item, 'overview')}
+                        >
+                          Duyệt Bảng Giá Cũ
+                        </Button>
+                      ) : item.status === 'disputed' && !isBusiness ? (
                         <Button
                           variant="primary"
                           size="sm"
                           className="bg-red-600 hover:bg-red-700 text-white font-bold cursor-pointer shadow-2xs"
                           onClick={() => handleOpenDetail(item, 'dispute')}
                         >
-                          ⚖️ Thẩm Định BO
+                          Thẩm Định Khiếu Nại
                         </Button>
                       ) : item.status === 'refund_pending' && !isBusiness ? (
                         <Button
@@ -1340,26 +1360,38 @@ export default function BusinessReturnsPanel({ user }: Props) {
                           className="bg-purple-600 hover:bg-purple-700 text-white font-bold cursor-pointer shadow-2xs"
                           onClick={() => handleOpenDetail(item, 'refund')}
                         >
-                          💳 Giải Ngân Cọc
+                          Giải ngân cọc
                         </Button>
                       ) : item.status === 'scheduled' || item.status === 'requested' ? (
-                        isBusiness ? <Button variant="outline" size="sm" className="font-medium cursor-pointer" onClick={() => handleOpenDetail(item, 'overview')}>Xem Chi Tiết</Button> : <Button
-                          variant="primary"
-                          size="sm"
-                          className="bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer shadow-2xs"
-                          onClick={() => handleOpenDetail(item, 'inspect')}
-                        >
-                          📋 Nghiệm Thu
-                        </Button>
+                        isBusiness ? (
+                          <Button variant="outline" size="sm" className="font-medium cursor-pointer" onClick={() => handleOpenDetail(item, 'overview')}>
+                            Xem Chi Tiết
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            className="bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer shadow-2xs"
+                            onClick={() => handleOpenDetail(item, 'inspect')}
+                          >
+                            Nghiệm thu
+                          </Button>
+                        )
                       ) : item.status === 'awaiting_customer_confirmation' || item.status === 'inspected' ? (
-                        isBusiness ? <Button variant="outline" size="sm" className="font-medium cursor-pointer" onClick={() => handleOpenDetail(item, 'overview')}>Xem Chi Tiết</Button> : <Button
-                          variant="primary"
-                          size="sm"
-                          className="bg-amber-600 hover:bg-amber-700 text-white font-bold cursor-pointer shadow-2xs"
-                          onClick={() => handleOpenDetail(item, 'overview')}
-                        >
-                          ⏳ Duyệt Quyết Toán
-                        </Button>
+                        isBusiness ? (
+                          <Button variant="outline" size="sm" className="font-medium cursor-pointer" onClick={() => handleOpenDetail(item, 'overview')}>
+                            Xem Chi Tiết
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            className="bg-amber-600 hover:bg-amber-700 text-white font-bold cursor-pointer shadow-2xs"
+                            onClick={() => handleOpenDetail(item, 'overview')}
+                          >
+                            ⏳ Duyệt Quyết Toán
+                          </Button>
+                        )
                       ) : (
                         <Button
                           variant="outline"
@@ -1467,7 +1499,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                       : 'border-transparent text-stone-500 hover:text-stone-800'
                   }`}
                 >
-                  📋 Biên bản nghiệm thu
+                  Biên bản nghiệm thu
                 </button>
               )}
               {!isBusiness && selectedItem.status === 'disputed' && (
@@ -1480,7 +1512,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                       : 'border-transparent text-stone-500 hover:text-stone-800'
                   }`}
                 >
-                  ⚖️ Thẩm định khiếu nại (BO)
+                  Thẩm định khiếu nại (BO)
                 </button>
               )}
               {!isBusiness && selectedItem.status === 'refund_pending' && (
@@ -1493,7 +1525,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                       : 'border-transparent text-stone-500 hover:text-stone-800'
                   }`}
                 >
-                  💳 Lệnh giải ngân hoàn cọc
+                  Lệnh giải ngân hoàn cọc
                 </button>
               )}
               {!isBusiness && selectedItem.status === 'payment_due' && (
@@ -1506,7 +1538,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                       : 'border-transparent text-stone-500 hover:text-stone-800'
                   }`}
                 >
-                  💵 Thu phụ phí
+                  Thu phụ phí
                 </button>
               )}
             </div>
@@ -1785,7 +1817,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                         className="bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer"
                         onClick={() => setActiveTab('inspect')}
                       >
-                        📋 Tiến hành nghiệm thu hiện trường
+                        Tiến hành nghiệm thu hiện trường
                       </Button>
                       <Button
                         variant="outline"
@@ -1794,7 +1826,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                         className="border-emerald-600 text-emerald-800 hover:bg-emerald-50 font-bold cursor-pointer"
                         onClick={() => handleFastReturn()}
                       >
-                        ⚡ Cho trả kho ngay (Không trừ cọc)
+                        Cho trả kho ngay (Không trừ cọc)
                       </Button>
                     </div>
                   )}
@@ -1821,7 +1853,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                           className="bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer"
                           onClick={() => handleCustomerConfirm('accepted')}
                         >
-                          ⚡ Hoàn tất trả kho ngay (Giải phóng gian)
+                          Hoàn tất trả kho ngay (Giải phóng gian)
                         </Button>
                         <Button
                           variant="outline"
@@ -1836,7 +1868,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                             }
                           }}
                         >
-                          ⚠️ Khách hàng gửi khiếu nại
+                          Khách hàng gửi khiếu nại
                         </Button>
                       </div>
                     </div>
@@ -1850,7 +1882,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                         className="bg-red-600 hover:bg-red-700 text-white font-bold cursor-pointer"
                         onClick={() => setActiveTab('dispute')}
                       >
-                        ⚖️ Thẩm định & Tái quyết toán khiếu nại ngay
+                        Thẩm định & Tái quyết toán khiếu nại ngay
                       </Button>
                       <Button
                         variant="outline"
@@ -1859,7 +1891,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                         className="border-emerald-600 text-emerald-800 hover:bg-emerald-50 font-bold cursor-pointer"
                         onClick={() => handleBypassDispute()}
                       >
-                        ⚡ Bỏ qua khiếu nại & Cho trả kho ngay
+                        Bỏ qua khiếu nại & Cho trả kho ngay
                       </Button>
                     </div>
                   )}
@@ -1872,7 +1904,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                         className="bg-purple-600 hover:bg-purple-700 text-white font-bold cursor-pointer"
                         onClick={() => setActiveTab('refund')}
                       >
-                        💳 Chuyển khoản hoàn cọc cho khách
+                        Chuyển khoản hoàn cọc cho khách
                       </Button>
                     </div>
                   )}
@@ -1885,7 +1917,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                         className="bg-amber-600 hover:bg-amber-700 text-white font-bold cursor-pointer"
                         onClick={() => setActiveTab('pay')}
                       >
-                        💵 Ghi nhận thu phụ phí
+                        Ghi nhận thu phụ phí
                       </Button>
                     </div>
                   )}
@@ -2029,7 +2061,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
               <div className="p-4 bg-amber-50/80 rounded-xl border border-amber-300 space-y-4">
                 <div className="flex items-center justify-between">
                   <p className="font-bold text-amber-950 text-sm">
-                    ⚖️ Thẩm Định & Quyết Định Giải Quyết Khiếu Nại (Ban Điều Hành)
+                    Thẩm Định & Quyết Định Giải Quyết Khiếu Nại (Ban Điều Hành)
                   </p>
                   <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-amber-200 text-amber-900 border border-amber-400">
                     Quyền hạn BO
@@ -2115,7 +2147,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
             {activeTab === 'refund' && (
               <div className="p-4 bg-purple-50/70 rounded-xl border border-purple-200 space-y-4">
                 <p className="font-bold text-purple-950 text-sm">
-                  💳 Lệnh Giải Ngân Hoàn Tiền Cọc Cho Khách Hàng
+                  Lệnh giải ngân hoàn tiền cọc cho khách hàng
                 </p>
 
                 <div className="p-3 bg-white rounded-lg border border-purple-200 flex items-center justify-between">
@@ -2179,7 +2211,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
             {activeTab === 'pay' && (
               <div className="p-4 bg-amber-50/70 rounded-xl border border-amber-200 space-y-4">
                 <p className="font-bold text-amber-950 text-sm">
-                  💵 Thu Phụ Phí Quyết Toán Phát Sinh
+                  Thu phụ phí quyết toán phát sinh
                 </p>
 
                 <div className="p-3 bg-white rounded-lg border border-amber-200 flex items-center justify-between">

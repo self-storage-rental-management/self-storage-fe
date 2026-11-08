@@ -1847,7 +1847,7 @@ export default function BusinessApp({
       setPricingCatalogVersion(version => version + 1)
       showToast(
         lang === "vi"
-          ? `Đã cập nhật biểu giá cho cơ sở "${editingPriceFacility.name}"! Nếu cơ sở đang ở trạng thái Thiết lập, bạn có thể bấm [🚀 Công bố cơ sở] để xuất bản ngay lên Cổng khách hàng.`
+          ? `Đã cập nhật biểu giá cho cơ sở "${editingPriceFacility.name}"! Nếu cơ sở đang ở trạng thái Thiết lập, bạn có thể bấm [Công bố cơ sở] để xuất bản ngay lên Cổng khách hàng.`
           : `Updated pricing for "${editingPriceFacility.name}"!`
       )
       return
@@ -3576,68 +3576,57 @@ export default function BusinessApp({
     }
   }
 
-  const handleDeleteFacility = async () => {
+  const handleActivateFacility = async () => {
     if (!selectedFacility) return
     setDeleteFacilityBusy(true)
     setDeleteFacilityError(null)
 
-    if (isApiAuthenticated()) {
-      try {
+    try {
+      if (isApiAuthenticated()) {
         const persisted = (await listAllFacilitiesApi()).find(
           f => f.id === selectedFacility.id || (f.code && f.code.toUpperCase() === (selectedFacility.code || '').toUpperCase())
         )
         if (persisted) {
-          await deleteBusinessFacilityApi(persisted.id)
+          await updateBusinessFacilityApi(persisted.id, {
+            name: persisted.name,
+            address: persisted.address,
+            city: persisted.city,
+            phone: persisted.phone || null,
+            accessHours: persisted.accessHours || null,
+            imageUrl: persisted.imageUrl || null,
+            climateControlled: persisted.climateControlled,
+            securityDescription: persisted.securityDescription || null,
+            status: 'active',
+          })
         }
-        deleteFacility(selectedFacility.id, user, true)
-        setDeleteFacilityModal(false)
-        showToast(
-          lang === "vi"
-            ? `Đã xóa cơ sở "${selectedFacility.name}" thành công.`
-            : `Facility "${selectedFacility.name}" deleted.`
-        )
-        // Đồng bộ lại danh mục
-        try {
-          const backendFacs = await listAllFacilitiesApi()
-          if (Array.isArray(backendFacs)) {
-            const backendIds = new Set(backendFacs.map(bf => bf.id))
-            const backendCodes = new Set(backendFacs.map(bf => (bf.code || '').trim().toUpperCase()))
-            facilitiesList.forEach(f => {
-              const code = (f.code || '').trim().toUpperCase()
-              if (!backendIds.has(f.id) && !backendCodes.has(code)) {
-                deleteFacility(f.id, user, true)
-              }
-            })
-          }
-        } catch {}
-      } catch (error) {
-        setDeleteFacilityError(error instanceof Error ? error.message : 'Không thể xóa cơ sở.')
-      } finally {
-        setDeleteFacilityBusy(false)
       }
-      return
-    }
-
-    const result = deleteFacility(selectedFacility.id, user, true)
-
-    if (!result.success) {
-      setDeleteFacilityError(
+      updateFacility(selectedFacility.id, { status: 'active' }, user)
+      setDeleteFacilityModal(false)
+      showToast(
         lang === "vi"
-          ? result.reason || "Không thể xóa cơ sở!"
-          : result.reason || "Cannot delete facility!",
+          ? `Đã kích hoạt lại cơ sở "${selectedFacility.name}".`
+          : `Facility "${selectedFacility.name}" reactivated.`
       )
+      // Đồng bộ lại danh sách cơ sở từ backend
+      try {
+        const backendFacs = await listAllFacilitiesApi()
+        if (Array.isArray(backendFacs)) {
+          backendFacs.forEach(bf => {
+            const cleanBf = sanitizeFacilityStrings(bf)
+            const matching = facilitiesList.find(
+              f => f.id === cleanBf.id || (f.code && f.code.toUpperCase() === (cleanBf.code || '').toUpperCase())
+            )
+            if (matching) {
+              updateFacility(matching.id, { status: cleanBf.status }, user)
+            }
+          })
+        }
+      } catch {}
+    } catch (error) {
+      setDeleteFacilityError(error instanceof Error ? error.message : 'Không thể kích hoạt lại cơ sở.')
+    } finally {
       setDeleteFacilityBusy(false)
-      return
     }
-
-    setDeleteFacilityModal(false)
-    setDeleteFacilityBusy(false)
-
-    showToast(
-      lang === "vi"
-        ? `Đã xóa cơ sở "${selectedFacility.name}"!`
-        : `Facility deleted!`,
-    )
   }
 
   // Danh sách cơ sở sau khi lọc & tìm kiếm
@@ -4040,7 +4029,7 @@ export default function BusinessApp({
                             onClick={() => void handlePublishFacility(cleanF)}
                             title={lang === "vi" ? "Công bố cơ sở này lên Cổng khách hàng" : "Publish facility to customer portal"}
                           >
-                            🚀 {lang === "vi" ? "Công bố cơ sở" : "Publish"}
+                            {lang === "vi" ? "Công bố cơ sở" : "Publish"}
                           </Button>
                         )}
                         {cleanF.status === "inactive" && (
@@ -4051,7 +4040,7 @@ export default function BusinessApp({
                             onClick={() => void handlePublishFacility(cleanF)}
                             title={lang === "vi" ? "Khôi phục hoạt động cho cơ sở này" : "Reactivate facility"}
                           >
-                            🔄 {lang === "vi" ? "Khôi phục HĐ" : "Reactivate"}
+                            {lang === "vi" ? "Khôi phục HĐ" : "Reactivate"}
                           </Button>
                         )}
                         <Button
@@ -4073,7 +4062,11 @@ export default function BusinessApp({
                         <Button
                           variant="outline"
                           size="sm"
-                          className="w-full justify-center text-xs font-semibold border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300"
+                          className={`w-full justify-center text-xs font-semibold ${
+                            cleanF.status === "active"
+                              ? "border-amber-300 text-amber-800 hover:bg-amber-50"
+                              : "border-emerald-300 text-emerald-800 hover:bg-emerald-50"
+                          }`}
                           onClick={() => {
                             setSelectedFacility(cleanF)
                             setDeleteFacilityError(null)
@@ -4081,7 +4074,13 @@ export default function BusinessApp({
                             setDeleteFacilityModal(true)
                           }}
                         >
-                          {lang === "vi" ? (cleanF.status === "inactive" ? "Quản lý / Xóa" : cleanF.status === "setup" ? "Xóa cơ sở" : "Xóa / Ngừng HĐ") : "Delete"}
+                          {lang === "vi"
+                            ? cleanF.status === "active"
+                              ? "Ngừng hoạt động"
+                              : "Kích hoạt lại"
+                            : cleanF.status === "active"
+                              ? "Deactivate"
+                              : "Reactivate"}
                         </Button>
                       </div>
                     </div>
@@ -6264,7 +6263,7 @@ export default function BusinessApp({
         )
       })()}
 
-      {/* 3. Modal Quản Lý Vòng Đời: Xóa hoặc Ngừng Hoạt Động Cơ Sở */}
+      {/* 3. Modal Quản Lý Trạng Thái: Ngừng Hoạt Động / Kích Hoạt Lại Cơ Sở */}
       <Modal
         open={deleteFacilityModal}
         onClose={() => {
@@ -6273,7 +6272,15 @@ export default function BusinessApp({
             setDeleteFacilityError(null)
           }
         }}
-        title={lang === "vi" ? "Quản Lý Vòng Đời Cơ Sở" : "Facility Lifecycle Management"}
+        title={
+          lang === "vi"
+            ? selectedFacility?.status === "active"
+              ? "Ngừng Hoạt Động Cơ Sở"
+              : "Kích Hoạt Lại Cơ Sở"
+            : selectedFacility?.status === "active"
+              ? "Deactivate Facility"
+              : "Reactivate Facility"
+        }
       >
         {selectedFacility && (
           <div className="space-y-4">
@@ -6281,66 +6288,51 @@ export default function BusinessApp({
             {selectedFacility.occupied > 0 ? (
               <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-xl text-sm space-y-2">
                 <div className="font-bold flex items-center gap-1.5 text-base text-red-700">
-                  ⚠️ CẢNH BÁO AN TOÀN HỢP ĐỒNG:
+                  CẢNH BÁO AN TOÀN HỢP ĐỒNG:
                 </div>
                 <p>
                   Cơ sở <b>{selectedFacility.name} ({selectedFacility.code || selectedFacility.id})</b> hiện đang có{" "}
                   <b className="text-red-700">{selectedFacility.occupied} gian kho có hợp đồng khách thuê đang hoạt động</b>.
                 </p>
                 <p className="text-xs text-red-600 leading-relaxed">
-                  Hệ thống <b>từ chối xóa hoặc ngừng hoạt động</b> cơ sở này nhằm bảo đảm toàn vẹn hợp đồng khách hàng, an ninh tài sản và tính pháp lý kế toán. Toàn bộ hợp đồng phải được hoàn tất thanh lý và nghiệm thu tại mục <b>Trả kho & Quyết toán</b> trước khi thao tác.
+                  Hệ thống <b>không thể ngừng hoạt động</b> cơ sở này nhằm bảo đảm quyền lợi khách hàng đang thuê kho, an ninh tài sản và tính pháp lý kế toán. Toàn bộ hợp đồng phải được hoàn tất thanh lý và nghiệm thu tại mục <b>Trả kho & Quyết toán</b> trước khi thao tác.
                 </p>
               </div>
-            ) : selectedFacility.status === "inactive" ? (
-              /* TH 2: Cơ sở đã ở trạng thái Ngừng hoạt động */
-              <div className="space-y-3">
-                <div className="bg-stone-50 border border-stone-200 p-4 rounded-xl text-xs text-stone-700 space-y-2">
-                  <div className="font-bold text-stone-900 text-sm flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-stone-400 inline-block"></span>
-                    Cơ sở hiện đang ở trạng thái: Ngừng hoạt động
-                  </div>
-                  <p>
-                    Cơ sở <b>{selectedFacility.name}</b> đã được ẩn khỏi danh mục tìm kiếm của khách hàng. Tất cả số liệu lịch sử hợp đồng và kiểm toán được lưu trữ an toàn.
-                  </p>
-                  {selectedFacility.units > 0 && (
-                    <p className="text-amber-800 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
-                      Cơ sở đang có <b>{selectedFacility.units} gian kho</b>. Do ràng buộc kiểm toán và lịch sử dữ liệu, hệ thống khuyến nghị lưu trữ ở trạng thái này thay vì xóa cứng.
-                    </p>
-                  )}
-                </div>
-              </div>
-            ) : selectedFacility.units > 0 ? (
-              /* TH 3: Không có khách thuê (occupied = 0) nhưng đã có gian kho / phân công */
+            ) : selectedFacility.status === "active" ? (
+              /* TH 2: Đang hoạt động, không có khách thuê (occupied = 0) */
               <div className="space-y-3">
                 <p className="text-sm text-slate-700">
-                  Bạn đang thao tác với cơ sở <b className="text-slate-900">{selectedFacility.name}</b>.
+                  Bạn có chắc chắn muốn chuyển cơ sở <b className="text-slate-900">{selectedFacility.name}</b> sang trạng thái <b>Ngừng hoạt động</b>?
                 </p>
                 <div className="bg-amber-50 border border-amber-200 p-3.5 rounded-xl text-xs text-amber-900 space-y-1.5">
                   <div className="font-bold text-amber-950 flex items-center gap-1">
-                    ℹ️ Thông tin hiện trạng cơ sở:
+                    Thông tin hiện trạng cơ sở:
                   </div>
                   <div><b>Mã cơ sở:</b> <span className="font-mono">{selectedFacility.code || selectedFacility.id}</span></div>
                   <div><b>Địa điểm:</b> {selectedFacility.address}, {selectedFacility.city}</div>
                   <div><b>Quy mô:</b> {selectedFacility.units} gian kho (Hiện 0 khách thuê)</div>
                   <p className="text-amber-800 pt-1 leading-relaxed">
-                    Cơ sở đã được khởi tạo cấu hình gian kho (hiện không có hợp đồng khách thuê). Bạn có thể chọn <b>Chuyển sang Ngừng hoạt động</b> để tạm ẩn, hoặc bấm <b>Xác Nhận Xóa Cơ Sở</b> để xóa bỏ hoàn toàn cơ sở cùng danh mục kho liên quan.
+                    Khi chuyển sang trạng thái <b>Ngừng hoạt động</b>, cơ sở sẽ tạm ẩn khỏi Cổng khách hàng. Tất cả số liệu gian kho, cấu hình gói cước và lịch sử kiểm toán vẫn được lưu trữ an toàn. Bạn có thể kích hoạt lại cơ sở bất cứ lúc nào.
                   </p>
                 </div>
               </div>
             ) : (
-              /* TH 4: Cơ sở mới tạo (Setup / Draft), 0 gian kho, 0 khách */
+              /* TH 3: Cơ sở đã ở trạng thái Ngừng hoạt động / Bảo trì -> Kích hoạt lại */
               <div className="space-y-3">
                 <p className="text-sm text-slate-700">
-                  Bạn có chắc chắn muốn xóa vĩnh viễn cơ sở <b className="text-slate-900">{selectedFacility.name}</b> khỏi hệ thống?
+                  Bạn có muốn kích hoạt lại cơ sở <b className="text-slate-900">{selectedFacility.name}</b> để tiếp tục đón khách thuê?
                 </p>
-                <div className="bg-stone-50 border border-stone-200 p-3 rounded-lg text-xs text-stone-600 space-y-1">
+                <div className="bg-emerald-50 border border-emerald-200 p-3.5 rounded-xl text-xs text-emerald-900 space-y-1.5">
+                  <div className="font-bold text-emerald-950 flex items-center gap-1">
+                    Mở lại hoạt động cơ sở:
+                  </div>
                   <div><b>Mã cơ sở:</b> <span className="font-mono">{selectedFacility.code || selectedFacility.id}</span></div>
                   <div><b>Địa điểm:</b> {selectedFacility.address}, {selectedFacility.city}</div>
-                  <div><b>Trạng thái:</b> Đang thiết lập (0 gian kho)</div>
+                  <div><b>Quy mô:</b> {selectedFacility.units} gian kho</div>
+                  <p className="text-emerald-800 pt-1 leading-relaxed">
+                    Sau khi kích hoạt lại, cơ sở sẽ trở lại trạng thái <b>Đang hoạt động</b> và sẵn sàng hiển thị trên hệ thống để khách hàng tìm kiếm và đặt thuê kho.
+                  </p>
                 </div>
-                <p className="text-xs text-stone-500">
-                  Hành động này sẽ xóa hoàn toàn cơ sở khỏi danh mục hệ thống.
-                </p>
               </div>
             )}
 
@@ -6348,20 +6340,8 @@ export default function BusinessApp({
             {deleteFacilityError && (
               <div role="alert" className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 space-y-2">
                 <div className="font-semibold flex items-center gap-1.5">
-                  <span>❌</span>
                   <span>{deleteFacilityError}</span>
                 </div>
-                {deleteFacilityError.includes("Ngừng hoạt động") && selectedFacility.occupied === 0 && (
-                  <div className="pt-1">
-                    <button
-                      type="button"
-                      onClick={handleDeactivateFacility}
-                      className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded font-bold text-xs cursor-pointer shadow-xs"
-                    >
-                      Bấm vào đây để chuyển sang Ngừng hoạt động ngay
-                    </button>
-                  </div>
-                )}
               </div>
             )}
 
@@ -6378,26 +6358,26 @@ export default function BusinessApp({
               </Button>
 
               {/* Nút Chuyển sang Ngừng hoạt động */}
-              {selectedFacility.occupied === 0 && selectedFacility.status !== "inactive" && (
+              {selectedFacility.occupied === 0 && selectedFacility.status === "active" && (
                 <Button
                   variant="primary"
                   disabled={deleteFacilityBusy}
                   className="bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs"
                   onClick={handleDeactivateFacility}
                 >
-                  {deleteFacilityBusy ? "Đang xử lý..." : (lang === "vi" ? "Chuyển sang Ngừng hoạt động" : "Deactivate Facility")}
+                  {deleteFacilityBusy ? "Đang xử lý..." : (lang === "vi" ? "Xác nhận Ngừng hoạt động" : "Deactivate Facility")}
                 </Button>
               )}
 
-              {/* Nút Xóa vĩnh viễn */}
-              {selectedFacility.occupied === 0 && (
+              {/* Nút Kích hoạt lại */}
+              {selectedFacility.status !== "active" && (
                 <Button
                   variant="primary"
                   disabled={deleteFacilityBusy}
-                  className="bg-red-600 hover:bg-red-700 text-white font-semibold text-xs"
-                  onClick={handleDeleteFacility}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs"
+                  onClick={handleActivateFacility}
                 >
-                  {deleteFacilityBusy ? "Đang xóa..." : (lang === "vi" ? "Xác Nhận Xóa Cơ Sở" : "Delete Facility")}
+                  {deleteFacilityBusy ? "Đang xử lý..." : (lang === "vi" ? "Kích hoạt lại cơ sở" : "Reactivate Facility")}
                 </Button>
               )}
             </div>

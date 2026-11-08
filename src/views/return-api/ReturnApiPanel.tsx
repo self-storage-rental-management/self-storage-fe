@@ -584,6 +584,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
           </dl>
         </div>
       </div>
+
       {/* Ghi chú phản hồi cho khách khi xác nhận */}
       {role === 'customer' && record.status === 'awaiting_customer_confirmation' && (
         <div className="rounded-xl border border-stone-200 bg-white p-4 space-y-2">
@@ -599,6 +600,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
             placeholder="Nhập ý kiến của bạn về bảng quyết toán..."
             onChange={(event) => setNote(event.target.value)}
           />
+
         </div>
       )}
 
@@ -664,7 +666,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                       onClick={handleQuickStandardPass}
                       className="!bg-emerald-600 hover:!bg-emerald-700 text-white font-bold px-4 py-2 shadow-sm flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
                     >
-                      ⚡ Nghiệm thu đạt chuẩn & Hoàn cọc 100%
+                      Nghiệm thu đạt chuẩn & Hoàn cọc 100%
                     </Button>
 
                   </div>
@@ -976,7 +978,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                       <div className="rounded-xl border border-rose-300 bg-gradient-to-br from-rose-50 to-amber-50/70 p-3.5 space-y-1">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-bold text-rose-950 uppercase tracking-wide">
-                            ⚠️ Khách cần nộp thêm phụ phí
+                            Khách cần nộp thêm phụ phí
                           </span>
                           <span className="rounded-full bg-rose-200 px-2 py-0.5 text-[10px] font-extrabold text-rose-900">
                             THU THÊM
@@ -1022,7 +1024,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       {role === 'staff' && !recovery && record.status === 'awaiting_customer_confirmation' && (
         <div className="rounded-xl border border-amber-300 bg-amber-50/80 p-3.5 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-amber-900">⏳ Đang chờ khách hàng xác nhận quyết toán</span>
+            <span className="text-xs font-bold text-amber-900">Đang chờ khách hàng xác nhận quyết toán</span>
             <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800 border border-emerald-300">Có thể duyệt hoàn tất ngay</span>
           </div>
           <p className="text-xs text-amber-800">
@@ -1044,7 +1046,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       {role === 'staff' && !recovery && record.status === 'disputed' && (
         <div className="rounded-xl border border-rose-300 bg-rose-50/80 p-3.5 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-rose-900">⚠️ Khiếu nại từ khách hàng</span>
+            <span className="text-xs font-bold text-rose-900">Khiếu nại từ khách hàng</span>
             <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-300">Có thể duyệt trả kho</span>
           </div>
           <p className="text-xs text-rose-800">
@@ -1071,6 +1073,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
           </div>
         </div>
       )}
+
       {role === 'staff' && !recovery && record.status === 'refund_pending' && (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50/90 p-4 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1124,6 +1127,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
             >
               ✓ Xác nhận đã thu & Đóng hồ sơ
             </Button>
+
           </div>
         </div>
       )}

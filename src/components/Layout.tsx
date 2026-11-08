@@ -450,7 +450,6 @@ export default function Layout({
           {(user.role === 'manager' || user.role === 'staff') && (
             user.facility ? (
               <div className="flex items-center gap-1.5 px-2 py-1 text-xs text-stone-300">
-                <span>🏢</span>
                 <span className="truncate font-normal" title={user.facility}>{user.facility}</span>
               </div>
             ) : (

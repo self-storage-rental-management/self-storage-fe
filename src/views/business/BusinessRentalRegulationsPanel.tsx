@@ -1,4 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { getBusinessConfigApi, type BusinessConfigApi } from '../../services/businessConfigApi'
+import { isApiAuthenticated } from '../../services/authApi'
+import { formatVnd } from '../../i18n/currency'
 import { Card, Badge, Button } from '../../components/ui'
 import type { User } from '../../types'
 import { REGULATIONS } from '../../data/rentalRegulationsData'
@@ -10,6 +13,13 @@ interface Props {
 
 export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
   const [copied, setCopied] = useState(false)
+  const [config, setConfig] = useState<BusinessConfigApi | null>(null)
+
+  useEffect(() => {
+    if (isApiAuthenticated()) {
+      void getBusinessConfigApi().then(setConfig).catch(() => {})
+    }
+  }, [])
 
   const handleCopyAll = () => {
     const fullText = `QUY ĐỊNH CHO THUÊ KHO STORAGEHUB\n\n` +
@@ -108,13 +118,13 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 pt-4">
           <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
             <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Phí Quá Hạn</span>
-            <div className="text-base font-extrabold text-amber-700 font-mono mt-1">50% / ngày</div>
+            <div className="text-base font-extrabold text-amber-700 font-mono mt-1">{config ? `${formatVnd(config.lateFeeAmount)}/ngày` : '50% / ngày'}</div>
             <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30). Tự động tính theo số ngày trễ.</p>
           </div>
 
           <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
             <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Phí Giữ Chỗ</span>
-            <div className="text-base font-extrabold text-amber-600 font-mono mt-1">10% – 30%</div>
+            <div className="text-base font-extrabold text-amber-600 font-mono mt-1">{config ? `${Math.round(config.defaultDepositRatio * 100)}%` : '10% – 30%'}</div>
             <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Cấu hình theo từng gói thuê (mặc định 20%). Trừ trực tiếp vào tiền thuê khi nhận kho.</p>
           </div>
 
@@ -132,7 +142,7 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
 
           <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
             <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Gia Hạn Quá Hạn</span>
-            <div className="text-base font-extrabold text-blue-700 font-mono mt-1">Tối Đa 7 Ngày</div>
+            <div className="text-base font-extrabold text-blue-700 font-mono mt-1">{config ? `Ân hạn ${config.gracePeriodDays} ngày` : 'Tối Đa 7 Ngày'}</div>
             <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Khách có tối đa 7 ngày để hoàn tất gia hạn. Đến ngày thứ 8 chuyển thu hồi kho.</p>
           </div>
         </div>
@@ -207,7 +217,7 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
             {/* Important Note (if any) */}
             {art.importantNote && (
               <div className="mt-4 p-3.5 rounded-xl bg-rose-50/80 border border-rose-200/90 flex items-start gap-3">
-                <span className="text-rose-600 font-bold text-sm shrink-0">⚠️ Lưu ý quan trọng:</span>
+                <span className="text-rose-600 font-bold text-sm shrink-0">Lưu ý quan trọng:</span>
                 <p className="text-xs text-rose-800 leading-relaxed font-medium">{art.importantNote}</p>
               </div>
             )}
