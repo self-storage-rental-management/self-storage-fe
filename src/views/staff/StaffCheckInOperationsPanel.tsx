@@ -175,9 +175,9 @@ const workflowStepLabels = [
   "Xác minh khách",
   "Ký hợp đồng",
   "Thu tiền",
-  "Khách setup",
-  "Setup xong",
-  "Kiểm kê",
+  "Bàn giao kho",
+  "Thời gian setup",
+  "Kiểm kê hàng",
 ]
 
 export default function StaffCheckInOperationsPanel({
@@ -1207,24 +1207,146 @@ export default function StaffCheckInOperationsPanel({
             )}
 
             {handoverStep === 4 && (
-              <div className="space-y-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
-                <div><p className="font-semibold text-amber-950">Bàn giao kho trống và bắt đầu setup</p><p className="text-sm text-amber-800">Ổ khóa chỉ được kích hoạt sau khi backend xác nhận đã ký hợp đồng và thu tiền. Không lưu hoặc bàn giao mật khẩu.</p></div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Input label="Mã ổ khóa / chìa khóa *" value={keyLockReference} disabled={isReviewingCompletedStep} onChange={(event) => setKeyLockReference(event.target.value)} placeholder="Ví dụ: LOCK-018" />
-                  <div className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm"><span className="text-stone-600">Quyền lợi đã lưu cùng đơn</span><b className="mt-1 block">{handoverTarget.freeSetupDays} ngày setup miễn phí</b><span className="text-xs text-stone-500">Hệ thống tự tính từ ngày bàn giao thực tế, Staff không thể thay đổi.</span></div>
+              <div className="space-y-4">
+                <div className="rounded-xl border border-amber-300 bg-amber-50/80 p-4 text-amber-950">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 pb-3">
+                    <div>
+                      <p className="text-base font-bold text-amber-950">Bàn giao gian kho trống & Kích hoạt quyền ra vào</p>
+                      <p className="text-xs text-amber-800 mt-0.5">Tiến hành dẫn khách kiểm tra kho thực tế, bàn giao mã mở khóa và xác nhận hiện trạng ban đầu.</p>
+                    </div>
+                    <span className="rounded-full bg-amber-100 border border-amber-300 px-3 py-1 text-xs font-bold text-amber-900">
+                      Bước 4/6
+                    </span>
+                  </div>
+
+                  <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-lg border border-amber-200 bg-white p-3">
+                      <span className="text-xs text-stone-500">Gian kho bàn giao</span>
+                      <p className="text-base font-bold text-stone-900 mt-0.5">{handoverTarget.storageUnitCode || "Chưa cập nhật"}</p>
+                    </div>
+                    <div className="rounded-lg border border-amber-200 bg-white p-3">
+                      <span className="text-xs text-stone-500">Cơ sở lưu kho</span>
+                      <p className="text-base font-bold text-stone-900 mt-0.5">{handoverTarget.facilityName || "Cơ sở StorageHub"}</p>
+                    </div>
+                    <div className="rounded-lg border border-amber-200 bg-white p-3">
+                      <span className="text-xs text-stone-500">Quyền lợi setup miễn phí</span>
+                      <p className="text-base font-bold text-emerald-700 mt-0.5">{handoverTarget.freeSetupDays} ngày miễn phí</p>
+                    </div>
+                  </div>
                 </div>
-                {handoverTarget.lockReference && <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900"><b>Ổ khóa đã được kích hoạt và bàn giao</b><p className="mt-1">Mã ổ khóa/chìa khóa: <b className="font-mono">{handoverTarget.lockReference}</b></p><p className="mt-1 text-xs">Credential được kích hoạt lúc {formatStaffDateTime(handoverTarget.setupStartedAt)}. Không có mật khẩu được lưu hoặc bàn giao.</p></div>}
+
+                <div className="grid gap-4 rounded-xl border border-stone-200 bg-white p-4">
+                  <div className="space-y-3">
+                    <p className="text-xs font-bold uppercase tracking-wider text-stone-700">1. Thông tin khóa & Hiện trạng ban đầu</p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Input
+                        label="Mã ổ khóa / Chìa khóa / Mã PIN *"
+                        value={keyLockReference}
+                        disabled={isReviewingCompletedStep}
+                        onChange={(event) => setKeyLockReference(event.target.value)}
+                        placeholder="Ví dụ: LOCK-018 hoặc PIN-6882"
+                      />
+                      <Input
+                        label="Hiện trạng kho trống bàn giao *"
+                        value={initialCondition || "Kho trống sạch sẽ, sàn khô ráo, cửa và ổ khóa hoạt động tốt"}
+                        disabled={isReviewingCompletedStep}
+                        onChange={(event) => setInitialCondition(event.target.value)}
+                        placeholder="Ghi nhận trần, sàn, vách, đèn..."
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2.5 border-t border-stone-100 pt-3">
+                    <p className="text-xs font-bold uppercase tracking-wider text-stone-700">2. Danh mục kiểm tra bàn giao (Checklist)</p>
+                    <div className="grid gap-2 sm:grid-cols-3 text-xs">
+                      <label className="flex items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 p-2.5 cursor-pointer hover:bg-stone-100 transition">
+                        <input
+                          type="checkbox"
+                          className="rounded text-amber-600 focus:ring-amber-500"
+                          disabled={isReviewingCompletedStep}
+                          checked={checklist.unitWalkthrough}
+                          onChange={(e) => setChecklist(cur => ({ ...cur, unitWalkthrough: e.target.checked }))}
+                        />
+                        <span>Đã dẫn khách kiểm tra gian kho trực tiếp *</span>
+                      </label>
+                      <label className="flex items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 p-2.5 cursor-pointer hover:bg-stone-100 transition">
+                        <input
+                          type="checkbox"
+                          className="rounded text-amber-600 focus:ring-amber-500"
+                          disabled={isReviewingCompletedStep}
+                          checked={checklist.conditionRecorded}
+                          onChange={(e) => setChecklist(cur => ({ ...cur, conditionRecorded: e.target.checked }))}
+                        />
+                        <span>Trần, sàn, vách nguyên vẹn & sạch sẽ *</span>
+                      </label>
+                      <label className="flex items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 p-2.5 cursor-pointer hover:bg-stone-100 transition">
+                        <input
+                          type="checkbox"
+                          className="rounded text-amber-600 focus:ring-amber-500"
+                          disabled={isReviewingCompletedStep}
+                          checked={checklist.accessHandedOver}
+                          onChange={(e) => setChecklist(cur => ({ ...cur, accessHandedOver: e.target.checked }))}
+                        />
+                        <span>Đã bàn giao mã khóa & hướng dẫn ra vào *</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {handoverTarget.lockReference && (
+                  <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900">
+                    <div className="flex items-center justify-between">
+                      <b>Ổ khóa & quyền ra vào đã được kích hoạt thành công</b>
+                      <span className="font-mono font-bold bg-white px-2.5 py-1 rounded border border-emerald-300 text-emerald-950">
+                        {handoverTarget.lockReference}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-emerald-800">
+                      Bàn giao lúc: {formatStaffDateTime(handoverTarget.setupStartedAt)}. Khách hàng có {handoverTarget.freeSetupDays} ngày để chuyển đồ và chuẩn bị trước khi tính cước hợp đồng.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
             {handoverStep === 5 && (
-              <div className="space-y-3 rounded-lg border border-violet-200 bg-violet-50 p-4 text-violet-950">
-                <p className="font-semibold">Khách hàng đang setup gian kho</p>
-                <p className="text-sm">Bắt đầu: <b>{formatStaffDateTime(handoverTarget.setupStartedAt)}</b></p>
-                <p className="text-sm">Setup miễn phí: <b>{handoverTarget.freeSetupDays} ngày</b></p>
-                <p className="text-sm">Thời hạn thuê tính từ: <b>{handoverTarget.paidRentalStartsOn || `ngày bàn giao thực tế + ${handoverTarget.freeSetupDays} ngày`}</b></p>
-                <p className="text-sm">Có thể xác nhận setup xong để chuyển sang kiểm kê ngay; ngày bắt đầu tính tiền vẫn là ngày bàn giao thực tế cộng số ngày setup miễn phí.</p>
-                {handoverTarget.lockReference && <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900"><b>Ổ khóa đã bàn giao</b><p className="mt-1">Mã: <b className="font-mono">{handoverTarget.lockReference}</b></p><p className="mt-1 text-xs">Quyền truy cập được kích hoạt từ thời điểm bàn giao, theo giờ mở cửa cơ sở.</p></div>}
+              <div className="space-y-4">
+                <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 text-violet-950">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-violet-200/60 pb-3">
+                    <div>
+                      <p className="font-bold text-base text-violet-950">Khách hàng đang trong thời gian chuẩn bị (Setup)</p>
+                      <p className="text-xs text-violet-800 mt-0.5">Khách hàng đang chủ động đưa hàng hóa vào gian kho và sắp xếp kiện hàng.</p>
+                    </div>
+                    <span className="rounded-full bg-violet-100 border border-violet-300 px-3 py-1 text-xs font-bold text-violet-900">
+                      Bước 5/6
+                    </span>
+                  </div>
+
+                  <div className="mt-3 grid gap-3 sm:grid-cols-3 text-xs">
+                    <div className="rounded-lg border border-violet-200 bg-white p-3">
+                      <span className="text-stone-500">Bắt đầu bàn giao:</span>
+                      <p className="font-bold text-stone-900 mt-0.5">{formatStaffDateTime(handoverTarget.setupStartedAt)}</p>
+                    </div>
+                    <div className="rounded-lg border border-violet-200 bg-white p-3">
+                      <span className="text-stone-500">Thời gian setup miễn phí:</span>
+                      <p className="font-bold text-emerald-700 mt-0.5">{handoverTarget.freeSetupDays} ngày</p>
+                    </div>
+                    <div className="rounded-lg border border-violet-200 bg-white p-3">
+                      <span className="text-stone-500">Tính cước kỳ thuê từ:</span>
+                      <p className="font-bold text-stone-900 mt-0.5">{handoverTarget.paidRentalStartsOn || `Bàn giao + ${handoverTarget.freeSetupDays} ngày`}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-stone-200 bg-white p-4 text-sm text-stone-700 space-y-2">
+                  <p className="font-bold text-stone-900">Quy trình tiếp theo</p>
+                  <p className="text-xs text-stone-600 leading-relaxed">
+                    Sau khi khách hàng hoàn tất việc chuyển đồ vào kho hoặc hết thời gian setup miễn phí, nhân viên cơ sở sẽ tiến hành <b>Kiểm kê thực tế</b> (đo đạc kích thước kiện, cân nặng và chụp ảnh lưu hồ sơ).
+                  </p>
+                  <p className="text-xs text-stone-500">
+                    Bấm <b>"Xác nhận setup xong, tiếp tục kiểm kê"</b> khi khách hàng báo đã sắp xếp xong hoặc khi đến hạn kiểm kê.
+                  </p>
+                </div>
               </div>
             )}
 
