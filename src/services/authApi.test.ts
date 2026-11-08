@@ -107,13 +107,13 @@ describe('backend customer navigation and profile', () => {
       ...actor,
       roles: ['STAFF'],
       facilityScopes: { 'facility-q1': 'OPERATE' },
-      facilityNames: { 'facility-q1': 'Kho Việt – Cơ sở Quận 1' },
+      facilityNames: { 'facility-q1': 'Kho Việt - Cơ sở Quận 1' },
       permissions: ['view_reservations', 'approve_reservations'],
     }
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: { actor: staff, accessToken: 'access', refreshToken: 'refresh' } }), { headers: { 'Content-Type': 'application/json' } })))
     await loginWithApi(staff.email, 'password')
     const user = actorToUser(staff)
-    expect(user.facility).toBe('Kho Việt – Cơ sở Quận 1')
+    expect(user.facility).toBe('Kho Việt - Cơ sở Quận 1')
     expect(user.facilityId).toBe('facility-q1')
     expect(user.facilityScopes).toEqual({ 'facility-q1': 'OPERATE' })
     expect(canApiActor(user, 'reservations:approve')).toBe(true)

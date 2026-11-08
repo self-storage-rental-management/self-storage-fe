@@ -1,7 +1,7 @@
 import { managerDisplayError } from './managerPresentation'
 import { useCallback, useEffect, useState } from 'react'
 import { Badge, Button, Card, Modal } from '../../components/ui'
-import { formatVndAmount as formatVnd } from '../../i18n/currency'
+import { formatVndAmount } from '../../i18n/currency'
 import type { PaymentComplaint } from '../../services/customerReservationApi'
 import { decideManagerPaymentComplaint, getManagerPaymentComplaint, listManagerPaymentComplaints } from '../../services/managerPaymentComplaintApi'
 
@@ -50,7 +50,7 @@ export default function ManagerPaymentComplaintsPanel({ showToast }: { showToast
     </Card>
     <Modal open={Boolean(selected)} onClose={() => { if (!busy) setSelected(null) }} title="Đối soát khiếu nại thanh toán">
       {selected && <div className="space-y-4 text-sm">
-        <div className="rounded-lg bg-stone-50 p-3 space-y-1"><p>Đơn giữ kho: <b>{selected.reservationCode}</b></p><p>Tiền cọc cần đối soát: <b>{formatVnd(selected.depositAmount || 0)}</b></p><p>Trạng thái: <b>{labels[selected.status]}</b></p><p>Hạn xử lý: <b>{new Date(selected.reviewDueAt).toLocaleString('vi-VN')}</b></p></div>
+        <div className="rounded-lg bg-stone-50 p-3 space-y-1"><p>Đơn giữ kho: <b>{selected.reservationCode}</b></p><p>Tiền cọc cần đối soát: <b>{formatVndAmount(selected.depositAmount || 0)}</b></p><p>Trạng thái: <b>{labels[selected.status]}</b></p><p>Hạn xử lý: <b>{new Date(selected.reviewDueAt).toLocaleString('vi-VN')}</b></p></div>
         <div><p className="font-bold">Lý do khách hàng</p><p className="mt-1 rounded-lg border border-stone-200 p-3">{selected.reason}</p></div>
         <div><p className="font-bold">Chứng từ đính kèm</p><div className="mt-2 space-y-2">{selected.images?.map(image => <div key={image.id} className="rounded-lg border border-stone-200 p-3"><p className="font-medium">{image.originalName}</p><p className="text-xs text-stone-500">{image.contentType} · {(image.sizeBytes / 1024).toFixed(1)} KB</p></div>)}{!selected.images?.length && <p className="text-stone-500">Không có chứng từ.</p>}</div></div>
         <label className="block font-bold">Ghi chú xử lý<textarea className="mt-2 min-h-24 w-full rounded-lg border border-stone-300 p-3 font-normal" value={reason} onChange={event => setReason(event.target.value)} placeholder="Bắt buộc khi từ chối, không bắt buộc khi chấp thuận" maxLength={2000} /></label>

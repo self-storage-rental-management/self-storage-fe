@@ -41,7 +41,7 @@ export default function ReturnSettlementReceipt({ entry }: { entry: HistoryEntry
       <section className="min-w-0" aria-label="Chi tiết quyết toán">
         <h4 className="mb-3 text-xs font-semibold text-stone-900">Chi tiết quyết toán</h4>
         <dl className="overflow-hidden rounded-xl border border-stone-200">
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3 bg-stone-50 px-3 py-3 text-xs"><dt className="text-stone-600">Cọc bảo đảm</dt><dd className="text-right font-semibold tabular-nums">{amount(settlement.depositAmount)}</dd></div>
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3 bg-stone-50 px-3 py-3 text-xs"><dt className="text-stone-600">Tiền cọc đảm bảo thuê</dt><dd className="text-right font-semibold tabular-nums">{amount(settlement.depositAmount)}</dd></div>
           {settlement.setupEarlyExit && <div className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3 border-t border-stone-100 px-3 py-2.5 text-xs"><dt className="leading-5 text-stone-600">Tiền thuê thực thu được quyết toán</dt><dd className="text-right font-medium leading-5 tabular-nums">{amount(settlement.rentalRefundCredit ?? null)}</dd></div>}
           {rows.map(([label, value]) => <div key={label} className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3 border-t border-stone-100 px-3 py-2.5 text-xs">
             <dt className="leading-5 text-stone-600">{label}</dt><dd className={`text-right leading-5 tabular-nums ${value === 0 ? 'text-stone-400' : 'font-medium text-stone-900'}`}>{amount(value)}</dd>

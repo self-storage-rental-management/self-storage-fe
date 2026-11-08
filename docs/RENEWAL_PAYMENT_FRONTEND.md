@@ -1,4 +1,4 @@
-# Renewal payment UI — 12/10/2026
+# Renewal payment UI - 12/10/2026
 
 The customer workspace remains `page=rental-records` / **Hồ sơ Thuê**. RenewalDetail's **Thanh toán toàn kỳ** button calls the shared backend Payment endpoint, not simulated deposit commands.
 

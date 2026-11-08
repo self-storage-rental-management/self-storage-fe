@@ -1,7 +1,7 @@
 import { isApiAuthenticated } from '../../services/authApi'
 import { useReturnRecords } from '../../hooks/useReturnRecords'
 import { returnScreenRecord } from '../../services/returnScreenAdapter'
-import { getReturn, reviewDispute, recordReturnSettlement, uploadReturnEvidence, returnError, confirmReturn, fastApproveReturn } from '../../services/returnApi'
+import { getReturn, reviewDispute, recordReturnSettlement, uploadReturnEvidence, returnError, confirmReturn } from '../../services/returnApi'
 import React, { useEffect, useRef, useState } from 'react'
 import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Select, Avatar, Input, Tabs } from '../../components/ui'
 import { Icon } from '../../components/Layout'
@@ -269,8 +269,8 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
       setApiBusy(true)
       try {
         if (completeTarget.status === 'requested' || completeTarget.status === 'scheduled') {
-          await fastApproveReturn(completeTarget.id, 'manager')
-          showToast(`Đã nghiệm thu và cho trả kho ngay hồ sơ ${completeTarget.id}!`)
+          showToast('Hồ sơ cần được Staff nghiệm thu hiện trường trước khi quản lý xác nhận quyết toán.')
+          return
         } else if (completeTarget.status === 'awaiting_customer_confirmation' || completeTarget.status === 'inspected') {
           await confirmReturn(completeTarget.id, 'accepted', completeNotes || 'Quản lý duyệt quyết toán trực tiếp tại quầy', 'manager')
           showToast(`Đã duyệt quyết toán cho hồ sơ ${completeTarget.id}!`)
@@ -284,7 +284,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
             resolutionNote: completeNotes || 'Quản lý duyệt hoàn tất trả kho',
             proposedUnitStatus: 'available',
           })
-          showToast(`Đã duyệt bỏ qua khiếu nại và cho trả kho ngay hồ sơ ${completeTarget.id}!`)
+          showToast(`Đã gửi kết luận xử lý khiếu nại cho hồ sơ ${completeTarget.id}.`)
         } else {
           showToast(`Hồ sơ đang ở trạng thái ${completeTarget.status}, vui lòng xử lý theo đúng quy trình.`)
           return
@@ -758,42 +758,6 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                             onClick={() => openMaintenanceModal(ret)}
                           >
                             {'Lập bảo trì'}
-                          </Button>
-                        )}
-
-                        {ret.status === 'awaiting_customer_confirmation' && (
-                          <Button
-                            size="sm"
-                            variant="primary"
-                            title="Duyệt hoàn tất và đóng hồ sơ trả kho ngay"
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium whitespace-nowrap cursor-pointer"
-                            onClick={() => openCompleteModal(ret)}
-                          >
-                            {'✓ Duyệt trả kho ngay'}
-                          </Button>
-                        )}
-
-                        {ret.status === 'inspected' && (
-                          <Button
-                            size="sm"
-                            variant="primary"
-                            title="Hoàn tất trả kho ngay"
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium whitespace-nowrap cursor-pointer"
-                            onClick={() => openCompleteModal(ret)}
-                          >
-                            {'✓ Hoàn tất trả kho'}
-                          </Button>
-                        )}
-
-                        {ret.status === 'payment_due' && (
-                          <Button
-                            size="sm"
-                            variant="primary"
-                            title="Xác nhận thu phí & hoàn tất trả kho"
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium whitespace-nowrap cursor-pointer"
-                            onClick={() => openCompleteModal(ret)}
-                          >
-                            {'✓ Hoàn tất trả kho'}
                           </Button>
                         )}
 

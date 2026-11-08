@@ -164,8 +164,8 @@ export const ROLE_NOTIFICATION_CONFIGS: Record<Role, RoleNotificationConfig> = {
       },
       {
         id: 'mgr_reservation_assignment',
-        title: 'Đơn Đặt Giữ Kho Mới Chờ Phân Gian',
-        description: 'Thông báo ngay khi khách thuê phí giữ chỗ thành công và đang chờ Quản lý chỉ định mã kho vật lý phù hợp.',
+        title: 'Đơn Đặt Giữ Kho Mới Chờ Phân Kho',
+        description: 'Thông báo ngay khi khách đặt cọc giữ chỗ thành công và đang chờ Quản lý chỉ định mã kho vật lý phù hợp.',
         defaultEnabled: true,
         badge: 'Đơn mới',
         badgeColor: 'bg-amber-50 text-amber-700 border-amber-200'
@@ -915,7 +915,7 @@ setSavingProfile(true)
                         {unitTypeName && <p className="text-xs text-stone-600 font-normal">{unitTypeName}</p>}
                       </div>
                       <Badge variant={rental.status === 'active' ? 'success' : 'warning'}>
-                        {rental.status === 'setup' ? 'Đang setup miễn phí' : rental.status === 'active' ? 'Đang thuê' : 'Đang trả kho'}
+                        {rental.status === 'setup' ? 'Đang trong thời gian chuẩn bị miễn phí' : rental.status === 'active' ? 'Đang thuê' : 'Đang trả kho'}
                       </Badge>
                     </div>
                     <p className="mt-2 text-sm font-semibold text-stone-700">{facName}</p>
@@ -1244,7 +1244,7 @@ setSavingProfile(true)
                         placeholder="0901234567"
                         inputMode="tel"
                       />
-                      <p className="mt-1 text-[11px] text-stone-600">Nhập 10–11 số bắt đầu bằng 0 hoặc số quốc tế, ví dụ: 0901234562 / +84901234562.</p>
+                      <p className="mt-1 text-[11px] text-stone-600">Nhập 10-11 số bắt đầu bằng 0 hoặc số quốc tế, ví dụ: 0901234562 / +84901234562.</p>
                     </div>
                   </div>
 
@@ -1544,7 +1544,7 @@ setSavingProfile(true)
               rows={3}
               value={requestReason}
               onChange={event => setRequestReason(event.target.value)}
-              placeholder="Nêu rõ thông tin mới cần cập nhật (ví dụ: Cập nhật SĐT sang 0905 123 456, Điều chuyển cơ sở sang Kho Việt – Cơ sở Quận 1...)"
+              placeholder="Nêu rõ thông tin mới cần cập nhật (ví dụ: Cập nhật SĐT sang 0905 123 456, Điều chuyển cơ sở sang Kho Việt - Cơ sở Quận 1...)"
               className="w-full rounded-xl border border-stone-300 p-3 text-sm text-stone-900 placeholder:text-stone-400 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 resize-none transition"
             />
             <div className="flex justify-between items-center mt-1 text-[11px] text-stone-600">

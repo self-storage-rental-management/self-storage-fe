@@ -12,7 +12,7 @@ describe('StorageHub Policy Matching & Discount Benefit Engine', () => {
       id: 'pol-user-test',
       name: 'trốn thuế',
       value: '1 tháng trốn thuế',
-      scope: 'Kho Việt – Cơ sở Hà Nội',
+      scope: 'Kho Việt - Cơ sở Hà Nội',
       description: 'abc',
       editable: true,
       lastUpdated: '2026-09-29'
@@ -21,7 +21,7 @@ describe('StorageHub Policy Matching & Discount Benefit Engine', () => {
       id: 'pol-discount-pct',
       name: 'Ưu đãi khai trương cơ sở',
       value: '15%',
-      scope: 'Kho Việt – Cơ sở Quận 1',
+      scope: 'Kho Việt - Cơ sở Quận 1',
       description: 'Giảm 15% tổng giá trị thuê kỳ đầu',
       editable: true
     },
@@ -29,7 +29,7 @@ describe('StorageHub Policy Matching & Discount Benefit Engine', () => {
       id: 'pol-fixed-cash',
       name: 'Trợ giá chuyển kho',
       value: '500.000đ',
-      scope: 'Kho Việt – Cơ sở Bình Dương',
+      scope: 'Kho Việt - Cơ sở Bình Dương',
       description: 'Hỗ trợ 500k cho khách thuê mới',
       editable: true
     },
@@ -67,7 +67,7 @@ describe('StorageHub Policy Matching & Discount Benefit Engine', () => {
     })
 
     it('matches facility-specific policy with exact name', () => {
-      const hanoiPolicies = getPoliciesForFacility('Kho Việt – Cơ sở Hà Nội')
+      const hanoiPolicies = getPoliciesForFacility('Kho Việt - Cơ sở Hà Nội')
       expect(hanoiPolicies.some(p => p.name === 'trốn thuế')).toBe(true)
       // Also includes general policies (Toàn bộ cơ sở)
       expect(hanoiPolicies.some(p => p.name === 'Quy định giờ mở cửa')).toBe(true)
@@ -85,7 +85,7 @@ describe('StorageHub Policy Matching & Discount Benefit Engine', () => {
     })
 
     it('matches general policies for any facility', () => {
-      const q1Policies = getPoliciesForFacility('Kho Việt – Cơ sở Quận 1')
+      const q1Policies = getPoliciesForFacility('Kho Việt - Cơ sở Quận 1')
       expect(q1Policies.some(p => p.name === 'Ưu đãi khai trương cơ sở')).toBe(true)
       expect(q1Policies.some(p => p.name === 'Quy định giờ mở cửa')).toBe(true)
       expect(q1Policies.some(p => p.name === 'trốn thuế')).toBe(false)
@@ -111,7 +111,7 @@ describe('StorageHub Policy Matching & Discount Benefit Engine', () => {
         id: 'pol-2m',
         name: 'Tặng 2 tháng',
         value: '2 tháng miễn phí',
-        scope: 'Kho Việt – Cơ sở Hà Nội'
+        scope: 'Kho Việt - Cơ sở Hà Nội'
       }
       const monthlyRent = 2_500_000
       const benefit1Month = evaluatePolicyBenefit(twoMonthPolicy, monthlyRent, 1)

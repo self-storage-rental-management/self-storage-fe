@@ -359,7 +359,7 @@ export default function CustomerSupportChatbot({
               >
                 {storageContext.rentalsList.map(r => (
                   <option key={r.unitId} value={r.unitId}>
-                    {r.unitId} ({r.facilityName.split('–')[1] || r.facilityName})
+                    {r.unitId} ({r.facilityName.split('-')[1] || r.facilityName})
                   </option>
                 ))}
               </select>

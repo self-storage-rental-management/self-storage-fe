@@ -9,3 +9,12 @@ export function estimatedRentalPeriod(handoverDate: string, setupDays: number, m
   const endExclusive = new Date(Date.UTC(start.getUTCFullYear(), target, Math.min(start.getUTCDate(), lastDay)))
   return { startDate: start.toISOString().slice(0, 10), endDate: endExclusive.toISOString().slice(0, 10) }
 }
+
+/** Backend stores the end boundary exclusively; customers see the last occupied day. */
+export function rentalEndDateForDisplay(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+  const endExclusive = new Date(`${value}T00:00:00Z`)
+  if (Number.isNaN(endExclusive.getTime())) return value
+  endExclusive.setUTCDate(endExclusive.getUTCDate() - 1)
+  return endExclusive.toISOString().slice(0, 10)
+}

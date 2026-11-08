@@ -9,11 +9,11 @@ import ManagerAccessCredentialsPanel from './ManagerAccessCredentialsPanel'
 type Tab = 'checkins' | 'returns' | 'credentials'
 
 function dateTime(value: string | null | undefined) {
-  return value ? new Date(value).toLocaleString('vi-VN') : '—'
+  return value ? new Date(value).toLocaleString('vi-VN') : '-'
 }
 
 function dateOnly(value: string | null | undefined) {
-  return value ? new Date(value).toLocaleDateString('vi-VN') : '—'
+  return value ? new Date(value).toLocaleDateString('vi-VN') : '-'
 }
 
 function statusVariant(status: string | null | undefined) {
@@ -24,7 +24,7 @@ function statusVariant(status: string | null | undefined) {
 }
 
 function statusBadge(status: string | null | undefined) {
-  return <Badge variant={statusVariant(status)}>{managerStatusLabel(status || '—', 'vi')}</Badge>
+  return <Badge variant={statusVariant(status)}>{managerStatusLabel(status || '-', 'vi')}</Badge>
 }
 
 export default function ManagerMovesApiPanel({ facilityId }: { facilityId?: string }) {
@@ -71,7 +71,7 @@ export default function ManagerMovesApiPanel({ facilityId }: { facilityId?: stri
     {tab === 'credentials' ? <ManagerAccessCredentialsPanel facilityId={facilityId} /> : tab === 'checkins' ? (
       <Card>
         <Table>
-          <Thead><Tr><Th>Khách hàng / Đơn</Th><Th>Gian kho</Th><Th>Trạng thái</Th><Th>Setup</Th><Th>Kiểm kê</Th><Th>Check-in</Th></Tr></Thead>
+          <Thead><Tr><Th>Khách hàng / Đơn</Th><Th>Gian kho</Th><Th>Trạng thái</Th><Th>Hạn chuẩn bị</Th><Th>Kiểm kê</Th><Th>Check-in</Th></Tr></Thead>
           <Tbody>
             {!loading && !checkIns.length && <Tr><Td colSpan={6} className="py-8 text-center text-stone-500">Chưa có hồ sơ nhận kho từ Backend.</Td></Tr>}
             {checkIns.map(item => <Tr key={item.checkInId || item.reservationId}>
