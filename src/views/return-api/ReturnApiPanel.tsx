@@ -528,7 +528,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       {role === 'staff' && !recovery && (record.status === 'requested' || record.status === 'scheduled') && (
         <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3.5 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-blue-900">⚡ Cho trả kho nhanh</span>
+            <span className="text-xs font-bold text-blue-900">Cho trả kho nhanh</span>
             <span className="rounded bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-800 border border-blue-300">Thao tác nhanh</span>
           </div>
           <p className="text-xs text-blue-800">
@@ -542,7 +542,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
               className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer"
               onClick={() => void run(() => fastApproveReturn(id, role))}
             >
-              ⚡ Cho trả kho ngay (Đóng hồ sơ & giải phóng gian)
+              Cho trả kho ngay (Đóng hồ sơ & giải phóng gian)
             </Button>
           </div>
         </div>
@@ -550,7 +550,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       {role === 'staff' && !recovery && record.status === 'awaiting_customer_confirmation' && (
         <div className="rounded-xl border border-amber-300 bg-amber-50/80 p-3.5 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-amber-900">⏳ Đang chờ khách hàng xác nhận quyết toán</span>
+            <span className="text-xs font-bold text-amber-900">Đang chờ khách hàng xác nhận quyết toán</span>
             <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800 border border-emerald-300">Có thể duyệt hoàn tất ngay</span>
           </div>
           <p className="text-xs text-amber-800">
@@ -572,7 +572,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       {role === 'staff' && !recovery && record.status === 'disputed' && (
         <div className="rounded-xl border border-rose-300 bg-rose-50/80 p-3.5 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-rose-900">⚠️ Khiếu nại từ khách hàng</span>
+            <span className="text-xs font-bold text-rose-900">Khiếu nại từ khách hàng</span>
             <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-300">Có thể duyệt trả kho</span>
           </div>
           <p className="text-xs text-rose-800">
@@ -602,7 +602,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       {role === 'staff' && !recovery && record.status === 'payment_due' && (
         <div className="rounded-xl border border-amber-300 bg-amber-50/80 p-3.5 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-amber-900">💵 Phụ phí cần thu: {rentalMoney(record.amountDueFromCustomer, 'VND')}</span>
+            <span className="text-xs font-bold text-amber-900">Phụ phí cần thu: {rentalMoney(record.amountDueFromCustomer, 'VND')}</span>
             <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800 border border-emerald-300">Duyệt nhanh</span>
           </div>
           <p className="text-xs text-amber-800">
@@ -616,7 +616,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       {role === 'staff' && !recovery && record.status === 'refund_pending' && (
         <div className="rounded-xl border border-purple-300 bg-purple-50/80 p-3.5 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-purple-900">💳 Tiền hoàn cọc: {rentalMoney(record.netRefundAmount, 'VND')}</span>
+            <span className="text-xs font-bold text-purple-900">Tiền hoàn cọc: {rentalMoney(record.netRefundAmount, 'VND')}</span>
             <span className="rounded bg-purple-100 px-2 py-0.5 text-xs font-semibold text-purple-800 border border-purple-300">Chờ chuyển hoàn</span>
           </div>
           <div className="flex gap-2">

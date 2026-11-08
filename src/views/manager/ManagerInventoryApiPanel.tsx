@@ -471,7 +471,7 @@ function CreateUnitTypeModal({ open, facilityId, existingCodes = [], onClose, on
               onChange={event => setForm(current => ({ ...current, code: event.target.value.toUpperCase() }))}
             />
             {isDuplicateCode && (
-              <p className="mt-1 text-xs text-red-600 font-medium">⚠️ Mã loại kho này đã tồn tại trong cơ sở.</p>
+              <p className="mt-1 text-xs text-red-600 font-medium">Mã loại kho này đã tồn tại trong cơ sở.</p>
             )}
           </div>
         </div>

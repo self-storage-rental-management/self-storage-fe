@@ -119,6 +119,9 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
           </div>
 
           <p className="mt-3 border-t border-stone-100 pt-3 text-xs text-stone-600">Khoản giữ chỗ này <b>được trừ trực tiếp</b> vào tổng tiền cần thanh toán khi nhận kho.</p>
+          <div className="mt-2.5 rounded-lg border border-rose-200 bg-rose-50/90 p-2.5 text-xs text-rose-900">
+            <span className="font-bold text-rose-950">Quy định không hoàn tiền:</span> Phí giữ chỗ ({depositPercent}%) là khoản bảo đảm việc giữ loại kho đã chọn và <b>không được hoàn lại</b> trong trường hợp khách hàng tự ý hủy đơn hoặc bỏ lịch nhận kho.
+          </div>
         </div>
 
         {/* CHẶNG 2: THANH TOÁN KHI NHẬN KHO TẠI CƠ SỞ */}

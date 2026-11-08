@@ -142,6 +142,8 @@ export default function CustomerUnitDetails({
       ['Diện tích', `${t.areaM2} m²`], ['Kích thước kho (D × R × C)', `${t.lengthM} × ${t.widthM} × ${t.heightM} m`],
       ['Thể tích kho', `${t.volumeM3} m³`], ['Số khung kệ', `${t.rackCount} khung`],
       ['Kích thước khung (D × R × C)', `${t.rackLengthM} × ${t.rackWidthM} × ${t.rackHeightM} m`],
+      ['Diện tích khung kệ', `${Number((t.rackLengthM * t.rackWidthM).toFixed(2))} m²/khung (Tổng ${Number((t.rackLengthM * t.rackWidthM * t.rackCount).toFixed(2))} m²)`],
+      ['Thể tích khung kệ', `${Number((t.rackLengthM * t.rackWidthM * t.rackHeightM).toFixed(2))} m³/khung (Tổng ${Number((t.rackLengthM * t.rackWidthM * t.rackHeightM * t.rackCount).toFixed(2))} m³)`],
       ['Chiều rộng lối đi', t.aisleWidthM ? `${t.aisleWidthM} m` : 'Chưa cập nhật'],
       ['Xe đẩy hỗ trợ', t.trolleyType || 'Chưa cập nhật'],
       ['Tải trọng tối đa', `${t.maxLoadKg.toLocaleString('vi-VN')} kg`],

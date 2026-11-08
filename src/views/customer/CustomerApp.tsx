@@ -782,7 +782,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   // Live timer tick
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000)
+    const timer = setInterval(() => {
+      if (typeof document === 'undefined' || !document.hidden) {
+        setNow(Date.now())
+      }
+    }, 1000)
     return () => clearInterval(timer)
   }, [])
 
