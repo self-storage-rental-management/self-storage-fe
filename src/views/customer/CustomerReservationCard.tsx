@@ -85,10 +85,16 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const [setupGoodsDraft, setSetupGoodsDraft] = useState<GoodsItemInput[]>([])
   const [preparationSubmitting, setPreparationSubmitting] = useState(false)
   const [now, setNow] = useState(Date.now())
+  const needsCountdown = ['AWAITING_PAYMENT', 'AWAITING_EMAIL', 'AWAITING_REVIEW', 'PAYMENT_GRACE', 'PAYMENT_REVIEW'].includes(r.status)
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    if (!needsCountdown) return
+    const timer = window.setInterval(() => {
+      if (typeof document === 'undefined' || !document.hidden) {
+        setNow(Date.now())
+      }
+    }, 1000)
     return () => window.clearInterval(timer)
-  }, [])
+  }, [needsCountdown])
   useEffect(() => {
     setAppointmentInput(localDateTimeInput(r.appointmentAt))
     setSavedAppointmentAt(r.appointmentAt)
@@ -366,7 +372,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
           </section>
           <section>
             <h3 className="font-bold text-stone-900">Thông tin kho</h3>
-            <div className="mt-2 space-y-1"><p><b>Địa chỉ:</b> {facilityDetails ? `${facilityDetails.address}, ${facilityDetails.city}` : 'Chưa cập nhật'}</p><p><b>Liên hệ:</b> {facilityDetails?.phone || 'Chưa cập nhật'}</p><p><b>Giờ hoạt động:</b> {facilityDetails?.accessHours || 'Chưa cập nhật'}</p>{unitTypeDetails && <><p><b>Kích thước kho:</b> {unitTypeDetails.lengthM} × {unitTypeDetails.widthM} × {unitTypeDetails.heightM} m · {unitTypeDetails.volumeM3} m³</p><p><b>Khung:</b> {unitTypeDetails.rackCount} khung · {unitTypeDetails.rackLengthM} × {unitTypeDetails.rackWidthM} × {unitTypeDetails.rackHeightM} m/khung</p><p><b>Tải trọng:</b> {unitTypeDetails.maxLoadKg.toLocaleString('vi-VN')} kg</p></>}{r.assignedUnitCode && <p><b>Gian kho đã phân:</b> {r.assignedUnitCode}{r.assignedUnitStatus ? ` (${r.assignedUnitStatus})` : ''}</p>}</div>
+            <div className="mt-2 space-y-1"><p><b>Địa chỉ:</b> {facilityDetails ? `${facilityDetails.address}, ${facilityDetails.city}` : 'Chưa cập nhật'}</p><p><b>Liên hệ:</b> {facilityDetails?.phone || 'Chưa cập nhật'}</p><p><b>Giờ hoạt động:</b> {facilityDetails?.accessHours || 'Chưa cập nhật'}</p>{unitTypeDetails && <><p><b>Kích thước kho:</b> {unitTypeDetails.lengthM} × {unitTypeDetails.widthM} × {unitTypeDetails.heightM} m · {unitTypeDetails.volumeM3} m³</p><p><b>Khung:</b> {unitTypeDetails.rackCount} khung · {unitTypeDetails.rackLengthM} × {unitTypeDetails.rackWidthM} × {unitTypeDetails.rackHeightM} m/khung (diện tích {Number((unitTypeDetails.rackLengthM * unitTypeDetails.rackWidthM).toFixed(2))} m² · thể tích {Number((unitTypeDetails.rackLengthM * unitTypeDetails.rackWidthM * unitTypeDetails.rackHeightM).toFixed(2))} m³/khung)</p><p><b>Tải trọng:</b> {unitTypeDetails.maxLoadKg.toLocaleString('vi-VN')} kg</p></>}{r.assignedUnitCode && <p><b>Gian kho đã phân:</b> {r.assignedUnitCode}{r.assignedUnitStatus ? ` (${r.assignedUnitStatus})` : ''}</p>}</div>
           </section>
         </div>
         <div className="mt-3 space-y-4">

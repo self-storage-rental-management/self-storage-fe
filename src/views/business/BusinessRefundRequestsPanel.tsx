@@ -71,14 +71,14 @@ export default function BusinessRefundRequestsPanel() {
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="font-semibold text-stone-900">{formatVndAmount(row.amount)}</p>
-                <p className="mt-1 text-xs text-stone-500">Yêu cầu lúc {new Date(row.createdAt).toLocaleString('vi-VN')} · Payment {row.paymentId}</p>
+                <p className="mt-1 text-xs text-stone-500">Yêu cầu lúc {new Date(row.createdAt).toLocaleString('vi-VN')} · {row.paymentId ? `Payment ${row.paymentId}` : 'Chưa có Payment'}</p>
               </div>
               <Button size="sm" disabled={busyId !== null} onClick={() => void approve(row)}>
                 {busyId === row.id ? 'Đang xử lý…' : 'Duyệt hoàn qua VNPay'}
               </Button>
             </div>
             <p className="mt-2 whitespace-pre-wrap text-sm text-stone-700">{row.reason}</p>
-            <p className="mt-2 text-xs text-stone-500">Request {row.id} · Người tạo {row.requestedBy}</p>
+            <p className="mt-2 text-xs text-stone-500">Request {row.id} · Người tạo {row.requestedBy ?? 'Hệ thống'}</p>
           </article>
         ))}
       </div>

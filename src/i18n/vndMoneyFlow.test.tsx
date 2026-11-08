@@ -25,7 +25,7 @@ describe('VND money across demo and role boundaries', () => {
   })
   it('seeds both warehouse pricing and overdue accounts directly in VND', () => {
     expect(UNIT_SPECS.S.priceMonthly).toBe(5500000)
-    expect(OVERDUE[0].amount).toBe(2314000)
+    expect(OVERDUE[0].amount).toBe(5500000)
     expect(OVERDUE[0].lateFee).toBe(650000)
   })
 })

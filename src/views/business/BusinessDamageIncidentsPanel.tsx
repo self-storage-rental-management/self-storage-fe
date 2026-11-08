@@ -232,7 +232,7 @@ export default function BusinessDamageIncidentsPanel({ user, lang = 'vi', facili
             {isVi ? 'Làm mới' : 'Refresh'}
           </Button>
           <Button variant="primary" size="sm" onClick={handleOpenCreate}>
-            ➕ {isVi ? 'Báo Cáo Sự Cố Mới' : 'Report Incident'}
+            {isVi ? 'Báo Cáo Sự Cố Mới' : 'Report Incident'}
           </Button>
         </div>
       </div>

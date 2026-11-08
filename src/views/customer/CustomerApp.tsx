@@ -784,7 +784,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   // Live timer tick
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000)
+    const timer = setInterval(() => {
+      if (typeof document === 'undefined' || !document.hidden) {
+        setNow(Date.now())
+      }
+    }, 1000)
     return () => clearInterval(timer)
   }, [])
 
@@ -840,7 +844,18 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     }).catch(error => { if (!cancelled) showToast(userFacingError(error, 'Không thể cập nhật số kho trống.')) })
     return () => { cancelled = true }
   }, [backendUnitTypes, availabilityPeriod, availabilityRevision])
+  const clearBookingSessionDraft = () => {
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        window.sessionStorage.removeItem('storagehub_customer_booking_draft')
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   const resetBookingForm = () => {
+    clearBookingSessionDraft()
     setGoodsItems([createGoodsDeclarationItem('goods-1')])
     setGoodsCondition('')
     setMoveInDate(availabilityPeriod.startDate)
@@ -861,6 +876,49 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     setTermsAccepted(false)
     setBookingVoucherCode('')
   }
+
+  useEffect(() => {
+    if (!selectedTarget) return
+    if (bookingStep === 1 && !customerIdCard && !customerAddress && goodsItems.length <= 1 && !goodsItems[0]?.lengthCm) {
+      return
+    }
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        const draft = {
+          facilityId: selectedTarget.facility.id,
+          unitTypeId: selectedTarget.unitType.id,
+          bookingStep,
+          customerIdCard,
+          customerPhone,
+          customerAddress,
+          goodsItems: goodsItems.map(g => ({ ...g, images: [] })),
+          goodsCondition,
+          rentalMonths,
+          selectedPackageId,
+          moveInDate,
+          bookingAppointmentTime,
+          termsAccepted,
+          updatedAt: Date.now(),
+        }
+        window.sessionStorage.setItem('storagehub_customer_booking_draft', JSON.stringify(draft))
+      }
+    } catch {
+      // ignore
+    }
+  }, [
+    selectedTarget,
+    bookingStep,
+    customerIdCard,
+    customerPhone,
+    customerAddress,
+    goodsItems,
+    goodsCondition,
+    rentalMonths,
+    selectedPackageId,
+    moveInDate,
+    bookingAppointmentTime,
+    termsAccepted,
+  ])
   const capacitySamples: PackageSample[] = goodsItems.map((item, index) => ({
     id: item.id, quantity: item.quantity, lengthCm: item.lengthCm, widthCm: item.widthCm,
     heightCm: item.heightCm, weightKg: item.weightKg,
@@ -1375,7 +1433,40 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     setBookingStartedAt(startedAt)
     if (!preserveSchedule) setMoveInDate(policyDateInput(suggestedCheckIn))
     if (!preserveSchedule) setBookingAppointmentTime(policyTimeInput(suggestedCheckIn))
-    setBookingStep(initialStep)
+    const isSameTarget = selectedTarget?.unitType.id === unitType.id || selectedTarget?.unitType.name === unitType.name
+    let stepToSet: 1 | 2 | 3 | 4 = initialStep
+    if (isSameTarget && bookingStep > 1) {
+      stepToSet = bookingStep
+    } else {
+      try {
+        if (typeof window !== 'undefined' && window.sessionStorage) {
+          const raw = window.sessionStorage.getItem('storagehub_customer_booking_draft')
+          if (raw) {
+            const draft = JSON.parse(raw)
+            if ((draft.unitTypeId === unitType.id || draft.unitTypeId === unitType.name) && draft.bookingStep > 1) {
+              stepToSet = draft.bookingStep as 1 | 2 | 3 | 4
+              if (draft.customerIdCard) setCustomerIdCard(draft.customerIdCard)
+              if (draft.customerPhone) setCustomerPhone(draft.customerPhone)
+              if (draft.customerAddress) setCustomerAddress(draft.customerAddress)
+              if (draft.goodsItems && draft.goodsItems.length > 0) setGoodsItems(draft.goodsItems)
+              if (draft.goodsCondition) setGoodsCondition(draft.goodsCondition)
+              if (draft.rentalMonths) setRentalMonths(draft.rentalMonths)
+              if (draft.selectedPackageId) setSelectedPackageId(draft.selectedPackageId)
+              if (draft.moveInDate) setMoveInDate(draft.moveInDate)
+              if (draft.bookingAppointmentTime) setBookingAppointmentTime(draft.bookingAppointmentTime)
+              if (draft.termsAccepted) setTermsAccepted(draft.termsAccepted)
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+    setBookingStep(stepToSet)
+    if (stepToSet > 1) {
+      showToast(`Đã tiếp tục tiến trình đặt kho tại Bước ${stepToSet}.`)
+    }
+
     setBookingReview(false)
     setServerQuote(null)
     setServerCompatibility(null)
@@ -1839,7 +1930,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       if (parsePositiveNumber(item.heightCm) === null) errors[`goodsHeight-${item.id}`] = 'Chiều cao phải lớn hơn 0.'
       if (parsePositiveNumber(item.weightKg) === null) errors[`goodsWeight-${item.id}`] = 'Cân nặng mỗi kiện phải lớn hơn 0.'
       if (!item.fragile) errors[`goodsFragile-${item.id}`] = 'Vui lòng chọn hàng có dễ vỡ hay không.'
-      if (item.images.length > 10) errors[`goodsImages-${item.id}`] = 'Mỗi loại hàng hóa được tải tối đa 10 ảnh.'
+      if (item.images.length > 10) {
+        errors[`goodsImages-${item.id}`] = 'Mỗi loại hàng hóa được tải tối đa 10 ảnh.'
+      } else if (item.images.some(file => file.size > 10 * 1024 * 1024)) {
+        errors[`goodsImages-${item.id}`] = 'Có ảnh vượt quá dung lượng tối đa 10 MB. Vui lòng kiểm tra lại.'
+      }
       if (isFreeformGoods) {
         if (!item.customGoodsName.trim()) errors[`customGoodsName-${item.id}`] = 'Vui lòng nhập tên hàng hóa.'
       }
@@ -1901,6 +1996,35 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       showToast('Bạn chỉ được chọn tối đa 10 ảnh cho mỗi loại hàng hóa.')
       return
     }
+
+    const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024 // Tối đa 10 MB mỗi ảnh
+    const ALLOWED_EXTENSIONS = /\.(png|jpe?g|webp)$/i
+    const ALLOWED_MIME_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp']
+
+    const invalidTypeFiles = files.filter(
+      f => !ALLOWED_MIME_TYPES.includes(f.type.toLowerCase()) && !ALLOWED_EXTENSIONS.test(f.name)
+    )
+    if (invalidTypeFiles.length > 0) {
+      event.currentTarget.value = ''
+      setBookingErrors(current => ({
+        ...current,
+        [errorKey]: `Tệp không đúng định dạng (${invalidTypeFiles.map(f => f.name).join(', ')}). Chỉ chấp nhận ảnh PNG, JPG hoặc WebP.`,
+      }))
+      showToast('Chỉ chấp nhận định dạng ảnh PNG, JPG hoặc WebP.')
+      return
+    }
+
+    const oversizedFiles = files.filter(f => f.size > MAX_IMAGE_SIZE_BYTES)
+    if (oversizedFiles.length > 0) {
+      event.currentTarget.value = ''
+      setBookingErrors(current => ({
+        ...current,
+        [errorKey]: `Ảnh ${oversizedFiles.map(f => `${f.name} (${(f.size / (1024 * 1024)).toFixed(1)} MB)`).join(', ')} vượt quá dung lượng tối đa 10 MB mỗi ảnh.`,
+      }))
+      showToast('Mỗi ảnh tải lên không được vượt quá 10 MB.')
+      return
+    }
+
     setGoodsItems(items => items.map(row => row.id === goodsItemId ? { ...row, images: files } : row))
     setBookingErrors(current => {
       if (!current[errorKey]) return current
@@ -3586,27 +3710,51 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       {/* ── MODAL 2: GOODS DECLARATION & HOLD (P0.1, P0.3, P1.1) ─ */}
       <Modal
         open={bookOpen}
-        onClose={() => { resetReservationDraft(); resetBookingForm(); setBookOpen(false); showToast('Đã thoát biểu mẫu đặt kho.') }}
+        onClose={() => {
+          setBookOpen(false)
+          if (bookingStep > 1) {
+            showToast(`Đã lưu tạm tiến trình đặt kho (Bước ${bookingStep}). Bấm "Đặt kho" để tiếp tục.`)
+          }
+        }}
         size="xl"
         title={selectedTarget ? (`Đặt Kho: ${unitTypeLabel(selectedTarget.unitType.name)}`) : (selectedUnit ? ('Đặt kho') : '')}
       >
         {selectedUnit && (
           <div className="space-y-4">
-            <ol className="grid grid-cols-1 gap-2 sm:grid-cols-4" aria-label="Các bước đặt kho">
-              {[
-                [1, 'Thông tin cá nhân'],
-                [2, 'Hàng hóa & số liệu'],
-                [3, 'Báo giá'],
-                [4, 'Lịch check-in'],
-              ].map(([step, label]) => {
-                const stepNumber = Number(step)
-                const active = bookingStep === stepNumber
-                const completed = bookingStep > stepNumber
-                return <li key={stepNumber} className={`rounded-xl border px-3 py-2 text-xs font-semibold ${active ? 'border-amber-500 bg-amber-50 text-amber-950' : completed ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-stone-200 bg-white text-stone-500'}`}>
-                  <span className="mr-1.5">{stepNumber}.</span>{label}
-                </li>
-              })}
-            </ol>
+            <div>
+              <ol className="grid grid-cols-1 gap-2 sm:grid-cols-4" aria-label="Các bước đặt kho">
+                {[
+                  [1, 'Thông tin cá nhân'],
+                  [2, 'Hàng hóa & số liệu'],
+                  [3, 'Báo giá'],
+                  [4, 'Lịch check-in'],
+                ].map(([step, label]) => {
+                  const stepNumber = Number(step)
+                  const active = bookingStep === stepNumber
+                  const completed = bookingStep > stepNumber
+                  return <li key={stepNumber} className={`rounded-xl border px-3 py-2 text-xs font-semibold ${active ? 'border-amber-500 bg-amber-50 text-amber-950' : completed ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-stone-200 bg-white text-stone-500'}`}>
+                    <span className="mr-1.5">{stepNumber}.</span>{label}
+                  </li>
+                })}
+              </ol>
+              {bookingStep > 1 && (
+                <div className="mt-2 flex items-center justify-between text-xs text-stone-500 px-1">
+                  <span>Tiến trình đang được tự động lưu tạm</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetReservationDraft()
+                      resetBookingForm()
+                      setBookingStep(1)
+                      showToast('Đã bắt đầu lại từ bước 1.')
+                    }}
+                    className="hover:text-amber-800 underline font-medium text-amber-700"
+                  >
+                    ↺ Bắt đầu lại từ bước 1
+                  </button>
+                </div>
+              )}
+            </div>
 
             {bookingStep === 2 && <div className="rounded-xl border border-stone-300 bg-white p-4 shadow-sm">
               <div className="mb-3 border-b border-stone-200 pb-3">
@@ -3744,7 +3892,19 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                      <div className="flex h-full flex-col"><Input type="number" min="0.1" label="Cao (cm) *" value={item.heightCm} onChange={e => { const value = e.target.value; setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, heightCm: value } : row)); updateBookingError(`goodsHeight-${item.id}`, parsePositiveNumber(value) === null ? 'Chiều cao phải lớn hơn 0.' : undefined) }} /><p className="mt-1 min-h-8 text-xs text-red-700">{bookingErrors[`goodsHeight-${item.id}`] || ''}</p></div>
                      <div className="flex h-full flex-col"><Input type="number" min="0.1" label="Nặng/kiện (kg) *" value={item.weightKg} onChange={e => { const value = e.target.value; setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, weightKg: value } : row)); updateBookingError(`goodsWeight-${item.id}`, parsePositiveNumber(value) === null ? 'Cân nặng mỗi kiện phải lớn hơn 0.' : undefined) }} /><p className="mt-1 min-h-8 text-xs text-red-700">{bookingErrors[`goodsWeight-${item.id}`] || ''}</p></div>
                   </div>
-                   <div className="mt-3"><p className="text-sm font-medium text-stone-700">Hàng dễ bể / dễ vỡ? *</p><div className="mt-2 flex gap-5"><label className="flex items-center gap-2 text-sm"><input type="radio" name={`fragile-${item.id}`} checked={item.fragile === 'no'} onChange={() => { setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, fragile: 'no' } : row)); updateBookingError(`goodsFragile-${item.id}`) }} />Không</label><label className="flex items-center gap-2 text-sm"><input type="radio" name={`fragile-${item.id}`} checked={item.fragile === 'yes'} onChange={() => { setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, fragile: 'yes' } : row)); updateBookingError(`goodsFragile-${item.id}`) }} />Có</label></div>{bookingErrors[`goodsFragile-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsFragile-${item.id}`]}</p>}{bookingErrors[`goodsFit-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsFit-${item.id}`]}</p>}</div>
+<div className="mt-3"><p className="text-sm font-medium text-stone-700">Hàng dễ bể / dễ vỡ? *</p><div className="mt-2 flex gap-5"><label className="flex items-center gap-2 text-sm"><input type="radio" name={`fragile-${item.id}`} checked={item.fragile === 'no'} onChange={() => { setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, fragile: 'no' } : row)); updateBookingError(`goodsFragile-${item.id}`) }} />Không</label><label className="flex items-center gap-2 text-sm"><input type="radio" name={`fragile-${item.id}`} checked={item.fragile === 'yes'} onChange={() => { setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, fragile: 'yes' } : row)); updateBookingError(`goodsFragile-${item.id}`) }} />Có</label></div>{bookingErrors[`goodsFragile-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsFragile-${item.id}`]}</p>}{bookingErrors[`goodsFit-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsFit-${item.id}`]}</p>}</div>
+                    <details open className="mt-4 rounded-lg border border-stone-200 bg-white p-3">
+                      <summary className="cursor-pointer font-bold text-stone-900">Thông tin bổ sung và hình ảnh hàng hóa</summary>
+                      <div className="mt-3 space-y-3 border-t border-stone-200 pt-3">
+                        {catalogCategoryFor(item.category)?.custom && <div className="grid gap-3 sm:grid-cols-2">
+                          <div><Input label="Tên hàng hóa *" value={item.customGoodsName} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customGoodsName: e.target.value } : row))} />{bookingErrors[`customGoodsName-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`customGoodsName-${item.id}`]}</p>}</div>
+                          <div><Input label="Chất liệu chính (nếu xác định được)" value={item.customMaterial} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customMaterial: e.target.value } : row))} /></div>
+                        </div>}
+                        <Input label="Ghi chú bổ sung" value={item.customerNote} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customerNote: e.target.value } : row))} />
+                        <div><label className="text-sm font-medium text-stone-700">Hình ảnh hàng hóa</label><p className="mt-1 text-xs text-stone-500">Tối đa 10 ảnh PNG, JPEG hoặc WebP (tối đa 10 MB/ảnh). Ảnh được gắn với đúng hàng hóa sau khi tạo đơn.</p><input type="file" accept="image/png,image/jpeg,image/webp" multiple className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm" onChange={event => selectGoodsImages(item.id, event)} />{item.images.length > 0 && <p className="mt-1 text-xs text-stone-500">Đã chọn {item.images.length}/10 ảnh: {item.images.map(file => file.name).join(', ')}</p>}{bookingErrors[`goodsImages-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsImages-${item.id}`]}</p>}</div>
+                        {catalogCategoryFor(item.category)?.custom && <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><b>Yêu cầu cần nhân viên cơ sở duyệt</b><p className="mt-1 leading-5">Sau khi xác nhận thư điện tử, yêu cầu sẽ được xem xét trong tối đa 6 giờ. Sau khi hồ sơ được duyệt, khách hàng có 15 phút để thanh toán. Quản lý cơ sở có tối đa 6 giờ tiếp theo để phân kho.</p></div>}
+                      </div>
+                    </details>
                 </div>)}
               </div>
               <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => setGoodsItems(items => [...items, createGoodsDeclarationItem()])}>+ Thêm hàng hóa</Button>
@@ -4680,6 +4840,48 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         payments={payments}
         role="customer"
       />
+      {/* ── FLOATING RESUME DRAFT BAR ────────────────────────── */}
+      {!bookOpen && bookingStep > 1 && selectedTarget && (
+        <div className="fixed bottom-4 left-4 z-40 max-w-sm rounded-2xl border-2 border-amber-500 bg-white p-3.5 shadow-2xl transition sm:bottom-6 sm:left-6 animate-fade-in">
+          <div className="flex items-center gap-3">
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-500 text-base font-extrabold text-white shadow-sm">
+              {bookingStep}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-700">Tiến trình chưa hoàn tất</p>
+              <p className="truncate text-sm font-bold text-stone-900">
+                {unitTypeLabel(selectedTarget.unitType.name)} · {selectedTarget.facility.name}
+              </p>
+              <p className="text-xs text-stone-500">
+                Đang dừng tại: <b className="text-stone-800">Bước {bookingStep}/4</b>
+              </p>
+            </div>
+          </div>
+          <div className="mt-2.5 flex items-center justify-end gap-2 border-t border-stone-100 pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                resetReservationDraft()
+                resetBookingForm()
+                showToast('Đã hủy tiến trình đặt kho.')
+              }}
+              className="px-2.5 py-1 text-xs font-semibold text-stone-500 hover:text-red-700 transition"
+            >
+              Hủy bỏ
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setBookOpen(true)
+                showToast(`Tiếp tục đặt kho tại Bước ${bookingStep}.`)
+              }}
+              className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white shadow hover:bg-amber-700 transition"
+            >
+              Tiếp tục đặt kho →
+            </button>
+          </div>
+        </div>
+      )}
       </div>
     </Layout>
   )

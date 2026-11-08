@@ -3727,6 +3727,7 @@ export default function StaffApp({
                     <option value="dry_intact">Khô ráo, kín gió, nguyên vẹn</option>
                     <option value="stained">Có vết loang ố nước cũ / ẩm</option>
                     <option value="leaking">Dột nước / thấm dột mái (Lỗi cơ sở)</option>
+
                   </select>
                 </div>
                 <div>
@@ -3742,6 +3743,7 @@ export default function StaffApp({
                     <option value="dry_intact">Khô ráo, sạch sẽ</option>
                     <option value="damp_seepage">Thấm ẩm tường ngoài (Lỗi cơ sở)</option>
                     <option value="cracked">Móp méo / nứt vỡ vách</option>
+
                   </select>
                 </div>
                 <div>
@@ -3757,6 +3759,7 @@ export default function StaffApp({
                     <option value="dry_intact">Khô ráo, chịu lực tốt</option>
                     <option value="cracked">Nứt vỡ sàn / bong gạch lát</option>
                     <option value="water_pooling">Có đọng vũng nước / ngấm sàn</option>
+
                   </select>
                 </div>
               </div>
@@ -3801,6 +3804,7 @@ export default function StaffApp({
                   <option value="facility_fault">Do lỗi cơ sở kho (Thấm dột trần/vách hoặc sự cố điều hòa/hút ẩm)</option>
                   <option value="customer_fault">Do lỗi khách hàng (Đóng gói còn ẩm, nông sản lên men, hàng cấm)</option>
                   <option value="climate_standard_uncontrolled">Kho tiêu chuẩn - Độ ẩm tự nhiên mùa nồm (không áp dụng cam kết thời gian xử lý)</option>
+
                 </select>
               </div>
 
