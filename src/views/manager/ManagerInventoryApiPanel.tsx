@@ -55,7 +55,7 @@ const statusLabels: Record<InventoryUnit["status"], string> = {
   available: "Còn trống",
   occupied: "Đang sử dụng",
   reserved: "Đã giữ cho khách",
-  assigned: "Đã phân gian",
+  assigned: "Đã phân kho",
   held: "Đang giữ tạm thời",
   maintenance: "Đang bảo trì",
   inactive: "Tạm ngưng",
@@ -199,7 +199,7 @@ function InventoryRead({
           const unit = read.data?.units.find(item => item.unitTypeId === type.id)
           return <article key={type.id} className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-100 p-4">
-              <div><div className="flex flex-wrap items-center gap-2"><h4 className="text-base font-bold">{type.name}</h4><Badge variant={detail?.status === 'active' ? 'success' : 'muted'}>{detail ? (({ active: 'Đang khai thác', awaiting_pricing: 'Chờ định giá', draft: 'Đang thiết lập', inactive: 'Tạm ngưng', archived: 'Đã lưu trữ' } as Record<string, string>)[detail.status] || 'Chưa xác định') : 'Đang tải'}</Badge></div><p className="mt-1 text-xs text-stone-500">Mã {type.code} · {type.total} gian · Tầng {unit?.floor || '—'} · {unit?.zone || 'Chưa có khu vực'}</p></div>
+              <div><div className="flex flex-wrap items-center gap-2"><h4 className="text-base font-bold">{type.name}</h4><Badge variant={detail?.status === 'active' ? 'success' : 'muted'}>{detail ? (({ active: 'Đang khai thác', awaiting_pricing: 'Chờ định giá', draft: 'Đang thiết lập', inactive: 'Tạm ngưng', archived: 'Đã lưu trữ' } as Record<string, string>)[detail.status] || 'Chưa xác định') : 'Đang tải'}</Badge></div><p className="mt-1 text-xs text-stone-500">Mã {type.code} · {type.total} gian · Tầng {unit?.floor || '-'} · {unit?.zone || 'Chưa có khu vực'}</p></div>
               <div className="flex gap-2">
             <Button variant="outline" disabled={actionBusy} onClick={async () => {
               setActionBusy(true); setActionError(undefined)
@@ -221,9 +221,9 @@ function InventoryRead({
                 <div><dt className="text-xs text-stone-500">Kích thước kho</dt><dd className="mt-1 font-medium">{detail.lengthM} × {detail.widthM} × {detail.heightM} m</dd></div>
                 <div><dt className="text-xs text-stone-500">Tình trạng sử dụng</dt><dd className="mt-1 font-medium">{detail.availableCount ?? 0} còn trống · {detail.occupiedCount ?? 0} đang dùng</dd></div>
                 <div><dt className="text-xs text-stone-500">Khung kệ</dt><dd className="mt-1 font-medium">{detail.rackCount} kệ, kích thước {detail.rackLengthM} × {detail.rackWidthM} × {detail.rackHeightM} m</dd></div>
-                <div><dt className="text-xs text-stone-500">Lối đi và xe đẩy</dt><dd className="mt-1 font-medium">Rộng {detail.aisleWidthM ?? '—'} m · {detail.trolleyType || 'Chưa khai báo'}</dd></div>
+                <div><dt className="text-xs text-stone-500">Lối đi và xe đẩy</dt><dd className="mt-1 font-medium">Rộng {detail.aisleWidthM ?? '-'} m · {detail.trolleyType || 'Chưa khai báo'}</dd></div>
                 <div><dt className="text-xs text-stone-500">Sức chứa dự kiến</dt><dd className="mt-1 font-medium">{detail.smallBoxCapacity ?? 0} thùng nhỏ · {detail.largeBoxCapacity ?? 0} thùng lớn</dd></div>
-                <div><dt className="text-xs text-stone-500">Tiền cọc đảm bảo kho</dt><dd className="mt-1 font-medium">{formatVndAmount(detail.securityDepositAmount)}</dd></div>
+                <div><dt className="text-xs text-stone-500">Tiền cọc đảm bảo thuê</dt><dd className="mt-1 font-medium">{formatVndAmount(detail.securityDepositAmount)}</dd></div>
               </dl>
             </div> : <p className="p-4 text-sm text-stone-500">Đang tải thông tin chi tiết loại kho...</p>}
           </article>
@@ -361,6 +361,23 @@ function CreateUnitTypeModal({ open, facilityId, existingCodes = [], onClose, on
     )
   }, [form.code, existingCodes, initial])
 
+  const validationErrors = useMemo(() => {
+    const list: string[] = []
+    if (!form.name.trim()) list.push("Tên loại kho không được để trống")
+    if (!form.code.trim()) list.push("Mã loại kho không được để trống")
+    if (isDuplicateCode) list.push("Mã loại kho đã tồn tại trong cơ sở")
+    if (selectedCategories.length === 0) list.push("Vui lòng chọn ít nhất 1 loại hàng được nhận")
+    if (Number(form.lengthM) <= 0) list.push("Chiều dài kho phải lớn hơn 0 m")
+    if (Number(form.widthM) <= 0) list.push("Chiều rộng kho phải lớn hơn 0 m")
+    if (Number(form.heightM) <= 0) list.push("Chiều cao kho phải lớn hơn 0 m")
+    if (Number(form.maxLoadKg) <= 0) list.push("Tải trọng tối đa phải lớn hơn 0 kg")
+    if (Number(form.aisleWidthM) <= 0) list.push("Chiều rộng lối đi phải lớn hơn 0 m")
+    if (!form.trolleyType.trim()) list.push("Loại xe đẩy hỗ trợ không được để trống")
+    return list
+  }, [form, isDuplicateCode, selectedCategories])
+
+  const isFormValid = validationErrors.length === 0
+
   const field = (key: keyof typeof form, label: string, type = 'text') => (
     <label className="block text-sm font-medium text-stone-700">{label}
       <input
@@ -373,7 +390,7 @@ function CreateUnitTypeModal({ open, facilityId, existingCodes = [], onClose, on
     </label>
   )
   const submit = async () => {
-    if (imageReading || isDuplicateCode) return
+    if (imageReading || !isFormValid) return
     setBusy(true); setError(undefined)
     try {
       const input = {
@@ -405,13 +422,16 @@ function CreateUnitTypeModal({ open, facilityId, existingCodes = [], onClose, on
           <label className="block text-sm font-medium text-stone-700">
             Tên loại kho *
             <input
-              className={`${inputClass} mt-1`}
+              className={`${inputClass} mt-1 ${!form.name.trim() ? "border-amber-400 focus:ring-amber-500" : ""}`}
               disabled={busy}
               type="text"
               placeholder="VD: Kho Đồ Gia Đình, Kho Mini..."
               value={form.name}
               onChange={event => handleNameChange(event.target.value)}
             />
+            {!form.name.trim() && (
+              <p className="mt-1 text-xs text-amber-600 font-medium">Vui lòng nhập tên loại kho.</p>
+            )}
           </label>
 
           {/* Mã loại kho (Phương án 2) */}
@@ -471,7 +491,7 @@ function CreateUnitTypeModal({ open, facilityId, existingCodes = [], onClose, on
               onChange={event => setForm(current => ({ ...current, code: event.target.value.toUpperCase() }))}
             />
             {isDuplicateCode && (
-              <p className="mt-1 text-xs text-red-600 font-medium">⚠️ Mã loại kho này đã tồn tại trong cơ sở.</p>
+              <p className="mt-1 text-xs text-red-600 font-medium">Mã loại kho này đã tồn tại trong cơ sở.</p>
             )}
           </div>
         </div>
@@ -584,9 +604,29 @@ function CreateUnitTypeModal({ open, facilityId, existingCodes = [], onClose, on
             {checked && <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{materials.map(material => <label key={material.id} className="flex items-center gap-2 rounded bg-stone-50 px-3 py-2 text-sm"><input type="checkbox" checked={selectedMaterials.includes(material.id)} onChange={event => setSelectedMaterials(current => event.target.checked ? [...new Set([...current, material.id])] : current.filter(id => id !== material.id))} />{material.label}{material.fragile ? ' · Dễ vỡ' : ''}</label>)}</div>}
           </div>
         })}
+        {selectedCategories.length === 0 && (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs font-semibold text-amber-800">
+            ⚠️ Vui lòng chọn ít nhất 1 loại hàng hóa mà loại kho này chấp nhận lưu trữ.
+          </p>
+        )}
       </section>
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p>}
-      <div className="flex justify-end gap-2 border-t border-stone-200 pt-4"><Button variant="outline" disabled={busy || imageReading} onClick={onClose}>Hủy</Button><Button disabled={busy || imageReading || !form.code.trim() || !form.name.trim() || isDuplicateCode || selectedCategories.length === 0} onClick={() => void submit()}>{imageReading ? 'Đang đọc ảnh…' : busy ? 'Đang lưu...' : initial ? 'Lưu thay đổi' : 'Thêm loại kho'}</Button></div>
+      {validationErrors.length > 0 && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+          <div className="font-semibold flex items-center gap-1.5 mb-1.5 text-amber-800">
+            <svg className="w-4 h-4 text-amber-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <span>Chưa đủ điều kiện lưu ({validationErrors.length} mục cần hoàn tất):</span>
+          </div>
+          <ul className="list-disc list-inside space-y-0.5 text-amber-800 pl-1">
+            {validationErrors.map((msg, idx) => (
+              <li key={idx}>{msg}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <div className="flex justify-end gap-2 border-t border-stone-200 pt-4"><Button variant="outline" disabled={busy || imageReading} onClick={onClose}>Hủy</Button><Button disabled={busy || imageReading || !isFormValid} onClick={() => void submit()}>{imageReading ? 'Đang đọc ảnh…' : busy ? 'Đang lưu...' : initial ? 'Lưu thay đổi' : 'Thêm loại kho'}</Button></div>
     </div>
   </Modal>
 }
@@ -681,7 +721,7 @@ export function InventoryContent({
         />
         <StatCard title="Đang sử dụng" value={occupied} icon={Icon.key} />
         <StatCard
-          title="Đã phân gian"
+          title="Đã phân kho"
           value={count("reserved") + count("assigned")}
           icon={Icon.calendar}
         />
@@ -707,7 +747,7 @@ export function InventoryContent({
             ["all", "Tất cả trạng thái"],
             ["available", statusLabels.available],
             ["occupied", statusLabels.occupied],
-            ["allocated", "Đã phân gian / giữ chỗ"],
+            ["allocated", "Đã phân kho / giữ chỗ"],
             ["held", statusLabels.held],
             ["maintenance", statusLabels.maintenance],
             ["inactive", statusLabels.inactive],

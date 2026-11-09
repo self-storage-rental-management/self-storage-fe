@@ -148,7 +148,7 @@ export interface CustomerStorageContext {
 
 /**
  * Requirement 6: Automatically map facility & unit from customer's active rentals and holds.
- * Eliminates "chưa xác định cơ sở" / "—"!
+ * Eliminates "chưa xác định cơ sở" / "-"!
  */
 export function resolveCustomerStorageContext(
   customerUser: User,
@@ -169,7 +169,7 @@ export function resolveCustomerStorageContext(
 
   const rentalsList = activeRentals.map(r => ({
     id: r.id,
-    facilityName: r.facilityName || 'Kho Việt – Cơ sở Quận 1',
+    facilityName: r.facilityName || 'Kho Việt - Cơ sở Quận 1',
     facilityId: r.facilityId || 'fac-001',
     unitId: r.unitId || 'Standard'
   }))
@@ -177,7 +177,7 @@ export function resolveCustomerStorageContext(
   if (activeRentals.length === 1) {
     const primary = activeRentals[0]
     return {
-      facility: primary.facilityName || 'Kho Việt – Cơ sở Quận 1',
+      facility: primary.facilityName || 'Kho Việt - Cơ sở Quận 1',
       facilityId: primary.facilityId || 'fac-001',
       unit: primary.unitId || 'Chưa gán gian',
       relatedType: 'rental',
@@ -190,7 +190,7 @@ export function resolveCustomerStorageContext(
   if (activeRentals.length > 1) {
     const primary = activeRentals[0]
     return {
-      facility: primary.facilityName || 'Kho Việt – Cơ sở Quận 1',
+      facility: primary.facilityName || 'Kho Việt - Cơ sở Quận 1',
       facilityId: primary.facilityId || 'fac-001',
       unit: primary.unitId || 'Chưa gán gian',
       relatedType: 'rental',
@@ -203,7 +203,7 @@ export function resolveCustomerStorageContext(
   if (activeHolds.length > 0) {
     const primaryHold = activeHolds[0]
     return {
-      facility: primaryHold.facilityName || 'Kho Việt – Cơ sở Quận 1',
+      facility: primaryHold.facilityName || 'Kho Việt - Cơ sở Quận 1',
       facilityId: primaryHold.facilityId || 'fac-001',
       unit: primaryHold.assignedUnitId || primaryHold.unitTypeName || 'Gian kho đã giữ',
       relatedType: 'reservation',
@@ -214,7 +214,7 @@ export function resolveCustomerStorageContext(
   }
 
   return {
-    facility: customerUser.facility || 'Kho Việt – Cơ sở Quận 1',
+    facility: customerUser.facility || 'Kho Việt - Cơ sở Quận 1',
     facilityId: customerUser.facilityId || 'fac-001',
     unit: 'Tư vấn chung',
     relatedType: 'general',
@@ -259,7 +259,7 @@ export function assignStaffWithWorkloadAndUrgency(params: {
   if (onlineStaff.length === 0) {
     const dutyManager = facilityRoster.find(s => s.role === 'manager') || {
       name: 'Quản lý cơ sở',
-      phone: '—',
+      phone: '-',
       initials: 'QL'
     }
 
@@ -272,7 +272,7 @@ export function assignStaffWithWorkloadAndUrgency(params: {
       priority: isUrgent ? 'high' : 'medium',
       estimatedWaitMinutes: isUrgent ? 5 : 480,
       estimatedWaitLabel: isUrgent
-        ? 'Kênh khẩn cấp 24/7 — Quản lý trực ca xử lý ngay trong 5-10 phút'
+        ? 'Kênh khẩn cấp 24/7 - Quản lý trực ca xử lý ngay trong 5-10 phút'
         : 'Đầu ca sáng mai (08:00)',
       queuePosition: 1,
       emergencyHotline: '1900 8820',
@@ -320,10 +320,10 @@ export function assignStaffWithWorkloadAndUrgency(params: {
   if (isUrgent) {
     if (selected.urgentCount === 0) {
       waitMinutes = 5
-      waitLabel = `~5 - 8 phút (Ưu tiên xử lý khẩn cấp — ${member.name} tiếp nhận ngay)`
+      waitLabel = `~5 - 8 phút (Ưu tiên xử lý khẩn cấp - ${member.name} tiếp nhận ngay)`
     } else {
       waitMinutes = 10
-      waitLabel = `~8 - 12 phút (Ưu tiên cao — ${member.name} đang hoàn tất 1 ca khẩn khác)`
+      waitLabel = `~8 - 12 phút (Ưu tiên cao - ${member.name} đang hoàn tất 1 ca khẩn khác)`
     }
   } else {
     if (openCount === 0) {

@@ -13,7 +13,7 @@ export function rentalPeriodText(rental: RentalApiRecord, showTechnicalWarning =
 
 export const rentalLabels: Record<string, string> = {
   setup: "Đang chuẩn bị",
-  active: "Đang hiệu lực",
+  active: "Đang hoạt động",
   return_requested: "Đã yêu cầu trả kho",
   return_inspection: "Đang kiểm tra trả kho",
   closing: "Đang quyết toán",
@@ -39,7 +39,7 @@ export function rentalMoney(
   currency: string,
 ) {
   if (value == null || !Number.isFinite(value)) return unknown
-  // Wire values are applied amounts, never legacy USD-base values.
+  // Monetary API values are already VND and must not be converted.
   return `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 2 }).format(value)} ${
     currency === "VND" ? "đ" : currency
   }`

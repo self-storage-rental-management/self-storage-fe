@@ -100,6 +100,29 @@ export interface RentalBookingEvidence {
     projectRecognition?: { environment: string; enabled: boolean; eligibleForReconciliation: boolean; reason: string }
   }[]
   paymentsTruncated: boolean
+  customer?: {
+    fullName: string
+    email: string
+    phone: string | null
+    address: string | null
+    identityDocumentNumber: string | null
+  } | null
+  goodsItems?: {
+    id: string
+    goodsCode: string
+    categoryName: string | null
+    materialName: string | null
+    customGoodsName: string | null
+    description: string | null
+    quantity: number
+    lengthCm: number
+    widthCm: number
+    heightCm: number
+    weightPerItemKg: number
+    fragile: boolean
+    customerNote: string | null
+    images: { id: string; originalName: string; contentType: string; sizeBytes: number }[]
+  }[]
 }
 export interface RentalApiQuery {
   page?: number

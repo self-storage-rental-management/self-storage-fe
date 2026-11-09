@@ -26,7 +26,12 @@ export function isRentalBookingEvidence(value: unknown, rentalId: string, reserv
   const equal = (a: number, b: number) => Math.abs(a - b) <= 0.005
   if (e.rentalId !== rentalId || !reservationId || e.reservationId !== reservationId || e.currency !== "VND" ||
     typeof e.paymentsTruncated !== "boolean" || !Array.isArray(e.payments) || e.payments.length > 20 ||
-    (e.paymentsTruncated && e.payments.length !== 20)) return false
+    (e.paymentsTruncated && e.payments.length !== 20) ||
+    !(e.customer == null || (typeof e.customer?.fullName === "string" && typeof e.customer.email === "string" &&
+      (e.customer.phone === null || typeof e.customer.phone === "string") &&
+      (e.customer.address === null || typeof e.customer.address === "string") &&
+      (e.customer.identityDocumentNumber === null || typeof e.customer.identityDocumentNumber === "string"))) ||
+    !(e.goodsItems == null || Array.isArray(e.goodsItems))) return false
   if (e.agreedAmounts !== null) {
     const a = e.agreedAmounts
     if (!a || ![a.netRentalAmount, a.reservationDepositAmount, a.securityDepositAmount,
@@ -36,6 +41,11 @@ export function isRentalBookingEvidence(value: unknown, rentalId: string, reserv
       !equal(a.netRentalAmount + a.securityDepositAmount, a.totalInitialObligation)) return false
   }
   const ids = new Set<string>()
+  if (!(e.goodsItems ?? []).every(item => item && typeof item.id === "string" && typeof item.goodsCode === "string" &&
+    Number.isSafeInteger(item.quantity) && item.quantity > 0 &&
+    [item.lengthCm,item.widthCm,item.heightCm,item.weightPerItemKg].every(money) && typeof item.fragile === "boolean" &&
+    Array.isArray(item.images) && item.images.every(image => image && typeof image.id === "string" && typeof image.originalName === "string" &&
+      typeof image.contentType === "string" && Number.isSafeInteger(image.sizeBytes) && image.sizeBytes >= 0))) return false
   return e.payments.every(p => {
     if (!p || typeof p.id !== "string" || !p.id.trim() || ids.has(p.id) || !money(p.amount) ||
       typeof p.purpose !== "string" || typeof p.status !== "string" ||

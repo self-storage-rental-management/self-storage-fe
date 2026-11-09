@@ -23,8 +23,8 @@ export default function CustomerReservationOtpModal({
   now: number
   onCodeChange: (value: string) => void
   onClose: () => void
-  onResend: () => void
-  onVerify: () => void
+  onResend: () => void | Promise<unknown>
+  onVerify: () => void | Promise<unknown>
 }) {
   const resendSeconds = Math.max(0, Math.ceil((nextResendAt - now) / 1000))
 
@@ -33,6 +33,7 @@ export default function CustomerReservationOtpModal({
       <p className="text-sm text-stone-600">
         Nhập mã OTP 6 chữ số đã gửi tới <b className="text-stone-900">{reservation?.customerEmail || 'email tài khoản của bạn'}</b> cho đơn <b>{reservation?.reservationCode}</b>.
       </p>
+      <p className="text-xs leading-5 text-stone-600">OTP xác nhận bạn chủ động đặt đơn này. Suất kho được giữ tối đa 10 phút từ khi tạo đơn; gửi lại mã không kéo dài thời hạn giữ kho. Thời hạn thanh toán chỉ bắt đầu sau khi xác minh và duyệt hàng hóa nếu cần.</p>
       <Input
         label="Mã OTP"
         value={code}

@@ -14,7 +14,7 @@ import { rentalDate, rentalMoney } from "../rental-api/presentation"
 
 const kinds = {
   RENT: "Tiền thuê",
-  SECURITY_DEPOSIT: "Cọc bảo đảm",
+  SECURITY_DEPOSIT: "Tiền cọc đảm bảo thuê",
   RENEWAL_DEPOSIT: "Tiền thuê gia hạn trả trước",
   RENEWAL_REMAINDER: "Tiền thuê gia hạn còn lại",
 }
@@ -94,7 +94,7 @@ function CoverageDetails({ data }: { data: LedgerView }) {
     if (gap === "PAYMENT_DISPUTED") return "Có giao dịch đang được khiếu nại."
     if (gap === "SANDBOX_RECEIPT_BINDING_INVALID") return "Chứng cứ hoặc phân bổ VNPay Sandbox không khớp dữ liệu đã lưu."
     if (gap.includes("PAYMENT") || gap.includes("RECEIPT")) return "Chứng cứ thu tiền chưa được đối soát đầy đủ."
-    if (gap.includes("SECURITY_DEPOSIT")) return "Chưa xác minh số tiền cọc đang được giữ."
+    if (gap.includes("SECURITY_DEPOSIT")) return "Chưa xác minh tiền cọc đảm bảo thuê đang được giữ."
     if (gap.includes("RENEWAL")) return "Nghĩa vụ gia hạn chưa được xác minh đầy đủ."
     return "Dữ liệu tài chính lịch sử chưa được xác minh đầy đủ."
   }))]

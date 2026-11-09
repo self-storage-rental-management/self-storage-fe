@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent, type ReactNode, type HTMLAttributes, type InputHTMLAttributes, type TdHTMLAttributes } from 'react'
+import { useRef, useState, type ChangeEvent, type MouseEvent, type ReactNode, type HTMLAttributes, type InputHTMLAttributes, type TdHTMLAttributes } from 'react'
 import LocalizedDateInput from './LocalizedDateInput'
 
 // ─── Badge ───────────────────────────────────────────────────────────────────
@@ -39,18 +39,37 @@ const btnSizes: Record<BtnSize, string> = {
   lg: 'text-sm px-5 py-2.5',
 }
 
-interface ButtonProps extends HTMLAttributes<HTMLButtonElement> {
+interface ButtonProps extends Omit<HTMLAttributes<HTMLButtonElement>, 'onClick'> {
+  onClick?: (event: MouseEvent<HTMLButtonElement>) => unknown
   variant?: BtnVariant
   size?: BtnSize
   disabled?: boolean
   type?: 'button' | 'submit' | 'reset'
 }
 
-export function Button({ variant = 'primary', size = 'md', className = '', children, disabled, ...rest }: ButtonProps) {
+export function Button({ variant = 'primary', size = 'md', className = '', children, disabled, onClick, ...rest }: ButtonProps) {
+  const clickLock = useRef(false)
+  const [pending, setPending] = useState(false)
+  const handleClick = async (event: MouseEvent<HTMLButtonElement>) => {
+    if (disabled || clickLock.current) { event.preventDefault(); return }
+    clickLock.current = true
+    try {
+      const result = onClick?.(event)
+      if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
+        setPending(true)
+        await result
+      }
+    } finally {
+      clickLock.current = false
+      setPending(false)
+    }
+  }
   return (
     <button
-      className={`${btnBase} ${btnVariants[variant]} ${btnSizes[size]} ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
-      disabled={disabled}
+      className={`${btnBase} ${btnVariants[variant]} ${btnSizes[size]} ${disabled || pending ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
+      disabled={disabled || pending}
+      aria-busy={pending || undefined}
+      onClick={handleClick}
       {...rest}
     >
       {children}
@@ -170,7 +189,7 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 export function Input({ label, className = '', ...props }: InputProps) {
   return (
     <div className="space-y-1">
-      {label && <label className="block whitespace-nowrap text-sm font-medium text-stone-700">{label}</label>}
+      {label && <label className="block text-sm font-medium text-stone-700 leading-tight">{label}</label>}
       <LocalizedDateInput
         className={`w-full border border-stone-300 rounded-lg px-3 py-2 text-sm text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition ${className}`}
         {...props}
@@ -201,7 +220,7 @@ export function PasswordField({
 
   return (
     <div className="space-y-1">
-      {label && <label htmlFor={id} className="block whitespace-nowrap text-sm font-medium text-stone-700">{label}</label>}
+      {label && <label htmlFor={id} className="block text-sm font-medium text-stone-700 leading-tight">{label}</label>}
       <div className="relative">
         <input
           {...props}
@@ -249,7 +268,7 @@ export function Select({ label, children, className = '', value, onChange, disab
 }) {
   return (
     <div className="space-y-1">
-      {label && <label className="block whitespace-nowrap text-sm font-medium text-stone-700">{label}</label>}
+      {label && <label className="block text-sm font-medium text-stone-700 leading-tight">{label}</label>}
       <select
         className={`w-full border border-stone-300 rounded-lg px-3 py-2 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition bg-white ${className}`}
         value={value}

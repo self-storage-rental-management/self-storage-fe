@@ -77,7 +77,7 @@ const toUiStatus = (status: ApiUserStatus): AccountStatus =>
 
 function formatDate(value: string) {
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('vi-VN')
+  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleDateString('vi-VN')
 }
 
 function formatRelativeTime(dateStr: string | null | undefined): string {
@@ -854,7 +854,7 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
             <span className="font-semibold text-stone-800">
               {accounts.length === 0 ? 0 : page * pageSize + 1}
             </span>{' '}
-            –{' '}
+            -{' '}
             <span className="font-semibold text-stone-800">
               {Math.min((page + 1) * pageSize, totalItems)}
             </span>{' '}
@@ -904,7 +904,7 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
         onClose={() => setModalOpen(false)}
         title={
           selected
-            ? `Chỉnh Sửa Người Dùng – ${selected.fullName}`
+            ? `Chỉnh Sửa Người Dùng - ${selected.fullName}`
             : mode === 'customer-support'
               ? 'Tạo hộ tài khoản khách thuê kho'
               : 'Tạo tài khoản nội bộ'
@@ -1119,8 +1119,9 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
             >
               <p className="font-bold">
                 {confirmStatusModal.status === 'ACTIVE'
-                  ? '⚠️ Cảnh báo hành động tạm khóa tài khoản:'
-                  : '✓ Thông báo mở khóa tài khoản:'}
+                  ? 'Cảnh báo hành động tạm khóa tài khoản:'
+                  : 'Thông báo mở khóa tài khoản:'}
+
               </p>
               <p className="mt-1">
                 Bạn đang chuẩn bị {confirmStatusModal.status === 'ACTIVE' ? 'tạm khóa' : 'mở khóa'} tài khoản{' '}

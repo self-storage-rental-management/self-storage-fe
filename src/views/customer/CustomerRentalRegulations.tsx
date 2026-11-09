@@ -1,5 +1,6 @@
 import { Card, Badge } from '../../components/ui'
 import { REGULATIONS } from '../../data/rentalRegulationsData'
+import CustomerTransactionTerms from './CustomerTransactionTerms'
 
 interface Props {
   facilityName?: string
@@ -15,13 +16,13 @@ export default function CustomerRentalRegulations({ facilityName }: Props) {
         <div className="relative z-10 space-y-1.5 max-w-2xl">
           <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-400/20 text-amber-200 border border-amber-300/30">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-            Văn bản ban hành chính thức · Áp dụng toàn hệ thống {facilityName ? `· ${facilityName}` : ''}
+            Quy định dịch vụ StorageHub {facilityName ? `· ${facilityName}` : ''}
           </div>
           <h3 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white uppercase">
             QUY ĐỊNH CHO THUÊ KHO STORAGEHUB
           </h3>
           <p className="text-stone-300 text-sm leading-7">
-            Văn bản pháp quy chuẩn hóa quyền và nghĩa vụ của Khách hàng cùng StorageHub, quy định chi tiết về phạm vi sử dụng, giá thuê & thanh toán, điều kiện an toàn, xử lý sự cố và bàn giao kho.
+            Quy định dịch vụ đi kèm báo giá và hợp đồng đã chấp nhận, giúp khách hàng đối chiếu quyền, nghĩa vụ, khoản phí và trình tự bàn giao kho.
           </p>
         </div>
       </div>
@@ -54,7 +55,7 @@ export default function CustomerRentalRegulations({ facilityName }: Props) {
             </div>
           </div>
           <p className="text-sm text-slate-600 mt-2 leading-7">
-            Minh bạch biểu giá, tiền cọc đảm bảo kho, các khoản phí và điều kiện gia hạn trước hạn.
+            Minh bạch biểu giá, tiền cọc đảm bảo thuê, các khoản phí và điều kiện gia hạn trước hạn.
           </p>
         </Card>
 
@@ -138,13 +139,14 @@ export default function CustomerRentalRegulations({ facilityName }: Props) {
             Hiệu lực thi hành và tính pháp lý
           </h5>
           <p>
-            1. Bản Quy định này có hiệu lực kể từ ngày StorageHub ban hành chính thức và được dẫn chiếu mặc định vào toàn bộ các Hợp đồng thuê kho, Phiếu xác nhận đặt giữ kho (Hold/Reservation) và Biên bản bàn giao kho.
+            1. Áp dụng phiên bản điều khoản được cung cấp và khách hàng chấp nhận khi giao dịch. Báo giá, hợp đồng và biên bản đã lưu là căn cứ đối chiếu; nội dung mới không tự động thay đổi nghĩa vụ đã chốt.
           </p>
           <p>
-            2. Khi có sự thay đổi, bổ sung điều khoản, StorageHub sẽ thông báo công khai trước ít nhất 15 ngày trên cổng quản trị hệ thống và gửi email thông báo đến các khách hàng đang có hợp đồng hiệu lực.
+            2. Thay đổi cần nêu rõ nội dung, thời điểm và hồ sơ chịu ảnh hưởng, gửi thông báo cho khách đang sử dụng dịch vụ và lấy xác nhận khi cần. Không mặc nhiên áp phí mới hoặc hạn chế quyền khiếu nại của khách hàng.
           </p>
         </div>
       </div>
+      <CustomerTransactionTerms />
     </section>
   )
 }

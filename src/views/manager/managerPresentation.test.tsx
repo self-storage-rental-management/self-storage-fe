@@ -52,11 +52,11 @@ describe('Manager-only readable presentation', () => {
     expect(other).not.toContain('text-sm leading-relaxed')
   })
   it('translates labels and punctuation without changing their source values', () => {
-    const source = { status: 'CONFIRMED', label: 'Staff — Customer; Manager' }
+    const source = { status: 'CONFIRMED', label: 'Staff - Customer; Manager' }
     expect(managerDisplayText(source.status)).toBe('Đã xác nhận')
     expect(managerDisplayText(source.label)).toBe('nhân viên - khách hàng, quản lý cơ sở')
     expect(source.status).toBe('CONFIRMED')
-    expect(source.label).toBe('Staff — Customer; Manager')
+    expect(source.label).toBe('Staff - Customer; Manager')
   })
   it('removes operational banners but preserves safety warnings without the prefix', () => {
     expect(renderToStaticMarkup(<ManagerActionNotice>Chờ nhân viên</ManagerActionNotice>)).toBe('')

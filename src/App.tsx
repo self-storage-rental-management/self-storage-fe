@@ -200,7 +200,16 @@ function MainContent() {
 
   const handleLogin = (nextUser: User) => {
     if (['/login', '/register', '/verify-email', '/reset-password', '/profile', '/profile/security'].includes(normalizedPathname())) {
-      window.history.replaceState(null, '', '/')
+      const incoming = new URLSearchParams(window.location.search)
+      const preserved = new URLSearchParams()
+      const section = incoming.get('emailSection')
+      if (section && ['reservations', 'rental-records', 'payments', 'policies'].includes(section)) {
+        preserved.set('emailSection', section)
+        const reservationId = incoming.get('reservationId')
+        if (reservationId) preserved.set('reservationId', reservationId)
+      }
+      const query = preserved.toString()
+      window.history.replaceState(null, '', query ? `/?${query}` : '/')
     }
     const authenticatedActor = getAuthenticatedActor()
     if (authenticatedActor) {
@@ -271,7 +280,7 @@ function MainContent() {
 
   return <>
     {logoutError && <div role="alert" className="fixed left-1/2 top-4 z-[100] flex w-[min(560px,calc(100vw-32px))] -translate-x-1/2 items-start gap-3 rounded-xl bg-amber-50 p-4 text-sm text-stone-800 shadow-lg"><p>{logoutError}</p><button type="button" aria-label="Đóng thông báo đăng xuất" onClick={() => setLogoutError(undefined)} className="shrink-0 px-1">×</button></div>}
-    <div inert={loggingOut} aria-busy={loggingOut}>
+    <div className="h-full" inert={loggingOut} aria-busy={loggingOut}>
       <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-stone-100 text-sm font-medium text-stone-600">Đang tải không gian làm việc…</div>}>{roleApp}</Suspense>
     </div>
     <dialog ref={logoutDialog} aria-label="Đang đăng xuất" onCancel={event => event.preventDefault()} className="fixed inset-0 m-auto rounded-xl border-0 bg-white p-5 text-sm text-stone-700 shadow-lg backdrop:bg-black/20"><p role="status">Đang lưu cuộc trò chuyện và đăng xuất…</p></dialog>

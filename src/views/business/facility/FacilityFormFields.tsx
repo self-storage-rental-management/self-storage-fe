@@ -122,6 +122,25 @@ export function generateFacilityCode(
   return candidate
 }
 
+export function isFacilityPhoneValid(phone: string): boolean {
+  if (!phone.trim()) return true
+  const clean = phone.replace(/[\s().-]/g, '')
+  return /^(?:0(?:2\d{8,9}|[35789]\d{8})|\+?84(?:2\d{8,9}|[35789]\d{8})|(?:1900|1800)\d{4,6})$/.test(clean)
+}
+
+export function isFacilityAccessHoursValid(hours: string): boolean {
+  if (!hours.trim()) return true
+  const trimmed = hours.trim()
+  if (trimmed === '24/7') return true
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})$/)
+  if (!match) return false
+  const [, h1, m1, h2, m2] = match
+  const hour1 = Number(h1), min1 = Number(m1)
+  const hour2 = Number(h2), min2 = Number(m2)
+  return hour1 >= 0 && hour1 <= 23 && min1 >= 0 && min1 <= 59 &&
+         hour2 >= 0 && hour2 <= 23 && min2 >= 0 && min2 <= 59
+}
+
 export const FacilityGeneralInfo: React.FC<FacilityGeneralInfoProps> = ({
   isEditing,
   code,
@@ -188,7 +207,7 @@ export const FacilityGeneralInfo: React.FC<FacilityGeneralInfoProps> = ({
   )
 
   // Validate Vietnamese phone number
-  const isPhoneValid = !phone.trim() || /^(0[35789]\d{8}|(024|028)\d{8}|(1900|1800)\d{4,6})$/.test(phone.replace(/\s+/g, ''))
+  const isPhoneValid = isFacilityPhoneValid(phone)
 
   // Check code modified warning in Edit mode
   const isCodeModified = isEditing && initialCode && code.trim().toUpperCase() !== initialCode.trim().toUpperCase()
@@ -394,6 +413,18 @@ export interface FacilityOperationsProps {
   lang?: 'vi' | 'en'
 }
 
+const parseHours = (raw: string) => {
+  const match = raw?.match(/(\d{1,2}):(\d{2}).*?(\d{1,2}):(\d{2})/)
+  if (match) {
+    const h1 = match[1].padStart(2, '0')
+    const m1 = match[2]
+    const h2 = match[3].padStart(2, '0')
+    const m2 = match[4]
+    return { open: `${h1}:${m1}`, close: `${h2}:${m2}` }
+  }
+  return { open: '08:00', close: '17:00' }
+}
+
 export const FacilityOperations: React.FC<FacilityOperationsProps> = ({
   accessHours,
   onChangeAccessHours,
@@ -403,6 +434,19 @@ export const FacilityOperations: React.FC<FacilityOperationsProps> = ({
   initialStatus,
   lang = 'vi',
 }) => {
+  const { open: openTime, close: closeTime } = parseHours(accessHours)
+  const isHoursValid = isFacilityAccessHoursValid(accessHours)
+
+  const handleOpenTimeChange = (newOpen: string) => {
+    const current = parseHours(accessHours)
+    onChangeAccessHours(`${newOpen || '08:00'} - ${current.close}`)
+  }
+
+  const handleCloseTimeChange = (newClose: string) => {
+    const current = parseHours(accessHours)
+    onChangeAccessHours(`${current.open} - ${newClose || '17:00'}`)
+  }
+
   return (
     <div className="pt-2">
       <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-2">
@@ -410,21 +454,72 @@ export const FacilityOperations: React.FC<FacilityOperationsProps> = ({
       </h4>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-6">
         {/* Khung giờ mở cửa */}
-        <div>
-          <label className="block text-xs font-semibold text-stone-700 mb-1">
-            {lang === 'vi' ? 'Khung giờ mở cửa' : 'Opening Hours'}
-          </label>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="block text-xs font-semibold text-stone-700">
+              {lang === 'vi' ? 'Khung giờ mở cửa' : 'Opening Hours'}
+            </label>
+            <span className="text-[11px] font-mono font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+              {accessHours || '08:00 - 17:00'}
+            </span>
+          </div>
 
-          {/* Ô nhập trực tiếp giờ hoạt động */}
-          <input
-            type="text"
-            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white text-stone-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
-            placeholder="08:00 - 17:00"
-            value={accessHours}
-            onChange={(e) => onChangeAccessHours(e.target.value)}
-          />
+          {/* Chọn giờ bắt đầu và giờ kết thúc */}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <span className="block text-[11px] font-medium text-stone-500 mb-1">
+                {lang === 'vi' ? 'Giờ mở cửa' : 'Open time'}
+              </span>
+              <input
+                type="time"
+                className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm bg-white font-medium text-stone-800 focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer"
+                value={openTime}
+                onChange={(e) => handleOpenTimeChange(e.target.value)}
+              />
+            </div>
+            <div>
+              <span className="block text-[11px] font-medium text-stone-500 mb-1">
+                {lang === 'vi' ? 'Giờ đóng cửa' : 'Close time'}
+              </span>
+              <input
+                type="time"
+                className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm bg-white font-medium text-stone-800 focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer"
+                value={closeTime}
+                onChange={(e) => handleCloseTimeChange(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Các nút chọn nhanh (Quick presets) */}
+          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+            <span className="text-[10px] text-stone-400 mr-0.5">{lang === 'vi' ? 'Chọn nhanh:' : 'Presets:'}</span>
+            {[
+              { label: '08:00 - 17:00', desc: 'Hành chính', value: '08:00 - 17:00' },
+              { label: '07:00 - 21:00', desc: 'Cả ngày', value: '07:00 - 21:00' },
+              { label: '06:00 - 22:00', desc: 'Mở rộng', value: '06:00 - 22:00' },
+              { label: '24/7', desc: '00:00 - 23:59', value: '00:00 - 23:59' },
+            ].map((preset) => (
+              <button
+                key={preset.value}
+                type="button"
+                onClick={() => onChangeAccessHours(preset.value)}
+                className={`text-[11px] px-2 py-0.5 rounded border transition cursor-pointer ${
+                  accessHours === preset.value
+                    ? 'border-amber-400 bg-amber-100 text-amber-900 font-semibold'
+                    : 'border-stone-200 bg-stone-50 text-stone-600 hover:bg-stone-100'
+                }`}
+                title={`${preset.label} (${preset.desc})`}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+          {!isHoursValid && (
+            <p className="text-[10px] font-semibold text-red-600 mt-1">
+              {lang === 'vi' ? 'Định dạng giờ mở cửa không hợp lệ (VD: 08:00 - 17:00 hoặc 24/7)' : 'Invalid opening hours format (e.g. 08:00 - 17:00 or 24/7)'}
+            </p>
+          )}
         </div>
-
         {/* Trạng thái hoạt động (chỉ dùng Tiếng Việt) */}
         <div>
           <label className="block text-xs font-semibold text-stone-700 mb-1">
@@ -436,7 +531,7 @@ export const FacilityOperations: React.FC<FacilityOperationsProps> = ({
             disabled={statusReadOnly}
             onChange={(e) => onChangeStatus(e.target.value as FacilityOperationsProps['status'])}
           >
-            <option value="setup">Đang thiết lập — chưa có loại kho/giá</option>
+            <option value="setup">Đang thiết lập - chưa có loại kho/giá</option>
             <option value="active">Đang hoạt động</option>
             <option value="maintenance">Bảo trì</option>
             <option value="inactive">Ngừng hoạt động</option>

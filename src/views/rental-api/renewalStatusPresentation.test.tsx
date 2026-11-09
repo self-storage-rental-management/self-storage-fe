@@ -19,6 +19,26 @@ const payment: RenewalVnpayPaymentResponse = { paymentId: 'p1', renewalId: renew
   settlementStage: 'VERIFIED_AWAITING_ALLOCATION', transactionStatus: 'RECONCILIATION_REQUIRED', receiptAvailable: false }
 
 describe('independent renewal states', () => {
+  it('keeps calculation and transaction references in collapsed details', () => {
+    const html = renderToStaticMarkup(<RenewalStatusPanel summary={summary} onReceipt={() => {}} />)
+    expect(html).toContain('Thanh toán gia hạn')
+    expect(html).toContain('Tổng phải trả')
+    expect(html).toContain('Còn lại')
+    expect(html).toMatch(/<details[^>]*><summary[^>]*>Chi tiết tính tiền/)
+    expect(html).toMatch(/<details[^>]*><summary[^>]*>Mã giao dịch/)
+    expect(html).not.toContain('<details open')
+    expect(html).toContain('Xem biên lai')
+  })
+  it('omits removed adjustment, due-date and explanatory content', () => {
+    const html = renderToStaticMarkup(<RenewalStatusPanel summary={{ ...summary,
+      invoice: { ...summary.invoice, dueNowAmount: 2000000, overdueAmount: 1000000 },
+    }} onReceipt={() => {}} />)
+    expect(html).not.toContain('Điều chỉnh giảm đã ghi nhận')
+    expect(html).not.toContain('Đến hạn')
+    expect(html).not.toContain('quá hạn thanh toán')
+    expect(html).not.toContain('Số đã thanh toán là tiền')
+    expect(html).not.toContain('không đồng nghĩa đã hoàn tất ký gia hạn')
+  })
   it('does not advance progress or expose a receipt based on PAID without reconciliation', () => {
     expect(reconciledRenewalPayment(payment)).toBe(false)
     expect(renewalPaymentDisplayLabel(payment)).toBe('Chờ đối soát')
@@ -28,10 +48,9 @@ describe('independent renewal states', () => {
   it('shows a partial invoice independently of a successful prepayment and signing workflow', () => {
     expect(isRenewalStatusSummary(summary)).toBe(true)
     const html = renderToStaticMarkup(<RenewalStatusPanel summary={summary} onReceipt={() => {}} />)
-    expect(html).toContain('Đã thanh toán một phần')
+    expect(html).toContain('Đã thanh toán cọc gia hạn')
     expect(html).toContain('Thanh toán thành công')
     expect(html).toContain('4.000.000 đ')
-    expect(html).toContain('không đồng nghĩa đã hoàn tất ký gia hạn')
     expect(html).not.toContain('trả theo tháng')
     expect(renewalProgress({ ...renewal, status: 'deposit_paid', statusSummary: summary }, null)).toBe(4)
   })

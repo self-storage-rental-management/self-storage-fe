@@ -1,9 +1,11 @@
 /** Values emitted by the backend API. Demo/local-store aliases are normalized here. */
-export type ApiReservationStatus =
-  | 'AWAITING_EMAIL' | 'AWAITING_REVIEW' | 'AWAITING_PAYMENT'
-  | 'PAYMENT_GRACE' | 'PAYMENT_REVIEW' | 'CONFIRMED' | 'UNIT_RESERVED'
-  | 'READY_FOR_CHECKIN' | 'AWAITING_CUSTOMER_RECEIPT' | 'COMPLETED'
-  | 'CANCELLED' | 'EXPIRED' | 'REJECTED'
+export const reservationStatusValues = [
+  'AWAITING_EMAIL', 'AWAITING_REVIEW', 'AWAITING_PAYMENT',
+  'PAYMENT_GRACE', 'PAYMENT_REVIEW', 'CONFIRMED', 'UNIT_RESERVED',
+  'READY_FOR_CHECKIN', 'AWAITING_CUSTOMER_RECEIPT', 'PREPARING', 'COMPLETED',
+  'CANCELLED', 'EXPIRED', 'REJECTED',
+] as const
+export type ApiReservationStatus = (typeof reservationStatusValues)[number]
 
 export type ApiPaymentStatus = 'PENDING' | 'PROCESSING' | 'PAID' | 'NOT_RECEIVED' | 'FAILED' | 'CANCELLED'
 export type ApiInvoiceStatus = 'DRAFT' | 'PAID' | 'VOID' | 'REFUNDED'
@@ -33,7 +35,7 @@ export type RenewalWorkflowStatus = (typeof renewalWorkflowStatusValues)[number]
 /** Workflow values emitted by the backend check-in API. */
 export type CheckInStatus =
   | 'scheduled' | 'identity_verified' | 'contract_signed' | 'payment_collected'
-  | 'setup_in_progress' | 'setup_completed' | 'completed' | 'rejected'
+  | 'handover_pending_receipt' | 'setup_in_progress' | 'setup_completed' | 'completed' | 'rejected'
   | 'no_show' | 'cancelled'
 
 /** Compatibility aliases used by the check-in service layer. */
@@ -42,7 +44,7 @@ export type PaymentStatus = ApiPaymentStatus
 
 const checkInStatusValues: readonly CheckInStatus[] = [
   'scheduled', 'identity_verified', 'contract_signed', 'payment_collected',
-  'setup_in_progress', 'setup_completed', 'completed', 'rejected', 'no_show', 'cancelled',
+  'handover_pending_receipt', 'setup_in_progress', 'setup_completed', 'completed', 'rejected', 'no_show', 'cancelled',
 ]
 
 const renewalStatusValues: readonly ApiRenewalStatus[] = [
@@ -60,6 +62,7 @@ const reservationAliases: Record<string, ApiReservationStatus> = {
   deposit_paid: 'CONFIRMED',
   UNIT_RESERVED: 'UNIT_RESERVED',
   READY_FOR_CHECKIN: 'READY_FOR_CHECKIN',
+  PREPARING: 'PREPARING',
   COMPLETED: 'COMPLETED',
   CANCELLED: 'CANCELLED',
   cancelled: 'CANCELLED',
@@ -71,7 +74,7 @@ const reservationAliases: Record<string, ApiReservationStatus> = {
 
 export function normalizeReservationStatus(value: unknown): ApiReservationStatus | null {
   if (typeof value !== 'string') return null
-  return reservationAliases[value] ?? (Object.values(reservationAliases).includes(value as ApiReservationStatus)
+  return reservationAliases[value] ?? ((reservationStatusValues as readonly string[]).includes(value)
     ? value as ApiReservationStatus : null)
 }
 

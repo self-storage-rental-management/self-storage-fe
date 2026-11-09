@@ -2,7 +2,7 @@ import type { ReservationPaymentResult } from '../../services/customerReservatio
 
 // Booking acceptance comes from the Reservation lifecycle, not PaymentStatus.PAID alone.
 const acceptedReservationStatuses = new Set([
-  'CONFIRMED', 'UNIT_RESERVED', 'READY_FOR_CHECKIN', 'AWAITING_CUSTOMER_RECEIPT', 'COMPLETED',
+  'CONFIRMED', 'UNIT_RESERVED', 'READY_FOR_CHECKIN', 'AWAITING_CUSTOMER_RECEIPT', 'PREPARING', 'COMPLETED',
 ])
 
 export function bookingDepositAccepted(payment: ReservationPaymentResult): boolean {

@@ -10,7 +10,7 @@ const ROLE_ORDER: ApiRoleCode[] = ['ADMIN', 'BUSINESS', 'MANAGER', 'STAFF', 'CUS
 function formatDateTime(value: string) {
   const date = new Date(value)
   return Number.isNaN(date.getTime())
-    ? '—'
+    ? '-'
     : date.toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
 }
 

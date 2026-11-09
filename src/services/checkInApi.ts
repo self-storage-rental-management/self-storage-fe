@@ -291,6 +291,8 @@ export async function confirmCheckInPayment(checkInId: string, note?: string) {
 export async function startCheckInSetup(checkInId: string, request: {
   lockReference: string
   note?: string
+  initialUnitCondition?: string
+  evidenceReferences?: string[]
 }) {
   return assertEnvelope(await apiRequest<unknown>(
     `/api/staff/check-ins/${encodeURIComponent(checkInId)}/setup/start`,
@@ -357,6 +359,12 @@ export async function rejectCheckIn(
 }
 
 export async function uploadCheckInEvidence(checkInId: string, file: File) {
+  if (file.size > 25 * 1024 * 1024) {
+    throw new ApiClientError(
+      "Tệp vượt quá dung lượng tối đa 25MB. Vui lòng chọn tệp nhỏ hơn.",
+      { code: 'FILE_TOO_LARGE', status: 413 }
+    )
+  }
   const form = new FormData()
   form.set('file', file)
   form.set('entityType', 'CHECK_IN')

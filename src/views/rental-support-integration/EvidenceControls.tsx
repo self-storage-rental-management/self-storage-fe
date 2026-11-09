@@ -101,11 +101,16 @@ export function EvidenceUpload({
         {value.map((id, index) => <div key={id} className="support-selected-file">
           <svg aria-hidden="true" className="show-icon h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg>
           <span className="min-w-0 truncate" title={selectedNames[id]}>{selectedNames[id] || `Tệp ${index + 1}`}</span>
+          <EvidenceDownload id={id} previewOnly compact previewLabel="Xem trước" />
           <button type="button" aria-label={`Bỏ ${selectedNames[id] || `tệp ${index + 1}`}`} disabled={disabled || busy} onClick={() => onChange(value.filter(fileId => fileId !== id))} className="support-remove-file">×</button>
         </div>)}
       </div> : <>
         {!!value.length && <p>Đã chọn {value.length} tệp.</p>}
-        {value.map((id, index) => <Button type="button" key={id} variant="outline" disabled={disabled || busy} onClick={() => onChange(value.filter((_, i) => i !== index))}>Bỏ tệp {index + 1}</Button>)}
+        {value.map((id, index) => <div key={id} className="flex flex-wrap items-center gap-2 rounded-lg border border-stone-200 px-3 py-2">
+          <span className="min-w-0 flex-1 break-words text-sm text-stone-700 [overflow-wrap:anywhere]">{selectedNames[id] || `Tệp ${index + 1}`}</span>
+          <EvidenceDownload id={id} previewOnly previewLabel="Xem trước" />
+          <Button type="button" variant="outline" disabled={disabled || busy} onClick={() => onChange(value.filter((_, i) => i !== index))}>Bỏ tệp {index + 1}</Button>
+        </div>)}
       </>}
     </div>
   )

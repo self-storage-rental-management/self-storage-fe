@@ -1,10 +1,11 @@
+import { formatCustomerDateTime } from '../i18n/customerDate'
 export const PAYMENT_WINDOW_MINUTES = 15
 export const STAFF_REVIEW_HOURS = 6
 export const MANAGER_ASSIGNMENT_HOURS = 6
 export const CHECK_IN_WINDOW_DAYS = 7
 const VIETNAM_OFFSET_MS = 7 * 60 * 60 * 1000
 const DAY_MS = 24 * 60 * 60 * 1000
-const POLICY_TIME_ZONE = 'Asia/Ho_Chi_Minh'
+
 
 // Facility hours are Vietnam wall-clock hours, independent of the browser/CI timezone.
 function policyClock(value: Date) {
@@ -28,8 +29,26 @@ export function isCheckInAppointmentAllowed(value: Date, window: ReturnType<type
   return !Number.isNaN(value.getTime()) && value >= window.availableAt && value <= window.deadlineAt
 }
 
+export function isCheckInDateAllowed(value: Date | string, window: ReturnType<typeof plannedCheckInWindow>) {
+  const date = typeof value === 'string' ? value : policyDateInput(value)
+  const firstDate = policyDateInput(window.availableAt)
+  const lastDate = policyDateInput(window.deadlineAt)
+  return Boolean(date) && date >= firstDate && date <= lastDate
+}
+
 export function firstCheckInMinute(availableAt: Date) {
   return new Date(Math.ceil(availableAt.getTime() / 60_000) * 60_000)
+}
+
+// Leave a minute for the create request to reach the server, which checks its own clock.
+export function submissionCheckInWindow(now: number, reviewRequired: boolean) {
+  const window = plannedCheckInWindow(now, reviewRequired)
+  return { ...window, availableAt: new Date(window.availableAt.getTime() + 60_000) }
+}
+
+export function firstBookableCheckInMinute(window: ReturnType<typeof plannedCheckInWindow>) {
+  const candidate = firstCheckInMinute(window.availableAt)
+  return candidate <= window.deadlineAt ? candidate : null
 }
 
 export function policyDateInput(value: Date) {
@@ -50,5 +69,5 @@ export function policyDateTimeInput(value: Date) {
 }
 
 export function formatPolicyDateTime(value: Date) {
-  return value.toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short', timeZone: POLICY_TIME_ZONE })
+  return formatCustomerDateTime(value)
 }

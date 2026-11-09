@@ -14,10 +14,10 @@ export function paymentCountdown(deadline: string | null | undefined, now: numbe
 
 export const reservationStatusLabels: Record<ReservationStatus, string> = {
   AWAITING_EMAIL: 'Chờ xác minh email', AWAITING_REVIEW: 'Chờ duyệt hàng hóa',
-  AWAITING_PAYMENT: 'Chờ thanh toán cọc', PAYMENT_GRACE: 'Chờ khiếu nại thanh toán',
+  AWAITING_PAYMENT: 'Chờ thanh toán đặt cọc giữ chỗ', PAYMENT_GRACE: 'Chờ khiếu nại thanh toán',
   PAYMENT_REVIEW: 'Đang đối soát thanh toán', CONFIRMED: 'Đã xác nhận giữ kho',
-  UNIT_RESERVED: 'Đã phân gian kho', READY_FOR_CHECKIN: 'Sẵn sàng nhận kho',
-  AWAITING_CUSTOMER_RECEIPT: 'Chờ xác nhận nhận kho', COMPLETED: 'Đã bàn giao',
+  UNIT_RESERVED: 'Đã phân kho', READY_FOR_CHECKIN: 'Sẵn sàng nhận kho',
+  AWAITING_CUSTOMER_RECEIPT: 'Chờ xác nhận nhận kho', PREPARING: 'Đang chuẩn bị hàng', COMPLETED: 'Đã hoàn tất nhận kho',
   CANCELLED: 'Đã hủy', EXPIRED: 'Đã hết hạn', REJECTED: 'Hàng hóa bị từ chối',
 }
 
@@ -29,6 +29,7 @@ export function reservationProgress(status: ReservationStatus): number | null {
     case 'CONFIRMED': return 3
     case 'UNIT_RESERVED': case 'READY_FOR_CHECKIN': return 4
     case 'AWAITING_CUSTOMER_RECEIPT': return 5
+    case 'PREPARING': return 5
     case 'COMPLETED': return 6
     default: return null
   }

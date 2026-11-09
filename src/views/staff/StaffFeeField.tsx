@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Input } from '../../components/ui'
-import { USD_TO_VND_RATE, formatVnd } from '../../i18n/currency'
+import { formatVnd } from '../../i18n/currency'
 
 export const formatStaffMoney = formatVnd
 
@@ -13,14 +13,13 @@ export default function StaffFeeField({ label, hint, value, onChange, onDetailCh
   disabled: boolean
 }) {
   const [quantity, setQuantity] = useState(value && Number(value) > 0 ? '1' : '')
-  const [price, setPrice] = useState(value && Number(value) > 0 ? String(Math.round(Number(value) * USD_TO_VND_RATE)) : '')
+  const [price, setPrice] = useState(value && Number(value) > 0 ? String(Math.round(Number(value))) : '')
   const update = (nextQuantity: string, nextPrice: string) => {
     setQuantity(nextQuantity)
     setPrice(nextPrice)
     const valid = /^\d+(?:\.\d{1,2})?$/.test(nextQuantity) && /^\d+$/.test(nextPrice)
     const totalVnd = Number(nextQuantity) * Number(nextPrice)
-    const totalBase = totalVnd / USD_TO_VND_RATE
-    onChange(valid && Number.isFinite(totalBase) ? String(totalBase) : 'invalid')
+    onChange(valid && Number.isFinite(totalVnd) ? String(totalVnd) : 'invalid')
     onDetailChange(valid ? `${label}: ${nextQuantity} × ${Number(nextPrice).toLocaleString('vi-VN')} ₫ = ${totalVnd.toLocaleString('vi-VN')} ₫.` : '')
   }
   return <div className="flex h-full flex-col rounded-lg border border-stone-200 bg-stone-50 p-4">

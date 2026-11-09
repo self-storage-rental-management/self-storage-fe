@@ -20,7 +20,7 @@ const record={...renewal,status:"accepted" as const,disabledReasons:[]}
 const payment={paymentId:"p1",renewalId:"n1",acceptedRevisionId:"revision-1",transactionReference:"intent-1",amount:100,currency:"VND",paymentStatus:"PENDING",paymentDeadline:"2026-10-13T00:00:00Z",paidAt:null,reconciliationRequired:false,message:"Pending",paymentUrl:"https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_TxnRef=intent-1&vnp_Amount=10000"}
 function nodes(n:any):any[]{return Array.isArray(n)?n.flatMap(nodes):n&&typeof n==="object"&&"type" in n?[n,...nodes(n.props.children)]:[]}
 function render(r=record,effects=false){h.cursor=0;h.effects=[];const view=RenewalDetail({renewal:r,role:"customer",onAction:vi.fn(),onPaymentChange:h.refresh});if(effects)h.effects.forEach(fn=>fn());return view}
-function pay(view:any){return nodes(view).find(n=>n.type===Button&&["Thanh toán toàn kỳ","Đang mở VNPay","Tiếp tục thanh toán"].includes(n.props.children))}
+function pay(view:any){return nodes(view).find(n=>n.type===Button&&["Thanh toán","Thanh toán toàn kỳ","Đang mở VNPay","Tiếp tục thanh toán"].includes(n.props.children))}
 beforeEach(async()=>{
   vi.useFakeTimers();vi.setSystemTime(new Date('2026-10-08T00:00:00Z'));h.slots=[];h.create.mockReset().mockResolvedValue(payment);h.read.mockReset().mockRejectedValue(new ApiClientError("Not found",{status:404}));h.operations.mockReset().mockResolvedValue({appointmentRef:'appointment-1',appointmentStart:'2026-10-09T03:00:00Z'});h.assign.mockReset();h.refresh.mockReset();
   vi.stubGlobal("window",{location:{assign:h.assign}});
@@ -36,11 +36,13 @@ it("clicks the actual payment button, binds Renewal, shows loading and blocks ra
   expect(h.create.mock.calls[0][1]).toBeTruthy();expect(pay(render()).props.disabled).toBe(true);
   resolve(payment);await first;expect(h.assign).toHaveBeenCalledWith(payment.paymentUrl);expect(pay(render()).props.disabled).toBe(false);
 })
-it("blocks rent prepayment until a valid signing appointment has been saved",async()=>{
-  vi.clearAllTimers();h.slots=[];h.operations.mockResolvedValue({appointmentRef:null,appointmentStart:null});
-  render(record,true);await vi.advanceTimersByTimeAsync(0);
-  expect(pay(render()).props.disabled).toBe(true);
-  expect(h.create).not.toHaveBeenCalled();
+it("allows rent prepayment without requiring a prior physical signing appointment", async () => {
+  vi.clearAllTimers();
+  h.slots = [];
+  h.operations.mockResolvedValue({ appointmentRef: null, appointmentStart: null });
+  render(record, true);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(pay(render()).props.disabled).toBe(false);
 })
 it("keeps the same idempotency key on uncertain retries",async()=>{
   h.create.mockRejectedValueOnce(new ApiClientError("network",{code:"NETWORK_ERROR"}));await pay(render()).props.onClick();

@@ -241,6 +241,23 @@ export async function getRenewalOperations(
     (v) => isOperationState(v) && v.renewalId === id,
   )
 }
+export interface RenewalCustomerIdentity {
+  renewalId: string
+  customerId: string
+  fullName: string | null
+  identityDocumentNumber: string | null
+}
+export async function getRenewalCustomerIdentity(id: string) {
+  return readRentalEnvelope<RenewalCustomerIdentity>(
+    await apiRequest(`${path('staff', id)}/customer-identity`),
+    value => {
+      const identity = value as RenewalCustomerIdentity | null
+      return !!identity && identity.renewalId === id && isUuid(identity.customerId)
+        && (identity.fullName === null || typeof identity.fullName === 'string')
+        && (identity.identityDocumentNumber === null || typeof identity.identityDocumentNumber === 'string')
+    },
+  )
+}
 export async function listRenewalAppointments(
   query: RenewalAppointmentQuery = {},
 ) {

@@ -82,7 +82,7 @@ export const REGULATIONS: RegulationArticle[] = [
       'Không được lưu trữ động vật sống, hàng dễ phân hủy hoặc vật phẩm có nguy cơ gây ô nhiễm, hư hại cho kho và tài sản khác.',
       'Khách hàng phải tuân thủ hướng dẫn an toàn và thông báo các yêu cầu bảo quản đặc biệt khi có liên quan.',
     ],
-    importantNote: 'Nghiêm cấm tuyệt đối hóa chất dễ nổ, pháo hoa, vũ khí, hàng lậu và chất độc hại. Vi phạm sẽ bị đơn phương hủy hợp đồng và chuyển giao cơ quan chức năng.',
+    importantNote: 'Cấm lưu trữ hóa chất dễ nổ, pháo hoa, vũ khí, hàng lậu và chất độc hại. StorageHub ghi nhận vi phạm và xử lý theo mức độ, chứng cứ, hợp đồng và quy định áp dụng.',
   },
   {
     id: 6,

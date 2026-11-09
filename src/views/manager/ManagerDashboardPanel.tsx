@@ -15,7 +15,7 @@ import {
   Tr,
 } from "../../components/ui"
 import { Icon } from "../../components/Layout"
-import { formatVnd } from "../../i18n/currency"
+import { formatVndAmount } from "../../i18n/currency"
 import { useStorageHub } from "../../store/StorageHubContext"
 import type { User } from "../../types"
 import type { ActivityRecord } from "../../types/storageHub"
@@ -205,9 +205,9 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
   const priorityItems = [
     {
       rank: 1,
-      label: "Đặt chỗ chờ phân gian",
+      label: "Đặt chỗ chờ phân kho",
       count: reservationsWaitingAssignment.length,
-      detail: "Đã thanh toán cọc và đủ điều kiện phân gian vật lý",
+      detail: "Đã thanh toán cọc và đủ điều kiện phân kho vật lý",
       page: "rentals",
       variant: "warning",
     },
@@ -506,7 +506,7 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
             <b className="mt-1 block text-xl text-emerald-900">{available}</b>
           </div>
           <div className="rounded-lg bg-amber-50 p-3">
-            <span className="text-amber-700">Đã giữ hoặc phân gian</span>
+            <span className="text-amber-700">Đã giữ hoặc phân kho</span>
             <b className="mt-1 block text-xl text-amber-900">{reserved}</b>
           </div>
           <div className="rounded-lg bg-stone-100 p-3">
@@ -698,12 +698,12 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
             <div className="flex items-center justify-between rounded-lg bg-emerald-50 p-3">
               <span>Đã thu trong tháng</span>
               <b className="text-emerald-800">
-                {formatVnd(collectedThisMonth)}
+                {formatVndAmount(collectedThisMonth)}
               </b>
             </div>
             <div className="flex items-center justify-between rounded-lg bg-stone-50 p-3">
               <span>Đã hoàn trong tháng</span>
-              <b>{formatVnd(refundedThisMonth)}</b>
+              <b>{formatVndAmount(refundedThisMonth)}</b>
             </div>
             <div className="flex items-center justify-between rounded-lg bg-stone-50 p-3">
               <span>Giao dịch đã thu trong tháng</span>
