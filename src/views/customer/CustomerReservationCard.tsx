@@ -1,20 +1,22 @@
+import { formatCustomerDate, formatCustomerDateTime } from '../../i18n/customerDate'
 import { userFacingError } from '../../presentation/userFacingError'
 import { savedReservationQuote, MISSING_RESERVATION_SNAPSHOT } from '../../services/reservationSnapshot'
 import { useEffect, useRef, useState } from 'react'
 import { Button, Card, Modal } from '../../components/ui'
 import VietnameseDateInput from '../../components/VietnameseDateInput'
 import { formatVndAmount as formatVnd } from '../../i18n/currency'
-import { confirmCustomerReceipt, downloadBookingDocument, downloadCustomerCheckInDocument, downloadCustomerReservationGoodsImage, generateBookingDocument, getBookingDocument, getCustomerCheckInDocuments, getCustomerReservation, setCustomerCheckInAppointment, updateSetupGoods, type BookingDocument, type CheckInDocument, type CustomerFacility, type CustomerReservation, type CustomerReservationDetail, type CustomerUnitType, type GoodsItemInput, type ReservationPaymentResult } from '../../services/customerReservationApi'
+import { confirmCustomerReceipt, downloadBookingDocument, downloadCustomerCheckInDocument, downloadCustomerReservationGoodsImage, generateBookingDocument, getBookingDocument, getCustomerCheckInDocuments, getCustomerReservation, markCustomerPreparationComplete, setCustomerCheckInAppointment, updateSetupGoods, type BookingDocument, type CheckInDocument, type CustomerFacility, type CustomerReservation, type CustomerReservationDetail, type CustomerUnitType, type GoodsItemInput, type ReservationPaymentResult } from '../../services/customerReservationApi'
 import { paymentCountdown, reservationProgress, reservationStatusLabels } from './reservationPresentation'
 import { ApiClientError } from '../../services/apiClient'
 import CustomerPaymentComplaint from './CustomerPaymentComplaint'
 import CustomerReservationPayment from './CustomerReservationPayment'
 import ReservationReceipt from './ReservationReceipt'
 import { paymentMethodLabel } from './paymentLabels'
-import { formatPolicyDateTime, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyDateTimeInput, policyTimeInput } from '../../domain/reservationCheckInPolicy'
+import { isCheckInDateAllowed, plannedCheckInWindow, policyDateInput, policyDateTimeInput } from '../../domain/reservationCheckInPolicy'
 import ReservationQuoteSummary from './ReservationQuoteSummary'
 import type { Facility, UnitType } from '../../types/storageHub'
 import { totalGoodsVolumeM3, formatGoodsVolume } from '../../domain/goodsMeasurements'
+import { rentalEndDateForDisplay } from '../../domain/rentalTimeline'
 
 const APPOINTMENT_EDITABLE_STATUSES = [
   'AWAITING_EMAIL',
@@ -55,16 +57,21 @@ interface Props {
   facility?: Facility
   unitType?: UnitType
   onVerify: () => void
-  onCancel: () => void
+  onCancel: () => void | Promise<unknown>
+  onDelete?: () => void | Promise<unknown>
   onRefresh: () => Promise<void>
   onReceiptConfirmed?: (reservationId: string) => void
+  visualTone?: 'active' | 'expired' | 'completed'
 }
 
-export default function CustomerReservationCard({ reservation: r, facilityName, unitTypeName, facilityDetails, unitTypeDetails, facility, unitType, onVerify, onCancel, onRefresh, onReceiptConfirmed }: Props) {
+export default function CustomerReservationCard({ reservation: r, facilityName, unitTypeName, facilityDetails, unitTypeDetails, facility, unitType, onVerify, onCancel, onDelete, onRefresh, onReceiptConfirmed, visualTone = 'active' }: Props) {
+  const [activeSection, setActiveSection] = useState<'information' | 'quote'>('information')
   const [detail, setDetail] = useState<CustomerReservationDetail | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [confirmingReceipt, setConfirmingReceipt] = useState(false)
+  const [receiptConfirmOpen, setReceiptConfirmOpen] = useState(false)
+  const [receiptAcknowledged, setReceiptAcknowledged] = useState(false)
   const receiptLock = useRef(false)
   const [bookingDocument, setBookingDocument] = useState<BookingDocument | null>(null)
   const [bookingDocumentOpen, setBookingDocumentOpen] = useState(false)
@@ -75,13 +82,22 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const [appointmentErrors, setAppointmentErrors] = useState<{ date?: string; time?: string }>({})
   const [savedAppointmentAt, setSavedAppointmentAt] = useState(r.appointmentAt)
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [removing, setRemoving] = useState(false)
   const [setupGoodsEditOpen, setSetupGoodsEditOpen] = useState(false)
   const [setupGoodsDraft, setSetupGoodsDraft] = useState<GoodsItemInput[]>([])
+  const [preparationSubmitting, setPreparationSubmitting] = useState(false)
   const [now, setNow] = useState(Date.now())
+  const needsCountdown = ['AWAITING_PAYMENT', 'AWAITING_EMAIL', 'AWAITING_REVIEW', 'PAYMENT_GRACE', 'PAYMENT_REVIEW'].includes(r.status)
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    if (!needsCountdown) return
+    const timer = window.setInterval(() => {
+      if (typeof document === 'undefined' || !document.hidden) {
+        setNow(Date.now())
+      }
+    }, 1000)
     return () => window.clearInterval(timer)
-  }, [])
+  }, [needsCountdown])
   useEffect(() => {
     setAppointmentInput(localDateTimeInput(r.appointmentAt))
     setSavedAppointmentAt(r.appointmentAt)
@@ -105,7 +121,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const calculatedGoodsVolumeM3 = totalGoodsVolumeM3(goodsItems)
   const calculatedGoodsWeightKg = goodsItems.reduce((total, item) => total + item.quantity * item.weightPerItemKg, 0)
   const formatMeasurement = formatGoodsVolume
-  const savedQuote = savedReservationQuote(r)
+  const savedQuote = savedReservationQuote(detail?.reservation ?? r)
   const beginSetupGoodsEdit = () => {
     setSetupGoodsDraft(goodsItems.map(item => ({
       catalogCategoryId: item.catalogCategoryId,
@@ -137,14 +153,28 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
       setSetupGoodsEditOpen(false)
       await onRefresh()
     } catch (error) {
-      setMessage(userFacingError(error, 'Không thể cập nhật khai báo hàng trong setup.'))
+      setMessage(userFacingError(error, 'Không thể cập nhật khai báo hàng trong thời gian chuẩn bị.'))
     } finally { setBusy(false) }
   }
+  const markPreparationComplete = async () => {
+    if (busy || preparationSubmitting) return
+    setPreparationSubmitting(true)
+    setMessage(null)
+    try {
+      const updated = await markCustomerPreparationComplete(r.id)
+      setDetail(updated)
+      await onRefresh()
+    } catch (error) {
+      setMessage(userFacingError(error, 'Không thể gửi yêu cầu kiểm kê hàng hóa.'))
+    } finally {
+      setPreparationSubmitting(false)
+    }
+  }
   const steps = [
-    { label: 'Xác minh email', detail: 'Xác nhận địa chỉ liên hệ' },
+    { label: 'Tài khoản đã xác minh', detail: 'Email được xác minh khi kích hoạt tài khoản' },
     { label: 'Phê duyệt hồ sơ', detail: r.goodsReviewStatus === 'PENDING' ? 'Nhân viên kiểm tra hàng hóa' : 'Hồ sơ được duyệt tự động' },
-    { label: ['PAYMENT_GRACE', 'PAYMENT_REVIEW'].includes(r.status) ? 'Đối soát thanh toán' : 'Thanh toán cọc', detail: r.status === 'PAYMENT_GRACE' ? 'Chờ khách hàng gửi chứng từ' : r.status === 'PAYMENT_REVIEW' ? 'Đang kiểm tra chứng từ thanh toán' : 'Hoàn tất cọc giữ chỗ' },
-    { label: 'Quản lý phân kho', detail: r.assignedUnitCode ? `Đã phân ${r.assignedUnitCode}` : 'Chờ phân gian kho cụ thể' },
+    { label: ['PAYMENT_GRACE', 'PAYMENT_REVIEW'].includes(r.status) ? 'Đối soát thanh toán' : 'Thanh toán đặt cọc giữ chỗ', detail: r.status === 'PAYMENT_GRACE' ? 'Chờ khách hàng gửi chứng từ' : r.status === 'PAYMENT_REVIEW' ? 'Đang kiểm tra chứng từ thanh toán' : 'Hoàn tất đặt cọc giữ chỗ' },
+    { label: 'Quản lý phân kho', detail: r.assignedUnitCode ? `Đã phân ${r.assignedUnitCode}` : 'Chờ phân kho cụ thể' },
     { label: 'Nhận kho và ký', detail: 'Đối chiếu và ký tại cơ sở' },
     { label: 'Đã bàn giao', detail: 'Nhận kho và mã ra vào' },
   ]
@@ -195,7 +225,8 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     setConfirmingReceipt(true); setMessage(null)
     try {
       const confirmed = await confirmCustomerReceipt(r.id)
-      setMessage('Đã xác nhận nhận kho. Hồ sơ thuê đã được tạo thành công.')
+      setReceiptConfirmOpen(false)
+      setMessage('Đã xác nhận nhận kho. Thời gian chuẩn bị hàng đã bắt đầu.')
       try { await onRefresh() } catch { /* Receipt command has already succeeded. */ }
       onReceiptConfirmed?.(confirmed.reservation.assignedUnitId || r.assignedUnitId || '')
     } catch (error) {
@@ -204,8 +235,8 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     }
     finally { receiptLock.current = false; setConfirmingReceipt(false) }
   }
-  const documentAvailable = ['CONFIRMED', 'UNIT_RESERVED', 'READY_FOR_CHECKIN', 'AWAITING_CUSTOMER_RECEIPT', 'COMPLETED'].includes(r.status)
-  const handoverDocumentsAvailable = ['AWAITING_CUSTOMER_RECEIPT', 'COMPLETED'].includes(r.status)
+  const documentAvailable = ['CONFIRMED', 'UNIT_RESERVED', 'READY_FOR_CHECKIN', 'AWAITING_CUSTOMER_RECEIPT', 'PREPARING', 'COMPLETED'].includes(r.status)
+  const handoverDocumentsAvailable = ['AWAITING_CUSTOMER_RECEIPT', 'PREPARING', 'COMPLETED'].includes(r.status)
   const saveAppointment = async () => {
     if (!appointmentInput || busy) return
     const [appointmentDate = '', appointmentTime = ''] = appointmentInput.split('T')
@@ -217,19 +248,14 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(appointmentDate)) {
       errors.date = 'Vui lòng chọn ngày nhận kho hợp lệ.'
     } else if (appointmentDate < earliestDate || appointmentDate > latestDate) {
-      errors.date = `Ngày nhận kho phải từ ${appointmentWindow.availableAt.toLocaleDateString('vi-VN')} đến ${appointmentWindow.deadlineAt.toLocaleDateString('vi-VN')}.`
+      errors.date = `Ngày nhận kho phải từ ${formatCustomerDate(appointmentWindow.availableAt)} đến ${formatCustomerDate(appointmentWindow.deadlineAt)}.`
     }
 
     if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(appointmentTime)) {
       errors.time = 'Vui lòng chọn giờ nhận kho hợp lệ.'
-    } else {
-      if (!errors.date && appointmentDate === earliestDate && appointment < appointmentWindow.availableAt) {
-        errors.time = `Trong ngày ${appointmentWindow.availableAt.toLocaleDateString('vi-VN')}, giờ nhận kho sớm nhất là ${policyTimeInput(appointmentWindow.availableAt)}.`
-      }
     }
-
-    if (!errors.date && !errors.time && !isCheckInAppointmentAllowed(appointment, appointmentWindow)) {
-      errors.time = 'Giờ nhận kho không nằm trong khung giờ được phép.'
+    if (!errors.date && !errors.time && !isCheckInDateAllowed(appointmentDate, appointmentWindow)) {
+      errors.date = 'Ngày nhận kho không nằm trong thời hạn được phép.'
     }
     if (errors.date || errors.time) {
       setAppointmentErrors(errors)
@@ -300,68 +326,65 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   <Card
     id={`customer-reservation-${r.id}`}
     tabIndex={-1}
-    className={`p-6 border-l-4 ${
+    className={`p-6 !border-l-8 transition-all duration-200 ${
       inactive
         ? 'border-l-stone-300 text-stone-500'
         : 'border-l-amber-500'
-    }`}
+    } ${visualTone === 'expired'
+      ? '!border-l-red-400 hover:!border-l-red-700'
+      : visualTone === 'completed'
+        ? '!border-l-emerald-400 hover:!border-l-emerald-700'
+        : '!border-l-amber-400 hover:!border-l-amber-700'}`}
   >
-    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_240px]">
-      <div className="min-w-0">
+    <div className="space-y-5">
+      <div className="flex flex-col items-start justify-between gap-5 border-b border-stone-200 pb-4 md:flex-row">
+      <div className="min-w-0 flex-1">
+      <div role="tablist" aria-label={`Nội dung đơn ${r.reservationCode}`} className="flex flex-wrap gap-2">
+        <button type="button" role="tab" id={`reservation-info-tab-${r.id}`} aria-controls={`reservation-info-${r.id}`} aria-selected={activeSection === 'information'} onClick={() => setActiveSection('information')} className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${activeSection === 'information' ? 'bg-amber-500 text-white' : 'bg-stone-100 text-stone-700 hover:bg-stone-200'}`}>Thông tin đơn</button>
+        <button type="button" role="tab" id={`reservation-quote-tab-${r.id}`} aria-controls={`reservation-quote-${r.id}`} aria-selected={activeSection === 'quote'} onClick={() => setActiveSection('quote')} className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${activeSection === 'quote' ? 'bg-amber-500 text-white' : 'bg-stone-100 text-stone-700 hover:bg-stone-200'}`}>Báo giá đặt kho</button>
+      </div>
+        <h3 className="mt-4 mb-3 text-base font-bold text-stone-900">Thông tin đơn giữ kho</h3>
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-bold text-amber-700">{r.reservationCode}</span>
           <span className={`rounded px-2.5 py-1 text-xs font-bold ${progress !== null && progress >= 3 ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{reservationStatusLabels[r.status]}</span>
         </div>
         <h2 className="mt-1 text-lg font-bold text-stone-900">{unitTypeName} · {facilityName}</h2>
         <div className="mt-3 space-y-2">
-          <p className="text-xs leading-5 text-stone-600">Lịch thuê: <b className="text-stone-900">{formatDisplayDate(r.startDate)} đến {formatDisplayDate(r.endDate)}</b></p>
-          <p className="text-xs leading-5 text-blue-800">Lịch nhận kho khách đặt: <b>{savedAppointmentAt ? new Date(savedAppointmentAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : 'Chưa đặt lịch'}</b></p>
+          <p className="text-xs leading-5 text-stone-600">{savedQuote?.rentalPeriodConfirmed ? 'Lịch thuê đã chốt:' : 'Lịch thuê dự kiến sau thời gian chuẩn bị:'} <b className="text-stone-900">{formatDisplayDate(savedQuote?.startDate || r.startDate)} đến {formatDisplayDate(rentalEndDateForDisplay(savedQuote?.endDate || r.endDate))}</b></p>
+          <p className="text-xs leading-5 text-blue-800">Lịch nhận kho khách đặt: <b>{savedAppointmentAt ? formatCustomerDateTime(new Date(savedAppointmentAt)) : 'Chưa đặt lịch'}</b></p>
         </div>
-        <div className="mt-3 grid gap-3 rounded-xl border border-stone-200 bg-stone-50 p-4 text-xs text-stone-700 md:grid-cols-2">
+      </div>
+        <div className="reservation-card-actions flex w-full min-w-0 flex-col items-end gap-2 md:w-64 md:shrink-0">
+        <div className="text-right"><p className="text-xs text-stone-500">Tổng chi phí phải thanh toán (gồm tiền cọc đảm bảo thuê)</p><p className="text-xl font-bold text-stone-900">{(r.totalInitialObligation == null ? "Chưa xác định" : formatVnd(r.totalInitialObligation))}</p><p className="text-xs text-amber-800">Đặt cọc giữ chỗ: {(r.reservationDepositAmount == null ? "Chưa xác định" : formatVnd(r.reservationDepositAmount))}</p></div>
+        {r.status === 'AWAITING_EMAIL' && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-right text-xs text-amber-950"><p className="font-bold">Cần xác minh email</p><p className="mt-1">Thời gian giữ đơn còn lại</p><p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{countdown.text}</p><Button className="mt-2" size="sm" disabled={countdown.expired} onClick={onVerify}>Xác minh email</Button></div>}
+        {r.status === 'AWAITING_REVIEW' && <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950"><p className="font-bold">Đang chờ nhân viên cơ sở duyệt hàng hóa</p><p className="mt-1">Thời gian giữ kho và hồ sơ còn lại</p><p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{countdown.text}</p><p className="mt-1">Tối đa 6 giờ từ khi gửi yêu cầu. Sau khi được duyệt, thời hạn thanh toán được hiển thị riêng trên đơn.</p></div>}
+        <CustomerReservationPayment reservation={r} facilityName={facilityName} unitTypeName={unitTypeName} paymentExpiresAt={detail?.paymentExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />
+        {r.status === 'AWAITING_CUSTOMER_RECEIPT' && <div className="w-full rounded-lg border border-amber-300 bg-amber-50 p-3 text-left text-xs text-amber-950"><p className="font-bold">Chờ bạn xác nhận nhận kho</p><p className="mt-1">Nhân viên đã ghi nhận bàn giao. Kiểm tra đúng gian kho và quyền ra vào trước khi xác nhận.</p><Button type="button" className="mt-3 w-full" size="sm" disabled={confirmingReceipt} onClick={() => { setReceiptAcknowledged(false); setReceiptConfirmOpen(true) }}>Kiểm tra và xác nhận nhận kho</Button></div>}
+        {detail?.checkInStatus === 'setup_in_progress' && detail.rentalStatus === 'setup' && <div className="rounded-lg border border-violet-300 bg-violet-50 p-3 text-right text-xs text-violet-950"><p className="font-bold">Bạn đang trong thời gian chuẩn bị hàng</p><p className="mt-1">Sau khi chuyển hàng vào kho xong, hãy báo lại để hệ thống tạo yêu cầu kiểm kê cho Staff.</p><Button type="button" className="mt-2" size="sm" disabled={preparationSubmitting} onClick={() => markPreparationComplete()}>{preparationSubmitting ? 'Đang gửi…' : 'Báo đã chuẩn bị xong'}</Button></div>}
+        {documentAvailable && <Button variant="outline" size="sm" className="reservation-action reservation-action-document min-h-10 w-full justify-center" disabled={busy} onClick={() => prepareBookingDocument()}>{busy ? 'Đang chuẩn bị…' : 'Xem phiếu giữ kho'}</Button>}
+        {handoverDocumentsAvailable && <Button variant="outline" size="sm" className="min-h-10 w-full justify-center" disabled={busy} onClick={() => loadHandoverDocuments()}>{busy ? 'Đang tải…' : 'Xem hợp đồng đã ký'}</Button>}
+        {['PAYMENT_GRACE', 'PAYMENT_REVIEW'].includes(r.status) && <CustomerPaymentComplaint reservation={r} complaintExpiresAt={detail?.complaintExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />}
+        {APPOINTMENT_EDITABLE_STATUSES.some(status => status === r.status) && <Button variant="ghost" size="sm" className="reservation-action reservation-action-cancel" onClick={() => setCancelConfirmOpen(true)}>Hủy giữ kho</Button>}
+        {['EXPIRED', 'COMPLETED'].includes(r.status) && onDelete && <Button variant="danger" size="sm" className="min-h-10 w-full justify-center" onClick={() => setDeleteConfirmOpen(true)}>Xóa đơn đặt giữ kho</Button>}
+      </div>
+      </div>
+      <section role="tabpanel" id={`reservation-info-${r.id}`} aria-labelledby={`reservation-info-tab-${r.id}`} hidden={activeSection !== 'information'} className="w-full min-w-0">
+        <div className="mt-3 grid gap-3 rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm leading-6 text-stone-700 md:grid-cols-2">
           <section>
             <h3 className="font-bold text-stone-900">Thông tin khách hàng</h3>
-            <div className="mt-2 space-y-1"><p><b>Họ tên:</b> {r.customerName || 'Chưa cập nhật'}</p><p><b>Email:</b> {r.customerEmail || 'Chưa cập nhật'}</p><p><b>Số điện thoại:</b> {r.customerPhone || 'Chưa cập nhật'}</p><p><b>CCCD/Hộ chiếu:</b> {maskIdentityDocument(r.identityDocumentNumber)}</p><p><b>Địa chỉ:</b> {r.customerAddress || 'Chưa cập nhật'}</p></div>
+            <div className="mt-2 space-y-1"><p><b>Họ tên:</b> {r.customerName || 'Chưa cập nhật'}</p><p><b>Email:</b> {r.customerEmail || 'Chưa cập nhật'}</p><p><b>Số điện thoại:</b> {r.customerPhone || 'Chưa cập nhật'}</p><p><b>CCCD/CMND:</b> {maskIdentityDocument(r.identityDocumentNumber)}</p><p><b>Địa chỉ:</b> {r.customerAddress || 'Chưa cập nhật'}</p></div>
           </section>
           <section>
             <h3 className="font-bold text-stone-900">Thông tin kho</h3>
-            <div className="mt-2 space-y-1"><p><b>Địa chỉ:</b> {facilityDetails ? `${facilityDetails.address}, ${facilityDetails.city}` : 'Chưa cập nhật'}</p><p><b>Liên hệ:</b> {facilityDetails?.phone || 'Chưa cập nhật'}</p><p><b>Giờ hoạt động:</b> {facilityDetails?.accessHours || 'Chưa cập nhật'}</p>{unitTypeDetails && <><p><b>Kích thước kho:</b> {unitTypeDetails.lengthM} × {unitTypeDetails.widthM} × {unitTypeDetails.heightM} m · {unitTypeDetails.volumeM3} m³</p><p><b>Khung:</b> {unitTypeDetails.rackCount} khung · {unitTypeDetails.rackLengthM} × {unitTypeDetails.rackWidthM} × {unitTypeDetails.rackHeightM} m/khung</p><p><b>Tải trọng:</b> {unitTypeDetails.maxLoadKg.toLocaleString('vi-VN')} kg</p></>}{r.assignedUnitCode && <p><b>Gian kho đã phân:</b> {r.assignedUnitCode}{r.assignedUnitStatus ? ` (${r.assignedUnitStatus})` : ''}</p>}</div>
+            <div className="mt-2 space-y-1"><p><b>Địa chỉ:</b> {facilityDetails ? `${facilityDetails.address}, ${facilityDetails.city}` : 'Chưa cập nhật'}</p><p><b>Liên hệ:</b> {facilityDetails?.phone || 'Chưa cập nhật'}</p><p><b>Giờ hoạt động:</b> {facilityDetails?.accessHours || 'Chưa cập nhật'}</p>{unitTypeDetails && <><p><b>Kích thước kho:</b> {unitTypeDetails.lengthM} × {unitTypeDetails.widthM} × {unitTypeDetails.heightM} m · {unitTypeDetails.volumeM3} m³</p><p><b>Khung:</b> {unitTypeDetails.rackCount} khung · {unitTypeDetails.rackLengthM} × {unitTypeDetails.rackWidthM} × {unitTypeDetails.rackHeightM} m/khung (diện tích {Number((unitTypeDetails.rackLengthM * unitTypeDetails.rackWidthM).toFixed(2))} m² · thể tích {Number((unitTypeDetails.rackLengthM * unitTypeDetails.rackWidthM * unitTypeDetails.rackHeightM).toFixed(2))} m³/khung)</p><p><b>Tải trọng:</b> {unitTypeDetails.maxLoadKg.toLocaleString('vi-VN')} kg</p></>}{r.assignedUnitCode && <p><b>Gian kho đã phân:</b> {r.assignedUnitCode}{r.assignedUnitStatus ? ` (${r.assignedUnitStatus})` : ''}</p>}</div>
           </section>
         </div>
-        {APPOINTMENT_EDITABLE_STATUSES.some(status => status === r.status) && <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950">
-          <div className="grid w-full gap-3 sm:grid-cols-2">
-            <div><VietnameseDateInput value={appointmentInput.split('T')[0] || ''} min={policyDateTimeInput(appointmentWindow.availableAt).slice(0, 10)} max={policyDateTimeInput(appointmentWindow.deadlineAt).slice(0, 10)}
-              onChange={date => { setAppointmentInput(`${date}T${appointmentInput.split('T')[1] || '00:00'}`); setAppointmentErrors(current => ({ ...current, date: undefined })); setMessage(null) }} />
-              {appointmentErrors.date && <p className="mt-1 text-xs text-red-700">{appointmentErrors.date}</p>}</div>
-            <label className="block text-sm font-medium text-stone-700">Giờ nhận kho mong muốn<input aria-invalid={Boolean(appointmentErrors.time)} className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2.5 font-normal" type="time" step="60" value={appointmentInput.split('T')[1] || ''}
-              onChange={event => { setAppointmentInput(`${appointmentInput.split('T')[0] || ''}T${event.target.value}`); setAppointmentErrors(current => ({ ...current, time: undefined })); setMessage(null) }} />{appointmentErrors.time && <p className="mt-1 text-xs text-red-700">{appointmentErrors.time}</p>}</label>
-          </div>
-          <Button size="sm" disabled={!appointmentInput || busy} onClick={() => void saveAppointment()}>{busy ? 'Đang lưu…' : r.appointmentAt ? 'Đổi lịch nhận kho' : 'Lưu lịch nhận kho'}</Button>
-          <span className="basis-full text-[11px]">Lịch hợp lệ từ {formatPolicyDateTime(appointmentWindow.availableAt)} đến {formatPolicyDateTime(appointmentWindow.deadlineAt)}. Kỳ thuê bắt đầu từ ngày kho có thể sẵn sàng sớm nhất. Mọi thay đổi lịch sẽ được thông báo cho nhân viên tại cơ sở.</span>
-          {message && <p role="status" className="basis-full rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{message}</p>}
-        </div>}
         <div className="mt-3 space-y-4">
-          <section className="rounded-xl border border-stone-200 bg-white p-4 text-sm leading-6 text-stone-700">
-            <h3 className="font-bold text-stone-900">Thông tin khách hàng</h3>
-            <dl className="mt-2 grid gap-x-6 gap-y-1 sm:grid-cols-2">
-              <div><dt className="inline font-medium">Họ và tên: </dt><dd className="inline">{r.customerName || 'Chưa có thông tin'}</dd></div>
-              <div><dt className="inline font-medium">CCCD / Hộ chiếu: </dt><dd className="inline">{r.identityDocumentNumber || 'Chưa có thông tin'}</dd></div>
-              <div><dt className="inline font-medium">Số điện thoại: </dt><dd className="inline">{r.customerPhone || 'Chưa có thông tin'}</dd></div>
-              <div><dt className="inline font-medium">Email: </dt><dd className="inline break-all">{r.customerEmail || 'Chưa có thông tin'}</dd></div>
-              <div className="sm:col-span-2"><dt className="inline font-medium">Địa chỉ: </dt><dd className="inline">{r.customerAddress || 'Chưa có thông tin'}</dd></div>
-            </dl>
-            <h3 className="mt-4 border-t border-stone-200 pt-4 font-bold text-stone-900">Thông tin kho đã đặt</h3>
-            <dl className="mt-2 grid gap-x-6 gap-y-1 sm:grid-cols-2">
-              <div><dt className="inline font-medium">Cơ sở: </dt><dd className="inline">{facilityName}</dd></div>
-              <div><dt className="inline font-medium">Loại kho: </dt><dd className="inline">{unitTypeName}</dd></div>
-              {facility && <><div className="sm:col-span-2"><dt className="inline font-medium">Địa chỉ kho: </dt><dd className="inline">{facility.address}</dd></div><div><dt className="inline font-medium">Giờ hoạt động: </dt><dd className="inline">{facility.accessHours || 'Chưa công bố'}</dd></div>{facility.phone && <div><dt className="inline font-medium">Liên hệ cơ sở: </dt><dd className="inline">{facility.phone}</dd></div>}</>}
-              {unitType && <><div><dt className="inline font-medium">Diện tích: </dt><dd className="inline">{unitType.areaM2} m²</dd></div><div><dt className="inline font-medium">Kích thước kho (D × R × C): </dt><dd className="inline">{unitType.lengthM} × {unitType.widthM} × {unitType.heightM} m</dd></div><div><dt className="inline font-medium">Thể tích kho: </dt><dd className="inline">{unitType.volumeM3} m³</dd></div><div><dt className="inline font-medium">Tải trọng tối đa: </dt><dd className="inline">{unitType.maxLoadKg.toLocaleString('vi-VN')} kg</dd></div></>}
-            </dl>
-          </section>
           <section className="rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-700">
-            <div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="text-sm font-bold text-stone-900">Thông tin hàng hóa đã khai báo</h3><p className="mt-1 text-xs text-stone-500">Chỉ được sửa một lần trong setup và sẽ khóa ngay khi kiểm kê.</p></div>{r.status === 'READY_FOR_CHECKIN' && !r.setupGoodsRevisionUsedAt && !setupGoodsEditOpen && <Button type="button" variant="outline" size="sm" disabled={!goodsItems.length || busy} onClick={beginSetupGoodsEdit}>Sửa khai báo một lần</Button>}</div>
+            <div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="text-sm font-bold text-stone-900">Thông tin hàng hóa đã khai báo</h3></div>{r.status === 'READY_FOR_CHECKIN' && !r.setupGoodsRevisionUsedAt && !setupGoodsEditOpen && <Button type="button" variant="outline" size="sm" disabled={!goodsItems.length || busy} onClick={beginSetupGoodsEdit}>Sửa khai báo một lần</Button>}</div>
             {!detail && <p className="mt-3 text-stone-500">Đang tải chi tiết hàng hóa…</p>}
             {detail && <>
-              {setupGoodsEditOpen && <div className="mt-3 space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950"><p className="font-bold">Cập nhật khai báo trong setup</p><p>Đây là lần sửa duy nhất. Sau khi lưu hoặc sau khi Staff kiểm kê, hệ thống sẽ khóa khai báo.</p>{setupGoodsDraft.map((item, index) => <div key={index} className="grid gap-2 rounded-lg border border-amber-200 bg-white p-3 sm:grid-cols-4"><label className="sm:col-span-2">Mô tả<input className="mt-1 w-full rounded border border-stone-300 px-2 py-1.5" value={item.description || ''} onChange={event => setSetupGoodsDraft(current => current.map((value, i) => i === index ? { ...value, description: event.target.value } : value))} /></label><label>Số lượng<input className="mt-1 w-full rounded border border-stone-300 px-2 py-1.5" type="number" min="1" value={item.quantity} onChange={event => setSetupGoodsDraft(current => current.map((value, i) => i === index ? { ...value, quantity: Number(event.target.value) } : value))} /></label><label>Cân nặng/kiện<input className="mt-1 w-full rounded border border-stone-300 px-2 py-1.5" type="number" min="0.01" step="0.01" value={item.weightPerItemKg} onChange={event => setSetupGoodsDraft(current => current.map((value, i) => i === index ? { ...value, weightPerItemKg: Number(event.target.value) } : value))} /></label><label>Dài × Rộng × Cao (cm)<span className="mt-1 flex gap-1"><input className="w-full rounded border border-stone-300 px-1 py-1.5" type="number" min="0.01" value={item.lengthCm} onChange={event => setSetupGoodsDraft(current => current.map((value, i) => i === index ? { ...value, lengthCm: Number(event.target.value) } : value))} /><input className="w-full rounded border border-stone-300 px-1 py-1.5" type="number" min="0.01" value={item.widthCm} onChange={event => setSetupGoodsDraft(current => current.map((value, i) => i === index ? { ...value, widthCm: Number(event.target.value) } : value))} /><input className="w-full rounded border border-stone-300 px-1 py-1.5" type="number" min="0.01" value={item.heightCm} onChange={event => setSetupGoodsDraft(current => current.map((value, i) => i === index ? { ...value, heightCm: Number(event.target.value) } : value))} /></span></label></div>)}<div className="flex gap-2"><Button type="button" size="sm" disabled={busy} onClick={() => void saveSetupGoods()}>{busy ? 'Đang lưu…' : 'Lưu thay đổi và khóa khai báo'}</Button><Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => setSetupGoodsEditOpen(false)}>Hủy</Button></div></div>}
+              {setupGoodsEditOpen && <div className="mt-3 space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950"><p className="font-bold">Cập nhật khai báo trong thời gian chuẩn bị</p><p>Đây là lần sửa duy nhất. Sau khi lưu hoặc sau khi Staff kiểm kê, hệ thống sẽ khóa khai báo.</p>{setupGoodsDraft.map((item, index) => <div key={index} className="grid gap-2 rounded-lg border border-amber-200 bg-white p-3 sm:grid-cols-4"><label className="sm:col-span-2">Mô tả<input className="mt-1 w-full rounded border border-stone-300 px-2 py-1.5" value={item.description || ''} onChange={event => setSetupGoodsDraft(current => current.map((value, i) => i === index ? { ...value, description: event.target.value } : value))} /></label><label>Số lượng<input className="mt-1 w-full rounded border border-stone-300 px-2 py-1.5" type="number" min="1" value={item.quantity} onChange={event => setSetupGoodsDraft(current => current.map((value, i) => i === index ? { ...value, quantity: Number(event.target.value) } : value))} /></label><label>Cân nặng/kiện<input className="mt-1 w-full rounded border border-stone-300 px-2 py-1.5" type="number" min="0.01" step="0.01" value={item.weightPerItemKg} onChange={event => setSetupGoodsDraft(current => current.map((value, i) => i === index ? { ...value, weightPerItemKg: Number(event.target.value) } : value))} /></label><label>Dài × Rộng × Cao (cm)<span className="mt-1 flex gap-1"><input className="w-full rounded border border-stone-300 px-1 py-1.5" type="number" min="0.01" value={item.lengthCm} onChange={event => setSetupGoodsDraft(current => current.map((value, i) => i === index ? { ...value, lengthCm: Number(event.target.value) } : value))} /><input className="w-full rounded border border-stone-300 px-1 py-1.5" type="number" min="0.01" value={item.widthCm} onChange={event => setSetupGoodsDraft(current => current.map((value, i) => i === index ? { ...value, widthCm: Number(event.target.value) } : value))} /><input className="w-full rounded border border-stone-300 px-1 py-1.5" type="number" min="0.01" value={item.heightCm} onChange={event => setSetupGoodsDraft(current => current.map((value, i) => i === index ? { ...value, heightCm: Number(event.target.value) } : value))} /></span></label></div>)}<div className="flex gap-2"><Button type="button" size="sm" disabled={busy} onClick={() => saveSetupGoods()}>{busy ? 'Đang lưu…' : 'Lưu thay đổi và khóa khai báo'}</Button><Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => setSetupGoodsEditOpen(false)}>Hủy</Button></div></div>}
               <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded-lg border border-stone-200 bg-white p-3"><span className="text-xs text-stone-500">Tổng loại hàng</span><b className="mt-1 block text-base text-stone-900">{goodsItems.length}</b></div>
                 <div className="rounded-lg border border-stone-200 bg-white p-3"><span className="text-xs text-stone-500">Tổng số lượng</span><b className="mt-1 block text-base text-stone-900">{totalGoodsQuantity.toLocaleString('vi-VN')} kiện</b></div>
@@ -383,7 +406,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
                       <p><b>Thể tích:</b> {formatMeasurement(itemVolumeM3)} m³/kiện · tổng {formatMeasurement(itemVolumeM3 * item.quantity)} m³</p>
                       <p><b>Cân nặng:</b> {formatMeasurement(item.weightPerItemKg)} kg/kiện · tổng {formatMeasurement(item.quantity * item.weightPerItemKg)} kg</p>
                       <p><b>Hàng dễ bể / dễ vỡ:</b> {item.fragile ? 'Có' : 'Không'}</p>
-                      <div><b>Hình ảnh:</b> {item.images.length ? <span className="mt-1 flex flex-wrap gap-1.5">{item.images.map(image => <button key={image.id} type="button" className="rounded-md border border-stone-300 bg-stone-50 px-2 py-1 text-left text-[11px] text-stone-700 hover:border-amber-400 hover:bg-amber-50" onClick={() => void viewGoodsImage(image.id)}>{image.originalName}</button>)}</span> : 'Không có'}</div>
+                      <div><b>Hình ảnh:</b> {item.images.length ? <span className="mt-1 flex flex-wrap gap-1.5">{item.images.map(image => <button key={image.id} type="button" className="rounded-md border border-stone-300 bg-stone-50 px-2 py-1 text-left text-[11px] text-stone-700 hover:border-amber-400 hover:bg-amber-50" onClick={() => viewGoodsImage(image.id)}>{image.originalName}</button>)}</span> : 'Không có'}</div>
                       {item.customerNote && <p className="sm:col-span-2"><b>Ghi chú:</b> {item.customerNote}</p>}
                     </div>
                   </article>
@@ -393,36 +416,42 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
             </>}
           </section>
 
-          {savedQuote ? <ReservationQuoteSummary quote={savedQuote} needsReview={false} context="reservation" /> : <p role="status">{MISSING_RESERVATION_SNAPSHOT}</p>}
-            {r.setupExitReviewRequired && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><b>Đang chờ Business quyết định hoàn tiền</b><p className="mt-1 text-xs">Yêu cầu hủy/trả trong thời gian setup không tự động hoàn tiền. Khoản hoàn và bước kiểm tra trả kho sẽ được quyết định theo tình trạng hàng thực tế.</p></div>}
-            {remainingPayment && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-950">
-              <p className="font-bold">Biên lai thanh toán phần còn lại</p>
-              <p className="mt-1">Đã ghi nhận {formatVnd(remainingPayment.amount)} bằng {remainingPayment.paymentMethod ? paymentMethodLabel(remainingPayment.paymentMethod) : 'phương thức tại quầy'}.</p>
-              <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => setPaymentReceipt(remainingPayment)}>Xem biên lai</Button>
-            </div>}
+
         </div>
+        {APPOINTMENT_EDITABLE_STATUSES.some(status => status === r.status) && <div className="mt-4 flex flex-wrap items-end gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950">
+          <h3 className="w-full text-sm font-bold">Lịch nhận kho</h3>
+          <div className="grid w-full gap-3 sm:grid-cols-2">
+            <div><VietnameseDateInput value={appointmentInput.split('T')[0] || ''} min={policyDateTimeInput(appointmentWindow.availableAt).slice(0, 10)} max={policyDateTimeInput(appointmentWindow.deadlineAt).slice(0, 10)}
+              onChange={date => { setAppointmentInput(`${date}T${appointmentInput.split('T')[1] || '00:00'}`); setAppointmentErrors(current => ({ ...current, date: undefined })); setMessage(null) }} />
+              {appointmentErrors.date && <p className="mt-1 text-xs text-red-700">{appointmentErrors.date}</p>}</div>
+            <label className="block text-sm font-medium text-stone-700">Giờ nhận kho mong muốn<input aria-invalid={Boolean(appointmentErrors.time)} className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2.5 font-normal" type="time" step="60" value={appointmentInput.split('T')[1] || ''}
+              onChange={event => { setAppointmentInput(`${appointmentInput.split('T')[0] || ''}T${event.target.value}`); setAppointmentErrors(current => ({ ...current, time: undefined })); setMessage(null) }} />{appointmentErrors.time && <p className="mt-1 text-xs text-red-700">{appointmentErrors.time}</p>}</label>
+          </div>
+          <Button size="sm" disabled={!appointmentInput || busy} onClick={() => saveAppointment()}>{busy ? 'Đang lưu…' : r.appointmentAt ? 'Đổi lịch nhận kho' : 'Lưu lịch nhận kho'}</Button>
+          <span className="basis-full text-[11px]">Bạn có thể nhận kho từ {formatCustomerDate(appointmentWindow.availableAt)} đến {formatCustomerDate(appointmentWindow.deadlineAt)}. Kỳ thuê có tính tiền bắt đầu sau số ngày chuẩn bị miễn phí, tính từ khi khách hàng xác nhận đã nhận kho. Trước bàn giao, ngày bắt đầu và kết thúc chỉ là dự kiến. Mọi thay đổi lịch sẽ được thông báo cho nhân viên tại cơ sở.</span>
+          {message && <p role="status" className="basis-full rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{message}</p>}
+        </div>}
         {progress !== null && <div className="mt-4 border-t border-stone-200 pt-4">
           <div className="mb-3 flex flex-wrap items-start justify-between gap-2"><div><p className="text-xs font-bold text-black">Tiến trình đơn đặt kho</p><p className="mt-0.5 text-[11px] text-stone-500">Đã hoàn thành {progress}/{steps.length} bước</p></div>{steps[progress] && <span className="rounded-full bg-amber-100 px-3 py-1 text-[11px] font-bold text-amber-900 ring-1 ring-amber-300">Đang thực hiện: {steps[progress].label}</span>}</div>
           <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">{steps.map((step, index) => {
             const completed = index < progress
             const current = index === progress
             return <div key={step.label} aria-current={current ? 'step' : undefined} className={`relative rounded-xl border p-3 transition ${completed ? 'border-emerald-600 bg-emerald-50 text-emerald-950' : current ? 'border-amber-500 bg-amber-500 text-white shadow-lg ring-2 ring-amber-200' : 'border-stone-200 bg-stone-50 text-stone-400'}`}>
-              <div className="mb-2 flex items-center justify-between gap-1"><span className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-extrabold ${completed ? 'bg-emerald-600 text-white' : current ? 'bg-white text-amber-700' : 'bg-stone-200 text-stone-500'}`}>{completed ? '✓' : index + 1}</span><span className="text-[9px] font-bold">{completed ? 'Đã xong' : current ? 'Hiện tại' : 'Sắp tới'}</span></div><p className="text-[11px] font-bold leading-4">{step.label}</p><p className="mt-1 text-[10px] leading-4">{step.detail}</p>
+              <div className="mb-2 flex items-center justify-between gap-1"><span className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-extrabold ${completed ? 'bg-emerald-600 text-white' : current ? 'bg-white text-amber-700' : 'bg-stone-200 text-stone-500'}`}>{index + 1}</span><span className="text-[9px] font-bold">{completed ? 'Đã xong' : current ? 'Hiện tại' : 'Sắp tới'}</span></div><p className="text-[11px] font-bold leading-4">{step.label}</p><p className="mt-1 text-[10px] leading-4">{step.detail}</p>
             </div>
           })}</div>
         </div>}
-      </div>
-      <div className="flex min-w-0 flex-col items-stretch gap-3 lg:items-end">
-        <div className="text-right"><p className="text-xs text-stone-500">Tổng thu cả kỳ (gồm tiền cọc đảm bảo kho)</p><p className="text-xl font-bold text-stone-900">{(r.totalInitialObligation == null ? "Chưa xác định" : formatVnd(r.totalInitialObligation))}</p><p className="text-xs text-amber-800">Trả lúc giữ chỗ: {(r.reservationDepositAmount == null ? "Chưa xác định" : formatVnd(r.reservationDepositAmount))}</p></div>
-        {r.status === 'AWAITING_EMAIL' && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-right text-xs text-amber-950"><p className="font-bold">Cần xác minh email</p><p className="mt-1">Thời gian giữ đơn còn lại</p><p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{countdown.text}</p><Button className="mt-2" size="sm" disabled={countdown.expired} onClick={onVerify}>Xác minh email</Button></div>}
-        {r.status === 'AWAITING_REVIEW' && <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950"><p className="font-bold">Đang chờ nhân viên cơ sở duyệt hàng hóa</p><p className="mt-1">Thời gian giữ hồ sơ còn lại</p><p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{countdown.text}</p><p className="mt-1">Tối đa 24 giờ từ khi xác minh email.</p></div>}
-        <CustomerReservationPayment reservation={r} facilityName={facilityName} unitTypeName={unitTypeName} paymentExpiresAt={detail?.paymentExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />
-        {r.status === 'AWAITING_CUSTOMER_RECEIPT' && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-right text-xs text-amber-950"><p className="font-bold">Nhân viên đã hoàn tất bàn giao</p><p className="mt-1">Vui lòng xác nhận bạn đã nhận kho và mã ra vào.</p><Button type="button" className="mt-2" size="sm" disabled={confirmingReceipt} onClick={() => void confirmReceipt()}>{confirmingReceipt ? 'Đang xác nhận…' : 'Xác nhận đã nhận kho'}</Button></div>}
-        {documentAvailable && <Button variant="outline" size="sm" disabled={busy} onClick={() => void prepareBookingDocument()}>{busy ? 'Đang chuẩn bị…' : 'Xem phiếu giữ kho'}</Button>}
-        {handoverDocumentsAvailable && <Button variant="outline" size="sm" disabled={busy} onClick={() => void loadHandoverDocuments()}>{busy ? 'Đang tải…' : 'Xem hợp đồng đã ký'}</Button>}
-        {['PAYMENT_GRACE', 'PAYMENT_REVIEW'].includes(r.status) && <CustomerPaymentComplaint reservation={r} complaintExpiresAt={detail?.complaintExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />}
-        {APPOINTMENT_EDITABLE_STATUSES.some(status => status === r.status) && <Button variant="ghost" size="sm" className="text-red-600 hover:bg-red-50 text-xs" onClick={() => setCancelConfirmOpen(true)}>Hủy giữ kho</Button>}
-      </div>
+      </section>
+      <section role="tabpanel" id={`reservation-quote-${r.id}`} aria-labelledby={`reservation-quote-tab-${r.id}`} hidden={activeSection !== 'quote'} className="w-full min-w-0 space-y-4">
+          {savedQuote ? <ReservationQuoteSummary quote={{ ...savedQuote, facilityName: savedQuote.facilityName || facilityName, unitTypeName: savedQuote.unitTypeName || unitTypeName }} needsReview={false} context="reservation" /> : <p role="status">{MISSING_RESERVATION_SNAPSHOT}</p>}
+            {r.setupExitReviewRequired && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><b>Đang chờ Business quyết định hoàn tiền</b><p className="mt-1 text-xs">Yêu cầu hủy/trả trong thời gian chuẩn bị không tự động hoàn tiền. Khoản hoàn và bước kiểm tra trả kho sẽ được quyết định theo tình trạng hàng thực tế.</p></div>}
+            {remainingPayment && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-950">
+              <p className="font-bold">Biên lai thanh toán phần còn lại</p>
+              <p className="mt-1">Đã ghi nhận {formatVnd(remainingPayment.amount)} bằng {remainingPayment.paymentMethod ? paymentMethodLabel(remainingPayment.paymentMethod) : 'phương thức tại quầy'}.</p>
+              <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => setPaymentReceipt(remainingPayment)}>Xem biên lai</Button>
+            </div>}
+      </section>
+
     </div>
     {message && <p role="status" className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{message}</p>}
     <Modal open={bookingDocumentOpen} onClose={() => setBookingDocumentOpen(false)} title="Phiếu xác nhận giữ kho">
@@ -431,21 +460,40 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
           <p className="font-bold">Phiếu xác nhận giữ kho đã được phát hành</p>
           <p className="mt-2">Đơn giữ kho: <b>{bookingDocument.reservationCode}</b></p>
           <p>Tệp: <b>{bookingDocument.fileName}</b></p>
-          <p>Ngày phát hành: <b>{new Date(bookingDocument.issuedAt).toLocaleString('vi-VN')}</b></p>
+          <p>Ngày phát hành: <b>{formatCustomerDateTime(new Date(bookingDocument.issuedAt))}</b></p>
         </div>
-        <p className="text-sm text-stone-600">Phiếu ghi nhận loại kho đã giữ và khoản cọc giữ chỗ đã thanh toán. Đây không phải hợp đồng thuê và không xác nhận một gian kho vật lý cụ thể.</p>
+        <p className="text-sm text-stone-600">Phiếu ghi nhận loại kho đã giữ và khoản đặt cọc giữ chỗ đã thanh toán. Đây không phải hợp đồng thuê và không xác nhận một gian kho vật lý cụ thể.</p>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Button variant="outline" onClick={() => void viewBookingDocument()}>Xem PDF</Button>
-          <Button onClick={() => void saveBookingDocument()}>Tải PDF</Button>
+          <Button variant="outline" onClick={() => viewBookingDocument()}>Xem PDF</Button>
+          <Button onClick={() => saveBookingDocument()}>Tải PDF</Button>
         </div>
       </div>}
+    </Modal>
+    <Modal open={receiptConfirmOpen} onClose={() => { if (!confirmingReceipt) setReceiptConfirmOpen(false) }} title="Xác nhận nhận bàn giao kho" size="2xl">
+      <div className="space-y-4">
+        <p className="text-sm text-stone-600">Đối chiếu thông tin dưới đây với gian kho và hồ sơ nhân viên đã bàn giao.</p>
+        <dl className="grid gap-4 rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm sm:grid-cols-2">
+          {[
+            ['Mã đơn giữ kho', r.reservationCode], ['Khách hàng nhận kho', r.customerName || 'Chưa cập nhật'],
+            ['Tên cơ sở', facilityName], ['Loại kho', unitTypeName],
+            ['Mã gian kho được bàn giao', r.assignedUnitCode || 'Chưa phân kho'],
+            ['Địa chỉ cơ sở', facilityDetails ? `${facilityDetails.address}, ${facilityDetails.city}` : 'Chưa cập nhật'],
+            ['Lịch nhận kho', savedAppointmentAt ? formatCustomerDateTime(new Date(savedAppointmentAt)) : 'Chưa đặt lịch'],
+            ['Thời gian chuẩn bị miễn phí', r.freeSetupDays == null ? 'Theo hợp đồng đã ký' : `${r.freeSetupDays} ngày sau khi bạn xác nhận nhận kho`],
+          ].map(([label, value]) => <div key={label}><dt className="text-xs text-stone-500">{label}</dt><dd className="mt-1 break-words font-semibold text-stone-900">{value}</dd></div>)}
+        </dl>
+        <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">Sau khi xác nhận, hồ sơ thuê và thời gian chuẩn bị bắt đầu. Khi chuyển hàng xong, chọn “Báo đã chuẩn bị xong” để nhân viên kiểm kê.</p>
+        <label className="flex items-start gap-3 rounded-lg border border-stone-200 p-3 text-sm"><input type="checkbox" className="mt-1" checked={receiptAcknowledged} disabled={confirmingReceipt} onChange={event => setReceiptAcknowledged(event.target.checked)} /><span>Tôi đã kiểm tra đúng gian kho, tình trạng kho và đã nhận hướng dẫn/quyền ra vào theo biên bản bàn giao.</span></label>
+        {message && <p role="status" className="text-sm text-amber-900">{message}</p>}
+        <div className="flex flex-wrap justify-end gap-2"><Button variant="outline" disabled={confirmingReceipt} onClick={() => setReceiptConfirmOpen(false)}>Kiểm tra lại</Button><Button disabled={!receiptAcknowledged || !r.assignedUnitCode || confirmingReceipt} onClick={() => confirmReceipt()}>{confirmingReceipt ? 'Đang xác nhận…' : 'Xác nhận đã nhận kho'}</Button></div>
+      </div>
     </Modal>
     <Modal open={handoverDocumentsOpen} onClose={() => setHandoverDocumentsOpen(false)} title="Văn bản hợp đồng và bàn giao">
       <div className="space-y-3">
         <p className="text-sm text-stone-600">Các tệp được nhân viên tải lên khi hoàn tất bàn giao kho.</p>
         {handoverDocuments.map((document, index) => {
           const isSignedContract = document.originalName.toLowerCase().startsWith('hop-dong-da-ky-') || index === 0
-          return <div key={document.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm"><span><b className="mr-2">{isSignedContract ? 'Hợp đồng đã ký' : 'Bằng chứng bàn giao'}</b>{document.originalName.replace(/^hop-dong-da-ky-/i, '')}</span><span className="flex gap-2"><Button size="sm" variant="outline" onClick={() => void viewHandoverDocument(document)}>Xem</Button><Button size="sm" onClick={() => void saveHandoverDocument(document)}>Tải xuống</Button></span></div>
+          return <div key={document.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm"><span><b className="mr-2">{isSignedContract ? 'Hợp đồng đã ký' : 'Bằng chứng bàn giao'}</b>{document.originalName.replace(/^hop-dong-da-ky-/i, '')}</span><span className="flex gap-2"><Button size="sm" variant="outline" onClick={() => viewHandoverDocument(document)}>Xem</Button><Button size="sm" onClick={() => saveHandoverDocument(document)}>Tải xuống</Button></span></div>
         })}
         {!handoverDocuments.length && <p className="rounded-lg border border-dashed border-stone-300 p-5 text-center text-sm text-stone-500">Chưa có văn bản bàn giao được tải lên.</p>}
       </div>
@@ -457,13 +505,19 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
       <div className="space-y-5">
         <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-900">
           {progress !== null && progress >= 3
-            ? `Đơn ${r.reservationCode} đã được xác nhận thanh toán cọc. Hủy trước khi nhận kho có thể mất cọc theo chính sách. Bạn chắc chắn muốn hủy?`
+            ? `Đơn ${r.reservationCode} đã được xác nhận thanh toán đặt cọc giữ chỗ. Hủy trước khi nhận kho có thể mất cọc theo chính sách. Bạn chắc chắn muốn hủy?`
             : `Bạn có chắc muốn hủy ${r.reservationCode}? Suất kho đang giữ sẽ được giải phóng.`}
         </p>
         <div className="flex justify-end gap-2 border-t border-stone-100 pt-4">
-          <Button variant="outline" onClick={() => setCancelConfirmOpen(false)}>Quay lại</Button>
-          <Button variant="danger" onClick={() => { setCancelConfirmOpen(false); onCancel() }}>Xác nhận hủy giữ kho</Button>
+          <Button variant="outline" disabled={removing} onClick={() => setCancelConfirmOpen(false)}>Quay lại</Button>
+          <Button variant="danger" disabled={removing} onClick={async () => { setRemoving(true); try { await onCancel(); setCancelConfirmOpen(false) } finally { setRemoving(false) } }}>{removing ? 'Đang hủy…' : 'Xác nhận hủy giữ kho'}</Button>
         </div>
+      </div>
+    </Modal>
+    <Modal open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)} title="Xóa đơn đặt giữ kho" closeLabel="Đóng xác nhận xóa">
+      <div className="space-y-5">
+        <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-900">Xóa đơn {r.reservationCode} khỏi danh sách đơn {r.status === 'COMPLETED' ? 'hoàn thành' : 'hết hạn'}?</p>
+        <div className="flex justify-end gap-2 border-t border-stone-100 pt-4"><Button variant="outline" disabled={removing} onClick={() => setDeleteConfirmOpen(false)}>Quay lại</Button><Button variant="danger" disabled={removing} onClick={async () => { setRemoving(true); try { await onDelete?.(); setDeleteConfirmOpen(false) } finally { setRemoving(false) } }}>{removing ? 'Đang xóa…' : 'Xóa đơn đặt giữ kho'}</Button></div>
       </div>
     </Modal>
  </Card>

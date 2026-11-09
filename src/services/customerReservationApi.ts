@@ -215,6 +215,8 @@ export interface ReservationRentalPackage {
 }
 
 export interface ReservationQuote {
+  pricingPackageCode?: string
+  rentalPeriodConfirmed?: boolean
   setupEarlyExitPolicyVersion?: string | null
   setupEarlyExitFee?: number | null
   quoteId: string
@@ -268,6 +270,7 @@ export interface CreateReservationInput {
 }
 
 export interface CustomerReservation {
+  rentalPeriodConfirmed?: boolean
   setupEarlyExitPolicyVersion?: string | null
   setupEarlyExitFee?: number | null
   setupReturnRentalId?: string | null
@@ -371,6 +374,8 @@ export interface CustomerReservationDetail {
   cancelReason: string | null
   goodsItems: ReservationGoodsItem[]
   payments: ReservationPaymentResult[]
+  checkInStatus?: string | null
+  rentalStatus?: string | null
 }
 
 export interface ReservationEmailVerificationResult {
@@ -634,6 +639,9 @@ export async function getCustomerReservation(reservationId: string) {
   )
   return checkedReservationDetail(response.data)
 }
+export async function deleteExpiredReservationHistory(reservationId: string) {
+  await apiRequest<ApiEnvelope<null>>(`/api/customer/reservations/${reservationId}/history`, { method: 'DELETE' })
+}
 export async function confirmCustomerReceipt(reservationId: string) {
   const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
     `/api/customer/reservations/${encodeURIComponent(reservationId)}/receipt-confirmation`,
@@ -649,6 +657,14 @@ export async function updateSetupGoods(
   const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
     `/api/customer/reservations/${encodeURIComponent(reservationId)}/setup-goods`,
     { method: 'POST', body: JSON.stringify(input) },
+  )
+  return checkedReservationDetail(response.data)
+}
+
+export async function markCustomerPreparationComplete(reservationId: string, note?: string) {
+  const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
+    `/api/customer/reservations/${encodeURIComponent(reservationId)}/preparation-complete`,
+    { method: 'POST', body: JSON.stringify({ note: note?.trim() || null }) },
   )
   return checkedReservationDetail(response.data)
 }

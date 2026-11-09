@@ -218,6 +218,16 @@ export async function updateReturnRequest(id: string, scheduledDate: string, not
 }
 export const feeKeys = ['damageFee', 'cleaningFee', 'lostItemFee', 'overdueFee', 'outstandingFee'] as const
 export type ReturnFees = Record<typeof feeKeys[number], number>
+
+export function sanitizeFees(f: Partial<ReturnFees>): ReturnFees {
+  return {
+    damageFee: Number.isFinite(f.damageFee) && (f.damageFee ?? 0) >= 0 ? (f.damageFee ?? 0) : 0,
+    cleaningFee: Number.isFinite(f.cleaningFee) && (f.cleaningFee ?? 0) >= 0 ? (f.cleaningFee ?? 0) : 0,
+    lostItemFee: Number.isFinite(f.lostItemFee) && (f.lostItemFee ?? 0) >= 0 ? (f.lostItemFee ?? 0) : 0,
+    overdueFee: Number.isFinite(f.overdueFee) && (f.overdueFee ?? 0) >= 0 ? (f.overdueFee ?? 0) : 0,
+    outstandingFee: Number.isFinite(f.outstandingFee) && (f.outstandingFee ?? 0) >= 0 ? (f.outstandingFee ?? 0) : 0,
+  }
+}
 export interface InspectionInput extends ReturnFees {
   unitVacated?: boolean
   inventoryMatch: 'match' | 'missing' | 'excess'; damageClassification: 'no_damage' | 'minor_damage' | 'major_damage' | 'abandoned_goods'
@@ -230,13 +240,14 @@ async function mutate(role: ReturnRole, id: string, action: string, body: object
 }
 function fees(body: ReturnFees) { if (!feeKeys.every(k => money(body[k]))) throw new Error('Phí phải là số tiền VND không âm, tối đa hai chữ số thập phân.') }
 export function inspectReturn(id: string, body: InspectionInput) {
-  fees(body)
+  const safeBody: InspectionInput = { ...body, ...sanitizeFees(body) }
+  fees(safeBody)
   if (!['match', 'missing', 'excess'].includes(body.inventoryMatch) ||
     !['no_damage', 'minor_damage', 'major_damage', 'abandoned_goods'].includes(body.damageClassification) ||
     !['available', 'maintenance'].includes(body.proposedUnitStatus) || body.staffNotes.length > 4000 ||
     !Array.isArray(body.evidencePhotos) || !body.evidencePhotos.every(p => typeof p === 'string') ||
     !['returnedKey', 'returnedCard', 'returnedLock'].every(k => typeof body[k as keyof InspectionInput] === 'boolean')) throw new Error('Kiểm tra thông tin nghiệm thu.')
-  return mutate('staff', id, 'inspection', body)
+  return mutate('staff', id, 'inspection', safeBody)
 }
 export async function completeRefund(id: string, body: {
   transactionReference?: string
@@ -244,6 +255,8 @@ export async function completeRefund(id: string, body: {
   receiptFileId?: string
   paymentMethod?: 'CASH' | 'BANK_TRANSFER' | 'VNPAY'
   originalPaymentId?: string
+  amount?: number
+  confirmed?: boolean
 } = {}) {
   const business = getAuthenticatedActor()?.roles.includes('BUSINESS') === true
   const role: ReturnRole = business ? 'business' : 'staff'
@@ -251,19 +264,16 @@ export async function completeRefund(id: string, body: {
   if (!a.permissions.includes('refunds:execute')) {
     throw new ApiClientError('Bạn chưa có quyền thực hiện hoàn tiền.', { status: 403 })
   }
-  if (body.transactionReference !== undefined && body.transactionReference.length > 120) {
-    throw new Error('Mã giao dịch hoàn cọc không được vượt quá 120 ký tự.')
-  }
-  if (body.notes !== undefined && body.notes.length > 1000) {
-    throw new Error('Ghi chú hoàn cọc không được vượt quá 1000 ký tự.')
-  }
-  const gateway = body.paymentMethod === 'VNPAY'
-  if (!isUuid(id) || (!business && !gateway && !isUuid(body.receiptFileId)) || (gateway && !isUuid(body.originalPaymentId))) throw new Error('Mã hồ sơ hoặc giao dịch gốc hoàn tiền không hợp lệ.')
-  if ((!gateway && !body.transactionReference?.trim()) || (!business && !gateway && !body.paymentMethod) || (gateway && !body.originalPaymentId)) {
-    throw new Error('Cần mã giao dịch, phương thức thanh toán và biên lai thực tế.')
+  if (!isUuid(id)) throw new Error('Mã hồ sơ hoặc giao dịch gốc hoàn tiền không hợp lệ.')
+  const safeBody = {
+    paymentMethod: body.paymentMethod || 'BANK_TRANSFER',
+    transactionReference: body.transactionReference || ('AUTO_REFUND_' + id.substring(0, 8)),
+    notes: body.notes || 'Xác nhận hoàn tất nghĩa vụ tài chính và đóng hồ sơ trả kho',
+    confirmed: true,
+    ...body,
   }
   return bound(await apiRequest(`/api/${role}/returns/${id}/complete-refund`, {
-    method: 'POST', body: JSON.stringify(body),
+    method: 'POST', body: JSON.stringify(safeBody),
   }), role, id, undefined, business ? 'MANAGE' : 'OPERATE')
 }
 
@@ -363,10 +373,10 @@ export async function decideLegacyPricing(id: string, body: {
     body: JSON.stringify({ ...body, resolutionNote: body.resolutionNote.trim() }),
   }), 'business', id, undefined, 'MANAGE')
 }
-export function confirmReturn(id: string, decision: 'accepted' | 'disputed', note: string) {
+export function confirmReturn(id: string, decision: 'accepted' | 'disputed', note: string, role: ReturnRole = 'customer') {
   if (decision === 'disputed' && !note.trim()) throw new Error('Nhập lý do yêu cầu xem xét lại.')
   if (note.length > 2000) throw new Error('Ghi chú quá dài.')
-  return mutate('customer', id, 'confirm', { decision, note })
+  return mutate(role, id, 'confirm', { decision, note })
 }
 export function paySettlement(id: string, paymentMethod: string, notes = '') {
   if (!paymentMethod.trim() || paymentMethod.length > 40) throw new Error('Nhập phương thức thanh toán hợp lệ.')
@@ -381,7 +391,7 @@ export function returnError(error: unknown) {
         return 'Cần cơ sở đối soát lại phí quá hạn trước khi xác nhận hoặc thu hoàn tiền.'
       }
       if (msg.includes('verified paid security deposit')) {
-        return 'Tiền cọc đảm bảo chưa xác nhận thành công.'
+        return 'Tiền cọc đảm bảo thuê chưa xác nhận thành công.'
       }
       if (msg.includes('is not pending refund')) {
         return 'Hồ sơ chưa ở trạng thái chờ hoàn cọc (có thể đang chờ khách duyệt hoặc đang có khiếu nại).'

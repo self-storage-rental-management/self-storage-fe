@@ -12,7 +12,7 @@ const statusLabels: Record<string, BilingualLabel> = {
   held: labels('Held', 'Đang giữ'),
   assigned: labels('Assigned', 'Đã phân công'),
   active: labels('Active', 'Đang hiệu lực'),
-  setup: labels('Free setup', 'Đang setup miễn phí'),
+  setup: labels('Preparation period', 'Đang trong thời gian chuẩn bị miễn phí'),
   paid: labels('Paid', 'Đã thanh toán'),
   refunded: labels('Refunded', 'Đã hoàn tiền'),
   overdue: labels('Overdue', 'Quá hạn'),
@@ -29,7 +29,7 @@ const statusLabels: Record<string, BilingualLabel> = {
   awaiting_deposit: labels('Awaiting deposit', 'Chờ thanh toán tiền cọc'),
   contract_signed: labels('Contract signed', 'Đã ký hợp đồng'),
   fully_paid: labels('Fully paid', 'Đã thanh toán đủ'),
-  unit_assigned: labels('Unit assigned', 'Đã phân gian kho'),
+  unit_assigned: labels('Storage assigned', 'Đã phân kho'),
   review_required: labels('Review required', 'Cần duyệt hồ sơ'),
   confirmed: labels('Confirmed', 'Đã xác nhận'),
   expired: labels('Expired', 'Đã hết hạn'),
@@ -82,7 +82,7 @@ const unitTypes: Record<string, BilingualLabel> = {
 }
 
 const paymentTypes: Record<string, BilingualLabel> = {
-  RESERVATION_DEPOSIT: labels('Reservation deposit', 'Cọc giữ chỗ'),
+  RESERVATION_DEPOSIT: labels('Reservation deposit', 'Đặt cọc giữ chỗ'),
   INITIAL_RENT: labels('Initial rent', 'Tiền thuê ban đầu'),
   RENT: labels('Rent', 'Tiền thuê định kỳ'),
   RENTAL_PAYMENT: labels('Rental payment', 'Thanh toán tiền thuê'),

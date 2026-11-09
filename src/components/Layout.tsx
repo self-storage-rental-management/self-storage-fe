@@ -122,6 +122,16 @@ export default function Layout({
   const notificationAreaRef = useRef<HTMLDivElement>(null)
   const contentScrollRef = useRef<HTMLElement>(null)
   useEffect(() => {
+    const originalHtmlOverflow = document.documentElement.style.overflow
+    const originalBodyOverflow = document.body.style.overflow
+    document.documentElement.style.overflow = 'hidden'
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.documentElement.style.overflow = originalHtmlOverflow
+      document.body.style.overflow = originalBodyOverflow
+    }
+  }, [])
+  useEffect(() => {
     if (!notificationsOpen) return
     const closeOutside = (event: PointerEvent) => {
       if (event.target instanceof Node) {
@@ -407,7 +417,7 @@ export default function Layout({
   }
 
   return (
-    <div className={`flex h-dvh min-h-0 w-full min-w-0 max-w-full overflow-hidden bg-[#f3f2eb] ${user.role === 'customer' ? 'customer-role-layout' : ''}`}>
+    <div className={`flex h-screen min-h-screen max-h-screen min-h-0 w-full min-w-0 max-w-full overflow-hidden bg-[#f3f2eb] ${user.role === 'customer' ? 'customer-role-layout' : ''}`}>
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -419,7 +429,7 @@ export default function Layout({
       {/* Sidebar */}
       <aside
         style={{ borderTopColor: taskbarColor }}
-        className={`fixed lg:static inset-y-0 left-0 z-30 min-h-0 w-64 shrink-0 border-t-2 bg-[#292a27] border-r border-white/10 text-white flex flex-col overflow-hidden transition-transform duration-200
+        className={`fixed lg:static inset-y-0 left-0 z-30 h-full min-h-0 w-64 shrink-0 border-t-2 bg-[#292a27] border-r border-white/10 text-white flex flex-col overflow-hidden transition-transform duration-200
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
       >
         {/* Logo */}
@@ -430,14 +440,16 @@ export default function Layout({
         {/* Role & Facility badge */}
         <div className="shrink-0 px-4 pt-4 pb-2 space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-normal text-stone-300">
+            <span
+              className="inline-flex items-center rounded-md border px-3 py-1.5 text-xs font-semibold"
+              style={{ color: taskbarColor, borderColor: taskbarColor, backgroundColor: `${taskbarColor}18` }}
+            >
               {getTranslatedRole()}
             </span>
           </div>
           {(user.role === 'manager' || user.role === 'staff') && (
             user.facility ? (
               <div className="flex items-center gap-1.5 px-2 py-1 text-xs text-stone-300">
-                <span>🏢</span>
                 <span className="truncate font-normal" title={user.facility}>{user.facility}</span>
               </div>
             ) : (
@@ -518,7 +530,7 @@ export default function Layout({
       </aside>
 
       {/* Main */}
-      <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
+      <div className={`flex-1 flex flex-col h-full min-h-0 min-w-0 overflow-hidden ${user.role === 'customer' ? 'basis-0 w-0' : ''}`}>
         {/* Top bar */}
         <header className="bg-white border-b border-[#deddd2] h-16 flex items-center px-4 lg:px-7 gap-3 lg:gap-4 flex-shrink-0">
           <button
@@ -637,7 +649,7 @@ export default function Layout({
 
         {/* Content */}
         <main ref={contentScrollRef} data-layout-scroll-container className="min-h-0 min-w-0 flex-1 basis-0 overflow-x-hidden overflow-y-auto overscroll-contain p-4 lg:p-7 fade-in">
-          <div className="mx-auto min-w-0 w-full max-w-[1600px]">{children}</div>
+          <div className={`mx-auto min-w-0 w-full ${user.role === 'customer' ? 'max-w-none' : 'max-w-[1600px]'}`}>{children}</div>
 
         </main>
       </div>

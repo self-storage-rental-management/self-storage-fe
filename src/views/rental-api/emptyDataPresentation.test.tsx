@@ -84,7 +84,13 @@ describe("Dương verified empty-data presentation", () => {
   })
   it("D3 Staff empty appointment list", () => {
     state.actor = operationsActor("staff")
-    verifyEmptyOnlyAfterSuccess(<StaffRenewalOperationsApiPanel />, 'Không có lịch ký phù hợp với bộ lọc.')
+    const view = <StaffRenewalOperationsApiPanel />
+    const html = renderToStaticMarkup(view)
+    expect(html).toContain('Đang diễn ra')
+    expect(html).toContain('Đã kết thúc')
+    verifyEmptyOnlyAfterSuccess(view, 'Không có lịch ký đang diễn ra.')
+    state.error = undefined
+    verifyEmptyOnlyAfterSuccess(view, 'Chưa có lịch ký đã kết thúc.')
   })
   it.each(["customer", "staff", "manager"] as const)("D3 %s hides verified empty event history and preserves loading/errors", role => {
     state.actor = operationsActor(role); state.mode = "operations"

@@ -51,9 +51,10 @@ const CHECK_IN_STATUS_LABELS: Record<string, string> = {
   identity_verified: "Đã xác minh khách",
   contract_signed: "Đã ký hợp đồng",
   payment_collected: "Đã thu tiền",
-  setup_in_progress: "Khách đang setup",
-  setup_completed: "Chờ kiểm kê",
-  completed: "Đã hoàn tất bàn giao",
+  handover_pending_receipt: "Đã bàn giao · Chờ khách xác nhận",
+  setup_in_progress: "Khách đang trong thời gian chuẩn bị",
+  setup_completed: "Chờ kiểm kê hàng hóa",
+  completed: "Đã hoàn tất kiểm kê",
   rejected: "Đã từ chối nhận kho",
   no_show: "Khách không đến",
   cancelled: "Đã hủy",
@@ -66,9 +67,10 @@ const RESERVATION_STATUS_LABELS: Record<string, string> = {
   PAYMENT_GRACE: "Chờ khiếu nại thanh toán",
   PAYMENT_REVIEW: "Đang đối soát thanh toán",
   CONFIRMED: "Đã xác nhận giữ kho",
-  UNIT_RESERVED: "Đã phân gian kho",
+  UNIT_RESERVED: "Đã phân kho",
   READY_FOR_CHECKIN: "Sẵn sàng nhận kho",
   AWAITING_CUSTOMER_RECEIPT: "Chờ khách hàng xác nhận nhận kho",
+  PREPARING: "Khách đang chuẩn bị hàng",
   COMPLETED: "Đã bàn giao",
   CANCELLED: "Đã hủy",
   EXPIRED: "Đã hết hạn",
@@ -130,6 +132,10 @@ export function staffErrorMessage(error: unknown, fallback: string) {
 
   if (code === "TIMEOUT")
     return "Hệ thống phản hồi quá lâu. Vui lòng thử lại sau ít phút."
+  if (code === "FILE_TOO_LARGE")
+    return typeof (candidate as { message?: unknown }).message === "string"
+      ? String((candidate as { message?: unknown }).message)
+      : "Tệp tải lên vượt quá dung lượng cho phép (tối đa 25MB)."
   if (code === "NETWORK_ERROR")
     return "Không thể kết nối đến hệ thống. Vui lòng kiểm tra mạng và thử lại."
   if (status === 401)
@@ -150,21 +156,21 @@ export function staffErrorMessage(error: unknown, fallback: string) {
     if (code === "OPTIMISTIC_LOCK")
       return "Dữ liệu vừa được cập nhật ở nơi khác. Vui lòng tải lại và thử lại."
     if (message.includes("Reservation is not READY_FOR_CHECKIN"))
-      return "Đơn chưa ở trạng thái sẵn sàng nhận kho. Vui lòng tải lại để đồng bộ trạng thái phân gian."
+      return "Đơn chưa ở trạng thái sẵn sàng nhận kho. Vui lòng tải lại để đồng bộ trạng thái phân kho."
     if (message.includes("Check-in step is out of order"))
       return "Các bước nhận kho đã thay đổi. Vui lòng tải lại hồ sơ để tiếp tục từ bước hiện tại."
     if (message.includes("Customer identity"))
-      return "CCCD/hộ chiếu không khớp với thông tin đã khai báo trong đơn."
+      return "CCCD/CMND không khớp với thông tin đã khai báo trong đơn."
     if (message.includes("not ready to record the remaining payment"))
       return "Hồ sơ chưa sẵn sàng ghi nhận khoản thu còn lại. Vui lòng tải lại và kiểm tra bước ký hợp đồng."
     if (message.includes("Credentials can only be activated"))
       return "Chỉ được kích hoạt ổ khóa sau khi đã ký hợp đồng và thu tiền."
     if (message.includes("no active unit assignment"))
-      return "Hồ sơ chưa có phân gian đang hoạt động. Vui lòng kiểm tra lại bước phân gian."
+      return "Hồ sơ chưa có phân kho đang hoạt động. Vui lòng kiểm tra lại bước phân kho."
     if (message.includes("Storage unit is not reserved"))
       return "Gian kho không còn ở trạng thái giữ chỗ cho hồ sơ này. Vui lòng tải lại để kiểm tra."
     if (message.includes("Customer setup must be completed"))
-      return "Khách chưa được ghi nhận setup xong nên chưa thể kiểm kê."
+      return "Khách chưa được ghi nhận đã chuẩn bị xong nên chưa thể kiểm kê."
     if (message.includes("Evidence can only be uploaded"))
       return "Chỉ được tải bằng chứng khi quy trình check-in đang thực hiện. Vui lòng mở lại hồ sơ và tiếp tục từ bước hiện tại."
     if (message.includes("lock reference"))

@@ -1,0 +1,16 @@
+export default function CustomerTransactionTerms() {
+  const terms = [
+    ['Đặt giữ kho và xác minh', 'Email được xác minh khi kích hoạt tài khoản; tài khoản đã xác minh không cần nhập OTP cho mỗi lần đặt kho. Giữ kho là tạm thời, chỉ xác nhận đặt thành công sau khi cọc được ghi nhận. Thời hạn thanh toán mặc định 15 phút; hàng cần duyệt có tối đa 6 giờ để duyệt rồi bắt đầu thời hạn thanh toán riêng. Luôn theo mốc giờ cụ thể trên đơn.'],
+    ['Hai khoản cọc khác nhau', 'Cọc giữ chỗ là khoản trả trước theo báo giá, được trừ vào tổng nghĩa vụ phải thanh toán. Tiền cọc đảm bảo thuê được ghi riêng và quyết toán khi trả kho. Báo giá phải hiển thị tiền thuê sau ưu đãi, cọc giữ chỗ, cọc đảm bảo thuê và phần còn phải thu. Không thu thêm một lần nữa khoản đã được ghi nhận.'],
+    ['Hủy đơn và giao dịch có sai sót', 'Khách tự hủy hoặc không nhận kho đúng hạn có thể không được hoàn cọc giữ chỗ theo điều khoản đã chấp nhận. Lỗi thuộc StorageHub, thu trùng, trừ tiền nhưng chưa xác nhận đơn hoặc không cung cấp đúng dịch vụ phải được đối soát và xử lý theo chứng từ, hợp đồng và quy định áp dụng; không tự động coi là mất cọc.'],
+    ['Bàn giao và thời gian chuẩn bị', 'Nhân viên hoàn tất xác minh, hợp đồng, thanh toán và bàn giao kho trống. Thời gian chuẩn bị bắt đầu khi khách xác nhận đã nhận kho và tính theo ngày lịch tại Việt Nam. Ngày bắt đầu tính tiền hiển thị trong hồ sơ. Phí trả sớm trong thời gian chuẩn bị áp dụng riêng theo báo giá đã chấp nhận, tránh cộng chồng các khoản cùng bản chất.'],
+    ['Hết hạn và khiếu nại', 'Hết hạn thanh toán, hệ thống đối soát ngân hàng trước khi giải phóng suất. Khi kết quả chưa rõ, thời hạn gửi bằng chứng giữ suất hiển thị trên đơn, mặc định 24 giờ; quản lý có mục tiêu xử lý 24 giờ từ khi tiếp nhận. Quá mốc giữ suất không làm mất quyền yêu cầu đối soát qua Hỗ trợ hoặc quyền khiếu nại theo quy định áp dụng.'],
+    ['Trả kho, khấu trừ và hoàn tiền', 'Khách được xem biên bản, ảnh, từng khoản công nợ/phí và gửi ý kiến trước quyết toán. Khoản hoàn và khấu trừ cần có căn cứ. Đã duyệt hoàn khác với đã chuyển tiền; hạn xử lý dự kiến được ghi trong thông báo duyệt, mặc định 7 ngày. Khi chuyển xong có số tiền và chứng từ đối chiếu; thời gian tiền về phụ thuộc ngân hàng.'],
+    ['Phiên bản điều khoản và thông báo', 'Kỳ thuê áp dụng báo giá, điều khoản và hợp đồng khách đã chấp nhận. Thay đổi giá hoặc quy định không tự sửa nghĩa vụ đã chốt; nội dung mới phải nêu thời điểm áp dụng và được xác nhận khi cần. Email giao dịch dùng để cập nhật hồ sơ; email quảng cáo chỉ gửi theo lựa chọn đồng ý và phải có cách hủy đăng ký.'],
+  ]
+  return <section className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/50 p-4 text-sm leading-6" aria-label="Điều khoản giao dịch cần biết">
+    <h4 className="font-bold text-stone-900">Điều khoản cần biết trước khi xác nhận</h4>
+    <dl className="space-y-3">{terms.map(([title, text]) => <div key={title}><dt className="font-semibold text-stone-900">{title}</dt><dd className="mt-1 text-stone-700">{text}</dd></div>)}</dl>
+    <p className="text-xs text-stone-600">Nội dung hướng dẫn cập nhật ngày 09/11/2026. Số tiền, thời hạn và điều khoản cụ thể của từng hồ sơ được lưu cùng báo giá/hợp đồng để đối chiếu.</p>
+  </section>
+}

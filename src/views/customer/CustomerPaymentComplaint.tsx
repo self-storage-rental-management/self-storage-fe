@@ -1,3 +1,4 @@
+import { formatCustomerDateTime } from '../../i18n/customerDate'
 import { userFacingError } from '../../presentation/userFacingError'
 import { useEffect, useRef, useState } from 'react'
 import { Button, Modal } from '../../components/ui'
@@ -103,6 +104,8 @@ export default function CustomerPaymentComplaint({ reservation, complaintExpires
     {reservation.status === 'PAYMENT_GRACE' && !complaint && <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-xs text-red-900">
       <p className="font-bold">Chưa ghi nhận thanh toán</p>
       <p className="mt-1">Nếu tài khoản đã bị trừ tiền, hãy gửi thông tin và ảnh giao dịch để được kiểm tra.</p>
+      <p className="mt-1">Kho được giữ trong thời hạn gửi khiếu nại bên dưới. Nếu không gửi trước hạn, đơn hết hạn và suất kho được giải phóng sau khi hệ thống hoàn tất đối soát.</p>
+      <p className="mt-1">Hết thời hạn giữ suất kho không làm mất quyền yêu cầu đối soát. Bạn vẫn có thể gửi chứng từ qua mục Hỗ trợ sau thời hạn này.</p>
       <p className="mt-2 font-bold">Thời gian gửi khiếu nại còn lại</p>
       <p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{countdown.text}</p>
       <Button className="mt-2" size="sm" disabled={countdown.expired} onClick={() => setOpen(true)}>{countdown.expired ? 'Đã hết thời hạn khiếu nại' : 'Gửi khiếu nại thanh toán'}</Button>
@@ -110,7 +113,8 @@ export default function CustomerPaymentComplaint({ reservation, complaintExpires
     {complaint && <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950">
       <p className="font-bold">Khiếu nại: {complaintStatusLabels[complaint.status]}</p>
       <p className="mt-1">{complaint.reason}</p>
-      {['PENDING', 'REVIEW_OVERDUE'].includes(complaint.status) && <p className="mt-1">Dự kiến xử lý trước: <b>{new Date(complaint.reviewDueAt).toLocaleString('vi-VN')}</b></p>}
+      {['PENDING', 'REVIEW_OVERDUE'].includes(complaint.status) && <p className="mt-1">Dự kiến xử lý trước: <b>{formatCustomerDateTime(new Date(complaint.reviewDueAt))}</b></p>}
+      {['PENDING', 'REVIEW_OVERDUE'].includes(complaint.status) && <p className="mt-1">Suất kho tiếp tục được giữ trong khi quản lý đối soát. Quá hạn xử lý sẽ được đánh dấu để theo dõi, không tự động hủy đơn hoặc kết luận mất tiền.</p>}
       {complaint.decisionReason && <p className="mt-1"><b>Phản hồi:</b> {complaint.decisionReason}</p>}
       {['PENDING', 'REVIEW_OVERDUE'].includes(complaint.status) && <Button variant="outline" size="sm" className="mt-2" disabled={busy} onClick={() => setWithdrawConfirmOpen(true)}>Rút khiếu nại</Button>}
     </div>}
@@ -122,7 +126,7 @@ export default function CustomerPaymentComplaint({ reservation, complaintExpires
         <p className="text-xs text-stone-500">Tối đa 10 ảnh PNG, JPEG hoặc WebP. Đã chọn: {files.length} ảnh.</p>
         {errorMessage && <p role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-800">{errorMessage}</p>}
         <div className="rounded-lg bg-red-50 p-3 text-center text-red-800"><p className="text-xs font-bold">Thời gian gửi khiếu nại còn lại</p><p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{countdown.text}</p></div>
-        <Button className="w-full" disabled={busy || countdown.expired || !reason.trim() || files.length === 0} onClick={() => void send()}>{busy ? 'Đang gửi…' : countdown.expired ? 'Đã hết thời hạn khiếu nại' : 'Gửi khiếu nại'}</Button>
+        <Button className="w-full" disabled={busy || countdown.expired || !reason.trim() || files.length === 0} onClick={() => send()}>{busy ? 'Đang gửi…' : countdown.expired ? 'Đã hết thời hạn khiếu nại' : 'Gửi khiếu nại'}</Button>
       </div>
     </Modal>
     <PaymentComplaintWithdrawalConfirmation

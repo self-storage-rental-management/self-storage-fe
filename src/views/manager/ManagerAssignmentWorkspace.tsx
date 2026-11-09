@@ -11,7 +11,7 @@ export default function ManagerAssignmentWorkspace({ showToast, onOpenRental, on
   const [tab, setTab] = useState<'waiting' | 'units'>('waiting')
   return <div className="space-y-5">
     <div className="inline-flex rounded-xl border border-stone-200 bg-white p-1 shadow-sm">
-      <Button variant={tab === 'waiting' ? 'primary' : 'ghost'} onClick={() => setTab('waiting')}>Đơn chờ phân gian</Button>
+      <Button variant={tab === 'waiting' ? 'primary' : 'ghost'} onClick={() => setTab('waiting')}>Đơn chờ phân kho</Button>
       <Button variant={tab === 'units' ? 'primary' : 'ghost'} onClick={() => setTab('units')}>Danh sách gian kho</Button>
     </div>
     {tab === 'waiting'

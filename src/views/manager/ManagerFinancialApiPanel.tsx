@@ -18,7 +18,7 @@ import { requestVnpayRefund } from '../../services/vnpayRefundApi'
 import { ApiClientError } from '../../services/apiClient'
 
 const typeLabels: Record<ManagerPaymentHistoryType, string> = {
-  RESERVATION_DEPOSIT: 'Cọc giữ chỗ',
+  RESERVATION_DEPOSIT: 'Đặt cọc giữ chỗ',
   RENTAL_BALANCE: 'Nhận kho',
   MONTHLY_RENT: 'Tiền thuê',
   RENEWAL: 'Gia hạn',
@@ -240,7 +240,7 @@ function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; 
               <p className="mt-0.5 truncate text-xs text-stone-500" title={paymentMethodLabel(item.paymentMethod)}>{paymentMethodLabel(item.paymentMethod)}</p>
             </Td>
             <Td className="!pl-1 !pr-2 whitespace-nowrap text-right text-sm font-semibold tabular-nums text-stone-900">
-              {item.type === 'RETURN_REFUND' ? `−${money(item.amount, item.currency)}` : money(item.amount, item.currency)}
+              {item.type === 'RETURN_REFUND' ? `-${money(item.amount, item.currency)}` : money(item.amount, item.currency)}
             </Td>
             <Td className="text-center"><span className="inline-flex whitespace-nowrap"><Badge variant={needsReconciliation(item) ? 'warning' : statusVariants[item.status]}>{paymentDisplayLabel(item)}</Badge></span></Td>
             <Td><PaymentTime value={item.occurredAt} /></Td>
