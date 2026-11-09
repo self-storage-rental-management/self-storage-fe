@@ -1034,7 +1034,7 @@ export default function StaffCheckInOperationsPanel({
                           className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
                           size="sm"
                           disabled={item.checkInStatus === "rejected" || item.checkInStatus === "no_show" || item.checkInStatus === "cancelled"}
-                          onClick={() => void beginHandover(item)}
+                          onClick={() => beginHandover(item)}
                         >
                           {item.checkInStatus ? "Tiếp tục check-in" : "Bắt đầu check-in"}
                         </Button>
@@ -1139,13 +1139,17 @@ export default function StaffCheckInOperationsPanel({
         open={Boolean(handoverTarget)}
         onClose={() => { if (!submitting) setHandoverTarget(null) }}
         title="Quy trình bàn giao, chuẩn bị và kiểm kê"
-        size="xl"
+        size="3xl"
       >
         {handoverTarget && (
           <div className="space-y-5">
-            <div className="rounded-lg bg-stone-50 p-3 text-sm">
-              <b>{handoverTarget.reservationCode}</b> · {handoverTarget.storageUnitCode} · {handoverTarget.customerName}
-            </div>
+            <dl className="grid gap-3 rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                ['Mã đơn giữ kho', handoverTarget.reservationCode], ['Mã gian kho bàn giao', handoverTarget.storageUnitCode],
+                ['Khách hàng nhận kho', handoverTarget.customerName], ['Tên cơ sở', handoverTarget.facilityName || 'StorageHub'],
+              ].map(([label, value]) => <div key={label}><dt className="text-xs text-stone-500">{label}</dt><dd className="mt-1 break-words font-semibold text-stone-900">{value || 'Chưa cập nhật'}</dd></div>)}
+            </dl>
+            <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">Hoàn tất bàn giao kho trống sẽ chuyển sang chờ khách hàng xác nhận nhận kho. Thời gian chuẩn bị chỉ bắt đầu sau xác nhận của khách; kiểm kê thực hiện khi khách báo đã chuẩn bị xong.</p>
             <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-6" aria-label="Tiến độ check-in">
               {workflowStepLabels.map((label, index) => {
                 const step = index + 1
@@ -1153,7 +1157,7 @@ export default function StaffCheckInOperationsPanel({
                   <button
                     key={label}
                     type="button"
-                    disabled={step > workflowCurrentStep}
+                    disabled={submitting || step > workflowCurrentStep}
                     onClick={() => setHandoverStep(step)}
                     aria-current={handoverStep === step ? "step" : undefined}
                     className={`rounded-lg border px-3 py-2 text-left text-xs transition ${
@@ -1325,7 +1329,7 @@ export default function StaffCheckInOperationsPanel({
                 {handoverTarget.lockReference && (
                   <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900">
                     <div className="flex items-center justify-between">
-                      <b>Ổ khóa & quyền ra vào đã được kích hoạt thành công</b>
+                      <b>Mã ổ khóa đã bàn giao cho khách hàng</b>
                       <span className="font-mono font-bold bg-white px-2.5 py-1 rounded border border-emerald-300 text-emerald-950">
                         {handoverTarget.lockReference}
                       </span>
@@ -1429,9 +1433,9 @@ export default function StaffCheckInOperationsPanel({
                   (handoverStep === 2 && (!contractFile || !!setupTermsKey && (confirmedSetupTerms !== setupTermsKey || handoverTarget.setupEarlyExitFee == null))) ||
                   (handoverStep === 3 && (handoverTarget.dueAtCheckIn ?? 0) > 0 && !paymentEvidenceFile) ||
                   (handoverStep === 4 && (!keyLockReference.trim() || !initialCondition.trim() || !evidenceFiles.length))
-                } onClick={() => void submitWorkflowStep()}>{submitting ? "Đang lưu…" : "Xác nhận và tiếp tục"}</Button>
+                } onClick={() => submitWorkflowStep()}>{submitting ? "Đang lưu…" : "Xác nhận và tiếp tục"}</Button>
               ) : (
-                <Button disabled={submitting || !allChecksComplete || !evidenceFiles.length || !initialCondition.trim() || !goodsCondition.trim() || !goodsCategory.trim() || (measurementVariance && (!varianceAccepted || !varianceReason.trim()))} onClick={() => void submitHandover()}>{submitting ? "Đang hoàn tất…" : "Hoàn tất kiểm kê"}</Button>
+                <Button disabled={submitting || !allChecksComplete || !evidenceFiles.length || !initialCondition.trim() || !goodsCondition.trim() || !goodsCategory.trim() || (measurementVariance && (!varianceAccepted || !varianceReason.trim()))} onClick={() => submitHandover()}>{submitting ? "Đang hoàn tất…" : "Hoàn tất kiểm kê"}</Button>
               )}
             </div>
           </div>
@@ -1464,7 +1468,7 @@ export default function StaffCheckInOperationsPanel({
               <Button
                 variant="danger"
                 disabled={submitting || !noShowReason.trim()}
-                onClick={() => void submitNoShow()}
+                onClick={() => submitNoShow()}
               >
                 Xác nhận khách không đến
               </Button>
@@ -1536,7 +1540,7 @@ export default function StaffCheckInOperationsPanel({
                   (!rejectEvidenceFiles.length &&
                     !rejectEvidenceReferences.length)
                 }
-                onClick={() => void submitRejection()}
+                onClick={() => submitRejection()}
               >
                 {submitting
                   ? "Đang tải bằng chứng và xử lý…"
@@ -1556,8 +1560,11 @@ export default function StaffCheckInOperationsPanel({
         {detailTarget?.handover && (
           <div className="space-y-4 text-sm">
             <div className="rounded-lg bg-stone-50 p-3">
-              <b>{detailTarget.reservationCode}</b> ·{" "}
-              {detailTarget.storageUnitCode} · {detailTarget.customerName}
+              <dl className="grid gap-3 sm:grid-cols-3">
+                <div><dt className="text-xs text-stone-500">Mã đơn giữ kho</dt><dd className="mt-1 font-semibold">{detailTarget.reservationCode}</dd></div>
+                <div><dt className="text-xs text-stone-500">Mã gian kho bàn giao</dt><dd className="mt-1 font-semibold">{detailTarget.storageUnitCode}</dd></div>
+                <div><dt className="text-xs text-stone-500">Khách hàng nhận kho</dt><dd className="mt-1 font-semibold">{detailTarget.customerName}</dd></div>
+              </dl>
               <p className="mt-1 text-xs text-stone-500">
                 Hoàn tất lúc {formatStaffDateTime(detailTarget.checkedInAt)} bởi{" "}
                 {detailTarget.performedByName ||
@@ -1701,7 +1708,7 @@ export default function StaffCheckInOperationsPanel({
                       size="sm"
                       variant="outline"
                       disabled={downloadingEvidence === assetId}
-                      onClick={() => void previewEvidenceFile(assetId)}
+                      onClick={() => previewEvidenceFile(assetId)}
                     >
                       {downloadingEvidence === assetId
                         ? "Đang tải…"
