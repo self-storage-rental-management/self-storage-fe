@@ -200,7 +200,16 @@ function MainContent() {
 
   const handleLogin = (nextUser: User) => {
     if (['/login', '/register', '/verify-email', '/reset-password', '/profile', '/profile/security'].includes(normalizedPathname())) {
-      window.history.replaceState(null, '', '/')
+      const incoming = new URLSearchParams(window.location.search)
+      const preserved = new URLSearchParams()
+      const section = incoming.get('emailSection')
+      if (section && ['reservations', 'rental-records', 'payments', 'policies'].includes(section)) {
+        preserved.set('emailSection', section)
+        const reservationId = incoming.get('reservationId')
+        if (reservationId) preserved.set('reservationId', reservationId)
+      }
+      const query = preserved.toString()
+      window.history.replaceState(null, '', query ? `/?${query}` : '/')
     }
     const authenticatedActor = getAuthenticatedActor()
     if (authenticatedActor) {

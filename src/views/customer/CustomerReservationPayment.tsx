@@ -51,8 +51,16 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
   const [busy, setBusy] = useState(false)
   const [acceptedNoRefund, setAcceptedNoRefund] = useState(false)
   const paymentKey = useRef<string | null>(null)
+  const paymentLock = useRef(false)
   const onRefreshRef = useRef(onRefresh)
   useEffect(() => { onRefreshRef.current = onRefresh }, [onRefresh])
+  useEffect(() => {
+    const resume = (event: PageTransitionEvent) => {
+      if (event.persisted) { paymentLock.current = false; setBusy(false); void onRefreshRef.current() }
+    }
+    window.addEventListener('pageshow', resume)
+    return () => window.removeEventListener('pageshow', resume)
+  }, [])
 
   useEffect(() => {
     if (['AWAITING_EMAIL', 'AWAITING_REVIEW'].includes(reservation.status)) return
@@ -114,7 +122,9 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
   }, [reservation.status, countdown.expired])
 
   const pay = async () => {
+    if (paymentLock.current) return
     if (busy || countdown.expired || !acceptedNoRefund || reservation.status !== 'AWAITING_PAYMENT' || !snapshot) return
+    paymentLock.current = true
     setBusy(true)
     try {
       paymentKey.current ??= crypto.randomUUID()
@@ -122,7 +132,7 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
       window.location.assign(result.paymentUrl)
     } catch (error) {
       onMessage(userFacingError(error, 'Không thể thanh toán đặt cọc giữ chỗ.'))
-    } finally {
+      paymentLock.current = false
       setBusy(false)
     }
   }
@@ -158,7 +168,8 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
             <p><span className="text-blue-800">{reservation.rentalPeriodConfirmed ? 'Ngày bắt đầu kỳ thuê đã chốt:' : 'Ngày bắt đầu kỳ thuê dự kiến:'}</span> <b>{formatDisplayDate(snapshot.startDate)}</b></p>
             <p><span className="text-blue-800">Ngày bắt đầu tính tiền:</span> <b>{formatDisplayDate(snapshot.startDate)}</b></p>
           </div>
-          <p className="mt-2 text-xs leading-5 text-blue-800">{reservation.rentalPeriodConfirmed ? 'Kỳ thuê đã được chốt theo ngày bàn giao thực tế và số ngày chuẩn bị miễn phí đã lưu.' : 'Ngày bắt đầu tính tiền bằng ngày bàn giao thực tế cộng số ngày chuẩn bị miễn phí đã chốt. Trước bàn giao, các mốc trên chỉ là dự kiến.'}</p>
+          <p className="mt-2 text-xs leading-5 text-blue-800">{reservation.rentalPeriodConfirmed ? 'Kỳ thuê đã được chốt theo ngày khách hàng xác nhận nhận kho và số ngày chuẩn bị miễn phí đã lưu.' : 'Ngày bắt đầu tính tiền bằng ngày khách hàng xác nhận nhận kho cộng số ngày chuẩn bị miễn phí đã chốt. Trước bàn giao, các mốc trên chỉ là dự kiến.'}</p>
+          <p className="mt-2 text-xs leading-5 text-blue-800">Nếu thanh toán thất bại rõ ràng, bạn có thể thử lại trước hạn. Khi hết hạn, hệ thống đối soát VNPay trước khi giải phóng suất kho. Nếu chưa có kết quả cuối cùng, kho tiếp tục được giữ trong thời hạn gửi khiếu nại hiển thị trên đơn. Khi có khiếu nại hợp lệ, kho được giữ trong thời gian quản lý xử lý.</p>
         </section>
         <div className="rounded-xl border-2 border-amber-500 bg-amber-50 p-4 text-center">
           <p className="text-xs font-bold uppercase tracking-wide text-amber-900">Số tiền cần thanh toán ngay</p>
@@ -175,10 +186,11 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
                 Thông báo quan trọng: Quy định không hoàn phí giữ chỗ
               </p>
               <p className="leading-relaxed text-rose-900 font-medium">
-                Khoản thanh toán ngay <b>{formatVnd(snapshot.reservationDepositAmount)}</b> là phí cam kết giữ chỗ gian kho đã chọn. Khoản tiền này <b>KHÔNG ĐƯỢC HOÀN LẠI</b> trong mọi trường hợp quý khách tự ý hủy đơn, đổi ý hoặc không đến nhận kho đúng thời hạn quy định.
+                Khoản thanh toán ngay <b>{formatVnd(snapshot.reservationDepositAmount)}</b> là cọc giữ chỗ, được trừ vào tổng nghĩa vụ phải thanh toán. Theo điều khoản đã chấp nhận, khoản này <b>không hoàn khi khách tự ý hủy hoặc không nhận kho đúng hạn</b>.
               </p>
               <p className="text-[11px] leading-relaxed text-rose-800">
                 Toàn bộ số tiền này sẽ được <b>khấu trừ 100%</b> vào tổng nghĩa vụ tài chính khi quý khách đến cơ sở làm thủ tục nhận kho đúng hẹn.
+                {' '}Trường hợp lỗi thuộc StorageHub, thu trùng hoặc giao dịch chưa rõ kết quả phải được đối soát và xử lý riêng theo chứng từ; không tự động coi là mất cọc.
               </p>
             </div>
           </div>
@@ -196,8 +208,8 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
           </span>
         </label>
 
-        <p className="text-sm text-stone-600">Bạn sẽ được chuyển sang VNPay Sandbox. Sau khi hoàn tất, VNPay sẽ đưa bạn trở lại StorageHub và cập nhật biên lai tự động.</p>
-        <Button className="w-full" disabled={busy || countdown.expired || !acceptedNoRefund} onClick={() => void pay()}>{busy ? 'Đang chuyển sang VNPay…' : `Thanh toán qua VNPay ${formatVnd(snapshot.reservationDepositAmount)}`}</Button>
+        <p className="text-sm text-stone-600">Bạn sẽ được chuyển sang VNPay Sandbox. Sau khi thanh toán thành công, biên lai được lưu trong đơn và gửi qua email tài khoản; hệ thống tự thử lại nếu gửi email tạm thời gặp lỗi.</p>
+        <Button className="w-full" disabled={busy || countdown.expired || !acceptedNoRefund} onClick={() => pay()}>{busy ? 'Đang chuyển sang VNPay…' : `Thanh toán qua VNPay ${formatVnd(snapshot.reservationDepositAmount)}`}</Button>
       </div>
     </Modal>
     <Modal size="3xl" open={receiptOpen} onClose={() => setReceiptOpen(false)} title={payment && bookingDepositAccepted(payment) ? 'Biên lai thanh toán' : 'Chi tiết giao dịch'}>
