@@ -2,6 +2,7 @@ import { formatCustomerDateTime } from '../../i18n/customerDate'
 import { formatVndAmount } from '../../i18n/currency'
 import type { ReservationQuote } from '../../services/customerReservationApi'
 import { rentalEndDateForDisplay } from '../../domain/rentalTimeline'
+import CustomerTransactionTerms from './CustomerTransactionTerms'
 
 function formatDisplayDate(value: string, endDate = false) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
@@ -21,6 +22,7 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
 
   return (
     <section className="space-y-5 rounded-2xl border border-stone-200 bg-white p-5 text-sm sm:p-6">
+      <details className="rounded-lg border border-stone-200 p-3"><summary className="cursor-pointer font-semibold">Điều khoản giữ kho, hủy, trả kho và hoàn tiền</summary><div className="mt-3"><CustomerTransactionTerms /></div></details>
       {/* ── HEADER BÁO GIÁ ── */}
       <div className="border-b border-stone-200 pb-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -35,7 +37,7 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
           {q.rentalPeriodConfirmed ? 'Kỳ thuê đã chốt:' : 'Kỳ thuê dự kiến sau thời gian chuẩn bị:'} <b className="text-stone-900">{formatDisplayDate(q.startDate)} đến {formatDisplayDate(q.endDate, true)}</b> · {q.rentalMonths} tháng
         </p>
         <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-950">
-          <b>{q.freeSetupDays ?? 0} ngày chuẩn bị miễn phí</b> tính từ ngày bàn giao thực tế. Các ngày này không nằm trong kỳ thuê đã thanh toán, ngày bắt đầu và kết thúc kỳ thuê sẽ được chốt theo ngày bàn giao thực tế. Quyền lợi này chỉ áp dụng một lần cho đơn ban đầu, không cộng lại khi gia hạn.
+          <b>{q.freeSetupDays ?? 0} ngày chuẩn bị miễn phí</b> tính từ khi khách hàng xác nhận đã nhận kho. Các ngày này không nằm trong kỳ thuê đã thanh toán, ngày bắt đầu và kết thúc kỳ thuê sẽ được chốt theo ngày khách hàng xác nhận nhận kho. Quyền lợi này chỉ áp dụng một lần cho đơn ban đầu, không cộng lại khi gia hạn.
         </div>
 
       </div>
@@ -155,7 +157,7 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
 
       {needsReview && (
         <p className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs text-stone-700 sm:text-sm">
-          Hàng hóa “Khác”: xác minh OTP sau khi tạo đơn để gửi nhân viên cơ sở duyệt. Chưa thu cọc cho đến khi hồ sơ được chấp thuận.
+          Hàng hóa “Khác”: tài khoản đã xác minh email được chuyển hồ sơ trực tiếp cho nhân viên cơ sở duyệt. Chưa thu cọc cho đến khi hồ sơ được chấp thuận.
         </p>
       )}
     </section>

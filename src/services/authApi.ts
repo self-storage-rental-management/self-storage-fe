@@ -172,13 +172,13 @@ export async function loginWithApi(email: string, password: string): Promise<Api
   return completeApiLogin(response, 'Backend trả về dữ liệu đăng nhập không hợp lệ.')
 }
 
-export async function loginWithGoogleApi(idToken: string): Promise<ApiActor> {
+export async function loginWithGoogleApi(idToken: string, captcha?: { captchaId: string; captchaAnswer: string } | null): Promise<ApiActor> {
   loginGeneration++
   clearAuthTokens()
   persistActor(null)
   const response = await apiRequest<ApiEnvelope<ApiAuthResponse>>('/api/auth/google', {
     method: 'POST',
-    body: JSON.stringify({ idToken }),
+    body: JSON.stringify({ idToken, ...captcha }),
     skipAuth: true,
     timeoutMs: 10_000,
   })
@@ -199,6 +199,8 @@ export async function changePasswordWithApi(currentPassword: string, newPassword
 }
 
 export async function registerWithApi(input: {
+  captchaId: string
+  captchaAnswer: string
   email: string
   password: string
   fullName: string
