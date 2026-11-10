@@ -340,7 +340,7 @@ export default function BusinessDashboardPanel({
       {/* ── TOP HEADER & CONTROLS ── */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <SectionHeader
-          title={isVi ? "Bảng Điều Khiển & Doanh Thu" : "Business Dashboard & Revenue"}
+          title={isVi ? "Doanh Thu & Báo Cáo" : "Business Revenue & Reporting"}
           subtitle={
             isVi
               ? "Tổng quan doanh thu thực thu, tiền cọc, tỷ lệ lấp đầy kho và hiệu suất toàn bộ chi nhánh"

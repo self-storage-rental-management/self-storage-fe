@@ -607,7 +607,7 @@ export default function BusinessApp({
     // ── TỔNG QUAN & BÁO CÁO ──
     {
       id: "dashboard",
-      label: "Bảng Điều Khiển",
+      label: "Doanh Thu",
       icon: Icon.chart,
       group: "Tổng Quan & Báo Cáo",
       permission: "facilities:read",
