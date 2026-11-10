@@ -18,6 +18,14 @@ import type { Facility, UnitType } from '../../types/storageHub'
 import { totalGoodsVolumeM3, formatGoodsVolume } from '../../domain/goodsMeasurements'
 import { rentalEndDateForDisplay } from '../../domain/rentalTimeline'
 
+const checkInDocumentLabels: Record<NonNullable<CheckInDocument['kind']>, string> = {
+  SIGNED_CONTRACT: 'Hợp đồng đã ký',
+  PAYMENT_RECEIPT: 'Chứng từ thanh toán tại cơ sở',
+  HANDOVER_EVIDENCE: 'Bằng chứng bàn giao kho trống',
+  INVENTORY_EVIDENCE: 'Bằng chứng kiểm kê hàng hóa',
+  OTHER: 'Tài liệu nhận kho',
+}
+
 const APPOINTMENT_EDITABLE_STATUSES = [
   'AWAITING_EMAIL',
   'AWAITING_REVIEW',
@@ -48,6 +56,10 @@ function maskIdentityDocument(value?: string | null) {
   return `${value.slice(0, 2)}••••${value.slice(-2)}`
 }
 
+function receiptBlockedByRentalStatus(status?: string | null) {
+  return status != null && status !== 'setup' && status !== 'active'
+}
+
 interface Props {
   reservation: CustomerReservation
   facilityName: string
@@ -60,11 +72,11 @@ interface Props {
   onCancel: () => void | Promise<unknown>
   onDelete?: () => void | Promise<unknown>
   onRefresh: () => Promise<void>
-  onReceiptConfirmed?: (reservationId: string) => void
+  onOpenRental?: (storageUnitId: string) => void
   visualTone?: 'active' | 'expired' | 'completed'
 }
 
-export default function CustomerReservationCard({ reservation: r, facilityName, unitTypeName, facilityDetails, unitTypeDetails, facility, unitType, onVerify, onCancel, onDelete, onRefresh, onReceiptConfirmed, visualTone = 'active' }: Props) {
+export default function CustomerReservationCard({ reservation: r, facilityName, unitTypeName, facilityDetails, unitTypeDetails, facility, unitType, onVerify, onCancel, onDelete, onRefresh, onOpenRental, visualTone = 'active' }: Props) {
   const [activeSection, setActiveSection] = useState<'information' | 'quote'>('information')
   const [detail, setDetail] = useState<CustomerReservationDetail | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -109,6 +121,11 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     return () => { disposed = true }
   }, [r.id, r.status])
   const countdown = paymentCountdown(detail?.paymentExpiresAt || r.holdExpiresAt, now)
+  const receiptBlocked = r.status === 'AWAITING_CUSTOMER_RECEIPT' && receiptBlockedByRentalStatus(detail?.rentalStatus)
+  const receiptStatusLabel = detail?.rentalStatus === 'completed'
+    ? 'Hồ sơ thuê đã kết thúc'
+    : detail?.rentalStatus === 'return_inspection' ? 'Đang kiểm tra trả kho' : 'Đang xử lý trả kho'
+  const legacyReceipt = detail?.checkInStatus === 'completed'
   const appointmentWindow = plannedCheckInWindow(
     r.createdAt,
     r.goodsReviewStatus !== 'NOT_REQUIRED',
@@ -220,17 +237,22 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     } catch (error) { setMessage(userFacingError(error, 'Không thể tải phiếu xác nhận giữ kho.')) }
   }
   const confirmReceipt = async () => {
-    if (receiptLock.current) return
+    if (receiptLock.current || receiptBlocked) return
     receiptLock.current = true
     setConfirmingReceipt(true); setMessage(null)
     try {
       const confirmed = await confirmCustomerReceipt(r.id)
       setReceiptConfirmOpen(false)
-      setMessage('Đã xác nhận nhận kho. Thời gian chuẩn bị hàng đã bắt đầu.')
+      setMessage(confirmed.reservation.status === 'PREPARING' ? 'Đã xác nhận nhận kho. Thời gian chuẩn bị hàng đã bắt đầu.' : 'Đã xác nhận nhận kho theo hồ sơ bàn giao.')
       try { await onRefresh() } catch { /* Receipt command has already succeeded. */ }
-      onReceiptConfirmed?.(confirmed.reservation.assignedUnitId || r.assignedUnitId || '')
+      onOpenRental?.(confirmed.reservation.assignedUnitId || r.assignedUnitId || '')
     } catch (error) {
       setMessage(userFacingError(error, 'Không thể xác nhận nhận kho.'))
+      try {
+        const latest = await getCustomerReservation(r.id)
+        setDetail(latest)
+        if (receiptBlockedByRentalStatus(latest.rentalStatus)) setReceiptConfirmOpen(false)
+      } catch { /* Keep the original error visible. */ }
       try { await onRefresh() } catch { /* Preserve the command error if readback is also unavailable. */ }
     }
     finally { receiptLock.current = false; setConfirmingReceipt(false) }
@@ -346,7 +368,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         <h3 className="mt-4 mb-3 text-base font-bold text-stone-900">Thông tin đơn giữ kho</h3>
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-bold text-amber-700">{r.reservationCode}</span>
-          <span className={`rounded px-2.5 py-1 text-xs font-bold ${progress !== null && progress >= 3 ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{reservationStatusLabels[r.status]}</span>
+          <span className={`rounded px-2.5 py-1 text-xs font-bold ${progress !== null && progress >= 3 ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{receiptBlocked ? receiptStatusLabel : reservationStatusLabels[r.status]}</span>
         </div>
         <h2 className="mt-1 text-lg font-bold text-stone-900">{unitTypeName} · {facilityName}</h2>
         <div className="mt-3 space-y-2">
@@ -359,10 +381,20 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         {r.status === 'AWAITING_EMAIL' && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-right text-xs text-amber-950"><p className="font-bold">Cần xác minh email</p><p className="mt-1">Thời gian giữ đơn còn lại</p><p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{countdown.text}</p><Button className="mt-2" size="sm" disabled={countdown.expired} onClick={onVerify}>Xác minh email</Button></div>}
         {r.status === 'AWAITING_REVIEW' && <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950"><p className="font-bold">Đang chờ nhân viên cơ sở duyệt hàng hóa</p><p className="mt-1">Thời gian giữ kho và hồ sơ còn lại</p><p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{countdown.text}</p><p className="mt-1">Tối đa 6 giờ từ khi gửi yêu cầu. Sau khi được duyệt, thời hạn thanh toán được hiển thị riêng trên đơn.</p></div>}
         <CustomerReservationPayment reservation={r} facilityName={facilityName} unitTypeName={unitTypeName} paymentExpiresAt={detail?.paymentExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />
-        {r.status === 'AWAITING_CUSTOMER_RECEIPT' && <div className="w-full rounded-lg border border-amber-300 bg-amber-50 p-3 text-left text-xs text-amber-950"><p className="font-bold">Chờ bạn xác nhận nhận kho</p><p className="mt-1">Nhân viên đã ghi nhận bàn giao. Kiểm tra đúng gian kho và quyền ra vào trước khi xác nhận.</p><Button type="button" className="mt-3 w-full" size="sm" disabled={confirmingReceipt} onClick={() => { setReceiptAcknowledged(false); setReceiptConfirmOpen(true) }}>Kiểm tra và xác nhận nhận kho</Button></div>}
+        {r.status === 'AWAITING_CUSTOMER_RECEIPT' && <div className="w-full rounded-lg border border-amber-300 bg-amber-50 p-3 text-left text-xs text-amber-950">
+          {receiptBlocked ? <>
+            <p className="font-bold">{receiptStatusLabel}</p>
+            <p className="mt-1">Mở Hồ sơ thuê để xem tiến độ, biên bản và quyết toán trả kho.</p>
+            {onOpenRental && <Button type="button" className="mt-3 w-full" size="sm" onClick={() => onOpenRental(r.assignedUnitId || '')}>Mở hồ sơ thuê</Button>}
+          </> : <>
+            <p className="font-bold">Chờ bạn xác nhận nhận kho</p>
+            <p className="mt-1">Nhân viên đã ghi nhận bàn giao. Kiểm tra đúng gian kho và quyền ra vào trước khi xác nhận.</p>
+            <Button type="button" className="mt-3 w-full" size="sm" disabled={!detail || confirmingReceipt} onClick={() => { setMessage(null); setReceiptAcknowledged(false); setReceiptConfirmOpen(true) }}>Kiểm tra và xác nhận nhận kho</Button>
+          </>}
+        </div>}
         {detail?.checkInStatus === 'setup_in_progress' && detail.rentalStatus === 'setup' && <div className="rounded-lg border border-violet-300 bg-violet-50 p-3 text-right text-xs text-violet-950"><p className="font-bold">Bạn đang trong thời gian chuẩn bị hàng</p><p className="mt-1">Sau khi chuyển hàng vào kho xong, hãy báo lại để hệ thống tạo yêu cầu kiểm kê cho Staff.</p><Button type="button" className="mt-2" size="sm" disabled={preparationSubmitting} onClick={() => markPreparationComplete()}>{preparationSubmitting ? 'Đang gửi…' : 'Báo đã chuẩn bị xong'}</Button></div>}
         {documentAvailable && <Button variant="outline" size="sm" className="reservation-action reservation-action-document min-h-10 w-full justify-center" disabled={busy} onClick={() => prepareBookingDocument()}>{busy ? 'Đang chuẩn bị…' : 'Xem phiếu giữ kho'}</Button>}
-        {handoverDocumentsAvailable && <Button variant="outline" size="sm" className="min-h-10 w-full justify-center" disabled={busy} onClick={() => loadHandoverDocuments()}>{busy ? 'Đang tải…' : 'Xem hợp đồng đã ký'}</Button>}
+        {handoverDocumentsAvailable && <Button variant="outline" size="sm" className="min-h-10 w-full justify-center" disabled={busy} onClick={() => loadHandoverDocuments()}>{busy ? 'Đang tải…' : 'Xem hợp đồng và chứng từ'}</Button>}
         {['PAYMENT_GRACE', 'PAYMENT_REVIEW'].includes(r.status) && <CustomerPaymentComplaint reservation={r} complaintExpiresAt={detail?.complaintExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />}
         {APPOINTMENT_EDITABLE_STATUSES.some(status => status === r.status) && <Button variant="ghost" size="sm" className="reservation-action reservation-action-cancel" onClick={() => setCancelConfirmOpen(true)}>Hủy giữ kho</Button>}
         {['EXPIRED', 'COMPLETED'].includes(r.status) && onDelete && <Button variant="danger" size="sm" className="min-h-10 w-full justify-center" onClick={() => setDeleteConfirmOpen(true)}>Xóa đơn đặt giữ kho</Button>}
@@ -428,7 +460,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
               onChange={event => { setAppointmentInput(`${appointmentInput.split('T')[0] || ''}T${event.target.value}`); setAppointmentErrors(current => ({ ...current, time: undefined })); setMessage(null) }} />{appointmentErrors.time && <p className="mt-1 text-xs text-red-700">{appointmentErrors.time}</p>}</label>
           </div>
           <Button size="sm" disabled={!appointmentInput || busy} onClick={() => saveAppointment()}>{busy ? 'Đang lưu…' : r.appointmentAt ? 'Đổi lịch nhận kho' : 'Lưu lịch nhận kho'}</Button>
-          <span className="basis-full text-[11px]">Bạn có thể nhận kho từ {formatCustomerDate(appointmentWindow.availableAt)} đến {formatCustomerDate(appointmentWindow.deadlineAt)}. Kỳ thuê có tính tiền bắt đầu sau số ngày chuẩn bị miễn phí, tính từ khi khách hàng xác nhận đã nhận kho. Trước bàn giao, ngày bắt đầu và kết thúc chỉ là dự kiến. Mọi thay đổi lịch sẽ được thông báo cho nhân viên tại cơ sở.</span>
+          <span className="basis-full text-[11px]">Bạn có thể nhận kho từ {formatCustomerDate(appointmentWindow.availableAt)} đến {formatCustomerDate(appointmentWindow.deadlineAt)}. Bạn có thể xác nhận bắt đầu kỳ thuê sớm sau kiểm kê, hoặc bắt đầu theo lịch hết miễn phí. Trước bàn giao, ngày bắt đầu và kết thúc chỉ là dự kiến.</span>
           {message && <p role="status" className="basis-full rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{message}</p>}
         </div>}
         {progress !== null && <div className="mt-4 border-t border-stone-200 pt-4">
@@ -469,7 +501,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         </div>
       </div>}
     </Modal>
-    <Modal open={receiptConfirmOpen} onClose={() => { if (!confirmingReceipt) setReceiptConfirmOpen(false) }} title="Xác nhận nhận bàn giao kho" size="2xl">
+    <Modal open={receiptConfirmOpen && !receiptBlocked} onClose={() => { if (!confirmingReceipt) setReceiptConfirmOpen(false) }} title="Xác nhận nhận bàn giao kho" size="2xl">
       <div className="space-y-4">
         <p className="text-sm text-stone-600">Đối chiếu thông tin dưới đây với gian kho và hồ sơ nhân viên đã bàn giao.</p>
         <dl className="grid gap-4 rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm sm:grid-cols-2">
@@ -479,10 +511,10 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
             ['Mã gian kho được bàn giao', r.assignedUnitCode || 'Chưa phân kho'],
             ['Địa chỉ cơ sở', facilityDetails ? `${facilityDetails.address}, ${facilityDetails.city}` : 'Chưa cập nhật'],
             ['Lịch nhận kho', savedAppointmentAt ? formatCustomerDateTime(new Date(savedAppointmentAt)) : 'Chưa đặt lịch'],
-            ['Thời gian chuẩn bị miễn phí', r.freeSetupDays == null ? 'Theo hợp đồng đã ký' : `${r.freeSetupDays} ngày sau khi bạn xác nhận nhận kho`],
+            ['Thời gian chuẩn bị miễn phí', r.freeSetupDays == null ? 'Theo hợp đồng đã ký' : `${r.freeSetupDays} ngày ${legacyReceipt ? 'theo biên bản bàn giao' : 'sau khi bạn xác nhận nhận kho'}`],
           ].map(([label, value]) => <div key={label}><dt className="text-xs text-stone-500">{label}</dt><dd className="mt-1 break-words font-semibold text-stone-900">{value}</dd></div>)}
         </dl>
-        <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">Sau khi xác nhận, hồ sơ thuê và thời gian chuẩn bị bắt đầu. Khi chuyển hàng xong, chọn “Báo đã chuẩn bị xong” để nhân viên kiểm kê.</p>
+        <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">{legacyReceipt ? 'Xác nhận để ghi nhận bạn đã nhận kho. Mốc chuẩn bị và kỳ thuê theo hồ sơ bàn giao đã lưu.' : 'Xác nhận nhận kho trống để bắt đầu thời gian miễn phí. Khi chuyển hàng xong, chọn “Báo đã chuẩn bị xong” để nhân viên kiểm kê. Sau kiểm kê, bạn có thể xác nhận bắt đầu tính kỳ thuê ngay trong Hồ sơ thuê.'}</p>
         <label className="flex items-start gap-3 rounded-lg border border-stone-200 p-3 text-sm"><input type="checkbox" className="mt-1" checked={receiptAcknowledged} disabled={confirmingReceipt} onChange={event => setReceiptAcknowledged(event.target.checked)} /><span>Tôi đã kiểm tra đúng gian kho, tình trạng kho và đã nhận hướng dẫn/quyền ra vào theo biên bản bàn giao.</span></label>
         {message && <p role="status" className="text-sm text-amber-900">{message}</p>}
         <div className="flex flex-wrap justify-end gap-2"><Button variant="outline" disabled={confirmingReceipt} onClick={() => setReceiptConfirmOpen(false)}>Kiểm tra lại</Button><Button disabled={!receiptAcknowledged || !r.assignedUnitCode || confirmingReceipt} onClick={() => confirmReceipt()}>{confirmingReceipt ? 'Đang xác nhận…' : 'Xác nhận đã nhận kho'}</Button></div>
@@ -490,10 +522,17 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     </Modal>
     <Modal open={handoverDocumentsOpen} onClose={() => setHandoverDocumentsOpen(false)} title="Văn bản hợp đồng và bàn giao">
       <div className="space-y-3">
-        <p className="text-sm text-stone-600">Các tệp được nhân viên tải lên khi hoàn tất bàn giao kho.</p>
+        <p className="text-sm text-stone-600">Hợp đồng và các chứng từ được ghi nhận trong quá trình nhận kho.</p>
         {handoverDocuments.map((document, index) => {
-          const isSignedContract = document.originalName.toLowerCase().startsWith('hop-dong-da-ky-') || index === 0
-          return <div key={document.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm"><span><b className="mr-2">{isSignedContract ? 'Hợp đồng đã ký' : 'Bằng chứng bàn giao'}</b>{document.originalName.replace(/^hop-dong-da-ky-/i, '')}</span><span className="flex gap-2"><Button size="sm" variant="outline" onClick={() => viewHandoverDocument(document)}>Xem</Button><Button size="sm" onClick={() => saveHandoverDocument(document)}>Tải xuống</Button></span></div>
+          const kind = document.kind ?? (/^hop-dong-da-ky-/i.test(document.originalName) ? 'SIGNED_CONTRACT' : 'OTHER')
+          const label = checkInDocumentLabels[kind] + (kind === 'OTHER' ? ` ${index + 1}` : '')
+          return <div key={document.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm">
+            <span className="min-w-0 break-words"><b className="mr-2">{label}</b>{document.originalName.replace(/^hop-dong-da-ky-/i, '')}</span>
+            <span className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => viewHandoverDocument(document)}>Xem</Button>
+              <Button size="sm" onClick={() => saveHandoverDocument(document)}>Tải xuống</Button>
+            </span>
+          </div>
         })}
         {!handoverDocuments.length && <p className="rounded-lg border border-dashed border-stone-300 p-5 text-center text-sm text-stone-500">Chưa có văn bản bàn giao được tải lên.</p>}
       </div>

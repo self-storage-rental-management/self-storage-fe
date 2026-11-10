@@ -75,8 +75,7 @@ describe("CustomerRenewalRequestModal UI improvement", () => {
     expect(html).toContain("Hợp đồng thuê này đã được tạo một yêu cầu gia hạn trước đó")
 
     // Verify old confusing buttons are gone
-    expect(html).not.toContain("Xác nhận &amp; Đi đến thanh toán")
-    expect(html).not.toContain("Xác nhận & Đi đến thanh toán")
+    expect(html).not.toContain("Xác nhận và xem yêu cầu")
     expect(html).not.toContain("Đóng và tải lại hồ sơ")
 
     // Verify clean action buttons
@@ -100,7 +99,7 @@ describe("CustomerRenewalRequestModal UI improvement", () => {
     // Form elements present
     expect(html).toContain("Gói gia hạn")
     expect(html).toContain("Hủy")
-    expect(html).toContain("Xác nhận &amp; Đi đến thanh toán")
+    expect(html).toContain("Xác nhận và xem yêu cầu")
 
     // No conflict alert card
     expect(html).not.toContain("Gian kho này đã có yêu cầu gia hạn đang mở")

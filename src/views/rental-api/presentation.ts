@@ -19,6 +19,14 @@ export const rentalLabels: Record<string, string> = {
   closing: "Đang quyết toán",
   completed: "Hoàn tất",
 }
+
+export function rentalStatusLabel(rental: Pick<RentalApiRecord, "status" | "inventoryVerifiedAt" | "canConfirmRentalStart">) {
+  if (rental.canConfirmRentalStart) return "Đã kiểm kê · Chờ xác nhận"
+  return rental.status === "setup" && rental.inventoryVerifiedAt
+    ? "Đã kiểm kê · Chờ kỳ thuê"
+    : rentalLabels[rental.status]
+}
+
 export const renewalLabels: Record<string, string> = {
   pending: "Hệ thống đang kiểm tra điều kiện",
   accepted: "Đã xác nhận, thanh toán chưa mở",
