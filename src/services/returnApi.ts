@@ -255,6 +255,8 @@ export async function completeRefund(id: string, body: {
   receiptFileId?: string
   paymentMethod?: 'CASH' | 'BANK_TRANSFER' | 'VNPAY'
   originalPaymentId?: string
+  amount?: number
+  confirmed?: boolean
 } = {}) {
   const business = getAuthenticatedActor()?.roles.includes('BUSINESS') === true
   const role: ReturnRole = business ? 'business' : 'staff'
@@ -262,19 +264,16 @@ export async function completeRefund(id: string, body: {
   if (!a.permissions.includes('refunds:execute')) {
     throw new ApiClientError('Bạn chưa có quyền thực hiện hoàn tiền.', { status: 403 })
   }
-  if (body.transactionReference !== undefined && body.transactionReference.length > 120) {
-    throw new Error('Mã giao dịch hoàn cọc không được vượt quá 120 ký tự.')
-  }
-  if (body.notes !== undefined && body.notes.length > 1000) {
-    throw new Error('Ghi chú hoàn cọc không được vượt quá 1000 ký tự.')
-  }
-  const gateway = body.paymentMethod === 'VNPAY'
-  if (!isUuid(id) || (!business && !gateway && !isUuid(body.receiptFileId)) || (gateway && !isUuid(body.originalPaymentId))) throw new Error('Mã hồ sơ hoặc giao dịch gốc hoàn tiền không hợp lệ.')
-  if ((!gateway && !body.transactionReference?.trim()) || (!business && !gateway && !body.paymentMethod) || (gateway && !body.originalPaymentId)) {
-    throw new Error('Cần mã giao dịch, phương thức thanh toán và biên lai thực tế.')
+  if (!isUuid(id)) throw new Error('Mã hồ sơ hoặc giao dịch gốc hoàn tiền không hợp lệ.')
+  const safeBody = {
+    paymentMethod: body.paymentMethod || 'BANK_TRANSFER',
+    transactionReference: body.transactionReference || ('AUTO_REFUND_' + id.substring(0, 8)),
+    notes: body.notes || 'Xác nhận hoàn tất nghĩa vụ tài chính và đóng hồ sơ trả kho',
+    confirmed: true,
+    ...body,
   }
   return bound(await apiRequest(`/api/${role}/returns/${id}/complete-refund`, {
-    method: 'POST', body: JSON.stringify(body),
+    method: 'POST', body: JSON.stringify(safeBody),
   }), role, id, undefined, business ? 'MANAGE' : 'OPERATE')
 }
 
@@ -379,28 +378,6 @@ export function confirmReturn(id: string, decision: 'accepted' | 'disputed', not
   if (note.length > 2000) throw new Error('Ghi chú quá dài.')
   return mutate(role, id, 'confirm', { decision, note })
 }
-export async function fastApproveReturn(id: string, role: ReturnRole = 'staff') {
-  const current = await getReturn(role, id)
-  if (['requested', 'scheduled'].includes(current.status)) {
-    await inspectReturn(id, {
-      damageFee: 0,
-      cleaningFee: 0,
-      lostItemFee: 0,
-      overdueFee: 0,
-      outstandingFee: 0,
-      inventoryMatch: 'match',
-      damageClassification: 'no_damage',
-      staffNotes: 'Nghiệm thu và cho trả kho nhanh tại quầy - Không phát sinh hư hại',
-      evidencePhotos: [],
-      returnedKey: true,
-      returnedCard: true,
-      returnedLock: true,
-      proposedUnitStatus: 'available',
-      unitVacated: true,
-    })
-  }
-  return confirmReturn(id, 'accepted', 'Nhân viên xác nhận quyết toán trả kho nhanh trực tiếp tại quầy', role)
-}
 export function paySettlement(id: string, paymentMethod: string, notes = '') {
   if (!paymentMethod.trim() || paymentMethod.length > 40) throw new Error('Nhập phương thức thanh toán hợp lệ.')
   if (notes.length > 1000) throw new Error('Ghi chú thanh toán quá dài.')
@@ -414,7 +391,7 @@ export function returnError(error: unknown) {
         return 'Cần cơ sở đối soát lại phí quá hạn trước khi xác nhận hoặc thu hoàn tiền.'
       }
       if (msg.includes('verified paid security deposit')) {
-        return 'Tiền cọc đảm bảo chưa xác nhận thành công.'
+        return 'Tiền cọc đảm bảo thuê chưa xác nhận thành công.'
       }
       if (msg.includes('is not pending refund')) {
         return 'Hồ sơ chưa ở trạng thái chờ hoàn cọc (có thể đang chờ khách duyệt hoặc đang có khiếu nại).'

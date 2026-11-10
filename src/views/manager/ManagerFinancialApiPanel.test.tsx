@@ -56,7 +56,7 @@ describe('Manager payment history screen', () => {
     expect(html).toContain('Lịch sử thanh toán')
     expect(html).toContain('VNPAY-20261013-001')
     expect(html).toContain('Demo Customer')
-    expect(html).toContain('Phí giữ chỗ')
+    expect(html).toContain('Đặt cọc giữ chỗ')
     expect(html).not.toContain('Mã hồ sơ thuê')
     expect(html).not.toContain('A-01')
     expect(html).not.toContain('Xem thông tin tài chính')
@@ -100,7 +100,7 @@ describe('Manager payment history screen', () => {
     let html = render()
     expect(html).toContain('Hoàn cọc')
     expect(html).toContain('Đã hoàn tiền')
-    expect(html).toContain('−6.600.000')
+    expect(html).toContain('-6.600.000')
     expect(html).toContain('Xem trước')
     state.list = { data: paymentPage([{ ...item, status: 'PENDING', paymentMethod: null }]) }
     html = render()

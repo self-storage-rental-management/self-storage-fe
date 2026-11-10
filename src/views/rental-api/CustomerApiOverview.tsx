@@ -5,7 +5,7 @@ import { getAuthenticatedActor } from "../../services/authApi"
 import { listRentals } from "../../services/rentalApi"
 import { listSupportTickets } from "../../services/supportApi"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
-import { rentalDate, rentalLabels, rentalMoney } from './presentation'
+import { rentalDate, rentalStatusLabel, rentalMoney } from './presentation'
 import { rentalDaysUntilDeadline } from './RentalDeadlineNotice'
 import type { RentalApiRecord } from '../../types/rentalApi'
 import { useState } from 'react'
@@ -106,7 +106,7 @@ export function CustomerRentalOverviewRow({ record, onOpen }: { record: RentalAp
     <div className="flex flex-wrap items-start justify-between gap-2">
       <div><p className="text-base font-bold text-stone-900">{record.storageUnit.code}</p><h3 className="mt-1 text-sm font-medium text-stone-700">{record.facility.name}</h3><p className="mt-1 text-xs text-stone-500">{record.unitType.name}</p></div>
       <div className="flex flex-wrap justify-end gap-1.5">
-        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${record.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-100 text-amber-800'}`}>{rentalLabels[record.status]}</span>
+        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${record.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-100 text-amber-800'}`}>{rentalStatusLabel(record)}</span>
         {Number.isFinite(days) && days <= 7 && <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${days < 0 ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'}`}>{days < 0 ? `Quá hạn ${-days} ngày` : days === 0 ? 'Hết hạn hôm nay' : `Còn ${days} ngày`}</span>}
       </div>
     </div>

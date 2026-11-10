@@ -721,7 +721,7 @@ export const UnitAllocationTable: React.FC<UnitAllocationTableProps> = ({
                                 aria-label={`Giảm số lượng kho ${spec.sizeCode}`}
                                 title={isEditing && spec.count <= occ ? `Đã chạm số lượng đang thuê (${occ})` : 'Giảm 1'}
                               >
-                                −
+                                -
                               </button>
                               <input
                                 type="number"

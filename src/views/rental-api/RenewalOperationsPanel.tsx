@@ -864,7 +864,7 @@ function OperationForm({
           {customerIdentity.data && <>
             <dl className="grid gap-3 text-sm sm:grid-cols-2">
               <div><dt className="text-xs text-stone-600">Khách hàng</dt><dd className="mt-1 font-semibold text-stone-900">{customerIdentity.data.fullName || 'Chưa có tên khách'}</dd></div>
-              <div><dt className="text-xs text-stone-600">Số CCCD / Hộ chiếu đã lưu</dt><dd className="mt-1 break-all font-semibold tabular-nums text-stone-900">{customerIdentity.data.identityDocumentNumber || 'Chưa có CCCD / Hộ chiếu trong hồ sơ gốc'}</dd></div>
+              <div><dt className="text-xs text-stone-600">Số CCCD/CMND đã lưu</dt><dd className="mt-1 break-all font-semibold tabular-nums text-stone-900">{customerIdentity.data.identityDocumentNumber || 'Chưa có CCCD/CMND trong hồ sơ gốc'}</dd></div>
             </dl>
           </>}
         </section>}
@@ -1039,7 +1039,7 @@ function OperationForm({
         {action === "completion" && (
           <>
             <ApiReadState {...cash} retry={cash.refresh} />
-            {cash.data?.effectiveStartDate && <p className="text-sm text-stone-700">Kỳ có hiệu lực khi hoàn tất hôm nay: <b>{rentalDate(cash.data.effectiveStartDate)} → {rentalDate(cash.data.effectiveEndDate)}</b>. Kiểm tra hợp đồng đã ký khớp kỳ này. Không cộng ngày setup.</p>}
+            {cash.data?.effectiveStartDate && <p className="text-sm text-stone-700">Kỳ có hiệu lực khi hoàn tất hôm nay: <b>{rentalDate(cash.data.effectiveStartDate)} → {rentalDate(cash.data.effectiveEndDate)}</b>. Kiểm tra hợp đồng đã ký khớp kỳ này. Không cộng thêm ngày chuẩn bị.</p>}
             <EvidenceUpload
                 entityType="DUONG_RENEWAL_SIGNED_CONTRACT"
                 entityId={s.renewalId}
