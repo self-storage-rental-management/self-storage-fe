@@ -277,7 +277,7 @@ export default function CustomerRenewalRequestModal({
                   Hợp đồng thuê này đã được tạo một yêu cầu gia hạn trước đó và hiện đang chờ hoàn tất thanh toán. Để tránh phát sinh chi phí trùng lặp, hệ thống không cho phép tạo thêm yêu cầu mới.
                 </p>
                 <p className="text-xs font-medium text-amber-800">
-                  💡 Bạn có thể đi đến yêu cầu gia hạn đã có để thanh toán online ngay hoặc kiểm tra thông tin.
+                  Bạn có thể đi đến yêu cầu gia hạn đã có để thanh toán online ngay hoặc kiểm tra thông tin.
                 </p>
               </div>
             </div>

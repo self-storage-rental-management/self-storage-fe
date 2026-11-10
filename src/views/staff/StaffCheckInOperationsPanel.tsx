@@ -1730,7 +1730,7 @@ export default function StaffCheckInOperationsPanel({
                       : "text-red-700"
                   }
                 >
-                  {detailTarget.handover?.checklist[key] ? "✓" : "✕"} {label}
+                  {detailTarget.handover?.checklist[key] ? "[Đạt]" : "[Chưa]"} {label}
                 </div>
               ))}
             </div>

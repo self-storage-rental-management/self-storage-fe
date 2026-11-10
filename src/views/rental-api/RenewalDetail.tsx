@@ -232,7 +232,7 @@ export default function RenewalDetail({
       )}
       {r.status === "completed" && (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-1">
-          <h4 className="font-bold text-emerald-900 text-sm">✓ Gia hạn hợp đồng thành công</h4>
+          <h4 className="font-bold text-emerald-900 text-sm">Gia hạn hợp đồng thành công</h4>
           <p className="text-xs text-emerald-800 leading-relaxed">
             Hợp đồng thuê của bạn đã được gia hạn thành công. Thời hạn mới có hiệu lực đến ngày <b>{rentalDate(r.newEndDate)}</b>.
           </p>
@@ -268,7 +268,7 @@ export default function RenewalDetail({
         <div className="rounded-xl border-2 border-emerald-500 bg-emerald-50/80 p-4 shadow-sm space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-white font-bold text-sm">💳</span>
+              
               <div>
                 <p className="font-bold text-emerald-950 text-base">Thanh toán gia hạn trực tuyến qua VNPay Sandbox</p>
                 <p className="text-xs text-emerald-800">
@@ -285,7 +285,7 @@ export default function RenewalDetail({
               disabled={operationsLocked || paymentBusy || paymentExpired}
               onClick={openRenewalPayment}
             >
-              {paymentBusy ? "Đang mở cổng VNPay..." : payment && ["PENDING", "PROCESSING", "NOT_RECEIVED"].includes(payment.paymentStatus) ? "Tiếp tục thanh toán qua VNPay" : "💳 Thanh toán ngay qua VNPay Sandbox"}
+              {paymentBusy ? "Đang mở cổng VNPay..." : payment && ["PENDING", "PROCESSING", "NOT_RECEIVED"].includes(payment.paymentStatus) ? "Tiếp tục thanh toán qua VNPay" : "Thanh toán ngay qua VNPay Sandbox"}
             </Button>
           </div>
         </div>

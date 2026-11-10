@@ -62,7 +62,7 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
               className="bg-white/10 hover:bg-white/20 text-white border-white/20 text-xs px-3.5 py-2 cursor-pointer"
               onClick={handleCopyAll}
             >
-              {copied ? '✓ Đã sao chép toàn văn' : 'Sao chép toàn văn'}
+              {copied ? 'Đã sao chép toàn văn' : 'Sao chép toàn văn'}
             </Button>
             <Button
               type="button"

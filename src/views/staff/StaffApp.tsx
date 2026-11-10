@@ -2319,7 +2319,7 @@ export default function StaffApp({
                               }
                             }}
                           >
-                            ✓ Duyệt gia hạn
+                            Duyệt gia hạn
                           </Button>
                           <Button
                             size="sm"
@@ -2337,7 +2337,7 @@ export default function StaffApp({
                               }
                             }}
                           >
-                            ✕ Từ chối
+                            Từ chối
                           </Button>
                         </div>
                       </div>
@@ -3335,7 +3335,7 @@ export default function StaffApp({
                 <b>{selectedReservation.email}</b>
                 <p className="text-xs">
                   {selectedReservation.emailVerified
-                    ? "✓ Đã xác nhận"
+                    ? "Đã xác nhận"
                     : "Chưa xác nhận"}
                 </p>
               </div>
@@ -3503,7 +3503,7 @@ export default function StaffApp({
                   key={item}
                   className="mb-1 rounded bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
                 >
-                  ✓ {item}
+                  {item}
                 </p>
               ))}
             </div>
@@ -3810,7 +3810,7 @@ export default function StaffApp({
 
               {returnMoistureOrigin === 'facility_fault' && (
                 <div className="rounded-lg border border-rose-200 bg-rose-100/80 p-2.5 text-xs text-rose-900 space-y-1">
-                  <p className="font-bold">{"✓ Trách nhiệm của cơ sở kho:"}</p>
+                  <p className="font-bold">{"Trách nhiệm của cơ sở kho:"}</p>
                   <p>{"Hệ thống tự động miễn trừ toàn bộ phí hư hại và vệ sinh đối với khách hàng. Hệ thống hoàn 100% tiền cọc và kích hoạt phiếu sửa chữa bảo trì khẩn cấp (P1) cho Đội Kỹ thuật."}</p>
                 </div>
               )}
@@ -3995,7 +3995,7 @@ export default function StaffApp({
               </div>
             ) : selectedSharedReturn?.status === "awaiting_customer_confirmation" ? (
               <div className="rounded-lg border border-amber-300 bg-amber-50 p-3.5 text-sm text-amber-900">
-                <p className="font-bold">⏳ Chờ khách hàng phản hồi duyệt quyết toán</p>
+                <p className="font-bold">Chờ khách hàng phản hồi duyệt quyết toán</p>
                 <p className="mt-1 text-xs leading-relaxed text-amber-800">
                   Biên bản nghiệm thu đã lập và đang chờ khách hàng duyệt. Nhân viên không đóng hồ sơ hoặc hoàn cọc thay khách hàng để tránh xung đột hệ thống (lỗi 409 Conflict).
                 </p>

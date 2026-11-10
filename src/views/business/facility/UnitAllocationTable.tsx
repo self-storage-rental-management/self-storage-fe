@@ -984,7 +984,7 @@ export const UnitAllocationTable: React.FC<UnitAllocationTableProps> = ({
                                     >
                                       {isLaneInvalid
                                         ? `Yêu cầu: ≥ ${std.minLaneM}m`
-                                        : `✓ Đạt chuẩn lưu thông`}
+                                        : `Đạt chuẩn lưu thông`}
                                     </span>
                                   </div>
 

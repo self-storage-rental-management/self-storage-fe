@@ -355,7 +355,7 @@ export default function BusinessDashboardPanel({
               onChange={(e) => setSelectedFacilityId(e.target.value)}
               aria-label="Lọc theo cơ sở"
             >
-              <option value="all">{isVi ? "🏢 Toàn bộ chi nhánh" : "🏢 All Facilities"}</option>
+              <option value="all">{isVi ? "Toàn bộ chi nhánh" : "All Facilities"}</option>
               {facilitiesList.map((f) => (
                 <option key={f.id} value={f.id}>
                   {f.name} ({f.code || f.id})
@@ -417,7 +417,7 @@ export default function BusinessDashboardPanel({
       {/* Error alert if any */}
       {error && (
         <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 text-sm rounded-xl flex items-center justify-between">
-          <span>⚠️ {error}</span>
+          <span>{error}</span>
           <Button variant="outline" size="sm" onClick={() => void loadData()}>
             Thử lại
           </Button>

@@ -444,7 +444,7 @@ function FeeInputRow({
   readOnly,
 }: {
   label: string
-  icon: string
+  icon?: string
   value: number
   onChange: (val: number) => void
   disabled?: boolean
@@ -455,8 +455,7 @@ function FeeInputRow({
     <div className="rounded-xl border border-stone-200 bg-stone-50/50 p-2.5 transition focus-within:border-emerald-500 focus-within:bg-white focus-within:ring-1 focus-within:ring-emerald-500">
       <div className="flex items-center justify-between gap-2">
         <label className="text-xs font-semibold text-stone-700 flex items-center gap-1.5">
-          <span>{icon}</span>
-          <span>{label}</span>
+          {icon && <span>{icon}</span>}<span>{label}</span>
         </label>
         {readOnly && <span className="text-[10px] text-stone-400 font-medium">Tự động</span>}
       </div>
@@ -687,16 +686,15 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                       <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-xs space-y-3">
                         <div className="flex items-center justify-between border-b border-stone-100 pb-2.5">
                           <h4 className="text-sm font-bold text-stone-900 flex items-center gap-2">
-                            <span>🔑</span>
                             <span>1. Thu hồi phụ kiện & chìa khóa</span>
                           </h4>
                           <span className="text-[11px] font-medium text-stone-500">Chạm để đổi trạng thái</span>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                           {([
-                            { key: 'returnedKey' as const, label: 'Chìa khóa cơ', icon: '🔑', desc: 'Chìa mở cửa gian kho' },
-                            { key: 'returnedCard' as const, label: 'Thẻ từ ra vào', icon: '💳', desc: 'Thẻ quét cổng an ninh' },
-                            { key: 'returnedLock' as const, label: 'Ổ khóa cơ sở', icon: '🔒', desc: 'Khóa do cơ sở cấp' },
+                            { key: 'returnedKey' as const, label: 'Chìa khóa cơ', desc: 'Chìa mở cửa gian kho' },
+                            { key: 'returnedCard' as const, label: 'Thẻ từ ra vào', desc: 'Thẻ quét cổng an ninh' },
+                            { key: 'returnedLock' as const, label: 'Ổ khóa cơ sở', desc: 'Khóa do cơ sở cấp' },
                           ]).map((item) => {
                             const isReturned = returned[item.key]
                             return (
@@ -712,11 +710,11 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                                 }`}
                               >
                                 <div className="flex w-full items-center justify-between">
-                                  <span className="text-xl">{item.icon}</span>
+                                  
                                   <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
                                     isReturned ? 'bg-emerald-600 text-white' : 'bg-stone-200 text-stone-600'
                                   }`}>
-                                    {isReturned ? '✓ Đã thu' : 'Chưa nhận'}
+                                    {isReturned ? 'Đã thu' : 'Chưa nhận'}
                                   </span>
                                 </div>
                                 <span className="mt-2 text-xs font-bold">{item.label}</span>
@@ -752,7 +750,6 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                       <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-xs space-y-4">
                         <div className="border-b border-stone-100 pb-2.5">
                           <h4 className="text-sm font-bold text-stone-900 flex items-center gap-2">
-                            <span>🏢</span>
                             <span>2. Hiện trạng kho & Kiểm kê hàng hóa</span>
                           </h4>
                         </div>
@@ -764,9 +761,9 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                           </label>
                           <div className="grid grid-cols-3 gap-2">
                             {([
-                              { id: 'match', label: 'Khớp khai báo', icon: '🟢' },
-                              { id: 'missing', label: 'Thiếu hàng', icon: '🟡' },
-                              { id: 'excess', label: 'Dư thừa', icon: '🟠' },
+                              { id: 'match', label: 'Khớp khai báo' },
+                              { id: 'missing', label: 'Thiếu hàng' },
+                              { id: 'excess', label: 'Dư thừa' },
                             ] as const).map((opt) => (
                               <button
                                 key={opt.id}
@@ -779,7 +776,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                                     : 'border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100'
                                 }`}
                               >
-                                <div className="text-base">{opt.icon}</div>
+                                
                                 <div className="mt-0.5 font-medium">{opt.label}</div>
                               </button>
                             ))}
@@ -793,10 +790,10 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                           </label>
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                             {([
-                              { id: 'no_damage', label: 'Không hư hại', desc: 'Kho nguyên vẹn', icon: '🟢' },
-                              { id: 'minor_damage', label: 'Hư hại nhẹ', desc: 'Trầy xước/bẩn', icon: '🟡' },
-                              { id: 'major_damage', label: 'Hư hại nặng', desc: 'Móp méo/vỡ', icon: '🔴' },
-                              { id: 'abandoned_goods', label: 'Bỏ lại hàng', desc: 'Còn đồ bên trong', icon: '📦' },
+                              { id: 'no_damage', label: 'Không hư hại', desc: 'Kho nguyên vẹn' },
+                              { id: 'minor_damage', label: 'Hư hại nhẹ', desc: 'Trầy xước/bẩn' },
+                              { id: 'major_damage', label: 'Hư hại nặng', desc: 'Móp méo/vỡ' },
+                              { id: 'abandoned_goods', label: 'Bỏ lại hàng', desc: 'Còn đồ bên trong' },
                             ] as const).map((opt) => (
                               <button
                                 key={opt.id}
@@ -812,8 +809,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                                     : 'border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100'
                                 }`}
                               >
-                                <div className="text-base">{opt.icon}</div>
-                                <div className="text-xs font-bold mt-0.5">{opt.label}</div>
+                                                                <div className="text-xs font-bold mt-0.5">{opt.label}</div>
                                 <div className="text-[10px] text-stone-500 mt-0.5">{opt.desc}</div>
                               </button>
                             ))}
@@ -827,8 +823,8 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                           </label>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             {([
-                              { id: 'available' as const, label: 'Sẵn sàng cho thuê tiếp', desc: 'Kho đạt chuẩn vệ sinh & kỹ thuật', icon: '✅' },
-                              { id: 'maintenance' as const, label: 'Cần bảo trì / vệ sinh', desc: 'Cần staff xử lý trước khi cho thuê', icon: '🔧' },
+                              { id: 'available' as const, label: 'Sẵn sàng cho thuê tiếp', desc: 'Kho đạt chuẩn vệ sinh & kỹ thuật' },
+                              { id: 'maintenance' as const, label: 'Cần bảo trì / vệ sinh', desc: 'Cần staff xử lý trước khi cho thuê' },
                             ]).map((opt) => (
                               <button
                                 key={opt.id}
@@ -842,7 +838,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                                 }`}
                               >
                                 <div className="flex items-center gap-2">
-                                  <span className="text-lg">{opt.icon}</span>
+                                  
                                   <span className="text-xs font-bold">{opt.label}</span>
                                 </div>
                                 <p className="text-[11px] text-stone-500 mt-1">{opt.desc}</p>
@@ -858,7 +854,6 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                   <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-xs space-y-4">
                     <div className="border-b border-stone-100 pb-2.5">
                       <h4 className="text-sm font-bold text-stone-900 flex items-center gap-2">
-                        <span>📸</span>
                         <span>3. Ảnh hiện trường & Biên bản nghiệm thu</span>
                       </h4>
                     </div>
@@ -879,7 +874,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                             title="Tải ảnh bằng chứng nghiệm thu"
                           />
                           <div className="flex flex-col items-center justify-center gap-1 pointer-events-none">
-                            <span className="text-2xl group-hover:scale-110 transition-transform">📸</span>
+                            
                             <p className="text-xs font-bold text-stone-800">
                               Nhấn để chọn ảnh hoặc kéo thả ảnh chụp kho vào đây
                             </p>
@@ -919,7 +914,6 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                   <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-xs space-y-4 sticky top-4">
                     <div className="border-b border-stone-100 pb-3">
                       <h4 className="text-sm font-bold text-stone-900 flex items-center gap-2">
-                        <span>💳</span>
                         <span>Bảng quyết toán cọc & Phụ phí</span>
                       </h4>
                       <p className="text-xs text-stone-500 mt-0.5">
@@ -940,11 +934,11 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
 
                     {/* Danh sách 5 khoản phí khấu trừ */}
                     <div className="space-y-2">
-                      <FeeInputRow label="Phí hư hỏng" icon="🔨" value={fees.damageFee} onChange={(v) => setFees((f) => ({ ...f, damageFee: v }))} disabled={busy} />
-                      <FeeInputRow label="Phí vệ sinh" icon="🧹" value={fees.cleaningFee} onChange={(v) => setFees((f) => ({ ...f, cleaningFee: v }))} disabled={busy} />
-                      <FeeInputRow label="Phí mất đồ / chìa khóa" icon="🔑" value={fees.lostItemFee} onChange={(v) => setFees((f) => ({ ...f, lostItemFee: v }))} disabled={busy} />
-                      <FeeInputRow label="Phí quá hạn" icon="⏱️" value={fees.overdueFee} onChange={(v) => setFees((f) => ({ ...f, overdueFee: v }))} disabled={busy} />
-                      <FeeInputRow label="Phí còn thiếu (Công nợ)" icon="📄" value={fees.outstandingFee} onChange={(v) => setFees((f) => ({ ...f, outstandingFee: v }))} readOnly disabled={busy} />
+                      <FeeInputRow label="Phí hư hỏng" value={fees.damageFee} onChange={(v) => setFees((f) => ({ ...f, damageFee: v }))} disabled={busy} />
+                      <FeeInputRow label="Phí vệ sinh" value={fees.cleaningFee} onChange={(v) => setFees((f) => ({ ...f, cleaningFee: v }))} disabled={busy} />
+                      <FeeInputRow label="Phí mất đồ / chìa khóa" value={fees.lostItemFee} onChange={(v) => setFees((f) => ({ ...f, lostItemFee: v }))} disabled={busy} />
+                      <FeeInputRow label="Phí quá hạn" value={fees.overdueFee} onChange={(v) => setFees((f) => ({ ...f, overdueFee: v }))} disabled={busy} />
+                      <FeeInputRow label="Phí còn thiếu (Công nợ)" value={fees.outstandingFee} onChange={(v) => setFees((f) => ({ ...f, outstandingFee: v }))} readOnly disabled={busy} />
                     </div>
 
                     {/* Tổng khấu trừ */}
@@ -960,7 +954,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                       <div className="rounded-xl border border-emerald-300 bg-gradient-to-br from-emerald-50 to-teal-50/70 p-3.5 space-y-1">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-bold text-emerald-950 uppercase tracking-wide">
-                            ✓ Hoàn cọc dự kiến cho khách
+                            Hoàn cọc dự kiến cho khách
                           </span>
                           <span className="rounded-full bg-emerald-200 px-2 py-0.5 text-[10px] font-extrabold text-emerald-900">
                             HOÀN CỌC
@@ -1000,7 +994,6 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                         disabled={busy || (canReview && !note.trim()) || (canInspect && !!record.setupExitRequested && (vacatedReturnId !== id || damage === 'abandoned_goods'))}
                         className="w-full !bg-emerald-600 hover:!bg-emerald-700 text-white font-bold py-3 text-sm shadow-md flex items-center justify-center gap-2 cursor-pointer"
                       >
-                        <span>📋</span>
                         <span>{canInspect ? 'Ghi nhận kết quả nghiệm thu' : 'Ghi nhận xem xét khiếu nại'}</span>
                       </Button>
 
@@ -1037,7 +1030,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
               className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer"
               onClick={() => void run(() => confirmReturn(id, 'accepted', note.trim() || 'Nhân viên hỗ trợ xác nhận quyết toán trực tiếp tại quầy', role))}
             >
-              ✓ Xác nhận hoàn tất trả kho ngay
+              Xác nhận hoàn tất trả kho ngay
             </Button>
           </div>
         </div>
@@ -1067,7 +1060,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                 proposedUnitStatus: 'available',
               }))}
             >
-              ✓ Duyệt trả kho & Hoàn tất ngay
+              Duyệt trả kho & Hoàn tất ngay
             </Button>
           </div>
         </div>
@@ -1077,9 +1070,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50/90 p-4 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white font-bold text-base shadow-xs">
-                ✓
-              </span>
+              
               <div>
                 <p className="font-bold text-emerald-950 text-sm">
                   Khách hàng đã hoàn thành nghĩa vụ tài chính · Tiền cọc hoàn: {rentalMoney(record.netRefundAmount, 'VND')}
@@ -1096,7 +1087,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
               className="!bg-emerald-600 hover:!bg-emerald-700 text-white font-bold px-5 py-2.5 cursor-pointer shadow-sm whitespace-nowrap"
               onClick={() => void run(() => completeRefund(id, { amount: record.netRefundAmount ?? undefined }))}
             >
-              ✓ Xác nhận hoàn tất đóng hồ sơ
+              Xác nhận hoàn tất đóng hồ sơ
             </Button>
           </div>
         </div>
@@ -1105,9 +1096,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
         <div className="rounded-2xl border border-amber-200 bg-amber-50/90 p-4 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-600 text-white font-bold text-base shadow-xs">
-                💵
-              </span>
+              
               <div>
                 <p className="font-bold text-amber-950 text-sm">
                   Phụ phí phát sinh: {rentalMoney(record.amountDueFromCustomer, 'VND')}
@@ -1124,7 +1113,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
               className="!bg-amber-600 hover:!bg-amber-700 text-white font-bold px-5 py-2.5 cursor-pointer shadow-sm whitespace-nowrap"
               onClick={() => void run(() => confirmReturn(id, 'accepted', 'Nhân viên xác nhận hoàn tất phụ phí và đóng hồ sơ trả kho', role))}
             >
-              ✓ Xác nhận đã thu & Đóng hồ sơ
+              Xác nhận đã thu & Đóng hồ sơ
             </Button>
 
 

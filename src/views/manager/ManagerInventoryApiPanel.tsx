@@ -606,7 +606,7 @@ function CreateUnitTypeModal({ open, facilityId, existingCodes = [], onClose, on
         })}
         {selectedCategories.length === 0 && (
           <p className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs font-semibold text-amber-800">
-            ⚠️ Vui lòng chọn ít nhất 1 loại hàng hóa mà loại kho này chấp nhận lưu trữ.
+            Vui lòng chọn ít nhất 1 loại hàng hóa mà loại kho này chấp nhận lưu trữ.
           </p>
         )}
       </section>
