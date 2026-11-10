@@ -15,14 +15,15 @@ describe('authoritative backend pricing', () => {
   it('renders all snapshot amounts in VND with the actual 20% deposit', () => {
     const html = renderToStaticMarkup(<ReservationQuoteSummary quote={quote} needsReview={false} />)
     for (const amount of ['5.500.000 ₫', '16.500.000 ₫', '495.000 ₫', '4.301.000 ₫', '17.204.000 ₫', '21.505.000 ₫']) expect(html).toContain(amount)
-    expect(html).toContain('Phí giữ chỗ (20%)')
-    expect(html).toContain('Tiền cọc đảm bảo kho')
+    expect(html).toContain('Đặt cọc giữ chỗ (20%)')
+    expect(html).toContain('Tiền cọc đảm bảo thuê')
     expect(html).not.toContain('40%')
     expect(html).not.toContain('166.452.000.000')
   })
-  it('requires OTP and staff approval for OTHER without opening payment early', () => {
+  it('requires verified email and staff approval for OTHER without opening payment early', () => {
     const html = renderToStaticMarkup(<ReservationQuoteSummary quote={quote} needsReview />)
-    expect(html).toContain('xác minh OTP')
+    expect(html).toContain('tài khoản đã xác minh email')
+    expect(html).not.toContain('xác minh OTP')
     expect(html).toContain('nhân viên cơ sở duyệt')
     expect(html).toContain('Chưa thu cọc')
   })
@@ -34,7 +35,7 @@ describe('authoritative backend pricing', () => {
       reservationDepositRate: 0.15,
     }
     const html = renderToStaticMarkup(<ReservationQuoteSummary quote={customQuote} needsReview={false} />)
-    expect(html).toContain('Phí giữ chỗ (15%)')
+    expect(html).toContain('Đặt cọc giữ chỗ (15%)')
     expect(html).toContain('3.225.750 ₫')
     expect(html).toContain('15% × tổng tiền')
   })
@@ -66,6 +67,6 @@ expect(html).toContain('66.500.000 ₫')
 expect(html).toContain('63.650.000 ₫')
 expect(html).toContain('12.730.000 ₫')
 expect(html).toContain('50.920.000 ₫')
-expect(html).toContain('Phí giữ chỗ (20%)')
+expect(html).toContain('Đặt cọc giữ chỗ (20%)')
 expect(html).not.toContain('54.150.000 ₫')
 })

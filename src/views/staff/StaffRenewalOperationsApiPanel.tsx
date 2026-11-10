@@ -145,7 +145,7 @@ function StaffSession({ identity, onLocked }: { identity: string; onLocked: (val
           </div>
           {group.rows.length > 0 ? <div className="overflow-x-auto">
             <table className="w-full min-w-[680px] text-left text-sm">
-              <caption className="sr-only">Lịch ký gia hạn — {group.title}</caption>
+              <caption className="sr-only">Lịch ký gia hạn - {group.title}</caption>
               <thead className="border-b border-stone-200 bg-stone-50 text-xs text-stone-600">
                 <tr>
                   <th scope="col" className="px-4 py-3 font-semibold">Hồ sơ gia hạn</th>

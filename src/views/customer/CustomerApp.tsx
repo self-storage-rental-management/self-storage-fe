@@ -24,6 +24,7 @@ import CustomerRentalsApiPanel from './CustomerRentalsApiPanel'
 import { CustomerApiMetric, CustomerRentalApiLink } from '../rental-api/CustomerApiOverview'
 import { resolveCustomerInitialPage } from './customerRentalApiIntegration'
 import CustomerReservationOtpModal from './CustomerReservationOtpModal'
+import { referenceBoxCapacity } from '../../domain/referenceBoxCapacity'
 import { canApiCustomerNavigate, isApiAuthenticated } from '../../services/authApi'
 import { ApiClientError } from '../../services/apiClient'
 import { subscribeGoodsCatalog } from '../../services/goodsCatalogEvents'
@@ -35,7 +36,7 @@ import ReturnSettlementModal from '../../components/ReturnSettlementModal'
 import { generateDefaultRentalPackages, resolveRentalPackagesForUnit } from '../../domain/packageRules'
 import { LEGACY_RENEWAL_NOTICE, LEGACY_RENEWAL_HISTORY_NOTICE, legacyRenewalMoney, isLegacyRenewalPayment } from '../../domain/legacyRenewal'
 import LegacyRenewalPaymentRecord from '../rental-api/LegacyRenewalPaymentRecord'
-import { firstBookableCheckInMinute, firstCheckInMinute, submissionCheckInWindow, formatPolicyDateTime, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyTimeInput, PAYMENT_WINDOW_MINUTES, MANAGER_ASSIGNMENT_HOURS, CHECK_IN_WINDOW_DAYS } from '../../domain/reservationCheckInPolicy'
+import { firstCheckInMinute, submissionCheckInWindow, isCheckInDateAllowed, policyDateInput, policyTimeInput, PAYMENT_WINDOW_MINUTES, MANAGER_ASSIGNMENT_HOURS, CHECK_IN_WINDOW_DAYS } from '../../domain/reservationCheckInPolicy'
 import CustomerSupportChatbot from '../../components/support/CustomerSupportChatbot'
 import CustomerSupportWidget from '../../components/support/CustomerSupportWidget'
 import { paymentCurrencyLabel, paymentMethodLabel } from './paymentLabels'
@@ -63,6 +64,7 @@ import {
   createCustomerReservation,
   createReservationQuote,
   getCustomerReservation,
+  deleteExpiredReservationHistory,
   listCustomerReservations,
   resendReservationOtp,
   uploadReservationGoodsImage,
@@ -90,6 +92,18 @@ type CustomerCatalogUnit = StorageUnit & {
   trolley: string
   trolleyDetail: string
 }
+
+async function loadCustomerReservationRecords() {
+  const currentPage = await listCustomerReservations(undefined, 0, 100)
+  // Read expired records after the active list so a deadline transition between
+  // requests is picked up by the history request.
+  const expiredPage = await listCustomerReservations('EXPIRED', 0, 100)
+  const records = new Map<string, CustomerReservation>()
+  currentPage.data.forEach(reservation => records.set(reservation.id, reservation))
+  expiredPage.data.forEach(reservation => records.set(reservation.id, reservation))
+  return [...records.values()]
+}
+
 type CustomerConfirmation = {
   title: string
   message: string
@@ -108,7 +122,7 @@ const uniqueRentalPackagesByDuration = (packages: ReservationRentalPackage[]) =>
 }
 
 const isIdentityDocumentFormatValid = (value: string) =>
-  /^[0-9A-Za-z][0-9A-Za-z .-]{8,29}$/.test(value.trim())
+  /^(?:\d{9}|\d{12})$/.test(value.trim().replace(/\s+/g, ''))
 
 const customerTrolleyVi = (sizeCode?: string, originalTrolley?: string): string => {
   if (!originalTrolley || originalTrolley === 'Chưa cập nhật') return 'Chưa cập nhật'
@@ -219,7 +233,7 @@ const statusLabelMap: Record<string, string> = {
     payment_failed: 'Thanh toán thất bại',
     payment_expired: 'Hết hạn thanh toán',
     confirmed: 'Đã xác nhận',
-    deposit_paid: 'Đã phí giữ chỗ',
+    deposit_paid: 'Đã đặt cọc giữ chỗ',
     full_rent_paid: 'Đã thanh toán toàn kỳ gia hạn',
     contract_signed: 'Đã ký hợp đồng',
     fully_paid: 'Đã thanh toán đủ',
@@ -230,7 +244,7 @@ const statusLabelMap: Record<string, string> = {
     cancelled: 'Đã hủy',
     expired: 'Đã hết hạn',
     return_requested: 'Chờ trả kho',
-    refund_pending: 'Chờ chuyển hoàn cọc',
+    refund_pending: 'Chờ chuyển hoàn tiền cọc đảm bảo thuê',
     payment_due: 'Chờ đóng phần thiếu',
     awaiting_customer_confirmation: 'Chờ xác nhận quyết toán',
     completed: 'Đã hoàn tất',
@@ -312,7 +326,7 @@ function SizeCategoryCard({ facility, unitType, apiSpec, availableCount, onReser
           <div><p className="text-xs text-stone-500">{'Diện tích'}</p><p className="mt-0.5 font-bold text-black">{unitType.areaM2} m²</p></div>
           <div><p className="text-xs text-stone-500">{'Kích thước (D×R×C)'}</p><p className="mt-0.5 font-bold text-black">{unitType.lengthM} × {unitType.widthM} × {unitType.heightM} m</p></div>
           <div><p className="text-xs text-stone-500">{'Thể tích kho'}</p><p className="mt-0.5 font-bold text-black">{unitType.volumeM3} m³</p></div>
-          <div><p className="text-xs text-stone-500">{'Số khung kệ'}</p><p className="mt-0.5 font-bold text-black">{apiSpec?.rackCount ?? '—'} khung</p></div>
+          <div><p className="text-xs text-stone-500">{'Số khung kệ'}</p><p className="mt-0.5 font-bold text-black">{apiSpec?.rackCount ?? '-'} khung</p></div>
           <div><p className="text-xs text-stone-500">{'Chiều rộng lối đi'}</p><p className="mt-0.5 font-bold text-black">{amenities ? `${amenities.aisleWidthM} m` : 'Chưa có dữ liệu'}</p></div>
           <div><p className="text-xs text-stone-500">{'Tải trọng tối đa'}</p><p className="mt-0.5 font-bold text-black">{unitType.maxLoadKg.toLocaleString('vi-VN')} kg</p></div>
         </div>
@@ -326,6 +340,8 @@ function SizeCategoryCard({ facility, unitType, apiSpec, availableCount, onReser
         <div className="pt-5">
           <p className="text-xs text-stone-500">{'Giá thuê từ'}</p>
           <p className="text-2xl font-bold tracking-tight text-black">{apiSpec ? formatVndAmount(apiSpec.monthlyPrice) : formatVnd(unitType.monthlyPrice)}<span className="text-sm font-normal text-stone-500">/{'tháng'}</span></p>
+          <p className="mt-1 text-xs text-stone-600">Cọc giữ chỗ theo báo giá hệ thống</p>
+          <p className="mt-1 text-xs text-stone-600">{`Tiền cọc đảm bảo thuê: ${apiSpec?.securityDepositAmount != null ? formatVndAmount(apiSpec.securityDepositAmount) : isApiAuthenticated() ? 'Chưa có dữ liệu' : formatVndAmount(unitType.monthlyPrice)} (hoàn sau nghiệm thu nếu không phát sinh khấu trừ)`}</p>
           {!isAvailable && <p className="mt-2 text-xs font-bold text-red-700">{'Cỡ kho này hiện chưa thể đặt.'}</p>}
           <div className="mt-4 grid grid-cols-2 gap-2">
             <Button variant="outline" size="sm" onClick={() => onViewSpecs(facility, unitType, availableCount)}>{'Xem chi tiết'}</Button>
@@ -365,7 +381,7 @@ function notificationTimestamp(value?: string): number {
 
 function addMonthsForPreview(value: string, months: number): string {
   const date = parseCustomerDate(value)
-  if (!date || months <= 0) return '—'
+  if (!date || months <= 0) return '-'
   const year = date.getFullYear()
   const month = date.getMonth()
   const day = date.getDate()
@@ -681,8 +697,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     let initialLoad = true
     const loadReservations = async () => {
       try {
-        const result = await listCustomerReservations(undefined, 0, 50)
-        if (!cancelled) setBackendReservations(result.data)
+        const reservations = await loadCustomerReservationRecords()
+        if (!cancelled) setBackendReservations(reservations)
       } catch (error) {
         if (!cancelled && initialLoad) {
           showToast(userFacingError(error, 'Không thể tải danh sách đặt kho.'))
@@ -748,7 +764,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const [reservationSizeFilter, setReservationSizeFilter] = useState('all')
   const [reservationSearch, setReservationSearch] = useState('')
   const [reservationPageNumber, setReservationPageNumber] = useState(1)
-  const reservationPageSize = 5
+  const reservationPageSize = 3
+  const [expiredReservationPageNumber, setExpiredReservationPageNumber] = useState(1)
+  const [completedReservationPageNumber, setCompletedReservationPageNumber] = useState(1)
   const [rentalFacilityFilter, setRentalFacilityFilter] = useState('all')
   const [rentalTypeFilter, setRentalTypeFilter] = useState('all')
   const [rentalDeadlineFilter, setRentalDeadlineFilter] = useState<'all' | 'upcoming' | 'overdue'>('all')
@@ -767,7 +785,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   // Live timer tick
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000)
+    const timer = setInterval(() => {
+      if (typeof document === 'undefined' || !document.hidden) {
+        setNow(Date.now())
+      }
+    }, 1000)
     return () => clearInterval(timer)
   }, [])
 
@@ -797,7 +819,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const [moveInDate, setMoveInDate] = useState(availabilityPeriod.startDate)
   const [bookingAppointmentTime, setBookingAppointmentTime] = useState('09:00')
   const [bookingStartedAt, setBookingStartedAt] = useState(() => Date.now())
-  const [schedulePolicyMessage, setSchedulePolicyMessage] = useState<string | null>(null)
   const [rentalMonths, setRentalMonths] = useState(3)
   const [selectedPackageId, setSelectedPackageId] = useState<string>('')
   const [customerIdCard, setCustomerIdCard] = useState('')
@@ -805,6 +826,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const [customerEmail] = useState(user.email)
   const [customerAddress, setCustomerAddress] = useState(user.permanentAddress ?? '')
   const [bookingErrors, setBookingErrors] = useState<Record<string, string>>({})
+  const updateBookingError = (key: string, message?: string) => setBookingErrors(current => {
+    const next = { ...current }
+    if (message) next[key] = message
+    else delete next[key]
+    return next
+  })
   const [reservationSubmitError, setReservationSubmitError] = useState<string | null>(null)
   const bookingErrorRef = useRef<HTMLDivElement | null>(null)
 
@@ -818,7 +845,18 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     }).catch(error => { if (!cancelled) showToast(userFacingError(error, 'Không thể cập nhật số kho trống.')) })
     return () => { cancelled = true }
   }, [backendUnitTypes, availabilityPeriod, availabilityRevision])
+  const clearBookingSessionDraft = () => {
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        window.sessionStorage.removeItem('storagehub_customer_booking_draft')
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   const resetBookingForm = () => {
+    clearBookingSessionDraft()
     setGoodsItems([createGoodsDeclarationItem('goods-1')])
     setGoodsCondition('')
     setMoveInDate(availabilityPeriod.startDate)
@@ -829,7 +867,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     setCustomerPhone(user.phone ?? '')
     setCustomerAddress(user.permanentAddress ?? '')
     setBookingErrors({})
-    setSchedulePolicyMessage(null)
     setReservationSubmitError(null)
     setValidationViolation(null)
     setServerRecommendation(null)
@@ -840,6 +877,49 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     setTermsAccepted(false)
     setBookingVoucherCode('')
   }
+
+  useEffect(() => {
+    if (!selectedTarget) return
+    if (bookingStep === 1 && !customerIdCard && !customerAddress && goodsItems.length <= 1 && !goodsItems[0]?.lengthCm) {
+      return
+    }
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        const draft = {
+          facilityId: selectedTarget.facility.id,
+          unitTypeId: selectedTarget.unitType.id,
+          bookingStep,
+          customerIdCard,
+          customerPhone,
+          customerAddress,
+          goodsItems: goodsItems.map(g => ({ ...g, images: [] })),
+          goodsCondition,
+          rentalMonths,
+          selectedPackageId,
+          moveInDate,
+          bookingAppointmentTime,
+          termsAccepted,
+          updatedAt: Date.now(),
+        }
+        window.sessionStorage.setItem('storagehub_customer_booking_draft', JSON.stringify(draft))
+      }
+    } catch {
+      // ignore
+    }
+  }, [
+    selectedTarget,
+    bookingStep,
+    customerIdCard,
+    customerPhone,
+    customerAddress,
+    goodsItems,
+    goodsCondition,
+    rentalMonths,
+    selectedPackageId,
+    moveInDate,
+    bookingAppointmentTime,
+    termsAccepted,
+  ])
   const capacitySamples: PackageSample[] = goodsItems.map((item, index) => ({
     id: item.id, quantity: item.quantity, lengthCm: item.lengthCm, widthCm: item.widthCm,
     heightCm: item.heightCm, weightKg: item.weightKg,
@@ -848,7 +928,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const packageCountNumber = capacitySamples.reduce((sum, sample) => sum + (Number(sample.quantity) || 0), 0)
   const goodsWeightNumber = capacitySamples.reduce((sum, sample) => sum + ((Number(sample.quantity) || 0) * (Number(sample.weightKg) || 0)), 0)
   const goodsVolumeM3 = capacitySamples.reduce((sum, sample) => sum + packageVolumeM3(sample), 0)
-  const formatVolumeM3 = (value: number) => value.toLocaleString('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+  const formatVolumeM3 = (value: number) => value.toLocaleString('vi-VN', { minimumFractionDigits: value > 0 && value < 0.01 ? 6 : 0, maximumFractionDigits: value > 0 && value < 0.01 ? 6 : 2 })
   const formatRackDimensions = (dimensions: [number, number, number]) => dimensions.map(value => value.toLocaleString('vi-VN', { maximumFractionDigits: 2 })).join(' × ')
   const largestPackage = capacitySamples.reduce<PackageSample | null>((largest, sample) => {
     const volume = Number(sample.lengthCm) * Number(sample.widthCm) * Number(sample.heightCm)
@@ -871,16 +951,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     : goodsItems.map(item => catalogCategoryFor(item.category)?.custom || item.category === 'OTHER' ? item.customMaterial : item.materialName).filter(Boolean).join(', ')
   const hasOtherGoods = goodsItems.some(item => catalogCategoryFor(item.category)?.custom || item.category === 'OTHER')
   const checkInWindow = useMemo(
-    () => plannedCheckInWindow(bookingStartedAt, hasOtherGoods),
-    [bookingStartedAt, hasOtherGoods],
+    () => submissionCheckInWindow(now, hasOtherGoods),
+    [now, hasOtherGoods],
   )
   const earliestAppointment = firstCheckInMinute(checkInWindow.availableAt)
   const earliestCheckInDate = policyDateInput(earliestAppointment)
-  const earliestCheckInTime = policyTimeInput(earliestAppointment)
   const latestCheckInDate = policyDateInput(checkInWindow.deadlineAt)
-  const latestCheckInTime = policyTimeInput(checkInWindow.deadlineAt)
-  const previousReviewRequirement = useRef(hasOtherGoods)
-  const previousBookingStart = useRef<number | null>(null)
 
   const apiGoodsItems = useMemo<GoodsItemInput[]>(() => goodsItems.map(item => {
     const quantity = Math.max(1, Number(item.quantity) || packageCountNumber || 1)
@@ -942,21 +1018,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   useEffect(() => {
     if (!bookOpen) return
-    if (previousReviewRequirement.current === hasOtherGoods && previousBookingStart.current === bookingStartedAt) return
-    previousBookingStart.current = bookingStartedAt
-    const selectedAt = moveInDate && bookingAppointmentTime
-      ? new Date(`${moveInDate}T${bookingAppointmentTime}:00+07:00`)
-      : null
-    const invalid = !selectedAt || !isCheckInAppointmentAllowed(selectedAt, checkInWindow)
-    if (invalid) {
-      setMoveInDate(earliestCheckInDate)
-      setBookingAppointmentTime(earliestCheckInTime)
-      if (!previousReviewRequirement.current && hasOtherGoods) {
-        setSchedulePolicyMessage(`Do hàng hóa “Khác” cần nhân viên duyệt trong tối đa 6 giờ, lịch cũ không còn hợp lệ. Hệ thống đã chuyển sang thời điểm sớm nhất ${formatPolicyDateTime(checkInWindow.availableAt)}.`)
-      }
-    }
-    previousReviewRequirement.current = hasOtherGoods
-  }, [bookOpen, hasOtherGoods, checkInWindow.availableAt, checkInWindow.deadlineAt, earliestCheckInDate, earliestCheckInTime, moveInDate, bookingAppointmentTime])
+    if (moveInDate >= earliestCheckInDate && moveInDate <= latestCheckInDate) return
+
+    setMoveInDate(earliestCheckInDate)
+  }, [bookOpen, earliestCheckInDate, latestCheckInDate, moveInDate])
 
   useEffect(() => {
     if (!bookOpen || !bookingRentalPeriod) return
@@ -1101,7 +1166,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   // Data scoping for Customer (P1.4)
   const myHolds = holds.filter(h => h.customerId === user.id || h.customerName === user.name || h.customerEmail === user.email)
-  const visibleMyHolds = myHolds.filter(hold => !hold.customerArchivedAt && !['completed', 'COMPLETED'].includes(hold.status))
+  const visibleMyHolds = myHolds.filter(hold =>
+    (!hold.customerArchivedAt || hold.status === 'EXPIRED')
+  )
   const myRentals = rentals.filter(r => r.customerId === user.id || r.customerName === user.name || r.customerEmail === user.email)
   const visibleMyRentals = myRentals.filter(rental => !rental.customerArchivedAt && rental.status !== 'completed')
   const visibleMyContracts = contracts.filter(contract => !contract.customerArchivedAt && (
@@ -1151,8 +1218,15 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     const holdSize = storageSizeCode(assignedUnit?.type || hold.unitTypeName || hold.unitId)
     if (!matchesReservationSearch(reservationSearch, [hold.id, hold.unitTypeName, facilities.find(item => item.id === hold.facilityId)?.name])) return false
     return reservationSizeFilter === 'all' || holdSize === reservationSizeFilter
+  }).sort((left, right) => {
+    const rank = (status: string) => status === 'EXPIRED' ? 1 : ['COMPLETED', 'completed'].includes(status) ? 2 : 0
+    return rank(left.status) - rank(right.status)
   })
-  const pendingHandoverReservations = backendReservations.filter(reservation => reservation.status !== 'COMPLETED')
+  const pendingHandoverReservations = backendReservations
+    .sort((left, right) => {
+      const rank = (status: CustomerReservation['status']) => status === 'EXPIRED' ? 1 : status === 'COMPLETED' ? 2 : 0
+      return rank(left.status) - rank(right.status)
+    })
   const filteredBackendReservations = pendingHandoverReservations.filter(reservation => {
     if (reservationFacilityFilter !== 'all' && reservation.facilityId !== reservationFacilityFilter) return false
     const unitType = backendUnitTypes.find(item => item.id === reservation.unitTypeId)
@@ -1160,12 +1234,34 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     return reservationSizeFilter === 'all' || storageSizeCode(unitType?.name || unitType?.code || '') === reservationSizeFilter
   })
 
-  const reservationCount = isApiAuthenticated() ? filteredBackendReservations.length : filteredReservationHolds.length
+  const activeBackendReservations = filteredBackendReservations.filter(reservation => !['EXPIRED', 'COMPLETED'].includes(reservation.status))
+  const expiredBackendReservations = filteredBackendReservations.filter(reservation => reservation.status === 'EXPIRED')
+  const completedBackendReservations = filteredBackendReservations.filter(reservation => reservation.status === 'COMPLETED')
+  const activeReservationHolds = filteredReservationHolds.filter(hold => !['EXPIRED', 'COMPLETED', 'completed'].includes(hold.status))
+  const expiredReservationHolds = filteredReservationHolds.filter(hold => hold.status === 'EXPIRED')
+  const completedReservationHolds = filteredReservationHolds.filter(hold => ['COMPLETED', 'completed'].includes(hold.status))
+  const reservationCount = isApiAuthenticated() ? activeBackendReservations.length : activeReservationHolds.length
+  const expiredReservationCount = isApiAuthenticated() ? expiredBackendReservations.length : expiredReservationHolds.length
+  const completedReservationCount = isApiAuthenticated() ? completedBackendReservations.length : completedReservationHolds.length
   const reservationPagination = reservationPage(reservationCount, reservationPageNumber, reservationPageSize)
-  const pagedBackendReservations = filteredBackendReservations.slice(reservationPagination.start, reservationPagination.end)
-  const pagedReservationHolds = filteredReservationHolds.slice(reservationPagination.start, reservationPagination.end)
+  const expiredReservationPagination = reservationPage(expiredReservationCount, expiredReservationPageNumber, reservationPageSize)
+  const completedReservationPagination = reservationPage(completedReservationCount, completedReservationPageNumber, reservationPageSize)
+  const pagedBackendReservations = [
+    ...activeBackendReservations.slice(reservationPagination.start, reservationPagination.end),
+    ...expiredBackendReservations.slice(expiredReservationPagination.start, expiredReservationPagination.end),
+    ...completedBackendReservations.slice(completedReservationPagination.start, completedReservationPagination.end),
+  ]
+  const pagedReservationHolds = [
+    ...activeReservationHolds.slice(reservationPagination.start, reservationPagination.end),
+    ...expiredReservationHolds.slice(expiredReservationPagination.start, expiredReservationPagination.end),
+    ...completedReservationHolds.slice(completedReservationPagination.start, completedReservationPagination.end),
+  ]
   useEffect(() => { setReservationPageNumber(1) }, [reservationSearch, reservationFacilityFilter, reservationSizeFilter, reservationPageSize])
+  useEffect(() => { setExpiredReservationPageNumber(1) }, [reservationSearch, reservationFacilityFilter, reservationSizeFilter, reservationPageSize])
+  useEffect(() => { setCompletedReservationPageNumber(1) }, [reservationSearch, reservationFacilityFilter, reservationSizeFilter, reservationPageSize])
   useEffect(() => { setReservationPageNumber(current => Math.min(current, reservationPagination.pages)) }, [reservationPagination.pages])
+  useEffect(() => { setExpiredReservationPageNumber(current => Math.min(current, expiredReservationPagination.pages)) }, [expiredReservationPagination.pages])
+  useEffect(() => { setCompletedReservationPageNumber(current => Math.min(current, completedReservationPagination.pages)) }, [completedReservationPagination.pages])
 
   const activeUnassignedCapacityHolds = holds.filter(hold => {
     if (hold.assignedUnitId || ['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(hold.status)) return false
@@ -1263,7 +1359,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   useEffect(() => {
     if (isApiAuthenticated()) return
     visibleMyHolds
-      .filter(hold => ['CANCELLED', 'EXPIRED'].includes(hold.status))
+      .filter(hold => hold.status === 'CANCELLED')
       .forEach(hold => {
         try { archiveReservationHistory(hold.id, user) } catch { /* already archived */ }
       })
@@ -1334,12 +1430,44 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       return
     }
     const startedAt = preserveSchedule ? bookingStartedAt : Date.now()
-    const suggestedCheckIn = plannedCheckInWindow(startedAt, false).availableAt
+    const suggestedCheckIn = firstCheckInMinute(submissionCheckInWindow(startedAt, false).availableAt)
     setBookingStartedAt(startedAt)
     if (!preserveSchedule) setMoveInDate(policyDateInput(suggestedCheckIn))
     if (!preserveSchedule) setBookingAppointmentTime(policyTimeInput(suggestedCheckIn))
-    setSchedulePolicyMessage(null)
-    setBookingStep(initialStep)
+    const isSameTarget = selectedTarget?.unitType.id === unitType.id || selectedTarget?.unitType.name === unitType.name
+    let stepToSet: 1 | 2 | 3 | 4 = initialStep
+    if (isSameTarget && bookingStep > 1) {
+      stepToSet = bookingStep
+    } else {
+      try {
+        if (typeof window !== 'undefined' && window.sessionStorage) {
+          const raw = window.sessionStorage.getItem('storagehub_customer_booking_draft')
+          if (raw) {
+            const draft = JSON.parse(raw)
+            if ((draft.unitTypeId === unitType.id || draft.unitTypeId === unitType.name) && draft.bookingStep > 1) {
+              stepToSet = draft.bookingStep as 1 | 2 | 3 | 4
+              if (draft.customerIdCard) setCustomerIdCard(draft.customerIdCard)
+              if (draft.customerPhone) setCustomerPhone(draft.customerPhone)
+              if (draft.customerAddress) setCustomerAddress(draft.customerAddress)
+              if (draft.goodsItems && draft.goodsItems.length > 0) setGoodsItems(draft.goodsItems)
+              if (draft.goodsCondition) setGoodsCondition(draft.goodsCondition)
+              if (draft.rentalMonths) setRentalMonths(draft.rentalMonths)
+              if (draft.selectedPackageId) setSelectedPackageId(draft.selectedPackageId)
+              if (draft.moveInDate) setMoveInDate(draft.moveInDate)
+              if (draft.bookingAppointmentTime) setBookingAppointmentTime(draft.bookingAppointmentTime)
+              if (draft.termsAccepted) setTermsAccepted(draft.termsAccepted)
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+    setBookingStep(stepToSet)
+    if (stepToSet > 1) {
+      showToast(`Đã tiếp tục tiến trình đặt kho tại Bước ${stepToSet}.`)
+    }
+
     setBookingReview(false)
     setServerQuote(null)
     setServerCompatibility(null)
@@ -1524,7 +1652,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     : isApiAuthenticated() ? [0, 0, 0] : [4, 2, 4.5]
   const selectedUsableRackVolumeM3 = usableRackVolumeM3(selectedRackDimensions) * selectedRackCount
   const allPackageSamplesValid = capacitySamples.length > 0 && capacitySamples.every(isPackageSampleValid)
-  const recommendationFormReady = allPackageSamplesValid
+  const capacityReady = allPackageSamplesValid && Boolean(goodsCondition.trim())
+  const recommendationFormReady = capacityReady
     && !catalogIssues.some(Boolean)
     && Boolean(goodsCondition.trim())
     && goodsItems.every(item => {
@@ -1564,11 +1693,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       window.clearTimeout(timer)
     }
   }, [bookOpen, selectedTarget?.facility.id, selectedTarget?.unitType.id, recommendationFormReady, recommendationInput, recommendationRetry])
-  const packageCapacityResults = allPackageSamplesValid ? capacitySamples.map(sample => {
+  const packageCapacityResults = capacityReady ? capacitySamples.map(sample => {
     const capacityPerFrame = selectedUnit ? packageCapacityPerRack(sample, selectedRackDimensions) : 0
     return {
       ...sample,
       capacityPerFrame,
+      arrangement: referenceBoxCapacity(selectedRackDimensions, [Number(sample.lengthCm), Number(sample.widthCm), Number(sample.heightCm)], selectedRackCount),
       canFitFrame: capacityPerFrame > 0,
     }
   }) : []
@@ -1576,7 +1706,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const totalFramesRequired = hasUnplaceablePackage
     ? Number.POSITIVE_INFINITY
     : requiredRackCountForSamples(capacitySamples, selectedRackDimensions)
-  const localWarehouseRecommendation = allPackageSamplesValid && !isApiAuthenticated()
+  const localWarehouseRecommendation = capacityReady && !isApiAuthenticated()
     ? backendUnitTypes
       .filter(candidate => !selectedTarget || candidate.facilityId === selectedTarget.facility.id)
       .filter(candidate => (availabilityByUnitType[candidate.id] ?? candidate.availableCount ?? 0) > 0)
@@ -1593,7 +1723,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const serverRecommendedUnitType = serverRecommendation?.recommendedUnitTypeId
     ? backendUnitTypes.find(candidate => candidate.id === serverRecommendation.recommendedUnitTypeId)
     : undefined
-  const warehouseRecommendation = allPackageSamplesValid
+  const warehouseRecommendation = capacityReady
     ? isApiAuthenticated() ? serverRecommendedUnitType : localWarehouseRecommendation
     : undefined
   const recommendedUnitType = warehouseRecommendation
@@ -1622,7 +1752,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     : 0
   const noValidLargerUnitAvailable = Boolean(
     isApiAuthenticated()
-      && allPackageSamplesValid
+      && capacityReady
       && recommendationFormReady
       && !recommendationError
       && !warehouseRecommendation
@@ -1637,13 +1767,13 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const recommendationNeedsReview = Boolean(
     isApiAuthenticated() && serverRecommendation?.result === 'REVIEW_REQUIRED',
   )
-  const capacityStatus: CapacityStatus = !allPackageSamplesValid ? 'invalid' : warehouseRecommendation ? 'fits' : 'not-fit'
+  const capacityStatus: CapacityStatus = !capacityReady ? 'invalid' : warehouseRecommendation ? 'fits' : 'not-fit'
   const packagesFitSelectedUnit = capacityStatus === 'fits' && packageCapacityResults.every(sample => sample.capacityPerFrame > 0) && totalFramesRequired <= selectedRackCount
-  const selectedUnitCapacityFits = Boolean(selectedUnit && allPackageSamplesValid
+  const selectedUnitCapacityFits = Boolean(selectedUnit && capacityReady
     && !hasUnplaceablePackage
     && totalFramesRequired <= selectedRackCount
     && goodsWeightNumber <= selectedUnit.maxLoadKg)
-  const selectedUnitNeedsAlternative = allPackageSamplesValid && (!selectedUnitCapacityFits || selectedUnitTypeIncompatible)
+  const selectedUnitNeedsAlternative = capacityReady && (!selectedUnitCapacityFits || selectedUnitTypeIncompatible)
 
   // Active rental packages for the selected unit
   const selectedUnitActivePackages = useMemo(() => {
@@ -1782,14 +1912,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const validateBookingForm = () => {
     if (!selectedUnit) return false
     const errors: Record<string, string> = {}
-    const requestedAt = moveInDate && bookingAppointmentTime
-      ? new Date(`${moveInDate}T${bookingAppointmentTime}:00+07:00`)
-      : null
     const requestedDate = /^\d{4}-\d{2}-\d{2}$/.test(moveInDate)
       ? new Date(`${moveInDate}T00:00:00+07:00`)
       : null
 
-    if (!isIdentityDocumentFormatValid(customerIdCard)) errors.identity = 'CCCD/Hộ chiếu phải có 9–30 ký tự hợp lệ.'
+    if (!isIdentityDocumentFormatValid(customerIdCard)) errors.identity = 'CCCD/CMND phải gồm 9 hoặc 12 chữ số.'
     if (!isVietnamesePhone(customerPhone)) errors.phone = VIETNAMESE_PHONE_ERROR_MESSAGE
     if (!customerAddress.trim()) errors.address = 'Vui lòng nhập địa chỉ.'
     goodsItems.forEach((item, index) => {
@@ -1805,7 +1932,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       if (parsePositiveNumber(item.heightCm) === null) errors[`goodsHeight-${item.id}`] = 'Chiều cao phải lớn hơn 0.'
       if (parsePositiveNumber(item.weightKg) === null) errors[`goodsWeight-${item.id}`] = 'Cân nặng mỗi kiện phải lớn hơn 0.'
       if (!item.fragile) errors[`goodsFragile-${item.id}`] = 'Vui lòng chọn hàng có dễ vỡ hay không.'
-      if (item.images.length > 10) errors[`goodsImages-${item.id}`] = 'Mỗi loại hàng hóa được tải tối đa 10 ảnh.'
+      if (item.images.length > 10) {
+        errors[`goodsImages-${item.id}`] = 'Mỗi loại hàng hóa được tải tối đa 10 ảnh.'
+      } else if (item.images.some(file => file.size > 10 * 1024 * 1024)) {
+        errors[`goodsImages-${item.id}`] = 'Có ảnh vượt quá dung lượng tối đa 10 MB. Vui lòng kiểm tra lại.'
+      }
       if (isFreeformGoods) {
         if (!item.customGoodsName.trim()) errors[`customGoodsName-${item.id}`] = 'Vui lòng nhập tên hàng hóa.'
       }
@@ -1831,11 +1962,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
     if (!timeIsValid) {
       errors.appointmentTime = 'Vui lòng nhập giờ hợp lệ theo định dạng HH:mm (24 giờ).'
-    } else if (requestedAt && dateIsValid && !errors.moveInDate && !isCheckInAppointmentAllowed(requestedAt, checkInWindow)) {
-      const isFirstAvailableDate = moveInDate === earliestCheckInDate
-      errors.appointmentTime = isFirstAvailableDate && requestedAt < checkInWindow.availableAt
-        ? `Trong ngày ${formatCustomerDate(checkInWindow.availableAt)}, giờ nhận kho sớm nhất là ${earliestCheckInTime}.`
-        : 'Thời gian nhận kho nằm ngoài thời hạn cho phép.'
     }
     setBookingErrors(errors)
     if (Object.keys(errors).length) {
@@ -1848,7 +1974,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   const continueFromPersonalDetails = () => {
     const errors: Record<string, string> = {}
-    if (!isIdentityDocumentFormatValid(customerIdCard)) errors.identity = 'CCCD/Hộ chiếu phải có 9–30 ký tự hợp lệ.'
+    if (!isIdentityDocumentFormatValid(customerIdCard)) errors.identity = 'CCCD/CMND phải gồm 9 hoặc 12 chữ số.'
     if (!isVietnamesePhone(customerPhone)) errors.phone = VIETNAMESE_PHONE_ERROR_MESSAGE
     if (!customerAddress.trim()) errors.address = 'Vui lòng nhập địa chỉ.'
     setBookingErrors(errors)
@@ -1872,6 +1998,35 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       showToast('Bạn chỉ được chọn tối đa 10 ảnh cho mỗi loại hàng hóa.')
       return
     }
+
+    const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024 // Tối đa 10 MB mỗi ảnh
+    const ALLOWED_EXTENSIONS = /\.(png|jpe?g|webp)$/i
+    const ALLOWED_MIME_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp']
+
+    const invalidTypeFiles = files.filter(
+      f => !ALLOWED_MIME_TYPES.includes(f.type.toLowerCase()) && !ALLOWED_EXTENSIONS.test(f.name)
+    )
+    if (invalidTypeFiles.length > 0) {
+      event.currentTarget.value = ''
+      setBookingErrors(current => ({
+        ...current,
+        [errorKey]: `Tệp không đúng định dạng (${invalidTypeFiles.map(f => f.name).join(', ')}). Chỉ chấp nhận ảnh PNG, JPG hoặc WebP.`,
+      }))
+      showToast('Chỉ chấp nhận định dạng ảnh PNG, JPG hoặc WebP.')
+      return
+    }
+
+    const oversizedFiles = files.filter(f => f.size > MAX_IMAGE_SIZE_BYTES)
+    if (oversizedFiles.length > 0) {
+      event.currentTarget.value = ''
+      setBookingErrors(current => ({
+        ...current,
+        [errorKey]: `Ảnh ${oversizedFiles.map(f => `${f.name} (${(f.size / (1024 * 1024)).toFixed(1)} MB)`).join(', ')} vượt quá dung lượng tối đa 10 MB mỗi ảnh.`,
+      }))
+      showToast('Mỗi ảnh tải lên không được vượt quá 10 MB.')
+      return
+    }
+
     setGoodsItems(items => items.map(row => row.id === goodsItemId ? { ...row, images: files } : row))
     setBookingErrors(current => {
       if (!current[errorKey]) return current
@@ -1893,13 +2048,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     if (isApiAuthenticated() && bookingReview && serverQuote) {
       const submittedAt = Date.now()
       const currentWindow = submissionCheckInWindow(submittedAt, hasOtherGoods)
-      const selectedAppointment = new Date(`${moveInDate}T${bookingAppointmentTime}:00+07:00`)
-      if (!isCheckInAppointmentAllowed(selectedAppointment, currentWindow)) {
-        const suggested = firstBookableCheckInMinute(currentWindow)
-        const message = suggested
-          ? `Lịch nhận kho không còn hợp lệ. Bạn có thể nhận kho sớm nhất từ ${formatPolicyDateTime(suggested)}. Vui lòng chọn lại ngày giờ nhận kho, giá và hàng hóa được giữ nguyên.`
-          : 'Chưa có giờ nhận kho phù hợp trong thời hạn cho phép. Vui lòng liên hệ cơ sở.'
-        setSchedulePolicyMessage(message)
+      if (!isCheckInDateAllowed(moveInDate, currentWindow)) {
+        const message = `Ngày nhận kho không còn hợp lệ. Bạn có thể nhận kho từ ${formatCustomerDate(currentWindow.availableAt)} đến ${formatCustomerDate(currentWindow.deadlineAt)}. Vui lòng chọn lại ngày nhận kho, giá và hàng hóa được giữ nguyên.`
         setReservationSubmitError(message)
         showToast(message)
         return
@@ -2044,10 +2194,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       }
 
       if (!serverQuote.setupEarlyExitPolicyVersion || serverQuote.setupEarlyExitFee == null) {
-        throw new Error('Báo giá chưa có điều khoản trả kho trong setup. Vui lòng lấy lại báo giá hoặc liên hệ cơ sở.')
+        throw new Error('Báo giá chưa có điều khoản trả kho trong thời gian chuẩn bị. Vui lòng lấy lại báo giá hoặc liên hệ cơ sở.')
       }
       if (acceptedSetupQuoteId !== serverQuote.quoteId) {
-        throw new Error('Vui lòng đọc và đồng ý điều khoản trả kho trong setup trước khi xác nhận đặt kho.')
+        throw new Error('Vui lòng đọc và đồng ý điều khoản trả kho trong thời gian chuẩn bị trước khi xác nhận đặt kho.')
       }
       const scheduledCompatibility = await checkCompatibility({ ...selection, startDate: moveInDate })
       setServerCompatibility(scheduledCompatibility)
@@ -2083,7 +2233,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           goodsImageError = `Đơn đã được tạo nhưng chưa tải đủ ảnh hàng hóa: ${userFacingError(error, 'Lỗi tải ảnh')}.`
         }
       }
-      // Creation does not send an email in the current BE contract. Issue the first OTP here.
+      // Active accounts are verified once; new reservations proceed directly to review or payment.
       setBackendReservations(current => [reservation, ...current.filter(item => item.id !== reservation.id)])
       setAvailabilityRevision(value => value + 1)
       resetBookingForm()
@@ -2107,7 +2257,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           setBackendOtpMessage(`Đơn đã tạo, nhưng gửi OTP chưa thành công: ${userFacingError(error, 'Lỗi kết nối').replace(/[.!?。]+$/u, '')}. Bạn có thể gửi lại.${goodsImageError ? ` ${goodsImageError}` : ''}`)
         } finally { setBackendOtpBusy(false) }
       }
-      showToast(`${reservation.reservationCode} đã được tạo. Hãy xác minh OTP để tiếp tục.`)
+      showToast(goodsImageError || `${reservation.reservationCode} đã được tạo. ${reservation.status === 'AWAITING_REVIEW' ? 'Hồ sơ đang chờ duyệt hàng hóa; chưa yêu cầu thanh toán cọc.' : reservation.status === 'AWAITING_PAYMENT' ? 'Vui lòng thanh toán cọc trước thời hạn trên đơn. Email xác nhận đang được gửi.' : 'Vui lòng kiểm tra trạng thái tài khoản để tiếp tục.'}`)
     } catch (error) {
       const backendMessage = error instanceof Error ? error.message : ''
       const validationDetails = error instanceof ApiClientError && error.details && typeof error.details === 'object' && !Array.isArray(error.details)
@@ -2115,7 +2265,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         : null
       const validationLabels: Record<string, string> = {
         quoteId: 'Báo giá không hợp lệ hoặc đã hết hạn.',
-        identityDocumentNumber: 'CCCD/Hộ chiếu phải có từ 9 đến 30 ký tự hợp lệ.',
+        identityDocumentNumber: 'CCCD/CMND phải gồm 9 hoặc 12 chữ số.',
+        identityDocumentNumberValid: 'CCCD/CMND phải gồm 9 hoặc 12 chữ số.',
         customerPhone: 'Vui lòng nhập số điện thoại liên hệ.',
         customerPhoneValid: VIETNAMESE_PHONE_ERROR_MESSAGE,
         customerAddress: 'Vui lòng nhập địa chỉ.',
@@ -2155,19 +2306,26 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   }
 
   const cancelBackendReservation = (reservation: CustomerReservation) => {
-    void cancelCustomerReservation(reservation.id, 'Khách hàng chủ động hủy trên cổng khách hàng')
-      .then(() => listCustomerReservations(undefined, 0, 50))
-      .then(result => {
-        setBackendReservations(result.data)
+    return cancelCustomerReservation(reservation.id, 'Khách hàng chủ động hủy trên cổng khách hàng')
+      .then(() => loadCustomerReservationRecords())
+      .then(reservations => {
+        setBackendReservations(reservations)
         setAvailabilityRevision(value => value + 1)
         showToast(`Đã hủy ${reservation.reservationCode}.`)
       })
       .catch(error => showToast(userFacingError(error, 'Không thể hủy đơn đặt kho.')))
   }
 
+  const deleteBackendExpiredReservation = (reservation: CustomerReservation) => {
+    return deleteExpiredReservationHistory(reservation.id)
+      .then(() => refreshBackendReservations())
+      .then(() => showToast(`Đã xóa ${reservation.reservationCode} khỏi danh sách ${reservation.status === 'COMPLETED' ? 'đơn hoàn thành' : 'đơn hết hạn'}.`))
+      .catch(error => showToast(userFacingError(error, 'Không thể xóa đơn đặt giữ kho.')))
+  }
+
   const refreshBackendReservations = async () => {
-    const result = await listCustomerReservations(undefined, 0, 50)
-    setBackendReservations(result.data)
+    const reservations = await loadCustomerReservationRecords()
+    setBackendReservations(reservations)
     setAvailabilityRevision(value => value + 1)
   }
 
@@ -2320,7 +2478,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                         <div className="mt-4 flex flex-wrap items-center gap-2">
                           <div className="flex items-center gap-2 rounded-lg bg-[#292a27] px-3 py-1.5 text-sm font-bold text-white">
                             <span>{'Mã mở cổng:'}</span>
-                            <span className="text-[#e9a12c]">{rental.gateCode || '—'}</span>
+                            <span className="text-[#e9a12c]">{rental.gateCode || '-'}</span>
                           </div>
                           <Badge variant="muted">{'Quyền vào 24/7'}</Badge>
                         </div>
@@ -2363,7 +2521,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   <span className="text-amber-700 group-hover:text-white">{Icon.calendar}</span>
                   <span>
                     <b className="block text-sm">{'2. Tiến độ đơn đặt giữ kho'}</b>
-                    <small className="text-stone-500 group-hover:text-white">{'Phí giữ chỗ 20% theo báo giá trong 15 phút'}</small>
+                    <small className="text-stone-500 group-hover:text-white">{'Đặt cọc giữ chỗ (20%) theo báo giá trong 15 phút'}</small>
                   </span>
                 </button>
                 <button onClick={() => navigateTo('support')} className="group flex items-center gap-3 rounded-lg border border-stone-200 p-3 text-left transition hover:border-amber-600 hover:bg-amber-600 hover:text-white">
@@ -2593,10 +2751,20 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           </Card>
 
           {isApiAuthenticated() ? (
-            <div className="grid gap-4">
-              {pagedBackendReservations.map(reservation => <CustomerReservationCard
-                key={reservation.id}
+            <div className="grid gap-5">
+              {[
+                { id: 'active', title: 'Đơn giữ kho hoạt động', subtitle: 'Các đơn đang trong quá trình xác thực, thanh toán hoặc chờ bàn giao.', rows: pagedBackendReservations.filter(reservation => !['EXPIRED', 'COMPLETED'].includes(reservation.status)), total: activeBackendReservations.length, pagination: reservationPagination, setPage: setReservationPageNumber, sectionClass: 'border-amber-300', headerClass: 'bg-amber-50', accentClass: 'bg-amber-500', badgeClass: 'bg-amber-200 text-amber-950', bodyClass: 'bg-amber-50/30', itemClass: 'rounded-xl border-l-4 border-l-amber-500 transition duration-200 hover:-translate-y-0.5 hover:bg-amber-50 hover:shadow-lg hover:ring-2 hover:ring-amber-200', active: true },
+                { id: 'expired', title: 'Đơn giữ kho hết hạn', subtitle: 'Các đơn đã quá thời hạn được lưu lại tại đây để bạn tra cứu.', rows: pagedBackendReservations.filter(reservation => reservation.status === 'EXPIRED'), total: expiredBackendReservations.length, pagination: expiredReservationPagination, setPage: setExpiredReservationPageNumber, sectionClass: 'border-red-300', headerClass: 'bg-red-50', accentClass: 'bg-red-500', badgeClass: 'bg-red-100 text-red-800', bodyClass: 'bg-red-50/30', itemClass: 'rounded-xl border-l-4 border-l-red-500 opacity-90 transition duration-200 hover:-translate-y-0.5 hover:bg-red-50 hover:opacity-100 hover:shadow-lg hover:ring-2 hover:ring-red-200', active: false },
+                { id: 'completed', title: 'Đơn giữ kho hoàn thành', subtitle: 'Các đơn đã hoàn tất nhận kho và được chuyển sang hồ sơ thuê.', rows: pagedBackendReservations.filter(reservation => reservation.status === 'COMPLETED'), total: completedBackendReservations.length, pagination: completedReservationPagination, setPage: setCompletedReservationPageNumber, sectionClass: 'border-emerald-300', headerClass: 'bg-emerald-50', accentClass: 'bg-emerald-500', badgeClass: 'bg-emerald-100 text-emerald-800', bodyClass: 'bg-emerald-50/30', itemClass: 'rounded-xl border-l-4 border-l-emerald-500 transition duration-200 hover:-translate-y-0.5 hover:bg-emerald-50 hover:shadow-lg hover:ring-2 hover:ring-emerald-200', active: false },
+              ].map(group => <section key={group.id} aria-labelledby={`reservation-group-${group.id}`} className={`overflow-hidden rounded-xl border-2 bg-white shadow-sm ${group.sectionClass}`}>
+                <header className={`flex items-center justify-between gap-3 border-b px-5 py-4 ${group.headerClass}`}>
+                  <div className="flex items-center gap-3"><span aria-hidden="true" className={`h-11 w-1.5 rounded-full ${group.accentClass}`} /><div><h2 id={`reservation-group-${group.id}`} className="text-lg font-bold text-stone-950">{group.title}</h2><p className="mt-0.5 text-sm text-stone-600">{group.subtitle}</p></div></div>
+                  <span className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-bold ${group.badgeClass}`}>{group.total} đơn</span>
+                </header>
+                {group.rows.length ? <div className={`grid gap-4 p-4 ${group.bodyClass}`}>
+                {group.rows.map(reservation => <div key={reservation.id}><CustomerReservationCard
                 reservation={reservation}
+                visualTone={group.id as 'active' | 'expired' | 'completed'}
                 facilityName={facilities.find(item => item.id === reservation.facilityId)?.name || reservation.facilityId}
                 unitTypeName={reservation.unitTypeName || unitTypes.find(item => item.id === reservation.unitTypeId)?.name || reservation.unitTypeId}
                 facilityDetails={backendFacilities.find(item => item.id === reservation.facilityId) || null}
@@ -2619,34 +2787,44 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   })
                 }}
                 onCancel={() => cancelBackendReservation(reservation)}
+                onDelete={() => deleteBackendExpiredReservation(reservation)}
                 onRefresh={refreshBackendReservations}
-                onReceiptConfirmed={reservationId => {
-                  setReceiptRentalTarget(reservationId)
+                onOpenRental={storageUnitId => {
+                  setReceiptRentalTarget(storageUnitId)
                   navigateTo('rental-records')
                 }}
-              />)}
-              {!filteredBackendReservations.length && <Card className="p-10 text-center"><h2 className="font-semibold text-stone-700">{pendingHandoverReservations.length ? 'Không tìm thấy đơn phù hợp' : 'Không có đơn đặt giữ kho đang chờ bàn giao'}</h2><p className="mt-1 text-sm text-stone-500">{pendingHandoverReservations.length ? 'Hãy thử từ khóa khác hoặc thay đổi bộ lọc.' : 'Kho đã bàn giao được theo dõi trong Hồ sơ thuê.'}</p></Card>}
+              /></div>)}
+                </div> : <p className="px-4 py-10 text-center text-sm text-stone-500">{group.id === 'active' ? 'Chưa có đơn giữ kho hoạt động.' : group.id === 'expired' ? 'Chưa có đơn giữ kho hết hạn.' : 'Chưa có đơn giữ kho hoàn thành.'}</p>}
+                {group.total > 0 && <nav aria-label={`Phân trang ${group.title.toLowerCase()}`} className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-100 px-4 py-3"><p className="text-sm text-stone-500">3 đơn mỗi trang</p><div className="flex items-center gap-3"><Button variant="outline" size="sm" disabled={group.pagination.page <= 1} onClick={() => group.setPage(group.pagination.page - 1)}>Trang trước</Button><span className="text-sm text-stone-600">Trang {group.pagination.page}/{group.pagination.pages} · Tổng {group.total} đơn</span><Button variant="outline" size="sm" disabled={group.pagination.page >= group.pagination.pages} onClick={() => group.setPage(group.pagination.page + 1)}>Trang sau</Button></div></nav>}
+              </section>)}
             </div>
           ) : filteredReservationHolds.length ? (
             <div className="grid gap-4">
-              {pagedReservationHolds.map(hold => {
+              {!pagedReservationHolds.some(hold => hold.status !== 'EXPIRED') && <div className="mt-2 border-b border-stone-200 pb-2"><h2 className="text-base font-bold text-stone-900">Đơn giữ kho hoạt động</h2><p className="text-xs text-stone-500">Hiện không có đơn giữ kho hoạt động phù hợp.</p></div>}
+              {pagedReservationHolds.map((hold, index) => {
                 const linkedRental = myRentals.find(rental => rental.holdId === hold.id)
                 const receiptConfirmed = Boolean(linkedRental?.receiptConfirmedAt)
                 const linkedRentalEnded = rentals.some(rental => rental.holdId === hold.id && rental.status === 'completed')
                 const holdInactive = ['CANCELLED', 'EXPIRED'].includes(hold.status) || linkedRentalEnded
-                return (
-                <Card id={`customer-record-${hold.id}`} tabIndex={-1} key={hold.id} className={`p-6 border-l-4 ${holdInactive ? 'inactive-record-card border-l-stone-300 bg-white text-stone-500' : 'border-l-amber-500'} ${focusedNotificationTarget === hold.id ? 'notification-target-reveal' : ''}`}>
+                return (<div key={hold.id} className="contents">
+                {(index === 0 || (hold.status === 'EXPIRED' && pagedReservationHolds[index - 1]?.status !== 'EXPIRED')) && (
+                  <div className="mt-2 border-b border-stone-200 pb-2">
+                    <h2 className="text-base font-bold text-stone-900">{hold.status === 'EXPIRED' ? 'Đơn giữ kho hết hạn' : 'Đơn giữ kho hoạt động'}</h2>
+                    <p className="text-xs text-stone-500">{hold.status === 'EXPIRED' ? 'Các đơn đã quá thời hạn được lưu lại tại đây để bạn tra cứu.' : 'Các đơn đang trong quá trình xác thực, thanh toán hoặc chờ bàn giao.'}</p>
+                  </div>
+                )}
+                <Card id={`customer-record-${hold.id}`} tabIndex={-1} className={`p-6 border-l-4 ${holdInactive ? 'inactive-record-card border-l-stone-300 bg-white text-stone-500' : 'border-l-amber-500'} ${focusedNotificationTarget === hold.id ? 'notification-target-reveal' : ''}`}>
                   <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_240px]">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-bold text-amber-700">{hold.id}</span>
                         {badgeFor(hold.status)}
-                        {hold.payment.status === 'paid' && <span className="rounded bg-emerald-700 px-2.5 py-1 text-xs font-bold text-white">{'Đã phí giữ chỗ 20%'}</span>}
+                        {hold.payment.status === 'paid' && <span className="rounded bg-emerald-700 px-2.5 py-1 text-xs font-bold text-white">{'Đã đặt cọc giữ chỗ 20%'}</span>}
                       </div>
                       <h2 className="mt-1 text-lg font-bold text-stone-900">
                         {unitTypeLabel(hold.unitTypeName || hold.unitId)} · {hold.facilityName}
                       </h2>
-                      <p className="text-xs font-semibold text-blue-800">{hold.assignedUnitId ? 'Gian kho quản lý cơ sở đã phân:' : 'Trạng thái phân kho:'} {hold.assignedUnitId ? (units.find(unit => unit.id === hold.assignedUnitId)?.code || hold.assignedUnitId) : 'Chưa phân gian kho cụ thể'}</p>
+                      <p className="text-xs font-semibold text-blue-800">{hold.assignedUnitId ? 'Kho do quản lý cơ sở đã phân:' : 'Trạng thái phân kho:'} {hold.assignedUnitId ? (units.find(unit => unit.id === hold.assignedUnitId)?.code || hold.assignedUnitId) : 'Chưa phân kho cụ thể'}</p>
                       <p className="text-xs text-stone-500">
                         {'Lịch nhận kho hiện tại:'} <b>{displayDateValue(hold.appointmentDate || hold.moveInDate)}{hold.appointmentTime ? ` · ${hold.appointmentTime}` : ''}</b> · {'Thời hạn:'} {hold.rentalMonths} {'tháng'}
                       </p>
@@ -2688,12 +2866,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                           const bookingDeposit = hold.reservationDepositAmount ?? Math.round((rentTotal + (hold.securityDepositAmount || 0)) * 0.2 * 100) / 100
                           const rentBalance = Math.max(0, rentTotal - bookingDeposit)
                           return <div className="mt-2 grid gap-2 border-t border-stone-200/80 pt-3 text-[11px] sm:grid-cols-2">
-                            <div className="rounded-lg bg-white/70 p-3 leading-5"><p className="font-bold text-stone-900">{'Tiền thuê và phí giữ chỗ'}</p><p>{`Tiền thuê trước giảm: ${formatVnd(rentBeforeDiscount)}`}</p><p className="text-emerald-700">{`Giảm giá: − ${formatVnd(discountAmount)}`}</p><p>{`Tiền thuê sau giảm: ${formatVnd(rentTotal)} (${formatVnd(hold.quote.baseMonthlyPrice)} × ${hold.rentalMonths} tháng)`}</p><p>{`Cọc 20%: ${formatVnd(rentTotal)} × 20% = ${formatVnd(bookingDeposit)}`}</p><p>{`Tiền thuê còn lại: ${formatVnd(rentTotal)} − ${formatVnd(bookingDeposit)} = ${formatVnd(rentBalance)}`}</p></div>
-                            <div className="rounded-lg bg-amber-50 p-3 leading-5"><p className="font-bold text-stone-900">{'Khoản thu khi nhận kho'}</p><p>{`Tiền thuê còn lại: ${formatVnd(rentBalance)}`}</p><p>{`+ Tiền cọc đảm bảo kho: ${formatVnd(hold.securityDepositAmount)}`}</p><p className="border-t border-amber-200 pt-1 font-bold">{`Tổng thu khi nhận kho: ${formatVnd(hold.remainingAmount)}`}</p></div>
+                            <div className="rounded-lg bg-white/70 p-3 leading-5"><p className="font-bold text-stone-900">{'Tiền thuê và đặt cọc giữ chỗ'}</p><p>{`Tiền thuê trước giảm: ${formatVnd(rentBeforeDiscount)}`}</p><p className="text-emerald-700">{`Giảm giá: - ${formatVnd(discountAmount)}`}</p><p>{`Tiền thuê sau giảm: ${formatVnd(rentTotal)} (${formatVnd(hold.quote.baseMonthlyPrice)} × ${hold.rentalMonths} tháng)`}</p><p>{`Cọc 20%: ${formatVnd(rentTotal)} × 20% = ${formatVnd(bookingDeposit)}`}</p><p>{`Tiền thuê còn lại: ${formatVnd(rentTotal)} - ${formatVnd(bookingDeposit)} = ${formatVnd(rentBalance)}`}</p></div>
+                            <div className="rounded-lg bg-amber-50 p-3 leading-5"><p className="font-bold text-stone-900">{'Số tiền còn lại phải thanh toán khi bàn giao kho'}</p><p>{`Tiền thuê còn lại: ${formatVnd(rentBalance)}`}</p><p>{`+ Tiền cọc đảm bảo thuê: ${formatVnd(hold.securityDepositAmount)}`}</p><p className="border-t border-amber-200 pt-1 font-bold">{`Tổng thanh toán khi bàn giao kho: ${formatVnd(hold.remainingAmount)}`}</p></div>
                           </div>
                         })()}
 
-                        {hold.payment.status === 'paid' && <p className="pt-1 text-[11px] font-medium text-black">{hold.assignedUnitId ? 'Cọc đã thanh toán. Quản lý cơ sở đã phân gian kho. Vui lòng nhận kho trong thời hạn 7 ngày.' : 'Cọc đã thanh toán. Quản lý cơ sở có tối đa 6 giờ để phân gian kho cụ thể.'}</p>}
+                        {hold.payment.status === 'paid' && <p className="pt-1 text-[11px] font-medium text-black">{hold.assignedUnitId ? 'Cọc đã thanh toán. Quản lý cơ sở đã phân kho. Vui lòng nhận kho trong thời hạn 7 ngày.' : 'Cọc đã thanh toán. Quản lý cơ sở có tối đa 6 giờ để phân kho cụ thể.'}</p>}
 
                         {hold.generatedAccessPin && !holdInactive && (
                           <div className="mt-2 rounded bg-[#292a27] p-2 text-white text-xs flex items-center justify-between">
@@ -2707,8 +2885,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                         const progressSteps = [
                           { label: 'Xác minh email', detail: 'Xác nhận địa chỉ liên hệ' },
                           { label: 'Phê duyệt hồ sơ', detail: hold.goodsReviewStatus === 'PENDING' ? 'Nhân viên kiểm tra hàng hóa trong tối đa 6 giờ' : 'Hồ sơ được duyệt tự động' },
-                          { label: 'Thanh toán cọc', detail: 'Hoàn tất phí giữ chỗ 20%' },
-                          { label: 'Quản lý cơ sở phân kho', detail: hold.assignedUnitId ? `Đã phân ${units.find(unit => unit.id === hold.assignedUnitId)?.code || hold.assignedUnitId}` : 'Chờ phân gian kho cụ thể' },
+                          { label: 'Thanh toán cọc', detail: 'Hoàn tất đặt cọc giữ chỗ (20%)' },
+                          { label: 'Quản lý cơ sở phân kho', detail: hold.assignedUnitId ? `Đã phân ${units.find(unit => unit.id === hold.assignedUnitId)?.code || hold.assignedUnitId}` : 'Chờ phân kho cụ thể' },
                           { label: 'Nhận kho và ký', detail: 'Đối chiếu và ký tại cơ sở' },
                           { label: 'Đã bàn giao', detail: 'Nhận kho và mã ra vào' }
                         ]
@@ -2746,7 +2924,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     {/* Action buttons based on canonical status */}
                     <div className="flex min-w-0 flex-col items-stretch gap-3 lg:items-end">
                       <div className="text-right">
-                        {hold.goodsReviewStatus === 'PENDING' ? <><p className="text-xs text-stone-500">Tiền cọc</p><p className="text-lg font-bold text-blue-900">Chưa yêu cầu</p><p className="text-xs text-blue-800">Chỉ tính và mở thanh toán sau khi nhân viên chấp thuận.</p></> : <><p className="text-xs text-stone-500">{'Tổng thu cả kỳ (gồm tiền cọc đảm bảo kho):'}</p><p className="text-xl font-bold text-stone-900">{formatVnd(hold.totalInitialAmount ?? hold.quote.totalFirstPayment)}</p><p className="text-xs text-amber-800">{'Trả lúc giữ chỗ'}: {formatVnd(hold.reservationDepositAmount ?? hold.payment.amount)} · {'Thu khi nhận kho'}: {formatVnd(hold.remainingAmount)}</p></>}
+                        {hold.goodsReviewStatus === 'PENDING' ? <><p className="text-xs text-stone-500">Tiền cọc</p><p className="text-lg font-bold text-blue-900">Chưa yêu cầu</p><p className="text-xs text-blue-800">Chỉ tính và mở thanh toán sau khi nhân viên chấp thuận.</p></> : <><p className="text-xs text-stone-500">{'Tổng chi phí phải thanh toán (gồm tiền cọc đảm bảo thuê):'}</p><p className="text-xl font-bold text-stone-900">{formatVnd(hold.totalInitialAmount ?? hold.quote.totalFirstPayment)}</p><p className="text-xs text-amber-800">{'Đặt cọc giữ chỗ'}: {formatVnd(hold.reservationDepositAmount ?? hold.payment.amount)} · {'Số tiền còn lại phải thanh toán khi bàn giao kho'}: {formatVnd(hold.remainingAmount)}</p></>}
                       </div>
 
                       {hold.status === 'awaiting_email' && (
@@ -2808,7 +2986,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                             {'Đã phân bổ kho! Vui lòng đến cơ sở:'}
                           </p>
                           <p className="text-[11px] text-white">
-                            {'• Xuất trình CCCD/Hộ chiếu gốc'}<br />
+                            {'• Xuất trình CCCD/CMND gốc'}<br />
                             {'• Ký hợp đồng giấy tại quầy'}<br />
                             {`• Thanh toán phần còn lại (${formatVnd(hold.remainingAmount)})`}
                           </p>
@@ -2842,7 +3020,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                           className="text-red-600 hover:bg-red-50 text-xs"
                           onClick={() => {
                             const warning = hold.payment.status === 'paid'
-                              ? ('Đơn đã thanh toán phí giữ chỗ. Nếu hủy trước khi nhận kho, khoản cọc này KHÔNG ĐƯỢC HOÀN. Bạn chắc chắn muốn hủy?')
+                              ? ('Đơn đã thanh toán đặt cọc giữ chỗ. Nếu hủy trước khi nhận kho, khoản cọc này KHÔNG ĐƯỢC HOÀN. Bạn chắc chắn muốn hủy?')
                               : ('Bạn có chắc chắn muốn hủy giữ kho? Suất kho đang giữ sẽ được trả lại ngay.')
                             requestConfirmation({ title: 'Xác nhận hủy giữ kho', message: warning, confirmLabel: 'Hủy giữ kho', tone: 'danger', onConfirm: () => { cancelReservation(hold.id, user, 'Khách hàng chủ động hủy'); showToast('Đã hủy đơn đặt giữ kho thành công.') } })
                           }}
@@ -2855,7 +3033,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                         <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-right text-xs text-red-800 shadow-sm">
                           <p className="font-bold text-red-800">{'Đơn đã hủy'}</p>
                           <p className="mt-0.5 text-[11px] text-red-700">{'Gian kho đã được giải phóng.'}</p>
-                          {hold.payment.status === 'paid' && <p className="mt-1 font-semibold text-red-800">{'Phí giữ chỗ không hoàn lại do hủy trước khi nhận kho.'}</p>}
+                          {hold.payment.status === 'paid' && <p className="mt-1 font-semibold text-red-800">{'Đặt cọc giữ chỗ không hoàn lại do hủy trước khi nhận kho.'}</p>}
                         </div>
                       )}
 
@@ -2869,8 +3047,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       {holdInactive && <Button variant="outline" size="sm" onClick={() => requestConfirmation({ title: 'Xóa lịch sử giữ kho', message: 'Xóa lịch sử này khỏi danh sách của bạn? Dữ liệu đối soát hệ thống vẫn được lưu.', confirmLabel: 'Xóa lịch sử', tone: 'danger', onConfirm: () => { try { archiveReservationHistory(hold.id, user); showToast('Đã xóa lịch sử giữ kho khỏi danh sách.') } catch (error) { showToast(userFacingError(error, 'Không thể xóa lịch sử.')) } } })}> {'Xóa lịch sử'}</Button>}
                     </div>
                   </div>
-                </Card>
+                </Card></div>
               )})}
+              {!pagedReservationHolds.some(hold => hold.status === 'EXPIRED') && <div className="mt-2 border-b border-stone-200 pb-2"><h2 className="text-base font-bold text-stone-900">Đơn giữ kho hết hạn</h2><p className="text-xs text-stone-500">Chưa có đơn giữ kho hết hạn phù hợp. Khi một đơn quá hạn, đơn sẽ được lưu tại khu vực này.</p></div>}
             </div>
           ) : (
             <Card className="p-10 text-center">
@@ -2880,12 +3059,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               {visibleMyHolds.length ? <Button className="mt-4" size="sm" variant="outline" onClick={() => { setReservationFacilityFilter('all'); setReservationSizeFilter('all') }}>Xóa bộ lọc</Button> : <Button className="mt-4" size="sm" onClick={() => navigateTo('browse-units')}>{'Khám phá gian kho'}</Button>}
             </Card>
           )}
-          <Card className="p-4">
-            <nav aria-label="Phân trang đơn giữ kho" className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-stone-500">5 đơn mỗi trang</p>
-              <div className="flex items-center gap-3"><Button variant="outline" size="sm" disabled={reservationPagination.page <= 1} onClick={() => setReservationPageNumber(reservationPagination.page - 1)}>Trang trước</Button><span aria-live="polite" className="text-sm text-stone-600">Trang {reservationPagination.page}/{reservationPagination.pages} · Tổng {reservationCount} đơn</span><Button variant="outline" size="sm" disabled={reservationPagination.page >= reservationPagination.pages} onClick={() => setReservationPageNumber(reservationPagination.page + 1)}>Trang sau</Button></div>
-            </nav>
-          </Card>
+          {!isApiAuthenticated() && <Card className="p-4"><p className="text-sm text-stone-500">Mỗi nhóm hiển thị 3 đơn mỗi trang.</p></Card>}
         </div>
       )}
 
@@ -2939,7 +3113,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                           <span className="text-stone-400">{'Mã mở cổng:'}</span>
                           <span className="text-[#e9a12c] font-bold tracking-wider">{rental.gateCode}</span>
                         </div>
-                        <span className="text-xs text-stone-500">{'Tiền cọc đảm bảo kho:'} <b>{formatVnd(rental.securityDeposit ?? rental.deposit)}</b></span>
+                        <span className="text-xs text-stone-500">{'Tiền cọc đảm bảo thuê:'} <b>{formatVnd(rental.securityDeposit ?? rental.deposit)}</b></span>
                       </div>
                     </div>
 
@@ -3072,7 +3246,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                           </>
                         )}
                         {rental.status === 'setup' && (
-                          <Badge variant="warning">Đang setup miễn phí</Badge>
+                          <Badge variant="warning">Đang trong thời gian chuẩn bị miễn phí</Badge>
                         )}
                         {rental.status === 'return_requested' && (
                           <Badge variant="warning">{'Đã gửi yêu cầu trả kho'}</Badge>
@@ -3155,7 +3329,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                           )}
                         </div>
                       </div>
-                      {['awaiting_customer_confirmation', 'disputed', 'payment_due', 'refund_pending', 'completed'].includes(returnCase.status) && <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5"><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{'Hiện trạng ban đầu'}</p><p className="mt-1 font-semibold">{returnCase.initialConditionSnapshot}</p></div><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{'Kết quả nghiệm thu'}</p><p className="mt-1 font-semibold">{returnCase.damageClassification || '—'} · {returnCase.staffNotes || '—'}</p></div><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{`Phí quá hạn (${returnCase.overdueDays || 0} ngày)`}</p><p className="mt-1 font-bold text-red-700">{formatVnd(returnCase.overdueFee || 0)}</p></div><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{'Cọc được hoàn'}</p><p className="mt-1 font-bold text-emerald-700">{formatVnd(returnCase.netRefundAmount)}</p></div><div className={`rounded-lg p-3 ${(returnCase.amountDueFromCustomer || 0) > 0 ? 'bg-red-100' : 'bg-white'}`}><p className="text-stone-500">{'Khách phải đóng thêm'}</p><p className="mt-1 font-bold text-red-700">{formatVnd(returnCase.amountDueFromCustomer || 0)}</p></div></div>}
+                      {['awaiting_customer_confirmation', 'disputed', 'payment_due', 'refund_pending', 'completed'].includes(returnCase.status) && <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5"><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{'Hiện trạng ban đầu'}</p><p className="mt-1 font-semibold">{returnCase.initialConditionSnapshot}</p></div><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{'Kết quả nghiệm thu'}</p><p className="mt-1 font-semibold">{returnCase.damageClassification || '-'} · {returnCase.staffNotes || '-'}</p></div><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{`Phí quá hạn (${returnCase.overdueDays || 0} ngày)`}</p><p className="mt-1 font-bold text-red-700">{formatVnd(returnCase.overdueFee || 0)}</p></div><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{'Cọc được hoàn'}</p><p className="mt-1 font-bold text-emerald-700">{formatVnd(returnCase.netRefundAmount)}</p></div><div className={`rounded-lg p-3 ${(returnCase.amountDueFromCustomer || 0) > 0 ? 'bg-red-100' : 'bg-white'}`}><p className="text-stone-500">{'Khách phải đóng thêm'}</p><p className="mt-1 font-bold text-red-700">{formatVnd(returnCase.amountDueFromCustomer || 0)}</p></div></div>}
                       {returnCase.structuralInspection && (
                         <div className="mt-2.5 rounded-lg border border-stone-200 bg-white p-2.5 text-xs flex flex-wrap items-center justify-between gap-2">
                           <div className="flex items-center gap-2">
@@ -3192,7 +3366,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                           </div>
                           <div className="flex flex-wrap justify-end gap-2">
                             <Button variant="outline" size="sm" onClick={() => { setReturnDisputeTargetId(returnCase.id); setReturnDisputeReason('') }}>{'Yêu cầu xem xét lại'}</Button>
-                            <Button size="sm" onClick={() => { const due = returnCase.amountDueFromCustomer || 0; requestConfirmation({ title: 'Xác nhận quyết toán trả kho', message: due > 0 ? `Tổng phí vượt tiền cọc đảm bảo kho. Sau khi xác nhận, bạn cần đóng thêm ${formatVnd(due)}.` : `Xác nhận quyết toán và yêu cầu hoàn cọc ${formatVnd(returnCase.netRefundAmount)}?`, confirmLabel: 'Đồng ý quyết toán', onConfirm: () => { try { confirmReturnSettlement(returnCase.id, user, 'accepted'); showToast(due > 0 ? (`Đã xác nhận. Vui lòng thanh toán thêm ${formatVnd(due)}.`) : ('Đã xác nhận quyết toán. Hồ sơ và mã ra vào đã hết hiệu lực, đang chờ nhân viên chuyển hoàn cọc.')) } catch (error) { showToast(userFacingError(error, 'Không thể xác nhận quyết toán.')) } } }) }}>{'Đồng ý quyết toán'}</Button>
+                            <Button size="sm" onClick={() => { const due = returnCase.amountDueFromCustomer || 0; requestConfirmation({ title: 'Xác nhận quyết toán trả kho', message: due > 0 ? `Tổng phí vượt tiền cọc đảm bảo thuê. Sau khi xác nhận, bạn cần đóng thêm ${formatVnd(due)}.` : `Xác nhận quyết toán và yêu cầu hoàn cọc ${formatVnd(returnCase.netRefundAmount)}?`, confirmLabel: 'Đồng ý quyết toán', onConfirm: () => { try { confirmReturnSettlement(returnCase.id, user, 'accepted'); showToast(due > 0 ? (`Đã xác nhận. Vui lòng thanh toán thêm ${formatVnd(due)}.`) : ('Đã xác nhận quyết toán. Hồ sơ và mã ra vào đã hết hiệu lực, đang chờ nhân viên chuyển hoàn cọc.')) } catch (error) { showToast(userFacingError(error, 'Không thể xác nhận quyết toán.')) } } }) }}>{'Đồng ý quyết toán'}</Button>
                           </div>
                         </div>
                       )}
@@ -3227,7 +3401,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       {page === 'contracts' && !isApiAuthenticated() && <div className="fade-in space-y-4">
         <SectionHeader title={'Hợp đồng của tôi'} subtitle={'Bản scan hợp đồng giấy đã ký tại cơ sở'} />
         <div className="flex flex-wrap gap-2" aria-label="Lọc hợp đồng">{([['all', 'Tất cả'], ['active', 'Còn hiệu lực'], ['completed', 'Đã kết thúc']] as const).map(([value, label]) => <Button key={value} size="sm" variant={contractFilter === value ? 'primary' : 'outline'} onClick={() => setContractFilter(value)}>{label}</Button>)}</div>
-        <Card className="p-4 text-sm text-stone-700"><p className="font-bold">Các điều khoản áp dụng cùng hợp đồng giấy</p><p className="mt-2">Phí giữ chỗ theo báo giá được trừ vào tiền thuê. Mã xác minh có hiệu lực 10 phút. Sau khi xác minh, hoặc sau khi hàng “Khác” được duyệt, thời hạn thanh toán là 15 phút. Hồ sơ hàng hóa cần duyệt được xử lý theo thứ tự đến trước. Khách đến sớm chỉ được nhận kho sau khi nhân viên xác minh danh tính, hợp đồng, thanh toán và hiện trạng. Khi trả kho, hai bên đối chiếu biên bản, ảnh và từng khoản phí. Khách có quyền yêu cầu xem xét lại trước khi quyết toán. Tiền cọc đảm bảo kho còn lại được hoàn theo chứng từ giao dịch, sau khi trừ công nợ và phí phát sinh đã xác nhận.</p></Card>
+        <Card className="p-4 text-sm text-stone-700"><p className="font-bold">Các điều khoản áp dụng cùng hợp đồng giấy</p><p className="mt-2">Đặt cọc giữ chỗ theo báo giá được trừ vào tiền thuê. Email được xác minh một lần khi kích hoạt tài khoản. Thời hạn thanh toán bắt đầu khi tạo đơn hoặc sau khi hàng “Khác” được duyệt; mặc định là 15 phút. Hồ sơ hàng hóa cần duyệt được xử lý theo thứ tự đến trước. Khách đến sớm chỉ được nhận kho sau khi nhân viên xác minh danh tính, hợp đồng, thanh toán và hiện trạng. Khi trả kho, hai bên đối chiếu biên bản, ảnh và từng khoản phí. Khách có quyền yêu cầu xem xét lại trước khi quyết toán. Tiền cọc đảm bảo thuê còn lại được hoàn theo chứng từ giao dịch, sau khi trừ công nợ và phí phát sinh đã xác nhận.</p></Card>
         {sortedMyContracts.length ? <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{sortedMyContracts.map(c => {
           const contractRental = myRentals.find(rental => rental.contractId === c.id || rental.holdId === c.reservationId)
           const contractInactive = contractRental?.status === 'completed'
@@ -3235,7 +3409,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           <div className="aspect-[3/4] bg-stone-200 p-5">
             <div className="flex h-full flex-col bg-white px-6 py-8 text-center shadow-sm">
               <p className="text-[10px] font-bold uppercase tracking-wider text-black">Cộng hòa xã hội chủ nghĩa Việt Nam</p>
-              <p className="mt-1 text-[9px] font-semibold text-black">Độc lập – Tự do – Hạnh phúc</p>
+              <p className="mt-1 text-[9px] font-semibold text-black">Độc lập - Tự do - Hạnh phúc</p>
               <div className="my-5 border-t border-black" />
               <p className="text-base font-bold text-black">HỢP ĐỒNG THUÊ KHO</p>
               <p className="mt-2 text-xs font-bold text-black">{c.contractNumber}</p>
@@ -3245,7 +3419,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           </div>
           <div className="space-y-2 p-4 text-black">
             <div className="flex items-center justify-between gap-3"><div><p className="font-bold">{c.contractNumber}</p>{c.contractType === 'RENEWAL' && <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">{'Hợp đồng gia hạn'}</p>}</div><span className="rounded border border-black px-2 py-0.5 text-xs font-semibold">{c.status}</span></div>
-            <p>{'Ngày ký'}: {displayDateValue(c.signedAt)}</p><p>{'Hiệu lực'}: {displayDateValue(c.startDate)} – {displayDateValue(c.endDate)}</p>
+            <p>{'Ngày ký'}: {displayDateValue(c.signedAt)}</p><p>{'Hiệu lực'}: {displayDateValue(c.startDate)} - {displayDateValue(c.endDate)}</p>
             <p className="truncate text-stone-600">{c.scannedFileName}</p>
             <div className="flex flex-wrap items-center gap-3 border-t border-stone-200 pt-3"><a href={c.scannedFileUrl} target="_blank" rel="noopener noreferrer" className="font-bold underline text-black">{'Xem bản scan'}</a><a href={c.scannedFileUrl} download={c.scannedFileName} className="font-bold underline text-black">{'Tải xuống'}</a>{contractInactive && <Button variant="outline" size="sm" onClick={() => requestConfirmation({ title: 'Xóa lịch sử hợp đồng', message: 'Xóa hợp đồng hết hiệu lực này khỏi danh sách của bạn? Bản lưu đối soát vẫn được giữ.', confirmLabel: 'Xóa lịch sử', tone: 'danger', onConfirm: () => { try { archiveContractHistory(c.id, user); showToast('Đã xóa hợp đồng khỏi danh sách.') } catch (error) { showToast(userFacingError(error, 'Không thể xóa lịch sử hợp đồng.')) } } })}> {'Xóa lịch sử'}</Button>}</div>
           </div>
@@ -3287,8 +3461,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 {myPayments.filter(payment => paymentHistoryFilter === 'all' || (paymentHistoryFilter === 'settlement' ? ['DAMAGE_FEE', 'REFUND'].includes(payment.type) : !['DAMAGE_FEE', 'REFUND'].includes(payment.type))).map(payment => {
                   const rental = myRentals.find(r => r.id === payment.rentalId)
                   const hold = myHolds.find(h => h.id === payment.reservationId)
-                  const labels: Record<string, string> = { RESERVATION_DEPOSIT: 'Phí giữ chỗ 20%', INITIAL_RENT: 'Phần còn lại tại cơ sở', RENEWAL: 'Thanh toán gia hạn', DAMAGE_FEE: 'Thanh toán quyết toán trả kho', REFUND: 'Hoàn cọc sau quyết toán' }
-                  return <Tr key={payment.id}><Td><span className="text-xs text-stone-600">{payment.transactionReference || payment.id}</span><p className="mt-0.5 text-[10px] text-stone-400">{payment.paidAt ? formatCustomerDateTime(new Date(payment.paidAt)) : '—'}</p></Td><Td><b>{rental?.unitId || hold?.assignedUnitId || hold?.unitTypeName || '—'}</b><p className="text-[10px] text-stone-400">{rental?.facilityName || hold?.facilityName}</p></Td><Td>{labels[payment.type] || 'Giao dịch thanh toán'}</Td><Td><span className="text-xs text-stone-500">{paymentMethodLabel(payment.paymentMethod)}</span></Td><Td><b className={payment.type === 'REFUND' ? 'text-emerald-700' : 'text-stone-950'}>{payment.type === 'REFUND' ? '+' : ''}{formatVnd(payment.amount)}</b></Td><Td><span className={`inline-flex rounded px-2.5 py-1 text-xs font-bold ${payment.status === 'PAID' ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{payment.status === 'PAID' ? ('Hoàn tất') : ('Đang xử lý')}</span></Td></Tr>
+                  const labels: Record<string, string> = { RESERVATION_DEPOSIT: 'Đặt cọc giữ chỗ (20%)', INITIAL_RENT: 'Phần còn lại tại cơ sở', RENEWAL: 'Thanh toán gia hạn', DAMAGE_FEE: 'Thanh toán quyết toán trả kho', REFUND: 'Hoàn cọc sau quyết toán' }
+                  return <Tr key={payment.id}><Td><span className="text-xs text-stone-600">{payment.transactionReference || payment.id}</span><p className="mt-0.5 text-[10px] text-stone-400">{payment.paidAt ? formatCustomerDateTime(new Date(payment.paidAt)) : '-'}</p></Td><Td><b>{rental?.unitId || hold?.assignedUnitId || hold?.unitTypeName || '-'}</b><p className="text-[10px] text-stone-400">{rental?.facilityName || hold?.facilityName}</p></Td><Td>{labels[payment.type] || 'Giao dịch thanh toán'}</Td><Td><span className="text-xs text-stone-500">{paymentMethodLabel(payment.paymentMethod)}</span></Td><Td><b className={payment.type === 'REFUND' ? 'text-emerald-700' : 'text-stone-950'}>{payment.type === 'REFUND' ? '+' : ''}{formatVnd(payment.amount)}</b></Td><Td><span className={`inline-flex rounded px-2.5 py-1 text-xs font-bold ${payment.status === 'PAID' ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{payment.status === 'PAID' ? ('Hoàn tất') : ('Đang xử lý')}</span></Td></Tr>
                 })}
                 {!myPayments.length && <tr><td colSpan={6}><p className="py-6 text-center text-sm text-stone-500">{'Chưa có giao dịch nào.'}</p></td></tr>}
               </Tbody>
@@ -3362,7 +3536,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   </div>
                   <div className="text-right">
                     <p className="text-2xl font-bold text-white">{formatVnd(selectedUnit.price)}<span className="text-sm font-normal text-stone-300">/{'tháng'}</span></p>
-                    <p className="text-xs font-medium text-white/70">{isApiAuthenticated() ? 'Phí giữ chỗ theo báo giá của hệ thống' : 'Tiền cọc = 20% tổng giá trị kỳ thuê đã chọn'}</p>
+                    <p className="text-xs font-medium text-white/70">{isApiAuthenticated() ? 'Đặt cọc giữ chỗ theo báo giá của hệ thống' : 'Tiền cọc = 20% tổng giá trị kỳ thuê đã chọn'}</p>
                   </div>
                 </div>
               </div>
@@ -3508,7 +3682,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     'Chọn cỡ kho phù hợp',
                     'Xác nhận giữ suất theo loại kho',
                     'Thanh toán cọc 20% trong 15 phút',
-                    'Quản lý phân gian trong 6 giờ. Khách nhận kho trong 7 ngày'
+                    'Quản lý phân kho trong 6 giờ. Khách nhận kho trong 7 ngày'
                   ].map((item, index) => <div key={item} className="flex gap-2 rounded-xl bg-stone-50 p-3"><span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-stone-900 text-[10px] font-bold text-white">{index + 1}</span><span className="font-medium leading-4 text-stone-700">{item}</span></div>)}
                 </div>
               </div>
@@ -3538,27 +3712,51 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       {/* ── MODAL 2: GOODS DECLARATION & HOLD (P0.1, P0.3, P1.1) ─ */}
       <Modal
         open={bookOpen}
-        onClose={() => { resetReservationDraft(); resetBookingForm(); setBookOpen(false); showToast('Đã thoát biểu mẫu đặt kho.') }}
+        onClose={() => {
+          setBookOpen(false)
+          if (bookingStep > 1) {
+            showToast(`Đã lưu tạm tiến trình đặt kho (Bước ${bookingStep}). Bấm "Đặt kho" để tiếp tục.`)
+          }
+        }}
         size="xl"
         title={selectedTarget ? (`Đặt Kho: ${unitTypeLabel(selectedTarget.unitType.name)}`) : (selectedUnit ? ('Đặt kho') : '')}
       >
         {selectedUnit && (
           <div className="space-y-4">
-            <ol className="grid grid-cols-1 gap-2 sm:grid-cols-4" aria-label="Các bước đặt kho">
-              {[
-                [1, 'Thông tin cá nhân'],
-                [2, 'Hàng hóa & số liệu'],
-                [3, 'Báo giá'],
-                [4, 'Lịch check-in'],
-              ].map(([step, label]) => {
-                const stepNumber = Number(step)
-                const active = bookingStep === stepNumber
-                const completed = bookingStep > stepNumber
-                return <li key={stepNumber} className={`rounded-xl border px-3 py-2 text-xs font-semibold ${active ? 'border-amber-500 bg-amber-50 text-amber-950' : completed ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-stone-200 bg-white text-stone-500'}`}>
-                  <span className="mr-1.5">{stepNumber}.</span>{label}
-                </li>
-              })}
-            </ol>
+            <div>
+              <ol className="grid grid-cols-1 gap-2 sm:grid-cols-4" aria-label="Các bước đặt kho">
+                {[
+                  [1, 'Thông tin cá nhân'],
+                  [2, 'Hàng hóa & số liệu'],
+                  [3, 'Báo giá'],
+                  [4, 'Lịch check-in'],
+                ].map(([step, label]) => {
+                  const stepNumber = Number(step)
+                  const active = bookingStep === stepNumber
+                  const completed = bookingStep > stepNumber
+                  return <li key={stepNumber} className={`rounded-xl border px-3 py-2 text-xs font-semibold ${active ? 'border-amber-500 bg-amber-50 text-amber-950' : completed ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-stone-200 bg-white text-stone-500'}`}>
+                    <span className="mr-1.5">{stepNumber}.</span>{label}
+                  </li>
+                })}
+              </ol>
+              {bookingStep > 1 && (
+                <div className="mt-2 flex items-center justify-between text-xs text-stone-500 px-1">
+                  <span>Tiến trình đang được tự động lưu tạm</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetReservationDraft()
+                      resetBookingForm()
+                      setBookingStep(1)
+                      showToast('Đã bắt đầu lại từ bước 1.')
+                    }}
+                    className="hover:text-amber-800 underline font-medium text-amber-700"
+                  >
+                    ↺ Bắt đầu lại từ bước 1
+                  </button>
+                </div>
+              )}
+            </div>
 
             {bookingStep === 2 && <div className="rounded-xl border border-stone-300 bg-white p-4 shadow-sm">
               <div className="mb-3 border-b border-stone-200 pb-3">
@@ -3586,11 +3784,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               <div><p className="font-bold text-stone-900">Thông tin cá nhân</p><p className="mt-1 text-xs text-stone-500">Thông tin dùng để lập hồ sơ và đối chiếu khi nhận kho.</p></div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Input label={'Họ và tên người thuê'} value={user.name} disabled />
-              <Input label={'Số CCCD / Hộ chiếu * (Đối chiếu lúc nhận kho)'} value={customerIdCard} onChange={e => setCustomerIdCard(e.target.value)} />
-              <Input label={'Số điện thoại liên hệ *'} value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} />
-              {bookingErrors.phone && <p className="text-xs leading-5 text-red-700 sm:col-span-2">{bookingErrors.phone}</p>}
+              <div><Input label={'Số CCCD/CMND *'} value={customerIdCard} onChange={e => { setCustomerIdCard(e.target.value); updateBookingError('identity', isIdentityDocumentFormatValid(e.target.value) ? undefined : 'CCCD/CMND phải gồm 9 hoặc 12 chữ số.') }} />{bookingErrors.identity && <p className="mt-1 text-xs leading-5 text-red-700">{bookingErrors.identity}</p>}</div>
+              <div><Input label={'Số điện thoại liên hệ *'} value={customerPhone} onChange={e => { setCustomerPhone(e.target.value); updateBookingError('phone', isVietnamesePhone(e.target.value) ? undefined : VIETNAMESE_PHONE_ERROR_MESSAGE) }} />{bookingErrors.phone && <p className="mt-1 text-xs leading-5 text-red-700">{bookingErrors.phone}</p>}</div>
               <Input label="Email" value={customerEmail} disabled />
-              <Input label={'Địa chỉ *'} value={customerAddress} onChange={e => setCustomerAddress(e.target.value)} />
+              <div><Input label={'Địa chỉ *'} value={customerAddress} onChange={e => { setCustomerAddress(e.target.value); updateBookingError('address', e.target.value.trim() ? undefined : 'Vui lòng nhập địa chỉ.') }} />{bookingErrors.address && <p className="mt-1 text-xs leading-5 text-red-700">{bookingErrors.address}</p>}</div>
               </div>
             </section>}
 
@@ -3635,15 +3832,15 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 </> : selectedUnitActivePackages.length > 0 ? (
                   selectedUnitActivePackages.map(pkg => (
                     <option key={pkg.id} value={pkg.id}>
-                      {pkg.name} — {formatVnd(pkg.packagePrice)} {pkg.discountPercent ? `(Giảm ${pkg.discountPercent}%)` : ''}
+                      {pkg.name} - {formatVnd(pkg.packagePrice)} {pkg.discountPercent ? `(Giảm ${pkg.discountPercent}%)` : ''}
                     </option>
                   ))
                 ) : (
                   <>
-                    <option value="1">1 tháng — {formatVnd(currentQuote?.baseMonthlyPrice || selectedUnit?.price || 0)}</option>
-                    <option value="3">3 tháng — Giảm 3%</option>
-                    <option value="6">6 tháng — Giảm 5%</option>
-                    <option value="12">12 tháng — Giảm 8%</option>
+                    <option value="1">1 tháng - {formatVnd(currentQuote?.baseMonthlyPrice || selectedUnit?.price || 0)}</option>
+                    <option value="3">3 tháng - Giảm 3%</option>
+                    <option value="6">6 tháng - Giảm 5%</option>
+                    <option value="12">12 tháng - Giảm 8%</option>
                   </>
                 )}
               </Select>
@@ -3662,52 +3859,62 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       : row))}>Chọn lại</button>}</p>}
                   <button type="button" aria-label={`Xóa loại hàng hóa ${index + 1}`} title="Xóa loại hàng hóa" className="absolute right-3 top-2 flex h-7 w-7 items-center justify-center bg-transparent p-0 text-2xl leading-none text-stone-400 transition hover:text-red-700" onClick={() => setGoodsItems(items => items.length === 1 ? [createGoodsDeclarationItem('goods-1')] : items.filter(row => row.id !== item.id))}>×</button>
                   <div className="grid gap-3 sm:grid-cols-2 sm:items-start">
-                    <div><Select label="Loại hàng hóa" value={item.category} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, category: e.target.value, materialType: '', materialName: '', catalogMaterialId: undefined } : row))}><option value="">Chọn loại hàng hóa</option>{item.category && !bookingCategories.some(category => category.code === item.category) && <option value={item.category} disabled>Loại hàng không còn được áp dụng</option>}{bookingCategoryOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select>{bookingErrors[`goodsCategory-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsCategory-${item.id}`]}</p>}</div>
+                    <div><Select label="Loại hàng hóa" value={item.category} onChange={e => { const value = e.target.value; setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, category: value, materialType: '', materialName: '', catalogMaterialId: undefined } : row)); updateBookingError(`goodsCategory-${item.id}`, value ? undefined : 'Vui lòng chọn loại hàng hóa.') }}><option value="">Chọn loại hàng hóa</option>{item.category && !bookingCategories.some(category => category.code === item.category) && <option value={item.category} disabled>Loại hàng không còn được áp dụng</option>}{bookingCategoryOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select>{bookingErrors[`goodsCategory-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsCategory-${item.id}`]}</p>}</div>
                      {!catalogCategoryFor(item.category)?.custom ? (isMaterialOptional(item.category) && bookingMaterials(item.category).length === 0
                        ? <div className="self-end rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs text-stone-600">Không yêu cầu vật liệu chính</div>
-                       : <div><Select label={`Chất liệu chính${isMaterialOptional(item.category) ? ' (không bắt buộc)' : ''}`} value={item.materialName} disabled={!item.category} onChange={e => { const materialName = e.target.value; const material = bookingMaterials(item.category).find(value => value.label === materialName); const materialType: GoodsDeclarationItem['materialType'] = !materialName ? '' : 'NORMAL'; setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, materialName, catalogMaterialId: material?.id, materialType } : row)) }}><option value="">{isMaterialOptional(item.category) ? 'Không chọn vật liệu' : 'Chọn chất liệu cụ thể'}</option>{item.materialName && !bookingMaterials(item.category).some(material => material.label === item.materialName) && <option value={item.materialName} disabled>{item.materialName} (không còn áp dụng)</option>}{item.category && bookingMaterials(item.category).map(material => <option key={material.id} value={material.label}>{material.label}</option>)}</Select>{bookingErrors[`goodsMaterial-${item.id}`] && <p className="mt-1 text-xs text-red-700">Vui lòng chọn chất liệu chính.</p>}</div>) : <div className="self-end rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">Cần nhân viên cơ sở duyệt trước khi thu cọc</div>}
+                     : <div><Select label={`Chất liệu chính${isMaterialOptional(item.category) ? ' (không bắt buộc)' : ''}`} value={item.materialName} disabled={!item.category} onChange={e => { const materialName = e.target.value; const material = bookingMaterials(item.category).find(value => value.label === materialName); const materialType: GoodsDeclarationItem['materialType'] = !materialName ? '' : 'NORMAL'; setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, materialName, catalogMaterialId: material?.id, materialType } : row)); updateBookingError(`goodsMaterial-${item.id}`, materialName || isMaterialOptional(item.category) ? undefined : 'Vui lòng chọn chất liệu chính.') }}><option value="">{isMaterialOptional(item.category) ? 'Không chọn vật liệu' : 'Chọn chất liệu cụ thể'}</option>{item.materialName && !bookingMaterials(item.category).some(material => material.label === item.materialName) && <option value={item.materialName} disabled>{item.materialName} (không còn áp dụng)</option>}{item.category && bookingMaterials(item.category).map(material => <option key={material.id} value={material.label}>{material.label}</option>)}</Select>{bookingErrors[`goodsMaterial-${item.id}`] && <p className="mt-1 text-xs text-red-700">Vui lòng chọn chất liệu chính.</p>}</div>) : <div className="self-end rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">Cần nhân viên cơ sở duyệt trước khi thu cọc</div>}
                   </div>
-                   <div className="mt-4"><label className="text-sm font-medium text-stone-700">Mô tả hàng hóa *</label><textarea className="mt-1 min-h-20 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm" value={item.description} placeholder="Mô tả tên đồ vật, tình trạng hoặc đặc điểm cần lưu ý" onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, description: e.target.value } : row))} />{bookingErrors[`goodsDescription-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsDescription-${item.id}`]}</p>}</div>
-                  <div className="mt-4 grid gap-3 border-t border-stone-200 pt-4 sm:grid-cols-5 sm:items-start">
-                     <div className="flex h-full flex-col"><Input type="number" min="1" step="1" label="Số lượng *" value={item.quantity} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, quantity: e.target.value } : row))} /><p className="mt-1 min-h-8 text-xs text-red-700">{bookingErrors[`goodsQuantity-${item.id}`] || ''}</p></div>
-                     <div className="flex h-full flex-col"><Input type="number" min="0.1" label="Dài (cm) *" value={item.lengthCm} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, lengthCm: e.target.value } : row))} /><p className="mt-1 min-h-8 text-xs text-red-700">{bookingErrors[`goodsLength-${item.id}`] || ''}</p></div>
-                     <div className="flex h-full flex-col"><Input type="number" min="0.1" label="Rộng (cm) *" value={item.widthCm} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, widthCm: e.target.value } : row))} /><p className="mt-1 min-h-8 text-xs text-red-700">{bookingErrors[`goodsWidth-${item.id}`] || ''}</p></div>
-                     <div className="flex h-full flex-col"><Input type="number" min="0.1" label="Cao (cm) *" value={item.heightCm} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, heightCm: e.target.value } : row))} /><p className="mt-1 min-h-8 text-xs text-red-700">{bookingErrors[`goodsHeight-${item.id}`] || ''}</p></div>
-                     <div className="flex h-full flex-col"><Input type="number" min="0.1" label="Nặng/kiện (kg) *" value={item.weightKg} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, weightKg: e.target.value } : row))} /><p className="mt-1 min-h-8 text-xs text-red-700">{bookingErrors[`goodsWeight-${item.id}`] || ''}</p></div>
+                   <div className="mt-4"><label className="text-sm font-medium text-stone-700">Mô tả hàng hóa *</label><textarea className="mt-1 min-h-20 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm" value={item.description} placeholder="Mô tả tên đồ vật, tình trạng hoặc đặc điểm cần lưu ý" onChange={e => { const value = e.target.value; setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, description: value } : row)); updateBookingError(`goodsDescription-${item.id}`, value.trim() ? undefined : 'Vui lòng nhập mô tả hàng hóa.') }} />{bookingErrors[`goodsDescription-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsDescription-${item.id}`]}</p>}</div>
+                    <details open className="mt-4 rounded-lg border border-stone-200 bg-white p-3">
+                      <summary className="cursor-pointer font-bold text-stone-900">Thông tin bổ sung và hình ảnh hàng hóa {!catalogCategoryFor(item.category)?.custom && <span className="font-normal text-stone-500">(không bắt buộc)</span>}</summary>
+                      <div className="mt-3 space-y-3 border-t border-stone-200 pt-3">
+                        {catalogCategoryFor(item.category)?.custom && <div className="grid gap-3 sm:grid-cols-2">
+                          <div><Input label="Tên hàng hóa *" value={item.customGoodsName} onChange={e => { const value = e.target.value; setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customGoodsName: value } : row)); updateBookingError(`customGoodsName-${item.id}`, value.trim() ? undefined : 'Vui lòng nhập tên hàng hóa.') }} />{bookingErrors[`customGoodsName-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`customGoodsName-${item.id}`]}</p>}</div>
+                          <div><Input label="Chất liệu chính (nếu xác định được)" value={item.customMaterial} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customMaterial: e.target.value } : row))} /></div>
+                        </div>}
+                        <Input label="Ghi chú bổ sung" value={item.customerNote} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customerNote: e.target.value } : row))} />
+                        <div>
+                          <p className="text-sm font-medium text-stone-700">Hình ảnh hàng hóa</p>
+                          <p className="mt-1 text-xs text-stone-500">Không bắt buộc. Tối đa 10 ảnh PNG, JPEG hoặc WebP, mỗi ảnh tối đa 10 MB. Ảnh sẽ gắn với đúng loại hàng hóa sau khi tạo đơn.</p>
+                          <label htmlFor={`goods-images-${item.id}`} className="mt-2 flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-stone-300 bg-stone-50 px-4 py-4 text-center transition hover:border-amber-500 hover:bg-amber-50">
+                            <span className="text-sm font-semibold text-stone-800">Chọn ảnh hàng hóa</span>
+                            <span className="mt-1 text-xs text-stone-500">Có thể chọn nhiều ảnh cùng lúc</span>
+                          </label>
+                          <input id={`goods-images-${item.id}`} type="file" accept="image/png,image/jpeg,image/webp" multiple className="sr-only" onChange={event => selectGoodsImages(item.id, event)} />
+                          {item.images.length > 0 && <div className="mt-2 flex flex-wrap gap-2">{item.images.map((file, imageIndex) => <button key={`${file.name}-${file.lastModified}-${imageIndex}`} type="button" className="rounded-full border border-stone-300 bg-white px-3 py-1 text-xs text-stone-700 hover:border-red-400 hover:text-red-700" onClick={() => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, images: row.images.filter((_, index) => index !== imageIndex) } : row))} aria-label={`Xóa ảnh ${file.name}`}>{file.name} ×</button>)}</div>}
+                          {bookingErrors[`goodsImages-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsImages-${item.id}`]}</p>}
+                        </div>
+                        {catalogCategoryFor(item.category)?.custom && <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><b>Yêu cầu cần nhân viên cơ sở duyệt</b><p className="mt-1 leading-5">Tài khoản đã xác minh email được gửi hồ sơ trực tiếp để nhân viên xem xét trong tối đa 6 giờ. Sau khi hồ sơ được duyệt, khách hàng có 15 phút để thanh toán. Quản lý cơ sở có tối đa 6 giờ tiếp theo để phân kho.</p></div>}
+                      </div>
+                    </details>
+                    <div className="mt-4 grid gap-3 border-t border-stone-200 pt-4 sm:grid-cols-5 sm:items-start">
+                     <div className="flex h-full flex-col"><Input type="number" min="1" step="1" label="Số lượng *" value={item.quantity} onChange={e => { const value = e.target.value; setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, quantity: value } : row)); updateBookingError(`goodsQuantity-${item.id}`, Number.isInteger(Number(value)) && Number(value) > 0 ? undefined : 'Số lượng phải là số nguyên lớn hơn 0.') }} /><p className="mt-1 min-h-8 text-xs text-red-700">{bookingErrors[`goodsQuantity-${item.id}`] || ''}</p></div>
+                     <div className="flex h-full flex-col"><Input type="number" min="0.1" label="Dài (cm) *" value={item.lengthCm} onChange={e => { const value = e.target.value; setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, lengthCm: value } : row)); updateBookingError(`goodsLength-${item.id}`, parsePositiveNumber(value) === null ? 'Chiều dài phải lớn hơn 0.' : undefined) }} /><p className="mt-1 min-h-8 text-xs text-red-700">{bookingErrors[`goodsLength-${item.id}`] || ''}</p></div>
+                     <div className="flex h-full flex-col"><Input type="number" min="0.1" label="Rộng (cm) *" value={item.widthCm} onChange={e => { const value = e.target.value; setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, widthCm: value } : row)); updateBookingError(`goodsWidth-${item.id}`, parsePositiveNumber(value) === null ? 'Chiều rộng phải lớn hơn 0.' : undefined) }} /><p className="mt-1 min-h-8 text-xs text-red-700">{bookingErrors[`goodsWidth-${item.id}`] || ''}</p></div>
+                     <div className="flex h-full flex-col"><Input type="number" min="0.1" label="Cao (cm) *" value={item.heightCm} onChange={e => { const value = e.target.value; setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, heightCm: value } : row)); updateBookingError(`goodsHeight-${item.id}`, parsePositiveNumber(value) === null ? 'Chiều cao phải lớn hơn 0.' : undefined) }} /><p className="mt-1 min-h-8 text-xs text-red-700">{bookingErrors[`goodsHeight-${item.id}`] || ''}</p></div>
+                     <div className="flex h-full flex-col"><Input type="number" min="0.1" label="Nặng/kiện (kg) *" value={item.weightKg} onChange={e => { const value = e.target.value; setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, weightKg: value } : row)); updateBookingError(`goodsWeight-${item.id}`, parsePositiveNumber(value) === null ? 'Cân nặng mỗi kiện phải lớn hơn 0.' : undefined) }} /><p className="mt-1 min-h-8 text-xs text-red-700">{bookingErrors[`goodsWeight-${item.id}`] || ''}</p></div>
                   </div>
-                  <div className="mt-3"><p className="text-sm font-medium text-stone-700">Hàng dễ bể / dễ vỡ? *</p><div className="mt-2 flex gap-5"><label className="flex items-center gap-2 text-sm"><input type="radio" name={`fragile-${item.id}`} checked={item.fragile === 'no'} onChange={() => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, fragile: 'no' } : row))} />Không</label><label className="flex items-center gap-2 text-sm"><input type="radio" name={`fragile-${item.id}`} checked={item.fragile === 'yes'} onChange={() => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, fragile: 'yes' } : row))} />Có</label></div>{bookingErrors[`goodsFragile-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsFragile-${item.id}`]}</p>}{bookingErrors[`goodsFit-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsFit-${item.id}`]}</p>}</div>
-                   <details open className="mt-4 rounded-lg border border-stone-200 bg-white p-3">
-                    <summary className="cursor-pointer font-bold text-stone-900">Thông tin bổ sung và hình ảnh hàng hóa</summary>
-                    <div className="mt-3 space-y-3 border-t border-stone-200 pt-3">
-                      {catalogCategoryFor(item.category)?.custom && <div className="grid gap-3 sm:grid-cols-2">
-                        <div><Input label="Tên hàng hóa *" value={item.customGoodsName} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customGoodsName: e.target.value } : row))} />{bookingErrors[`customGoodsName-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`customGoodsName-${item.id}`]}</p>}</div>
-                        <div><Input label="Chất liệu chính (nếu xác định được)" value={item.customMaterial} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customMaterial: e.target.value } : row))} /></div>
-                      </div>}
-                      <Input label="Ghi chú bổ sung" value={item.customerNote} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customerNote: e.target.value } : row))} />
-                      <div><label className="text-sm font-medium text-stone-700">Hình ảnh hàng hóa</label><p className="mt-1 text-xs text-stone-500">Tối đa 10 ảnh PNG, JPEG hoặc WebP. Ảnh được gắn với đúng hàng hóa sau khi tạo đơn.</p><input type="file" accept="image/png,image/jpeg,image/webp" multiple className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm" onChange={event => selectGoodsImages(item.id, event)} />{item.images.length > 0 && <p className="mt-1 text-xs text-stone-500">Đã chọn {item.images.length}/10 ảnh: {item.images.map(file => file.name).join(', ')}</p>}{bookingErrors[`goodsImages-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsImages-${item.id}`]}</p>}</div>
-                      {catalogCategoryFor(item.category)?.custom && <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><b>Yêu cầu cần nhân viên cơ sở duyệt</b><p className="mt-1 leading-5">Sau khi xác nhận thư điện tử, yêu cầu sẽ được xem xét trong tối đa 6 giờ. Sau khi hồ sơ được duyệt, khách hàng có 15 phút để thanh toán. Quản lý cơ sở có tối đa 6 giờ tiếp theo để phân kho.</p></div>}
-                    </div>
-                  </details>
+<div className="mt-3"><p className="text-sm font-medium text-stone-700">Hàng dễ bể / dễ vỡ? *</p><div className="mt-2 flex gap-5"><label className="flex items-center gap-2 text-sm"><input type="radio" name={`fragile-${item.id}`} checked={item.fragile === 'no'} onChange={() => { setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, fragile: 'no' } : row)); updateBookingError(`goodsFragile-${item.id}`) }} />Không</label><label className="flex items-center gap-2 text-sm"><input type="radio" name={`fragile-${item.id}`} checked={item.fragile === 'yes'} onChange={() => { setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, fragile: 'yes' } : row)); updateBookingError(`goodsFragile-${item.id}`) }} />Có</label></div>{bookingErrors[`goodsFragile-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsFragile-${item.id}`]}</p>}{bookingErrors[`goodsFit-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsFit-${item.id}`]}</p>}</div>
                 </div>)}
               </div>
               <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => setGoodsItems(items => [...items, createGoodsDeclarationItem()])}>+ Thêm hàng hóa</Button>
 
               <div className="mt-4 grid grid-cols-1 gap-3">
-                <Input label={'Tình trạng đóng gói chung *'} value={goodsCondition} onChange={e => setGoodsCondition(e.target.value)} />
+                <div><Input label={'Tình trạng đóng gói chung *'} value={goodsCondition} onChange={e => { setGoodsCondition(e.target.value); updateBookingError('condition', e.target.value.trim() ? undefined : 'Vui lòng mô tả tình trạng đóng gói.') }} />{bookingErrors.condition && <p className="mt-1 text-xs text-red-700">{bookingErrors.condition}</p>}</div>
               </div>
 
             </div>
 
-            {allPackageSamplesValid && isApiAuthenticated() && recommendationLoading && (
+            {capacityReady && isApiAuthenticated() && recommendationLoading && (
               <div role="status" className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
                 Đang kiểm tra dữ liệu kho, kích thước, tải trọng và kỳ thuê trên hệ thống…
               </div>
             )}
-            {allPackageSamplesValid && warehouseRecommendation && (
+            {capacityReady && warehouseRecommendation && (
               <div className={`rounded-xl border p-4 text-sm ${selectedUnitTypeIncompatible ? 'border-red-300 bg-red-50 text-red-950' : warehouseRecommendation.id === selectedTarget?.unitType.id ? 'border-emerald-300 bg-emerald-50 text-emerald-950' : 'border-amber-300 bg-amber-50 text-amber-950'}`}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="font-bold">{smallerWarehouseRecommendation ? 'Hệ thống đề xuất kho nhỏ hơn' : largerWarehouseRecommendation ? 'Hệ thống đề xuất kho lớn hơn' : isApiAuthenticated() ? (recommendationNeedsReview ? 'Hệ thống đề xuất kho — cần nhân viên duyệt' : 'Hệ thống đề xuất kho phù hợp') : 'Gợi ý kho phù hợp theo số lượng và kích thước đã nhập'}</p>
+                    <p className="font-bold">{smallerWarehouseRecommendation ? 'Hệ thống đề xuất kho nhỏ hơn' : largerWarehouseRecommendation ? 'Hệ thống đề xuất kho lớn hơn' : isApiAuthenticated() ? (recommendationNeedsReview ? 'Hệ thống đề xuất kho - cần nhân viên duyệt' : 'Hệ thống đề xuất kho phù hợp') : 'Gợi ý kho phù hợp theo số lượng và kích thước đã nhập'}</p>
                     <p className="mt-1 text-xs leading-5">Cỡ nhỏ nhất còn chỗ và chứa vừa toàn bộ hàng hóa là <b>{unitTypeLabel(warehouseRecommendation.name || warehouseRecommendation.code)}</b> (~{warehouseRecommendation.volumeM3.toLocaleString('vi-VN')} m³, {warehouseRecommendation.rackCount} khung).</p>
                     {selectedUnitTypeIncompatible && <p className="mt-1 text-xs font-semibold text-red-800">Kho bạn tự chọn không còn phù hợp với hàng hóa hoặc không còn chỗ trong kỳ thuê này.</p>}
                     {warehouseRecommendation.id === selectedTarget?.unitType.id
@@ -3732,7 +3939,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 </div>
               </div>
             )}
-            {allPackageSamplesValid && isApiAuthenticated() && recommendationFormReady && !recommendationLoading && recommendationError && (
+            {capacityReady && isApiAuthenticated() && recommendationFormReady && !recommendationLoading && recommendationError && (
               <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
                 <b>Không thể kiểm tra kho phù hợp</b>
                 <p className="mt-1 text-xs">{recommendationError}</p>
@@ -3741,7 +3948,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 </Button>
               </div>
             )}
-            {allPackageSamplesValid && (!isApiAuthenticated() || recommendationFormReady) && !recommendationLoading && !recommendationError && !warehouseRecommendation && <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900">
+            {capacityReady && (!isApiAuthenticated() || recommendationFormReady) && !recommendationLoading && !recommendationError && !warehouseRecommendation && <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900">
               <b>Chưa có cỡ kho còn trống phù hợp</b>
               <p className="mt-1 text-xs">
                 {noValidLargerUnitAvailable && largestAvailableLargerUnitType
@@ -3755,26 +3962,26 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
             {bookingStep === 4 && <div className="space-y-3 rounded-xl border border-stone-200 bg-stone-50 p-4">
               <div>
-                <p className="text-sm font-semibold text-stone-900">Chọn ngày giờ nhận kho</p>
+                <p className="text-sm font-semibold text-stone-900">Chọn thời gian nhận kho</p>
                 <p className="mt-1 text-xs leading-5 text-stone-600">
-                  Bạn có thể nhận kho từ <b>{formatPolicyDateTime(checkInWindow.availableAt)}</b> đến <b>{formatPolicyDateTime(checkInWindow.deadlineAt)}</b>.
+                  Bạn có thể nhận kho từ <b>{formatCustomerDate(checkInWindow.availableAt)}</b> đến <b>{formatCustomerDate(checkInWindow.deadlineAt)}</b>.
                 </p>
               </div>
-              {schedulePolicyMessage && <div role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs leading-5 text-amber-950">{schedulePolicyMessage}</div>}
               <div className="grid gap-3 sm:grid-cols-2">
-                <div><VietnameseDateInput value={moveInDate} min={earliestCheckInDate} max={latestCheckInDate} onChange={value => { setMoveInDate(value); setSchedulePolicyMessage(null); setBookingErrors(current => { const next = { ...current }; delete next.moveInDate; return next }) }} />{bookingErrors.moveInDate && <p className="mt-1 text-xs text-red-700">{bookingErrors.moveInDate}</p>}</div>
-                <div><Input label="Giờ nhận kho mong muốn" type="time" step="60" value={bookingAppointmentTime} onChange={e => { setBookingAppointmentTime(e.target.value); setSchedulePolicyMessage(null); setBookingErrors(current => { const next = { ...current }; delete next.appointmentTime; return next }) }} />{bookingErrors.appointmentTime && <p className="mt-1 text-xs text-red-700">{bookingErrors.appointmentTime}</p>}</div>
+                <div><VietnameseDateInput value={moveInDate} min={earliestCheckInDate} max={latestCheckInDate} onChange={value => { setMoveInDate(value); updateBookingError('moveInDate', isCheckInDateAllowed(value, checkInWindow) ? undefined : `Ngày nhận kho phải từ ${formatCustomerDate(checkInWindow.availableAt)} đến ${formatCustomerDate(checkInWindow.deadlineAt)}.`) }} />{bookingErrors.moveInDate && <p className="mt-1 text-xs text-red-700">{bookingErrors.moveInDate}</p>}</div>
+                <div><Input label="Giờ nhận kho mong muốn" type="time" step="60" value={bookingAppointmentTime} onChange={e => { const value = e.target.value; setBookingAppointmentTime(value); updateBookingError('appointmentTime', /^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? undefined : 'Vui lòng nhập giờ hợp lệ theo định dạng HH:mm (24 giờ).') }} />{bookingErrors.appointmentTime && <p className="mt-1 text-xs text-red-700">{bookingErrors.appointmentTime}</p>}</div>
               </div>
               <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs leading-5 text-emerald-950">
-                <b>Ngày bắt đầu tính tiền dự kiến:</b> {displayDateValue(previewRentalPeriod?.startDate)}. Dự kiến bàn giao ngày {displayDateValue(moveInDate)}, sau đó có {previewSetupDays} ngày setup miễn phí. Kỳ thuê có tính tiền bắt đầu sau setup và sẽ được chốt theo ngày bàn giao thực tế. Thời hạn 7 ngày chỉ là thời hạn đến nhận kho.
+                <b>Ngày bắt đầu tính tiền dự kiến:</b> {displayDateValue(previewRentalPeriod?.startDate)}. Dự kiến bàn giao ngày {displayDateValue(moveInDate)}, sau đó có {previewSetupDays} ngày chuẩn bị miễn phí. Kỳ thuê có tính tiền bắt đầu sau thời gian này và sẽ được chốt theo ngày bàn giao thực tế. Thời hạn 7 ngày chỉ là thời hạn đến nhận kho.
               </div>
               {isApiAuthenticated() && serverQuote && <div className="space-y-2 text-xs leading-5 text-stone-600">
                 {serverQuote.setupEarlyExitPolicyVersion && serverQuote.setupEarlyExitFee != null ? <>
+                  <p><b className="text-stone-900">Điều khoản trả kho trong thời gian chuẩn bị:</b> nếu khách chủ động trả kho sau bàn giao và kho được nghiệm thu trống trước khi hết thời gian chuẩn bị, phí chấm dứt sớm một lần là <b>{formatVndAmount(serverQuote.setupEarlyExitFee)}</b> theo báo giá đã chốt. Tiền thuê và tiền cọc đảm bảo thuê thực thu được quyết toán sau khi trừ phí này, chi phí có chứng cứ và công nợ đã xác minh. Khoản trả trước đã nằm trong tiền thuê. Trả thực tế sau thời gian chuẩn bị áp dụng quyết toán kỳ thuê đã bắt đầu.</p>
                   <label className="flex items-start gap-2 text-stone-700">
                     <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-amber-600" checked={acceptedSetupQuoteId === serverQuote.quoteId} disabled={reservationSubmitting} onChange={event => setAcceptedSetupQuoteId(event.target.checked ? serverQuote.quoteId : null)} />
-                    <span>Tôi đã đọc và đồng ý điều khoản trả kho trong setup của báo giá này.</span>
+                    <span>Tôi đã đọc và đồng ý điều khoản trả kho trong thời gian chuẩn bị của báo giá này.</span>
                   </label>
-                </> : <p role="status">Báo giá chưa có điều khoản trả kho trong setup. Vui lòng quay lại lấy báo giá mới hoặc liên hệ cơ sở.</p>}
+                </> : <p role="status">Báo giá chưa có điều khoản trả kho trong thời gian chuẩn bị. Vui lòng quay lại lấy báo giá mới hoặc liên hệ cơ sở.</p>}
               </div>}
             </div>}
 
@@ -3782,10 +3989,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
             {/* Storage Space & Cost Breakdown */}
             {(() => {
+              if (!capacityReady) return null
               if (isApiAuthenticated()) return <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/40 p-4 text-sm text-stone-700">
-                <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-bold text-stone-900">Kiểm tra sức chứa theo khung và cân nặng</p>{recommendationLoading ? <span className="text-xs text-stone-500">Đang kiểm tra kho theo kỳ thuê...</span> : capacityStatus !== 'invalid' && <span className={`rounded-full px-3 py-1 text-xs font-bold ${packagesFitSelectedUnit && goodsWeightNumber <= selectedUnit.maxLoadKg ? smallerWarehouseRecommendation ? 'bg-amber-600 text-white' : 'bg-emerald-700 text-white' : 'bg-red-700 text-white'}`}>{packagesFitSelectedUnit && goodsWeightNumber <= selectedUnit.maxLoadKg ? smallerWarehouseRecommendation ? 'Phù hợp — có thể dùng kho nhỏ hơn' : 'Phù hợp' : 'Không phù hợp'}</span>}</div>
-                {capacityStatus === 'invalid' ? <p className="rounded-lg bg-white p-3 text-stone-500">Nhập đủ số lượng, kích thước và cân nặng ở từng hàng hóa để tính.</p> : <div className="space-y-2 rounded-lg border border-stone-200 bg-white p-3">{packageCapacityResults.map(sample => <div key={sample.id} className="grid gap-1 border-b border-stone-100 pb-2 last:border-0 sm:grid-cols-[1fr_auto]"><span><b>{sample.sourceLabel}</b>: {sample.quantity} kiện · {sample.lengthCm} × {sample.widthCm} × {sample.heightCm} cm · {sample.weightKg} kg/kiện · <b>{formatVolumeM3(packageVolumeM3(sample))} m³</b></span>{!sample.canFitFrame && <b className="text-red-700">Không xếp vừa khung</b>}</div>)}<div className="grid gap-2 border-t border-stone-200 pt-3 sm:grid-cols-3"><p><b>Tổng thể tích cần lưu:</b> <span>{formatVolumeM3(serverCompatibility?.totalGoodsVolumeM3 ?? goodsVolumeM3)} m³</span></p><p><b>Sức chứa khung hữu dụng:</b> <span>{formatVolumeM3(serverCompatibility?.usableVolumePerRackM3 ? serverCompatibility.usableVolumePerRackM3 * selectedRackCount : selectedUsableRackVolumeM3)} m³</span></p><p><b>Khung cần dùng:</b> <span className={packagesFitSelectedUnit ? 'text-emerald-700' : 'text-red-700'}>{hasUnplaceablePackage ? 'Không xác định' : totalFramesRequired} khung / {selectedRackCount} khung</span></p><p><b>Tổng cân nặng:</b> <span className={goodsWeightNumber <= selectedUnit.maxLoadKg ? 'text-emerald-700' : 'text-red-700'}>{goodsWeightNumber.toLocaleString('vi-VN')} / {selectedUnit.maxLoadKg.toLocaleString('vi-VN')} kg</span></p></div></div>}
-                {hasOtherGoods && <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-blue-950"><p className="font-bold">Hồ sơ cần được thẩm định</p><p className="mt-1 leading-5">Hàng hóa thuộc nhóm “Khác” được nhân viên cơ sở xem xét trong tối đa 6 giờ kể từ khi bạn xác minh email. Sau khi chấp thuận, bạn có 15 phút để hoàn tất tiền phí giữ chỗ.</p></div>}
+                <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-bold text-stone-900">Kiểm tra sức chứa theo khung và cân nặng</p>{recommendationLoading ? <span className="text-xs text-stone-500">Đang kiểm tra kho theo kỳ thuê...</span> : capacityStatus !== 'invalid' && <span className={`rounded-full px-3 py-1 text-xs font-bold ${packagesFitSelectedUnit && goodsWeightNumber <= selectedUnit.maxLoadKg ? smallerWarehouseRecommendation ? 'bg-amber-600 text-white' : 'bg-emerald-700 text-white' : 'bg-red-700 text-white'}`}>{packagesFitSelectedUnit && goodsWeightNumber <= selectedUnit.maxLoadKg ? smallerWarehouseRecommendation ? 'Phù hợp - có thể dùng kho nhỏ hơn' : 'Phù hợp' : 'Không phù hợp'}</span>}</div>
+                {capacityStatus === 'invalid' ? <p className="rounded-lg bg-white p-3 text-stone-500">Nhập đủ số lượng, kích thước và cân nặng ở từng hàng hóa để tính.</p> : <div className="space-y-2 rounded-lg border border-stone-200 bg-white p-3">{packageCapacityResults.map(sample => <div key={sample.id} className="grid gap-1 border-b border-stone-100 pb-2 last:border-0 sm:grid-cols-[1fr_auto]"><span><b>{sample.sourceLabel}</b>: {sample.quantity} kiện · {sample.lengthCm} × {sample.widthCm} × {sample.heightCm} cm · {sample.weightKg} kg/kiện · <b>{formatVolumeM3(packageVolumeM3(sample))} m³</b>{sample.arrangement && <span className="mt-1 block text-xs text-stone-600">Mỗi khung: {sample.arrangement.estimatedPerRack} kiện tham khảo (giới hạn hình học {sample.capacityPerFrame}); hướng D × R × C {sample.arrangement.orientedDimensionsCm.join(' × ')} cm, {sample.arrangement.boxesAlongLength} × {sample.arrangement.boxesAlongWidth} kiện/lớp × {sample.arrangement.layers} lớp. Xếp nặng dưới, nhẹ trên; chỉ chồng kiện cho phép chịu lực.</span>}</span>{!sample.canFitFrame && <b className="text-red-700">Không xếp vừa khung</b>}</div>)}<div className="grid gap-2 border-t border-stone-200 pt-3 sm:grid-cols-3"><p><b>Tổng thể tích cần lưu:</b> <span>{formatVolumeM3(serverCompatibility?.totalGoodsVolumeM3 ?? goodsVolumeM3)} m³</span></p><p><b>Sức chứa khung hữu dụng:</b> <span>{formatVolumeM3(serverCompatibility?.usableVolumePerRackM3 ? serverCompatibility.usableVolumePerRackM3 * selectedRackCount : selectedUsableRackVolumeM3)} m³</span></p><p><b>Khung cần dùng:</b> <span className={packagesFitSelectedUnit ? 'text-emerald-700' : 'text-red-700'}>{hasUnplaceablePackage ? 'Không xác định' : totalFramesRequired} khung / {selectedRackCount} khung</span></p><p><b>Tổng cân nặng:</b> <span className={goodsWeightNumber <= selectedUnit.maxLoadKg ? 'text-emerald-700' : 'text-red-700'}>{goodsWeightNumber.toLocaleString('vi-VN')} / {selectedUnit.maxLoadKg.toLocaleString('vi-VN')} kg</span></p></div></div>}
+                {hasOtherGoods && <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-blue-950"><p className="font-bold">Hồ sơ cần được thẩm định</p><p className="mt-1 leading-5">Hàng hóa thuộc nhóm “Khác” được nhân viên cơ sở xem xét trong tối đa 6 giờ kể từ khi bạn gửi yêu cầu. Sau khi chấp thuận, bạn có 15 phút để hoàn tất đặt cọc giữ chỗ.</p></div>}
                 {selectedUnitNeedsAlternative && smallerWarehouseRecommendation && selectedTarget && (
                   <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950">
                     <p className="font-bold">Kho đang chọn không phù hợp</p>
@@ -3817,13 +4025,13 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   <div className="flex items-center justify-between border-b border-stone-200 pb-2">
                     <div>
                       <p className="font-bold text-sm text-stone-900">Kiểm tra sức chứa theo khung & dự toán chi phí</p>
-                      <p className="text-[11px] text-stone-500">Mỗi khung {formatRackDimensions(selectedRackDimensions)} m. Sức chứa hữu dụng tính tối đa 80% thể tích, hệ thống thử đủ 6 hướng xoay.</p>
+                      <p className="text-[11px] text-stone-500">Mỗi khung {formatRackDimensions(selectedRackDimensions)} m. Diện tích {Number((selectedRackDimensions[0] * selectedRackDimensions[1]).toFixed(2))} m²/khung; thể tích {formatVolumeM3(selectedRackDimensions[0] * selectedRackDimensions[1] * selectedRackDimensions[2])} m³/khung. Số kiện là tham khảo theo kích thước, chưa thay thế kiểm tra tải trọng và độ bền khi xếp chồng.</p>
                     </div>
-                    {recommendationLoading ? <span className="text-xs text-stone-500">Đang kiểm tra kho theo kỳ thuê...</span> : capacityStatus !== 'invalid' && <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${packagesFitSelectedUnit && !isOverload ? smallerWarehouseRecommendation ? 'border-amber-600 bg-amber-600 text-white' : 'border-emerald-700 bg-emerald-700 text-white' : 'border-red-700 bg-red-700 text-white'}`}>{packagesFitSelectedUnit && !isOverload ? smallerWarehouseRecommendation ? 'Kho chứa vừa — có thể dùng kho nhỏ hơn' : 'Kho chứa vừa' : 'Kho không chứa vừa'}</span>}
+                    {recommendationLoading ? <span className="text-xs text-stone-500">Đang kiểm tra kho theo kỳ thuê...</span> : capacityStatus !== 'invalid' && <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${packagesFitSelectedUnit && !isOverload ? smallerWarehouseRecommendation ? 'border-amber-600 bg-amber-600 text-white' : 'border-emerald-700 bg-emerald-700 text-white' : 'border-red-700 bg-red-700 text-white'}`}>{packagesFitSelectedUnit && !isOverload ? smallerWarehouseRecommendation ? 'Kho chứa vừa - có thể dùng kho nhỏ hơn' : 'Kho chứa vừa' : 'Kho không chứa vừa'}</span>}
                   </div>
 
                   {capacityStatus === 'invalid' ? <div className="rounded-lg border border-stone-300 bg-stone-100 p-4 text-center font-medium text-stone-600">Chưa đủ dữ liệu để kiểm tra sức chứa. Vui lòng nhập đầy đủ số lượng và kích thước hàng hóa hợp lệ.</div> : <div className="space-y-2 rounded-lg border border-stone-200 bg-white p-3">
-                    {packageCapacityResults.map((sample, index) => <div key={sample.id} className="flex flex-wrap justify-between gap-2 border-b border-stone-100 pb-2 last:border-0 last:pb-0"><span>{sample.sourceLabel || `Mẫu ${index + 1}`}: {sample.quantity || '—'} kiện · {sample.lengthCm || '—'} × {sample.widthCm || '—'} × {sample.heightCm || '—'} cm · {sample.weightKg || '—'} kg/kiện · tổng {(Number(sample.quantity) * Number(sample.weightKg)).toLocaleString('vi-VN')} kg · <b>{formatVolumeM3(packageVolumeM3(sample))} m³</b></span>{!sample.canFitFrame && <b className="text-red-700">Không thể xếp vào khung {formatRackDimensions(selectedRackDimensions)} m</b>}</div>)}
+                    {packageCapacityResults.map((sample, index) => <div key={sample.id} className="flex flex-wrap justify-between gap-2 border-b border-stone-100 pb-2 last:border-0 last:pb-0"><span>{sample.sourceLabel || `Mẫu ${index + 1}`}: {sample.quantity || '-'} kiện · {sample.lengthCm || '-'} × {sample.widthCm || '-'} × {sample.heightCm || '-'} cm · {sample.weightKg || '-'} kg/kiện · tổng {(Number(sample.quantity) * Number(sample.weightKg)).toLocaleString('vi-VN')} kg · <b>{formatVolumeM3(packageVolumeM3(sample))} m³</b>{sample.arrangement && <span className="mt-1 block text-xs text-stone-600">Mỗi khung: {sample.arrangement.estimatedPerRack} kiện tham khảo (giới hạn hình học {sample.capacityPerFrame}); hướng D × R × C {sample.arrangement.orientedDimensionsCm.join(' × ')} cm, {sample.arrangement.boxesAlongLength} × {sample.arrangement.boxesAlongWidth} kiện/lớp × {sample.arrangement.layers} lớp. Xếp nặng dưới, nhẹ trên; chỉ chồng kiện cho phép chịu lực.</span>}</span>{!sample.canFitFrame && <b className="text-red-700">Không thể xếp vào khung {formatRackDimensions(selectedRackDimensions)} m</b>}</div>)}
                     <div className="grid gap-2 border-t border-stone-100 pt-2 text-sm sm:grid-cols-2"><span><b>Tổng thể tích cần lưu:</b> {formatVolumeM3(serverCompatibility?.totalGoodsVolumeM3 ?? goodsVolumeM3)} m³</span><span><b>Sức chứa khung hữu dụng:</b> {formatVolumeM3(serverCompatibility?.usableVolumePerRackM3 ? serverCompatibility.usableVolumePerRackM3 * selectedRackCount : selectedUsableRackVolumeM3)} m³</span><span className="sm:text-right"><b>Khung cần dùng:</b> <b className={packagesFitSelectedUnit ? 'text-emerald-700' : 'text-red-700'}>{hasUnplaceablePackage ? 'Không xác định' : totalFramesRequired} khung / {selectedRackCount} khung</b></span></div>
                     {warehouseRecommendation && <p className="border-t border-stone-100 pt-2 text-emerald-700">Cỡ kho nhỏ nhất phù hợp: <b>{storageSizeCode(warehouseRecommendation.name || warehouseRecommendation.code)}</b></p>}
                   </div>}
@@ -3831,12 +4039,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   {/* Floor Weight Check */}
                   <div className="flex items-center justify-between text-[11px] pt-1">
                     <span className="text-stone-600">{'Tải trọng hàng hóa thực tế:'}</span>
-                    <span className={isOverload ? 'font-bold text-red-700' : 'font-semibold text-black'}>{goodsWeightNumber > 0 ? goodsWeightNumber.toLocaleString('vi-VN') : '—'} kg / Sức chịu tải sàn {selectedUnit.maxLoadKg} kg {isOverload ? '(Vượt tải trọng)' : ''}</span>
+                    <span className={isOverload ? 'font-bold text-red-700' : 'font-semibold text-black'}>{goodsWeightNumber > 0 ? goodsWeightNumber.toLocaleString('vi-VN') : '-'} kg / Sức chịu tải sàn {selectedUnit.maxLoadKg} kg {isOverload ? '(Vượt tải trọng)' : ''}</span>
                   </div>
 
-                  {capacityStatus !== 'invalid' && (hasOtherGoods ? <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><b>Chưa yêu cầu thanh toán tiền cọc</b><p className="mt-1">Đơn đặt kho có hàng hóa “Khác” sẽ được giữ kho và chuyển cho nhân viên cơ sở duyệt. Dự toán và bước thanh toán chỉ mở sau khi hồ sơ được chấp thuận.</p></div> : <div className="space-y-2 border-t border-stone-200 pt-3"><p className="font-bold text-stone-900">Cách tính số tiền</p><div className="rounded-lg border border-stone-200 bg-white p-3 space-y-2"><div className="flex justify-between gap-4"><span>Tiền thuê gốc</span><b>{formatVnd(grossTermValue)}</b></div>{promotionDiscount > 0 && <div className="flex justify-between gap-4 text-emerald-700"><span>Ưu đãi thời hạn ({Math.round(discountRate * 100)}%)</span><b>{formatVnd(promotionDiscount)}</b></div>}{evaluatedPolicyBenefits.filter(b => b.isDiscount).map(b => <div key={b.policy.id} className="flex justify-between gap-4 text-emerald-700"><span className="flex items-center gap-1"><span>Ưu đãi cơ sở ({b.policy.name}): {b.policy.value}</span></span><b>{formatVnd(b.discountAmount)}</b></div>)}<div className="flex justify-between gap-4"><span>Tiền thuê sau giảm</span><b>{formatVnd(totalTermValue)}</b></div><div className="flex justify-between gap-4"><span>Phí giữ chỗ 20% (được trừ vào tiền thuê)</span><b>{formatVnd(reservationDeposit)}</b></div><div className="flex justify-between gap-4 text-amber-800"><span>Tiền cọc đảm bảo kho (bằng 1 tháng tiền thuê)</span><b>{formatVnd(conditionSecurityDeposit)}</b></div><div className="flex justify-between gap-4"><span>Thu tại nhận kho (tiền thuê còn lại + tiền cọc đảm bảo kho)</span><b>{formatVnd(dueAtCheckIn)}</b></div><div className="flex justify-between gap-4 border-t border-stone-200 pt-2 font-bold"><span>Tổng tiền thuê và tiền cọc đảm bảo kho</span><b>{formatVnd(initialObligation)}</b></div></div></div>)}
+                  {capacityStatus !== 'invalid' && (hasOtherGoods ? <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><b>Chưa yêu cầu thanh toán tiền cọc</b><p className="mt-1">Đơn đặt kho có hàng hóa “Khác” sẽ được giữ kho và chuyển cho nhân viên cơ sở duyệt. Dự toán và bước thanh toán chỉ mở sau khi hồ sơ được chấp thuận.</p></div> : <div className="space-y-2 border-t border-stone-200 pt-3"><p className="font-bold text-stone-900">Cách tính số tiền</p><div className="rounded-lg border border-stone-200 bg-white p-3 space-y-2"><div className="flex justify-between gap-4"><span>Tiền thuê gốc</span><b>{formatVnd(grossTermValue)}</b></div>{promotionDiscount > 0 && <div className="flex justify-between gap-4 text-emerald-700"><span>Ưu đãi thời hạn ({Math.round(discountRate * 100)}%)</span><b>{formatVnd(promotionDiscount)}</b></div>}{evaluatedPolicyBenefits.filter(b => b.isDiscount).map(b => <div key={b.policy.id} className="flex justify-between gap-4 text-emerald-700"><span className="flex items-center gap-1"><span>Ưu đãi cơ sở ({b.policy.name}): {b.policy.value}</span></span><b>{formatVnd(b.discountAmount)}</b></div>)}<div className="flex justify-between gap-4"><span>Tiền thuê sau giảm</span><b>{formatVnd(totalTermValue)}</b></div><div className="flex justify-between gap-4"><span>Cọc giữ chỗ theo báo giá (khấu trừ tổng nghĩa vụ)</span><b>{formatVnd(reservationDeposit)}</b></div><div className="flex justify-between gap-4 text-amber-800"><span>Tiền cọc đảm bảo thuê (bằng 1 tháng tiền thuê)</span><b>{formatVnd(conditionSecurityDeposit)}</b></div><div className="flex justify-between gap-4"><span>Số tiền còn lại phải thanh toán khi bàn giao kho</span><b>{formatVnd(dueAtCheckIn)}</b></div><div className="flex justify-between gap-4 border-t border-stone-200 pt-2 font-bold"><span>Tổng chi phí phải thanh toán</span><b>{formatVnd(initialObligation)}</b></div></div></div>)}
 
-                    <div className="rounded-lg bg-stone-100 p-3 text-[11px] text-black"><b>Cam kết minh bạch của StorageHub:</b><ul className="mt-1 list-disc space-y-0.5 pl-5 text-stone-600"><li>Mã OTP có hiệu lực 10 phút. Thời hạn thanh toán bắt đầu sau khi xác minh hoặc sau khi hồ sơ hàng “Khác” được duyệt.</li><li>{hasOtherGoods ? 'Hàng hóa “Khác” được xét duyệt trong tối đa 6 giờ. Sau khi duyệt có 15 phút để thanh toán.' : 'Sau khi xác minh email, bạn có 15 phút để thanh toán cọc 20% theo báo giá.'}</li><li>Quản lý cơ sở có tối đa 6 giờ để phân kho. Khách hàng chọn lịch nhận kho trong thời hạn 7 ngày từ thời điểm kho có thể sẵn sàng.</li></ul></div>
+                    <div className="rounded-lg bg-stone-100 p-3 text-[11px] text-black"><b>Cam kết minh bạch của StorageHub:</b><ul className="mt-1 list-disc space-y-0.5 pl-5 text-stone-600"><li>Tài khoản chỉ xác minh email khi kích hoạt; không nhập OTP cho từng đơn. Thời hạn thanh toán bắt đầu khi tạo đơn hoặc sau khi hồ sơ hàng “Khác” được duyệt.</li><li>{hasOtherGoods ? 'Hàng hóa “Khác” được xét duyệt trong tối đa 6 giờ. Sau khi duyệt có 15 phút để thanh toán.' : 'Bạn có 15 phút từ khi tạo đơn để thanh toán cọc theo báo giá. Mốc giờ cụ thể luôn hiển thị trên đơn.'}</li><li>Quản lý cơ sở có tối đa 6 giờ để phân kho. Khách hàng chọn lịch nhận kho trong thời hạn 7 ngày từ thời điểm kho có thể sẵn sàng.</li></ul></div>
                 </div>
               )
             })()}
@@ -3885,7 +4093,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             </div>
 
             {bookingStep === 3 && bookingReview && isApiAuthenticated() && serverQuote && <ReservationQuoteSummary quote={previewRentalPeriod ? { ...serverQuote, ...previewRentalPeriod } : serverQuote} needsReview={hasOtherGoods} />}
-            {bookingStep === 3 && bookingReview && isApiAuthenticated() && serverQuote && <label className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><input type="checkbox" className="mt-1 h-4 w-4" checked={termsAccepted} onChange={event => setTermsAccepted(event.target.checked)} /><span>Tôi đã đọc và đồng ý với báo giá và ngày setup miễn phí nêu trên. Bản điều khoản này sẽ được lưu cùng hồ sơ trước khi thanh toán.</span></label>}
+            {bookingStep === 3 && bookingReview && isApiAuthenticated() && serverQuote && <label className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><input type="checkbox" className="mt-1 h-4 w-4" checked={termsAccepted} onChange={event => setTermsAccepted(event.target.checked)} /><span>Tôi đã đọc và đồng ý với báo giá và thời gian chuẩn bị miễn phí nêu trên. Bản điều khoản này sẽ được lưu cùng hồ sơ trước khi thanh toán.</span></label>}
             {bookingStep === 3 && bookingReview && !isApiAuthenticated() && (() => {
               const totalValue = Math.max(0, currentQuote!.baseMonthlyPrice * rentalMonths - totalCombinedDiscount)
               const deposit = Math.round((totalValue + (currentQuote!.depositAmount || currentQuote!.baseMonthlyPrice)) * 0.2 * 100) / 100
@@ -3905,17 +4113,17 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     </div>
                   </div>
                   <div className="divide-y divide-stone-200 border-y border-stone-200">
-                    <section className="space-y-1 py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Người thuê</p><p><b>Họ và tên:</b> {user.name}</p><p><b>CCCD/Hộ chiếu:</b> {customerIdCard}</p><p><b>Số điện thoại:</b> {customerPhone}</p><p><b>Email:</b> {customerEmail}</p><p><b>Địa chỉ:</b> {customerAddress}</p></section>
+                    <section className="space-y-1 py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Người thuê</p><p><b>Họ và tên:</b> {user.name}</p><p><b>CCCD/CMND:</b> {customerIdCard}</p><p><b>Số điện thoại:</b> {customerPhone}</p><p><b>Email:</b> {customerEmail}</p><p><b>Địa chỉ:</b> {customerAddress}</p></section>
                     <section className="space-y-1 py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Kho đã chọn</p><p><b>Cỡ kho và cơ sở:</b> {selectedTarget?.unitType.name || selectedUnit.type} · {selectedUnit.facilityName}</p><p><b>Kích thước kho:</b> {selectedUnit.dimensions.lengthM} × {selectedUnit.dimensions.widthM} × {selectedUnit.dimensions.heightM} m</p><p><b>Khung chứa hàng:</b> {selectedRackCount} khung · {formatRackDimensions(selectedRackDimensions)} m/khung</p></section>
                     <section className="py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Hàng hóa và sức chứa</p><ul className="list-disc space-y-1 pl-5">{packageCapacityResults.map((sample, index) => <li key={sample.id}><b>{sample.sourceLabel || `Hàng hóa ${index + 1}`}:</b> {sample.quantity} kiện · {sample.lengthCm} × {sample.widthCm} × {sample.heightCm} cm · {sample.weightKg} kg/kiện · tổng {(Number(sample.quantity) * Number(sample.weightKg)).toLocaleString('vi-VN')} kg{!sample.canFitFrame && ' · không thể xếp vừa khung'}</li>)}</ul><p className="mt-3"><b>Tổng số kiện:</b> {packageCountNumber}</p><p><b>Tổng thể tích:</b> {formatVolumeM3(serverCompatibility?.totalGoodsVolumeM3 ?? goodsVolumeM3)} m³</p><p><b>Sức chứa khung hữu dụng:</b> {formatVolumeM3(serverCompatibility?.usableVolumePerRackM3 ? serverCompatibility.usableVolumePerRackM3 * selectedRackCount : selectedUsableRackVolumeM3)} m³</p><p><b>Khung cần dùng:</b> {hasUnplaceablePackage ? 'Không xác định' : totalFramesRequired} khung / {selectedRackCount} khung</p><p className="text-xs text-stone-500">Mỗi kiện được tính theo kích thước thực tế, tổng thể tích = số lượng × dài × rộng × cao. Sức chứa khung đã trừ 20% khoảng trống.</p><p><b>Tổng cân nặng:</b> {goodsWeightNumber.toLocaleString('vi-VN')} / {selectedUnit.maxLoadKg.toLocaleString('vi-VN')} kg</p><p><b>Tình trạng đóng gói:</b> {goodsCondition}</p></section>
                     <section className="space-y-1 py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Thời gian thuê</p><p><b>Lịch nhận kho:</b> {displayDateValue(moveInDate)} · {bookingAppointmentTime}</p><p><b>Ngày bắt đầu kỳ thuê dự kiến:</b> {displayDateValue(previewRentalPeriod?.startDate)}</p><p><b>Gói thuê đã chọn:</b> {selectedActivePackage?.name || `${rentalMonths} tháng`} · {formatVnd(selectedActivePackage?.packagePrice || totalValue)}</p><p className="pt-1 font-semibold text-red-700">Nếu đổi lịch, thời điểm mới vẫn phải nằm trong thời hạn nhận kho 7 ngày.</p></section>
                   </div>
-                  {hasOtherGoods ? <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-center text-blue-950"><b>Xác minh email trước khi nhân viên duyệt · Chưa thu tiền cọc</b><p className="mt-1 text-xs">Kho chưa bị khóa khi chờ duyệt. Sau khi xác minh email, nhân viên có tối đa 6 giờ để xét duyệt.</p></div> : <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-stone-100 p-4 text-center sm:grid-cols-5">
+                  {hasOtherGoods ? <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-center text-blue-950"><b>Tài khoản đã xác minh · Hồ sơ chờ nhân viên duyệt · Chưa thu tiền cọc</b><p className="mt-1 text-xs">Suất kho được giữ trong thời gian duyệt hàng hóa; đơn quá hạn sẽ được giải phóng. Nhân viên có tối đa 6 giờ từ khi tạo đơn để xét duyệt.</p></div> : <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-stone-100 p-4 text-center sm:grid-cols-5">
                     <div><p className="text-xs text-stone-500">Giảm giá {facilityPolicyDiscount > 0 ? '(Gồm ưu đãi cơ sở)' : `(${Math.round(discountRate * 100)}%)`}</p><p className="mt-1 font-bold text-emerald-700">{formatVnd(totalCombinedDiscount)}</p><p className="text-[10px] text-stone-500">Gốc {formatVnd(grossTermValue)}</p></div>
                     <div><p className="text-xs text-stone-500">Tiền thuê sau giảm</p><p className="mt-1 font-bold">{formatVnd(totalValue)}</p></div>
-                    <div><p className="text-xs text-stone-500">{'Phí giữ chỗ 20%'}</p><p className="mt-1 font-bold">{formatVnd(deposit)}</p></div>
-                    <div><p className="text-xs text-stone-500">Tiền cọc đảm bảo kho</p><p className="mt-1 font-bold text-amber-800">{formatVnd(securityDeposit)}</p><p className="text-[10px] text-stone-500">Bằng 1 tháng tiền thuê</p></div>
-                    <div><p className="text-xs text-stone-500">{'Thu tại nhận kho'}</p><p className="mt-1 font-bold">{formatVnd(dueAtCheckIn)}</p></div>
+                    <div><p className="text-xs text-stone-500">{'Đặt cọc giữ chỗ (20%)'}</p><p className="mt-1 font-bold">{formatVnd(deposit)}</p></div>
+                    <div><p className="text-xs text-stone-500">Tiền cọc đảm bảo thuê</p><p className="mt-1 font-bold text-amber-800">{formatVnd(securityDeposit)}</p><p className="text-[10px] text-stone-500">Bằng 1 tháng tiền thuê</p></div>
+                    <div><p className="text-xs text-stone-500">{'Số tiền còn lại phải thanh toán khi bàn giao kho'}</p><p className="mt-1 font-bold">{formatVnd(dueAtCheckIn)}</p></div>
                   </div>}
                   {evaluatedPolicyBenefits.some(b => b.isDiscount) && (
                     <div className="mt-4 rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-xs text-emerald-950">
@@ -3933,7 +4141,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       </div>
                     </div>
                   )}
-                  <p className="mt-4 text-xs leading-5 text-stone-600">{hasOtherGoods ? 'Sau khi nhân viên cơ sở chấp thuận, hệ thống mới mở bước thanh toán cọc 20%. Nếu bị từ chối, suất kho sẽ được giải phóng và lý do sẽ hiển thị trong thông báo.' : 'Phí giữ chỗ được trừ vào tiền thuê và không hoàn nếu khách hàng hủy trước nhận kho. Tiền cọc đảm bảo kho được thu riêng tại nhận kho để bảo đảm trách nhiệm về hư hại, vệ sinh và công nợ. Khoản còn lại được hoàn sau biên bản nghiệm thu trả kho.'}</p>
+                  <p className="mt-4 text-xs leading-5 text-stone-600">{hasOtherGoods ? 'Sau khi nhân viên cơ sở chấp thuận, hệ thống mới mở bước thanh toán đặt cọc giữ chỗ (20%). Nếu bị từ chối, suất kho sẽ được giải phóng và lý do sẽ hiển thị trong thông báo.' : 'Cọc giữ chỗ được khấu trừ vào tổng nghĩa vụ; việc không hoàn do khách tự hủy áp dụng theo điều khoản đã chấp nhận. Thu trùng hoặc lỗi dịch vụ phải được đối soát riêng. Tiền cọc đảm bảo thuê được thu riêng tại bàn giao kho để bảo đảm trách nhiệm về hư hại, vệ sinh và công nợ. Khoản còn lại được hoàn sau biên bản nghiệm thu trả kho.'}</p>
                 </div>
               )
             })()}
@@ -3964,13 +4172,13 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     reservationSubmitting ||
                     (isApiAuthenticated() && (rentalPackagesLoading || (!selectedBackendRentalPackage && backendRentalPackages.length === 0)))
                   }
-                  onClick={() => void confirmReservation()}
+                  onClick={() => confirmReservation()}
                 >
                   {reservationSubmitting ? 'Đang lập báo giá...' : 'Kiểm tra và lấy báo giá'}
                 </Button>
               )}
               {bookingStep === 3 && <Button disabled={!termsAccepted} onClick={() => setBookingStep(4)}>Tiếp theo: Chọn lịch check-in</Button>}
-              {bookingStep === 4 && <Button disabled={reservationSubmitting || !termsAccepted} onClick={() => void confirmReservation()}>{reservationSubmitting ? 'Đang xử lý...' : hasOtherGoods ? 'Gửi yêu cầu nhân viên cơ sở duyệt' : 'Xác nhận đặt kho'}</Button>}
+              {bookingStep === 4 && <Button disabled={reservationSubmitting || !termsAccepted} onClick={() => confirmReservation()}>{reservationSubmitting ? 'Đang xử lý...' : hasOtherGoods ? 'Gửi yêu cầu nhân viên cơ sở duyệt' : 'Xác nhận đặt kho'}</Button>}
             </div>
           </div>
         )}
@@ -3991,8 +4199,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             setBackendOtpDevelopmentCode(null)
           }
         }}
-        onResend={() => void resendBackendReservationOtp()}
-        onVerify={() => void verifyBackendReservationOtp()}
+        onResend={() => resendBackendReservationOtp()}
+        onVerify={() => verifyBackendReservationOtp()}
       />
 
       {/* ── MODAL 3: EMAIL VERIFICATION SIMULATION (P0.4) ─────── */}
@@ -4064,7 +4272,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       <Modal
         open={payModalOpen}
         onClose={() => setPayModalOpen(false)}
-        title={'Thanh Toán Phí Giữ Chỗ'}
+        title={'Thanh Toán Đặt Cọc Giữ Chỗ'}
       >
         {activeHoldForPayment && (() => {
           const originalRent = activeHoldForPayment.originalMonthlyRate ?? activeHoldForPayment.quote.baseMonthlyPrice
@@ -4090,16 +4298,16 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 <div className="space-y-1.5 pt-1">
                   <div className="flex justify-between"><span className="text-stone-600">{'Giá thuê mỗi tháng:'}</span><span className="font-semibold text-black">{formatVnd(originalRent)}</span></div>
                   <div className="flex justify-between"><span className="text-stone-600">{'Thời hạn thuê:'}</span><span className="font-semibold text-black">{activeHoldForPayment.rentalMonths} {'tháng'}</span></div>
-                  <div className="flex justify-between text-emerald-700"><span>{'Giảm giá:'}</span><span className="font-semibold">− {formatVnd(discountAmount)}</span></div>
+                  <div className="flex justify-between text-emerald-700"><span>{'Giảm giá:'}</span><span className="font-semibold">- {formatVnd(discountAmount)}</span></div>
 
                   <div className="flex justify-between text-base font-bold text-black pt-2 border-t border-stone-300">
                     <span>{'Tổng giá trị kỳ thuê:'}</span>
                     <span className="">{formatVnd(totalDue)}</span>
                   </div>
                   <div className="flex justify-between font-bold text-black"><span>{'Cọc cần thanh toán (20%):'}</span><span>{formatVnd(reservationDeposit)}</span></div>
-                  <div className="flex justify-between"><span>{'Tiền cọc đảm bảo kho:'}</span><span className="font-semibold text-emerald-700">{formatVnd(securityDeposit)}</span></div>
+                  <div className="flex justify-between"><span>{'Tiền cọc đảm bảo thuê:'}</span><span className="font-semibold text-emerald-700">{formatVnd(securityDeposit)}</span></div>
                   <div className="flex justify-between"><span>{'Còn thu tại nhận kho:'}</span><span>{formatVnd(dueAtCheckIn)}</span></div>
-                  <p className="border-t border-stone-200 pt-2 text-xs text-stone-600">{'Phí giữ chỗ 20% được khấu trừ vào tiền thuê. Tiền cọc đảm bảo kho được thu riêng khi nhận kho, dùng để bảo đảm hư hại, vệ sinh và công nợ. Phần không bị khấu trừ sẽ hoàn sau nghiệm thu trả kho.'}</p>
+                  <p className="border-t border-stone-200 pt-2 text-xs text-stone-600">{'Đặt cọc giữ chỗ (20%) được khấu trừ vào tiền thuê. Tiền cọc đảm bảo thuê được thu riêng khi bàn giao kho, dùng để bảo đảm hư hại, vệ sinh và công nợ. Phần không bị khấu trừ sẽ hoàn sau nghiệm thu trả kho.'}</p>
                 </div>
               </div>
 
@@ -4149,7 +4357,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   <span className="underline">{activeHoldForContract.customerEmail}</span>
                 </p>
                 <p className="text-stone-700">
-                  {'Đã ghi nhận phí giữ chỗ. Hợp đồng giấy chỉ xuất hiện sau khi hai bên ký và nhân viên lưu bản chụp. Phần còn lại thu tại cơ sở.'}
+                  {'Đã ghi nhận đặt cọc giữ chỗ. Hợp đồng giấy chỉ xuất hiện sau khi hai bên ký và nhân viên lưu bản chụp. Phần còn lại thu tại cơ sở.'}
                 </p>
               </div>
             </div>
@@ -4208,7 +4416,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     </span>
                   </div>
                   <div className="space-y-5 p-5">
-                    <section><p className="mb-2 text-[10px] font-bold uppercase tracking-[.14em] text-amber-700">{'1. Chủ thể hợp đồng'}</p><div className="grid gap-3 sm:grid-cols-2"><div className="rounded-lg border border-stone-200 p-3"><p className="font-bold text-stone-950">{'Bên cho thuê: StorageHub'}</p><p className="mt-1 leading-5 text-stone-600">{activeHoldForContract.facilityName}<br />{facilities.find(item => item.id === activeHoldForContract.facilityId)?.address || '—'}<br />{'Đại diện ký: quản lý cơ sở / nhân viên được ủy quyền'}</p></div><div className="rounded-lg border border-stone-200 p-3"><p className="font-bold text-stone-950">{`Bên thuê: ${activeHoldForContract.customerName}`}</p><p className="mt-1 leading-5 text-stone-600">CCCD/Hộ chiếu: {activeHoldForContract.identityId}<br />{activeHoldForContract.customerPhone} · {activeHoldForContract.customerEmail}<br />{activeHoldForContract.customerAddress || ('Địa chỉ: cập nhật khi ký')}<br />{`Mã khách hàng: ${activeHoldForContract.customerId}`}</p></div></div></section>
+                    <section><p className="mb-2 text-[10px] font-bold uppercase tracking-[.14em] text-amber-700">{'1. Chủ thể hợp đồng'}</p><div className="grid gap-3 sm:grid-cols-2"><div className="rounded-lg border border-stone-200 p-3"><p className="font-bold text-stone-950">{'Bên cho thuê: StorageHub'}</p><p className="mt-1 leading-5 text-stone-600">{activeHoldForContract.facilityName}<br />{facilities.find(item => item.id === activeHoldForContract.facilityId)?.address || '-'}<br />{'Đại diện ký: quản lý cơ sở / nhân viên được ủy quyền'}</p></div><div className="rounded-lg border border-stone-200 p-3"><p className="font-bold text-stone-950">{`Bên thuê: ${activeHoldForContract.customerName}`}</p><p className="mt-1 leading-5 text-stone-600">CCCD/CMND: {activeHoldForContract.identityId}<br />{activeHoldForContract.customerPhone} · {activeHoldForContract.customerEmail}<br />{activeHoldForContract.customerAddress || ('Địa chỉ: cập nhật khi ký')}<br />{`Mã khách hàng: ${activeHoldForContract.customerId}`}</p></div></div></section>
                     <section><p className="mb-2 text-[10px] font-bold uppercase tracking-[.14em] text-amber-700">{'2. Đối tượng thuê & lịch bàn giao'}</p><div className="grid gap-px overflow-hidden rounded-lg border border-stone-200 bg-stone-200 sm:grid-cols-2">{[
                       ['Số hợp đồng / mã đơn', `${signed?.contractNumber ?? ('Cấp sau khi ký')} · ${activeHoldForContract.id}`],
                       ['Gian kho / cỡ kho', activeHoldForContract.assignedUnitId ?? unitTypeLabel(activeHoldForContract.unitTypeName)],
@@ -4219,11 +4427,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     ].map(([label, value]) => <div key={label} className="bg-white px-4 py-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-stone-500">{label}</p><p className="mt-1 font-bold leading-5 text-stone-900">{value}</p></div>)}</div></section>
                     <section><p className="mb-2 text-[10px] font-bold uppercase tracking-[.14em] text-amber-700">{'3. Điều khoản chính'}</p><div className="grid gap-2 sm:grid-cols-2">{[
                       `Đơn giá đã lưu: ${formatVnd(activeHoldForContract.quote.baseMonthlyPrice)}/tháng. Tổng giá trị tiền thuê sau gia hạn cần được đối soát trong Hồ sơ thuê.`,
-                      `Khoản giữ chỗ ban đầu đã lưu (${formatVnd(deposit)}) được trừ vào tiền thuê. Tiền cọc đảm bảo kho ${formatVnd(securityDeposit)} là khoản riêng, dùng để bảo đảm hư hại, vệ sinh và công nợ. Phần còn lại được hoàn sau nghiệm thu.`,
+                      `Khoản đặt cọc giữ chỗ ban đầu đã lưu (${formatVnd(deposit)}) được trừ vào tiền thuê. Tiền cọc đảm bảo thuê ${formatVnd(securityDeposit)} là khoản riêng, dùng để bảo đảm hư hại, vệ sinh và công nợ. Phần còn lại được hoàn sau nghiệm thu.`,
                       'Khách hoàn tất nhận kho trong vòng 7 ngày. Việc đổi lịch cũng phải nằm trong thời hạn này.',
                       'Khách chỉ lưu hàng đã khai báo, tuân thủ tải trọng, kích thước cửa kho, PCCC và danh mục hàng cấm.',
                       'Gia hạn theo gói tháng. Hệ thống kiểm tra điều kiện và mở thanh toán khi các nguồn cần thiết sẵn sàng, quản lý cơ sở theo dõi hồ sơ.',
-                      'Khi trả kho, nhân viên lập biên bản trước–sau, khấu trừ phải có nội dung, số tiền và minh chứng.',
+                      'Khi trả kho, nhân viên lập biên bản trước-sau, khấu trừ phải có nội dung, số tiền và minh chứng.',
                       'Khách được xem, đồng ý hoặc yêu cầu xem xét lại quyết toán trước khi đóng hồ sơ.',
                       'Sự cố kết cấu hạ tầng: Cơ sở chịu 100% trách nhiệm, xử lý khẩn cấp trong 4 đến 12 giờ. Cơ sở kích hoạt di dời khẩn cấp miễn phí sang kho tương đương và giữ nguyên hợp đồng.',
                       'Phân định trách nhiệm ẩm mốc khi trả kho: Hoàn 100% cọc và đền bù nếu do thấm dột hoặc hỏng máy lạnh của cơ sở. Khách hàng tự chịu và bị khấu trừ phí khử trùng 1.500.000₫ nếu do đóng gói ẩm hoặc vi phạm hàng cấm.'
@@ -4235,16 +4443,16 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                         <p className="text-sm text-stone-600">{LEGACY_RENEWAL_HISTORY_NOTICE}</p>
                         <p>Kỳ đã lưu: {displayDateValue(renewal.oldEndDate)} → {displayDateValue(renewal.newEndDate)} · {renewal.renewalMonths} tháng</p>
                         <p>Tiền thuê đã lưu: {legacyRenewalMoney(renewal.totalAmount ?? renewal.renewalFee)}</p>
-                        <p>Mã chứng từ cũ: {renewal.invoiceNumber || '—'}</p>
-                        <p>Ngày ký đã lưu: {renewal.signedAt ? formatCustomerDate(new Date(renewal.signedAt)) : '—'}</p>
+                        <p>Mã chứng từ cũ: {renewal.invoiceNumber || '-'}</p>
+                        <p>Ngày ký đã lưu: {renewal.signedAt ? formatCustomerDate(new Date(renewal.signedAt)) : '-'}</p>
                         {renewalContract && <div className="flex gap-2 border-t border-stone-200 pt-3"><a href={renewalContract.scannedFileUrl} target="_blank" rel="noopener noreferrer" className="underline">Xem tệp hợp đồng đã lưu</a><a href={renewalContract.scannedFileUrl} download={renewalContract.scannedFileName} className="underline">Tải xuống</a></div>}
                       </article>
                     })}</div></section>}
                   </div>
                   <div className="grid gap-3 border-t border-stone-200 p-5 sm:grid-cols-4">
                     <div className="rounded-lg bg-stone-50 p-3"><p className="text-stone-500">{'Tổng giá trị thuê hiện hành'}</p><p className="mt-1 text-base font-bold text-stone-950">{legacyRenewalMoney(currentTermValue)}</p><p className="mt-1 text-[10px] text-stone-500">{totalRentalMonths} {'tháng, gồm các kỳ gia hạn đã hoàn tất'}</p></div>
-                    <div className="rounded-lg bg-blue-50 p-3"><p className="text-blue-700">{'Tổng phí giữ chỗ đã ghi nhận'}</p><p className="mt-1 text-base font-bold text-blue-800">{legacyRenewalMoney(totalBookingDeposit)}</p></div>
-                    <div className="rounded-lg bg-emerald-50 p-3"><p className="text-emerald-700">{'Tiền cọc đảm bảo kho'}</p><p className="mt-1 text-base font-bold text-emerald-800">{formatVnd(securityDeposit)}</p></div>
+                    <div className="rounded-lg bg-blue-50 p-3"><p className="text-blue-700">{'Tổng đặt cọc giữ chỗ đã ghi nhận'}</p><p className="mt-1 text-base font-bold text-blue-800">{legacyRenewalMoney(totalBookingDeposit)}</p></div>
+                    <div className="rounded-lg bg-emerald-50 p-3"><p className="text-emerald-700">{'Tiền cọc đảm bảo thuê'}</p><p className="mt-1 text-base font-bold text-emerald-800">{formatVnd(securityDeposit)}</p></div>
                     <div className="rounded-lg bg-amber-50 p-3"><p className="text-amber-800">{'Còn thanh toán tại cơ sở'}</p><p className="mt-1 text-base font-bold text-amber-900">{legacyRenewalMoney(balance)}</p><p className="mt-1 text-[10px] text-amber-700">{balance === null ? 'Đăng nhập để đối soát công nợ gia hạn' : 'Không có yêu cầu gia hạn đang mở'}</p></div>
                   </div>
                   <section className="border-t border-stone-200 bg-stone-50 p-5">
@@ -4267,7 +4475,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     </div>}
                   </section>
                   {signed ? <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 px-5 py-4">
-                    <div><p className="font-bold text-stone-900">{signed.scannedFileName}</p><p className="mt-0.5 text-stone-500">{`Đã ký ${displayDateValue(signed.signedAt)} · Hiệu lực hiện hành ${displayDateValue(signed.startDate)} – ${displayDateValue(effectiveEndDate)}`}</p></div>
+                    <div><p className="font-bold text-stone-900">{signed.scannedFileName}</p><p className="mt-0.5 text-stone-500">{`Đã ký ${displayDateValue(signed.signedAt)} · Hiệu lực hiện hành ${displayDateValue(signed.startDate)} - ${displayDateValue(effectiveEndDate)}`}</p></div>
                     <div className="flex gap-2"><a href={signed.scannedFileUrl} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-stone-300 px-3 py-2 font-bold text-stone-800 hover:bg-stone-50">{'Xem bản ký'}</a><a href={signed.scannedFileUrl} download={signed.scannedFileName} className="rounded-lg bg-stone-900 px-3 py-2 font-bold text-white hover:bg-black">{'Tải xuống'}</a></div>
                   </div> : <p className="border-t border-stone-200 px-5 py-4 text-stone-600">{'Bản PDF đã ký sẽ hiển thị tại đây sau khi hai bên hoàn tất ký hợp đồng tại cơ sở.'}</p>}
                 </>
@@ -4288,15 +4496,15 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               const totalPaid = receiptPayments.some(payment => payment.renewalId || payment.type === 'RENEWAL') ? null : receiptPayments.filter(payment => payment.status === 'PAID' && payment.type !== 'REFUND').reduce((sum, payment) => sum + payment.amount, 0)
               const balance = totalValue === null || totalPaid === null ? null : Math.max(0, totalValue - totalPaid)
               return <div className="space-y-4 text-xs">
-                <div className="rounded-xl border border-stone-200 bg-stone-50 p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-[.16em] text-stone-500">{'Hồ sơ biên nhận thanh toán'}</p><p className="mt-1 text-lg font-bold text-stone-950">{activeHoldForContract.id}</p><p className="mt-1 text-stone-600">{activeHoldForContract.customerName} · {activeHoldForContract.customerEmail}</p></div><div className="text-right"><p className="text-stone-500">{'Đơn vị nhận tiền'}</p><p className="font-bold">StorageHub · {activeHoldForContract.facilityName}</p></div></div><div className="mt-4 grid gap-3 sm:grid-cols-4"><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{'Tiền thuê theo kỳ'}</p><p className="mt-1 text-lg font-bold">{legacyRenewalMoney(rentalValue)}</p></div><div className="rounded-lg bg-emerald-50 p-3"><p className="text-emerald-700">{'Tiền cọc đảm bảo kho'}</p><p className="mt-1 text-lg font-bold text-emerald-800">{formatVnd(securityDeposit)}</p></div><div className="rounded-lg bg-blue-50 p-3"><p className="text-blue-700">{'Đã thu'}</p><p className="mt-1 text-lg font-bold text-blue-800">{legacyRenewalMoney(totalPaid)}</p></div><div className="rounded-lg bg-amber-50 p-3"><p className="text-amber-800">{'Còn phải thu'}</p><p className="mt-1 text-lg font-bold text-amber-900">{legacyRenewalMoney(balance)}</p></div></div></div>
+                <div className="rounded-xl border border-stone-200 bg-stone-50 p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-[.16em] text-stone-500">{'Hồ sơ biên nhận thanh toán'}</p><p className="mt-1 text-lg font-bold text-stone-950">{activeHoldForContract.id}</p><p className="mt-1 text-stone-600">{activeHoldForContract.customerName} · {activeHoldForContract.customerEmail}</p></div><div className="text-right"><p className="text-stone-500">{'Đơn vị nhận tiền'}</p><p className="font-bold">StorageHub · {activeHoldForContract.facilityName}</p></div></div><div className="mt-4 grid gap-3 sm:grid-cols-4"><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{'Tiền thuê theo kỳ'}</p><p className="mt-1 text-lg font-bold">{legacyRenewalMoney(rentalValue)}</p></div><div className="rounded-lg bg-emerald-50 p-3"><p className="text-emerald-700">{'Tiền cọc đảm bảo thuê'}</p><p className="mt-1 text-lg font-bold text-emerald-800">{formatVnd(securityDeposit)}</p></div><div className="rounded-lg bg-blue-50 p-3"><p className="text-blue-700">{'Đã thu'}</p><p className="mt-1 text-lg font-bold text-blue-800">{legacyRenewalMoney(totalPaid)}</p></div><div className="rounded-lg bg-amber-50 p-3"><p className="text-amber-800">{'Còn phải thu'}</p><p className="mt-1 text-lg font-bold text-amber-900">{legacyRenewalMoney(balance)}</p></div></div></div>
                 {receiptPayments.map(payment => isLegacyRenewalPayment(payment) ? <LegacyRenewalPaymentRecord key={payment.id} payment={payment} /> : <article key={payment.id} className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 bg-stone-50 px-5 py-3"><div><p className="text-[10px] font-bold uppercase tracking-wide text-stone-500">{payment.type === 'RESERVATION_DEPOSIT' ? 'Biên lai cọc' : payment.type === 'INITIAL_RENT' ? 'Biên lai nhận kho' : payment.type === 'RENEWAL' && payment.id.startsWith('PAY-RNW-BAL-') ? 'Biên lai thanh toán số dư gia hạn' : payment.type === 'RENEWAL' ? 'Biên lai thanh toán gia hạn' : 'Biên nhận điện tử'}</p><p className="mt-1 text-sm font-bold">{payment.transactionReference || payment.id}</p></div><span className="rounded-full bg-emerald-100 px-3 py-1 font-bold text-emerald-800">{payment.status === 'PAID' ? ('Đã thanh toán') : ('Đang xử lý')}</span></div><div className="grid gap-px bg-stone-200 sm:grid-cols-2">{[
                   ['Số biên nhận', payment.id],
-                  ['Ngày giờ thanh toán', payment.paidAt ? formatCustomerDateTime(new Date(payment.paidAt)) : '—'],
+                  ['Ngày giờ thanh toán', payment.paidAt ? formatCustomerDateTime(new Date(payment.paidAt)) : '-'],
                   ['Người nộp tiền', `${activeHoldForContract.customerName} · ${activeHoldForContract.customerEmail}`],
                   ['Đơn vị nhận tiền', `StorageHub · ${activeHoldForContract.facilityName}`],
-                  ['Nội dung thanh toán', payment.type === 'RENEWAL' && payment.id.startsWith('PAY-RNW-BAL-') ? (`Thanh toán phần còn lại của kỳ gia hạn: ${formatVnd(payment.amount)}`) : payment.description || (payment.type === 'RESERVATION_DEPOSIT' ? ('Phí giữ chỗ 20% giá trị kỳ thuê') : payment.type === 'INITIAL_RENT' ? ('Thanh toán phần còn lại tại nhận kho') : payment.type === 'RENEWAL' ? ('Thanh toán gia hạn hợp đồng') : 'Giao dịch thanh toán')],
-                  ['Số hóa đơn', payment.invoiceNumber || '—'],
-                  ['Mã đơn / hợp đồng', `${activeHoldForContract.id} · ${contracts.find(item => item.reservationId === activeHoldForContract.id)?.contractNumber || '—'}`],
+                  ['Nội dung thanh toán', payment.type === 'RENEWAL' && payment.id.startsWith('PAY-RNW-BAL-') ? (`Thanh toán phần còn lại của kỳ gia hạn: ${formatVnd(payment.amount)}`) : payment.description || (payment.type === 'RESERVATION_DEPOSIT' ? ('Đặt cọc giữ chỗ (20%) giá trị kỳ thuê') : payment.type === 'INITIAL_RENT' ? ('Thanh toán phần còn lại tại nhận kho') : payment.type === 'RENEWAL' ? ('Thanh toán gia hạn hợp đồng') : 'Giao dịch thanh toán')],
+                  ['Số hóa đơn', payment.invoiceNumber || '-'],
+                  ['Mã đơn / hợp đồng', `${activeHoldForContract.id} · ${contracts.find(item => item.reservationId === activeHoldForContract.id)?.contractNumber || '-'}`],
                   ['Phương thức', paymentMethodLabel(payment.paymentMethod || activeHoldForContract.payment.method)],
                   ['Mã giao dịch đối soát', payment.transactionReference || activeHoldForContract.payment.transactionId || payment.id],
                   ['Số tiền / tiền tệ', `${formatVnd(payment.amount)} · ${paymentCurrencyLabel('VND')}`],
@@ -4365,7 +4573,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           <div className="space-y-4">
             <div className="rounded-lg border border-amber-700 bg-amber-700 p-3 text-xs text-white">
               <p className="font-semibold">{`Gian kho ${activeRentalForReturn.unitId} (${activeRentalForReturn.facilityName})`}</p>
-              <p>{'Tiền cọc đảm bảo kho sẽ được hoàn đầy đủ sau khi nghiệm thu xác nhận không có hư hại, phí vệ sinh hoặc công nợ.'}</p>
+              <p>{'Tiền cọc đảm bảo thuê sẽ được hoàn đầy đủ sau khi nghiệm thu xác nhận không có hư hại, phí vệ sinh hoặc công nợ.'}</p>
             </div>
 
             <Input
@@ -4583,7 +4791,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     category: ticketCategory,
                     priority: ticketPriority,
                     status: 'open',
-                    facility: relatedRental?.facilityName || relatedHold?.facilityName || user.facility || 'Kho Việt – Cơ sở Quận 1',
+                    facility: relatedRental?.facilityName || relatedHold?.facilityName || user.facility || 'Kho Việt - Cơ sở Quận 1',
                     unit: relatedRental?.unitId || relatedHold?.assignedUnitId || relatedHold?.unitTypeName || 'Tư vấn chung',
                     facilityId: relatedRental?.facilityId || relatedHold?.facilityId || user.facilityId || 'fac-001',
                     relatedType: relatedType as 'rental' | 'reservation' | 'general',
@@ -4622,6 +4830,48 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         payments={payments}
         role="customer"
       />
+      {/* ── FLOATING RESUME DRAFT BAR ────────────────────────── */}
+      {!bookOpen && bookingStep > 1 && selectedTarget && (
+        <div className="fixed bottom-4 left-4 z-40 max-w-sm rounded-2xl border-2 border-amber-500 bg-white p-3.5 shadow-2xl transition sm:bottom-6 sm:left-6 animate-fade-in">
+          <div className="flex items-center gap-3">
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-500 text-base font-extrabold text-white shadow-sm">
+              {bookingStep}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-700">Tiến trình chưa hoàn tất</p>
+              <p className="truncate text-sm font-bold text-stone-900">
+                {unitTypeLabel(selectedTarget.unitType.name)} · {selectedTarget.facility.name}
+              </p>
+              <p className="text-xs text-stone-500">
+                Đang dừng tại: <b className="text-stone-800">Bước {bookingStep}/4</b>
+              </p>
+            </div>
+          </div>
+          <div className="mt-2.5 flex items-center justify-end gap-2 border-t border-stone-100 pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                resetReservationDraft()
+                resetBookingForm()
+                showToast('Đã hủy tiến trình đặt kho.')
+              }}
+              className="px-2.5 py-1 text-xs font-semibold text-stone-500 hover:text-red-700 transition"
+            >
+              Hủy bỏ
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setBookOpen(true)
+                showToast(`Tiếp tục đặt kho tại Bước ${bookingStep}.`)
+              }}
+              className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white shadow hover:bg-amber-700 transition"
+            >
+              Tiếp tục đặt kho →
+            </button>
+          </div>
+        </div>
+      )}
       </div>
     </Layout>
   )

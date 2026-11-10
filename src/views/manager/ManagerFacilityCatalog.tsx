@@ -20,7 +20,7 @@ export function FacilityCatalogTable({ rows }: { rows: FacilityCatalogRow[] }) {
       <Td>{quantity(row.areaM2, 'm²')}<br />{quantity(row.volumeM3, 'm³')}</Td>
       <Td>{quantity(row.maxLoadKg, 'kg')}</Td>
       <Td>{row.monthlyPrice == null || row.monthlyPrice <= 0 ? 'Chưa định giá' : <b>{formatVndAmount(row.monthlyPrice)}/tháng</b>}</Td>
-      <Td><b>{row.total.toLocaleString('vi-VN')} gian</b><p className="mt-1 text-xs text-stone-500">{row.counts.available} trống, {row.counts.occupied} đang sử dụng, {row.counts.maintenance} bảo trì</p><p className="mt-1 text-xs text-stone-500">{row.counts.reserved} đã giữ cho khách, {row.counts.held} giữ tạm, {row.counts.assigned} đã phân gian</p></Td>
+      <Td><b>{row.total.toLocaleString('vi-VN')} gian</b><p className="mt-1 text-xs text-stone-500">{row.counts.available} trống, {row.counts.occupied} đang sử dụng, {row.counts.maintenance} bảo trì</p><p className="mt-1 text-xs text-stone-500">{row.counts.reserved} đã giữ cho khách, {row.counts.held} giữ tạm, {row.counts.assigned} đã phân kho</p></Td>
     </Tr>)}{!rows.length && <tr><td colSpan={6} className="p-6 text-center text-sm text-stone-500">Cơ sở này chưa có loại gian kho.</td></tr>}</Tbody>
   </Table>
 }

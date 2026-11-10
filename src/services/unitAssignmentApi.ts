@@ -92,7 +92,7 @@ function assertPage<T>(payload: unknown, message: string): ApiPage<T> {
 
 function assertEnvelope<T>(payload: unknown): ApiEnvelope<T> {
   if (!payload || typeof payload !== 'object' || !('data' in payload)) {
-    throw new ApiClientError('Kết quả phân gian chưa đúng định dạng.', { code: 'INVALID_API_RESPONSE' })
+    throw new ApiClientError('Kết quả phân kho chưa đúng định dạng.', { code: 'INVALID_API_RESPONSE' })
   }
   return payload as ApiEnvelope<T>
 }
@@ -110,7 +110,7 @@ export async function listUnitAssignmentCandidates(params: {
   try {
     return assertPage<UnitAssignmentCandidate>(
       await apiRequest<unknown>(`/api/manager/unit-assignments/candidates?${query}`),
-      'Dữ liệu đơn chờ phân gian chưa đúng định dạng.',
+      'Dữ liệu đơn chờ phân kho chưa đúng định dạng.',
     )
   } catch (error) {
     if (error instanceof ApiClientError && error.status === 404) return emptyPage<UnitAssignmentCandidate>(params.page ?? 0, params.pageSize ?? 20)

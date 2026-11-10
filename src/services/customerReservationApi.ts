@@ -341,6 +341,7 @@ export interface CheckInDocument {
   entityId: string
   status: string
   createdAt: string
+  kind?: 'SIGNED_CONTRACT' | 'PAYMENT_RECEIPT' | 'HANDOVER_EVIDENCE' | 'INVENTORY_EVIDENCE' | 'OTHER'
 }
 
 export interface ReservationGoodsItem extends GoodsItemInput {
@@ -374,6 +375,8 @@ export interface CustomerReservationDetail {
   cancelReason: string | null
   goodsItems: ReservationGoodsItem[]
   payments: ReservationPaymentResult[]
+  checkInStatus?: string | null
+  rentalStatus?: string | null
 }
 
 export interface ReservationEmailVerificationResult {
@@ -637,10 +640,35 @@ export async function getCustomerReservation(reservationId: string) {
   )
   return checkedReservationDetail(response.data)
 }
+export async function deleteExpiredReservationHistory(reservationId: string) {
+  await apiRequest<ApiEnvelope<null>>(`/api/customer/reservations/${reservationId}/history`, { method: 'DELETE' })
+}
 export async function confirmCustomerReceipt(reservationId: string) {
   const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
     `/api/customer/reservations/${encodeURIComponent(reservationId)}/receipt-confirmation`,
     { method: 'POST' },
+  )
+  return checkedReservationDetail(response.data)
+}
+
+export interface RentalStartConfirmation {
+  scheduledStartDate: string
+  startDate: string
+  lastPermittedDate: string
+  rentalMonths: number
+}
+
+export async function previewCustomerRentalStart(reservationId: string) {
+  const response = await apiRequest<ApiEnvelope<RentalStartConfirmation>>(
+    `/api/customer/reservations/${encodeURIComponent(reservationId)}/rental-start-confirmation`,
+  )
+  return response.data
+}
+
+export async function confirmCustomerRentalStart(reservationId: string, preview: RentalStartConfirmation) {
+  const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
+    `/api/customer/reservations/${encodeURIComponent(reservationId)}/rental-start-confirmation`,
+    { method: 'POST', body: JSON.stringify({ startDate: preview.startDate, lastPermittedDate: preview.lastPermittedDate }) },
   )
   return checkedReservationDetail(response.data)
 }
@@ -652,6 +680,14 @@ export async function updateSetupGoods(
   const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
     `/api/customer/reservations/${encodeURIComponent(reservationId)}/setup-goods`,
     { method: 'POST', body: JSON.stringify(input) },
+  )
+  return checkedReservationDetail(response.data)
+}
+
+export async function markCustomerPreparationComplete(reservationId: string, note?: string) {
+  const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
+    `/api/customer/reservations/${encodeURIComponent(reservationId)}/preparation-complete`,
+    { method: 'POST', body: JSON.stringify({ note: note?.trim() || null }) },
   )
   return checkedReservationDetail(response.data)
 }
