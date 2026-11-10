@@ -544,7 +544,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
       <div className="space-y-5">
         <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-900">
           {progress !== null && progress >= 3
-            ? `Đơn ${r.reservationCode} đã được xác nhận thanh toán đặt cọc giữ chỗ. Hủy trước khi nhận kho có thể mất cọc theo chính sách. Bạn chắc chắn muốn hủy?`
+            ? `Đơn ${r.reservationCode} đã thanh toán đặt cọc giữ chỗ. Theo chính sách cam kết, tiền cọc sẽ KHÔNG được hoàn lại khi bạn chủ động hủy đơn. Suất kho đang giữ sẽ được giải phóng. Bạn chắc chắn muốn hủy?`
             : `Bạn có chắc muốn hủy ${r.reservationCode}? Suất kho đang giữ sẽ được giải phóng.`}
         </p>
         <div className="flex justify-end gap-2 border-t border-stone-100 pt-4">
