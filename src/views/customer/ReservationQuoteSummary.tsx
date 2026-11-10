@@ -37,7 +37,7 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
           {q.rentalPeriodConfirmed ? 'Kỳ thuê đã chốt:' : 'Kỳ thuê dự kiến sau thời gian chuẩn bị:'} <b className="text-stone-900">{formatDisplayDate(q.startDate)} đến {formatDisplayDate(q.endDate, true)}</b> · {q.rentalMonths} tháng
         </p>
         <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-950">
-          <b>{q.freeSetupDays ?? 0} ngày chuẩn bị miễn phí</b> tính từ khi khách hàng xác nhận đã nhận kho. Các ngày này không nằm trong kỳ thuê đã thanh toán, ngày bắt đầu và kết thúc kỳ thuê sẽ được chốt theo ngày khách hàng xác nhận nhận kho. Quyền lợi này chỉ áp dụng một lần cho đơn ban đầu, không cộng lại khi gia hạn.
+          <b>{q.freeSetupDays ?? 0} ngày chuẩn bị miễn phí</b> tính từ khi bạn xác nhận nhận kho trống. Sau khi nhân viên kiểm kê, bạn có thể xác nhận bắt đầu kỳ thuê ngay. Nếu chưa xác nhận sớm, kỳ thuê bắt đầu theo lịch hết miễn phí. Quyền lợi chuẩn bị áp dụng một lần cho đơn ban đầu.
         </div>
 
       </div>
