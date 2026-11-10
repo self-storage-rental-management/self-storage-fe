@@ -773,8 +773,8 @@ export default function AdminLoginHistoryApiPanel({
                   className="h-10 rounded-lg border border-stone-300 bg-white px-3 text-sm text-stone-700 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#e9a12c]"
                 >
                   <option value="all">Tất cả trạng thái</option>
-                  <option value="success">✓ Thành công</option>
-                  <option value="failed">✕ Thất bại (Lỗi xác thực)</option>
+                  <option value="success">Thành công</option>
+                  <option value="failed">Thất bại (Lỗi xác thực)</option>
                 </select>
 
                 {/* Date Preset */}
@@ -1045,7 +1045,7 @@ export default function AdminLoginHistoryApiPanel({
                         {/* Status & Risk Alert Badge */}
                         <Td>
                           {item.success ? (
-                            <Badge variant="success">✓ Thành công</Badge>
+                            <Badge variant="success">Thành công</Badge>
                           ) : isHighRisk ? (
                             <span className="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-red-100 px-2.5 py-1 text-xs font-bold text-red-800">
                               <svg className="h-3.5 w-3.5 shrink-0 text-red-600 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1343,7 +1343,7 @@ export default function AdminLoginHistoryApiPanel({
                     onClick={() => copyToClipboard(log.userAgent || '', 'User-Agent')}
                     className="text-xs font-semibold text-[#855306] hover:underline"
                   >
-                    {copiedText === 'User-Agent' ? '✓ Đã chép!' : 'Sao chép chuỗi UA'}
+                    {copiedText === 'User-Agent' ? 'Đã sao chép' : 'Sao chép chuỗi UA'}
                   </button>
                 </div>
                 <pre className="max-h-24 overflow-auto rounded-lg bg-[#1e1f1d] p-3 font-mono text-[11px] text-stone-300 leading-relaxed break-all whitespace-pre-wrap">
