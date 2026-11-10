@@ -2573,12 +2573,9 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       ? new Date(`${reservation.appointmentDate} ${reservation.appointmentTime}`)
       : new Date(`${reservation.moveInDate || reservation.startDate}T00:00:00`)
     const deposit = Math.max(0, reservation.reservationDepositAmount || 0)
-    const monthlyPrice = Math.max(0, reservation.firstMonthRent || reservation.quote.baseMonthlyPrice || 0)
-    const earlyTerminationFee = Math.min(deposit, monthlyPrice)
-    const fullRefund = Number.isFinite(checkInAt.getTime()) && now.getTime() <= checkInAt.getTime() - 24 * 60 * 60 * 1000
-    const cancellationChargeAmount = deposit > 0 ? (fullRefund ? 0 : earlyTerminationFee) : 0
-    const cancellationRefundAmount = Math.max(0, deposit - cancellationChargeAmount)
-    const cancellationType = fullRefund ? 'BEFORE_CHECKIN_FULL_REFUND' as const : 'BEFORE_CHECKIN_EARLY_FEE' as const
+    const cancellationChargeAmount = deposit
+    const cancellationRefundAmount = 0
+    const cancellationType = 'BEFORE_CHECKIN_EARLY_FEE' as const
 
     setState(prev => {
       const assignedUnit = prev.units.find(u => u.id === reservation.assignedUnitId)
@@ -2606,7 +2603,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
               cancellationType: h.payment.status === 'paid' ? cancellationType : undefined,
               cancellationChargeAmount: h.payment.status === 'paid' ? cancellationChargeAmount : 0,
               cancellationRefundAmount: h.payment.status === 'paid' ? cancellationRefundAmount : 0,
-              evidence: [...h.evidence, `CANCELLED · Hủy bởi ${user.name}. Lý do: ${reason || 'Khách hủy đơn'}.${h.payment.status === 'paid' ? ` Phí giữ lại ${formatVnd(cancellationChargeAmount)}, hoàn ${formatVnd(cancellationRefundAmount)} theo mốc check-in.` : ''}`]
+              evidence: [...h.evidence, `CANCELLED · Hủy bởi ${user.name}. Lý do: ${reason || 'Khách hủy đơn'}.${h.payment.status === 'paid' ? ` Tiền cọc giữ chỗ ${formatVnd(cancellationChargeAmount)} không hoàn lại theo cam kết.` : ''}`]
             }
           }
           return h
@@ -2623,7 +2620,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
             facilityId: reservation.facilityId,
             entityType: 'hold',
             entityId: reservation.id,
-            notes: `Hủy đơn ${reservation.id}. Kho ${reservation.assignedUnitId || 'N/A'} đã được giải phóng.${reservation.payment.status === 'paid' ? ` Phí giữ lại ${formatVnd(cancellationChargeAmount)}, hoàn ${formatVnd(cancellationRefundAmount)}.` : ''}`,
+            notes: `Hủy đơn ${reservation.id}. Kho ${reservation.assignedUnitId || 'N/A'} đã được giải phóng.${reservation.payment.status === 'paid' ? ` Tiền cọc giữ chỗ ${formatVnd(cancellationChargeAmount)} không hoàn lại.` : ''}`,
             timestamp: now.toLocaleString('vi-VN')
           },
           ...prev.activities
