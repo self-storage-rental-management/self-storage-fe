@@ -446,6 +446,8 @@ export default function StaffCheckInOperationsPanel({
   }, [handoverTarget, heightCm, lengthCm, packageCount, volumeM3, weightKg, widthCm])
 
   const measurementVariance = checkInComparison?.hasVariance ?? false
+  const hasEmptyStorageEvidence = evidenceFiles.length > 0 || evidenceReferences.length > 0
+  const emptyStorageHandoverReady = Boolean(keyLockReference.trim() && initialCondition.trim() && hasEmptyStorageEvidence)
 
   const workflowCurrentStep = handoverTarget ? stepForCheckIn(handoverTarget) : 1
   const isReviewingCompletedStep = Boolean(
@@ -665,8 +667,8 @@ export default function StaffCheckInOperationsPanel({
         }
         setChecklist((current) => ({ ...current, paymentVerified: true }))
       } else if (handoverStep === 4) {
-        if (!initialCondition.trim() || !evidenceFiles.length) {
-          throw new Error("Cần ghi nhận tình trạng kho trống và tải ít nhất một ảnh/PDF trước khi bàn giao.")
+        if (!emptyStorageHandoverReady) {
+          throw new Error("Cần nhập mã ổ khóa, ghi nhận hiện trạng và chọn ít nhất một ảnh hoặc PDF bằng chứng kho trống.")
         }
         const emptyStorageEvidence = [...evidenceReferences]
         for (const file of evidenceFiles) {
@@ -1281,7 +1283,7 @@ export default function StaffCheckInOperationsPanel({
                       />
                       <Input
                         label="Hiện trạng kho trống bàn giao *"
-                        value={initialCondition || "Kho trống sạch sẽ, sàn khô ráo, cửa và ổ khóa hoạt động tốt"}
+                        value={initialCondition}
                         disabled={isReviewingCompletedStep}
                         onChange={(event) => setInitialCondition(event.target.value)}
                         placeholder="Ghi nhận trần, sàn, vách, đèn..."
@@ -1325,6 +1327,40 @@ export default function StaffCheckInOperationsPanel({
                     </div>
                   </div>
                 </div>
+
+                {(!isReviewingCompletedStep || evidenceReferences.length > 0) && <div className="space-y-2 rounded-xl border border-stone-200 bg-white p-4">
+                  {!isReviewingCompletedStep && (
+                    <>
+                      <label className="block text-sm font-semibold text-stone-800">
+                        Ảnh hoặc PDF bằng chứng kho trống *
+                        <input
+                          type="file"
+                          multiple
+                          accept="image/jpeg,image/png,image/webp,application/pdf"
+                          className="mt-2 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
+                          disabled={submitting}
+                          onChange={(event) => {
+                            const selected = Array.from(event.target.files ?? [])
+                            if (selected.some(file => !validateUploadFile(file, "bàn giao", setError))) {
+                              event.target.value = ""
+                              return
+                            }
+                            setEvidenceFiles(selected)
+                          }}
+                        />
+                      </label>
+                      <p className="text-xs text-stone-600">Chọn ít nhất một tệp ghi nhận hiện trạng kho trước khi khách chuyển hàng vào. Tối đa 25 MB mỗi tệp.</p>
+                      <FilePreviewList
+                        files={evidenceFiles}
+                        onRemove={index => setEvidenceFiles(files => files.filter((_, current) => current !== index))}
+                        disabled={submitting}
+                      />
+                      {!hasEmptyStorageEvidence && <p className="text-xs font-medium text-amber-800">Chọn tệp bằng chứng để có thể xác nhận bàn giao.</p>}
+                      {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+                    </>
+                  )}
+                  {evidenceReferences.length > 0 && <p className="text-xs text-stone-600">Đã tải lên {evidenceReferences.length} tệp bằng chứng.</p>}
+                </div>}
 
                 {handoverTarget.lockReference && (
                   <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900">
@@ -1432,7 +1468,7 @@ export default function StaffCheckInOperationsPanel({
                   (handoverStep === 1 && (!checklist.identityVerified || !checklist.reservationMatched || identityVerificationBlocked)) ||
                   (handoverStep === 2 && (!contractFile || !!setupTermsKey && (confirmedSetupTerms !== setupTermsKey || handoverTarget.setupEarlyExitFee == null))) ||
                   (handoverStep === 3 && (handoverTarget.dueAtCheckIn ?? 0) > 0 && !paymentEvidenceFile) ||
-                  (handoverStep === 4 && (!keyLockReference.trim() || !initialCondition.trim() || !evidenceFiles.length))
+                  (handoverStep === 4 && !emptyStorageHandoverReady)
                 } onClick={() => submitWorkflowStep()}>{submitting ? "Đang lưu…" : "Xác nhận và tiếp tục"}</Button>
               ) : (
                 <Button disabled={submitting || !allChecksComplete || !evidenceFiles.length || !initialCondition.trim() || !goodsCondition.trim() || !goodsCategory.trim() || (measurementVariance && (!varianceAccepted || !varianceReason.trim()))} onClick={() => submitHandover()}>{submitting ? "Đang hoàn tất…" : "Hoàn tất kiểm kê"}</Button>

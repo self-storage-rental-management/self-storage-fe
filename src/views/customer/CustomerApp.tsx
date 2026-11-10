@@ -2789,8 +2789,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 onCancel={() => cancelBackendReservation(reservation)}
                 onDelete={() => deleteBackendExpiredReservation(reservation)}
                 onRefresh={refreshBackendReservations}
-                onReceiptConfirmed={reservationId => {
-                  setReceiptRentalTarget(reservationId)
+                onOpenRental={storageUnitId => {
+                  setReceiptRentalTarget(storageUnitId)
                   navigateTo('rental-records')
                 }}
               /></div>)}
@@ -3866,7 +3866,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   </div>
                    <div className="mt-4"><label className="text-sm font-medium text-stone-700">Mô tả hàng hóa *</label><textarea className="mt-1 min-h-20 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm" value={item.description} placeholder="Mô tả tên đồ vật, tình trạng hoặc đặc điểm cần lưu ý" onChange={e => { const value = e.target.value; setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, description: value } : row)); updateBookingError(`goodsDescription-${item.id}`, value.trim() ? undefined : 'Vui lòng nhập mô tả hàng hóa.') }} />{bookingErrors[`goodsDescription-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsDescription-${item.id}`]}</p>}</div>
                     <details open className="mt-4 rounded-lg border border-stone-200 bg-white p-3">
-                      <summary className="cursor-pointer font-bold text-stone-900">Thông tin bổ sung và hình ảnh hàng hóa <span className="font-normal text-stone-500">(không bắt buộc)</span></summary>
+                      <summary className="cursor-pointer font-bold text-stone-900">Thông tin bổ sung và hình ảnh hàng hóa {!catalogCategoryFor(item.category)?.custom && <span className="font-normal text-stone-500">(không bắt buộc)</span>}</summary>
                       <div className="mt-3 space-y-3 border-t border-stone-200 pt-3">
                         {catalogCategoryFor(item.category)?.custom && <div className="grid gap-3 sm:grid-cols-2">
                           <div><Input label="Tên hàng hóa *" value={item.customGoodsName} onChange={e => { const value = e.target.value; setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customGoodsName: value } : row)); updateBookingError(`customGoodsName-${item.id}`, value.trim() ? undefined : 'Vui lòng nhập tên hàng hóa.') }} />{bookingErrors[`customGoodsName-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`customGoodsName-${item.id}`]}</p>}</div>
@@ -3875,7 +3875,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                         <Input label="Ghi chú bổ sung" value={item.customerNote} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customerNote: e.target.value } : row))} />
                         <div>
                           <p className="text-sm font-medium text-stone-700">Hình ảnh hàng hóa</p>
-                          <p className="mt-1 text-xs text-stone-500">Không bắt buộc. Tối đa 10 ảnh PNG, JPEG hoặc WebP; ảnh sẽ gắn với đúng loại hàng hóa sau khi tạo đơn.</p>
+                          <p className="mt-1 text-xs text-stone-500">Không bắt buộc. Tối đa 10 ảnh PNG, JPEG hoặc WebP, mỗi ảnh tối đa 10 MB. Ảnh sẽ gắn với đúng loại hàng hóa sau khi tạo đơn.</p>
                           <label htmlFor={`goods-images-${item.id}`} className="mt-2 flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-stone-300 bg-stone-50 px-4 py-4 text-center transition hover:border-amber-500 hover:bg-amber-50">
                             <span className="text-sm font-semibold text-stone-800">Chọn ảnh hàng hóa</span>
                             <span className="mt-1 text-xs text-stone-500">Có thể chọn nhiều ảnh cùng lúc</span>
@@ -3895,18 +3895,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                      <div className="flex h-full flex-col"><Input type="number" min="0.1" label="Nặng/kiện (kg) *" value={item.weightKg} onChange={e => { const value = e.target.value; setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, weightKg: value } : row)); updateBookingError(`goodsWeight-${item.id}`, parsePositiveNumber(value) === null ? 'Cân nặng mỗi kiện phải lớn hơn 0.' : undefined) }} /><p className="mt-1 min-h-8 text-xs text-red-700">{bookingErrors[`goodsWeight-${item.id}`] || ''}</p></div>
                   </div>
 <div className="mt-3"><p className="text-sm font-medium text-stone-700">Hàng dễ bể / dễ vỡ? *</p><div className="mt-2 flex gap-5"><label className="flex items-center gap-2 text-sm"><input type="radio" name={`fragile-${item.id}`} checked={item.fragile === 'no'} onChange={() => { setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, fragile: 'no' } : row)); updateBookingError(`goodsFragile-${item.id}`) }} />Không</label><label className="flex items-center gap-2 text-sm"><input type="radio" name={`fragile-${item.id}`} checked={item.fragile === 'yes'} onChange={() => { setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, fragile: 'yes' } : row)); updateBookingError(`goodsFragile-${item.id}`) }} />Có</label></div>{bookingErrors[`goodsFragile-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsFragile-${item.id}`]}</p>}{bookingErrors[`goodsFit-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsFit-${item.id}`]}</p>}</div>
-                    <details open className="mt-4 rounded-lg border border-stone-200 bg-white p-3">
-                      <summary className="cursor-pointer font-bold text-stone-900">Thông tin bổ sung và hình ảnh hàng hóa</summary>
-                      <div className="mt-3 space-y-3 border-t border-stone-200 pt-3">
-                        {catalogCategoryFor(item.category)?.custom && <div className="grid gap-3 sm:grid-cols-2">
-                          <div><Input label="Tên hàng hóa *" value={item.customGoodsName} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customGoodsName: e.target.value } : row))} />{bookingErrors[`customGoodsName-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`customGoodsName-${item.id}`]}</p>}</div>
-                          <div><Input label="Chất liệu chính (nếu xác định được)" value={item.customMaterial} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customMaterial: e.target.value } : row))} /></div>
-                        </div>}
-                        <Input label="Ghi chú bổ sung" value={item.customerNote} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customerNote: e.target.value } : row))} />
-                        <div><label className="text-sm font-medium text-stone-700">Hình ảnh hàng hóa</label><p className="mt-1 text-xs text-stone-500">Tối đa 10 ảnh PNG, JPEG hoặc WebP (tối đa 10 MB/ảnh). Ảnh được gắn với đúng hàng hóa sau khi tạo đơn.</p><input type="file" accept="image/png,image/jpeg,image/webp" multiple className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm" onChange={event => selectGoodsImages(item.id, event)} />{item.images.length > 0 && <p className="mt-1 text-xs text-stone-500">Đã chọn {item.images.length}/10 ảnh: {item.images.map(file => file.name).join(', ')}</p>}{bookingErrors[`goodsImages-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsImages-${item.id}`]}</p>}</div>
-                        {catalogCategoryFor(item.category)?.custom && <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><b>Yêu cầu cần nhân viên cơ sở duyệt</b><p className="mt-1 leading-5">Tài khoản đã xác minh email được gửi hồ sơ trực tiếp để nhân viên xem xét trong tối đa 6 giờ. Sau khi hồ sơ được duyệt, khách hàng có 15 phút để thanh toán. Quản lý cơ sở có tối đa 6 giờ tiếp theo để phân kho.</p></div>}
-                      </div>
-                    </details>
                 </div>)}
               </div>
               <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => setGoodsItems(items => [...items, createGoodsDeclarationItem()])}>+ Thêm hàng hóa</Button>

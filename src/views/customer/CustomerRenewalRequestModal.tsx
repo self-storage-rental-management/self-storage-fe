@@ -1,16 +1,14 @@
 import { useEffect, useState, type ReactNode } from "react"
 import { Button, Modal } from "../../components/ui"
 import {
-  createRenewalVnpayPaymentIntent,
   getRenewalOptions,
   listRenewals,
   quoteRenewal,
-  renewalPaymentRedirectUrl,
   reviseRenewal,
   submitRenewal,
 } from "../../services/renewalApi"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
-import { newRenewalIdempotencyKey, useRenewalCommand } from "../../hooks/useRenewalCommand"
+import { useRenewalCommand } from "../../hooks/useRenewalCommand"
 import type { RenewalApiQuote, RenewalApiRecord } from "../../types/renewalApi"
 import ApiReadState from "../rental-api/ApiReadState"
 import RenewalRiskNotice from "../rental-api/RenewalRiskNotice"
@@ -228,14 +226,14 @@ export default function CustomerRenewalRequestModal({
             </div>
           </section>
           <section aria-label="Phương thức gia hạn" className="border-t border-stone-200 pt-4">
-            <h3 className="mb-2 text-xs font-medium uppercase text-stone-500">Quy trình gia hạn trực tuyến</h3>
+            <h3 className="mb-2 text-xs font-medium uppercase text-stone-500">Quy trình gia hạn</h3>
             <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-4 text-emerald-950 space-y-2">
               <div className="flex items-center gap-2">
                 <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-white text-xs font-bold">✓</span>
-                <p className="font-semibold text-sm text-emerald-900">Gia hạn tự động qua thanh toán trực tuyến</p>
+                <p className="font-semibold text-sm text-emerald-900">Thanh toán trực tuyến và ký tại cơ sở</p>
               </div>
               <p className="text-xs text-emerald-800 leading-relaxed">
-                Quy trình gia hạn được thực hiện 100% online. Bạn không cần đến cơ sở hay ký lại hợp đồng giấy. Ngay sau khi thanh toán thành công qua VNPay, hệ thống sẽ tự động cập nhật thời hạn thuê mới đến ngày <b>{rentalDate(quote.newEndDate)}</b>.
+                Sau khi gửi yêu cầu, bạn có thể chọn lịch ký và thanh toán qua VNPay trong chi tiết hồ sơ. Kỳ thuê mới có hiệu lực sau khi nhân viên đối soát đủ tiền và hoàn tất ký tại cơ sở.
               </p>
             </div>
             <details className="mt-3 text-sm text-stone-500">
@@ -370,27 +368,7 @@ export default function CustomerRenewalRequestModal({
                               key,
                             )
                           : submitRenewal(rentalId, quote.id, note, key),
-                      async (created) => {
-                        const renewalRecord = created as RenewalApiRecord
-                        if (renewalRecord?.id) {
-                          try {
-                            const paymentIntent = await createRenewalVnpayPaymentIntent(
-                              renewalRecord.id,
-                              newRenewalIdempotencyKey(),
-                            )
-                            if (paymentIntent?.paymentUrl) {
-                              const redirectUrl = renewalPaymentRedirectUrl(paymentIntent)
-                              if (typeof window !== "undefined" && window.location) {
-                                window.location.assign(redirectUrl)
-                                return
-                              }
-                            }
-                          } catch (payErr) {
-                            console.warn("Could not initiate instant VNPay payment:", payErr)
-                          }
-                        }
-                        onSuccess(renewalRecord)
-                      },
+                      (created) => onSuccess(created as RenewalApiRecord),
                     )
                   }}
                 >
@@ -398,7 +376,7 @@ export default function CustomerRenewalRequestModal({
                     ? "Đang gửi…"
                     : command.uncertain
                       ? "Thử lại cùng yêu cầu"
-                      : "Xác nhận & Đi đến thanh toán"}
+                      : "Xác nhận và xem yêu cầu"}
                 </Button>
               )}
             </div>
