@@ -47,7 +47,7 @@ export default function RenewalDetail({
   const isManager = role === "manager"
   const canOpenPayment = role === "customer" && r.status === "accepted" && r.acceptedRevision !== null
     && !['ON_HOLD', 'SIGNING_EXPIRED', 'PAYMENT_WINDOW_EXPIRED'].includes(r.statusSummary?.workflowStatus ?? '')
-  const { payment, busy: paymentBusy, error: paymentError, pay: openRenewalPayment, appointmentSelected } = useRenewalPayment(
+  const { payment, busy: paymentBusy, error: paymentError, pay: openRenewalPayment } = useRenewalPayment(
     r, role === "customer", onPaymentChange,
   )
   const canViewReceipt = reconciledRenewalPayment(payment)
@@ -66,7 +66,7 @@ export default function RenewalDetail({
     r.status === "full_rent_paid" ||
     (r.statusSummary?.transactions?.some((t) => t.status === "SUCCEEDED" && t.amount > 0) ?? false)
   const verification = r.systemVerification
-  const workflowStatusLabel = isCustomer && customerHasPaid && r.status !== "completed" ? "Đã thanh toán gia hạn" : r.statusSummary ? renewalWorkflowLabel(r) : paymentExpired ? "Đã hết hạn thanh toán, đang đối soát VNPay" : r.status === "accepted" && r.approvedPaymentDeadline
+  const workflowStatusLabel = r.statusSummary ? renewalWorkflowLabel(r) : paymentExpired ? "Đã hết hạn thanh toán, đang đối soát VNPay" : r.status === "accepted" && r.approvedPaymentDeadline
     ? isCustomer ? "Đã mở thanh toán qua VNPay Sandbox" : hasDeposit ? "Đã mở thanh toán tiền thuê trả trước qua VNPay Sandbox" : "Đã mở thanh toán toàn kỳ qua VNPay Sandbox"
     : r.status === "accepted" && verification?.status === "VERIFIED"
     ? "Đã xác nhận điều kiện, chờ kiểm tra readiness thanh toán"
@@ -94,9 +94,7 @@ export default function RenewalDetail({
         : 1
     : renewalProgress(r, payment)
 
-  const renewalTerminalMessage = isCustomer && customerHasPaid
-    ? null
-    : r.statusSummary?.workflowStatus === 'SIGNING_EXPIRED' ? 'Hạn ký gia hạn đã hết. Khoản đã thu được theo dõi riêng để đối soát và xử lý theo chính sách.'
+  const renewalTerminalMessage = r.statusSummary?.workflowStatus === 'SIGNING_EXPIRED' ? 'Hạn ký gia hạn đã hết. Khoản đã thu được theo dõi riêng để đối soát và xử lý theo chính sách.'
     : r.statusSummary?.workflowStatus === 'ON_HOLD' ? 'Hồ sơ đang tạm dừng xử lý. Vui lòng kiểm tra điều kiện, điều khoản hoặc khoản hoàn trước khi tiếp tục.'
     : r.status === "rejected" ? "Yêu cầu bị từ chối. Xem lý do quyết định bên dưới."
     : r.status === "cancelled" ? "Yêu cầu đã hủy. Các khoản đã thu cần được đối soát theo giao dịch."
@@ -243,21 +241,21 @@ export default function RenewalDetail({
       {!isManager && r.reviewState === "AWAITING_CUSTOMER_CONFIRMATION" && <p role="status" className="text-amber-700">
         Báo giá đã thay đổi. Vui lòng lấy báo giá mới và xác nhận lại trước khi tiếp tục thanh toán.
       </p>}
-      {isCustomer && customerHasPaid && r.status !== "completed" && (
+      {isCustomer && customerHasPaid && r.status !== "completed" && !renewalTerminalMessage && !payment?.reconciliationRequired && (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50/90 p-4 space-y-1.5" role="status">
           <div className="flex items-center gap-2">
             <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-white text-xs font-bold">✓</span>
             <h4 className="font-bold text-emerald-950 text-sm">Đã ghi nhận thanh toán gia hạn</h4>
           </div>
           <p className="text-xs text-emerald-900 leading-relaxed">
-            Khoản thanh toán gia hạn của bạn đã được xác nhận thành công qua cổng thanh toán. Hợp đồng của bạn được tự động gia hạn đến ngày <b>{rentalDate(extensionEndDate)}</b> mà không cần đến cơ sở ký lại hợp đồng giấy.
+            Hệ thống đã ghi nhận khoản thanh toán. Vui lòng theo dõi lịch hẹn và đến cơ sở ký gia hạn. Thời hạn thuê mới có hiệu lực sau khi nhân viên đối soát đủ tiền và xác nhận hoàn tất ký.
           </p>
         </div>
       )}
-      {!isCustomer && appointmentSelection && (
+      {isCustomer && canOpenPayment && !paymentExpired && !customerHasPaid && appointmentSelection && (
         <details className="rounded-xl border border-stone-200 bg-stone-50/60 p-3.5 text-sm">
           <summary className="cursor-pointer font-semibold text-stone-700 hover:text-amber-800 select-none">
-            📅 Tùy chọn: Đặt lịch hẹn hỗ trợ trực tiếp tại cơ sở
+            Đặt lịch ký gia hạn tại cơ sở
           </summary>
           <div className="mt-3 border-t border-stone-200 pt-3">
             {appointmentSelection}
@@ -274,7 +272,7 @@ export default function RenewalDetail({
               <div>
                 <p className="font-bold text-emerald-950 text-base">Thanh toán gia hạn trực tuyến qua VNPay Sandbox</p>
                 <p className="text-xs text-emerald-800">
-                  Hỗ trợ quét mã VNPAY-QR hoặc thẻ ATM / Internet Banking nội địa. Hợp đồng tự động kích hoạt ngay sau khi thanh toán.
+                  Hỗ trợ quét mã VNPAY-QR hoặc thẻ ATM / Internet Banking nội địa. Sau khi thanh toán, vui lòng theo dõi lịch ký tại cơ sở.
                 </p>
               </div>
             </div>

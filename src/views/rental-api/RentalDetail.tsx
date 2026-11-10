@@ -6,8 +6,10 @@ import { Badge, Button, Card, Modal } from "../../components/ui"
 import BookingTransactionReceipt from "./BookingTransactionReceipt"
 import type { RentalApiDetail, RentalApiRole } from "../../types/rentalApi"
 import { bookingPaymentPurposes, bookingPaymentStatuses } from "../../services/rentalBookingEvidence"
-import { rentalLabels, rentalMoney, unknown, rentalDataWarning, rentalPeriodText, rentalDate, accessStatusLabels } from "./presentation"
+import { rentalStatusLabel, rentalMoney, unknown, rentalDataWarning, rentalPeriodText, rentalDate, accessStatusLabels } from "./presentation"
 import { downloadCheckInEvidence } from "../../services/checkInApi"
+import { confirmCustomerRentalStart, previewCustomerRentalStart, type RentalStartConfirmation } from "../../services/customerReservationApi"
+import { userFacingError } from "../../presentation/userFacingError"
 import FilePreviewDialog from "../../components/FilePreviewDialog"
 import { vietnamDateInput } from "../../utils/vietnamTime"
 const labelClass = "text-xs font-normal text-slate-500"
@@ -49,15 +51,21 @@ export default function RentalDetail({
   onRequest,
   role = "customer",
   showTechnicalWarnings = true,
+  onRentalStartConfirmed,
 }: {
   rental: RentalApiDetail
   onRequest?: () => void
   role?: RentalApiRole
   showTechnicalWarnings?: boolean
+  onRentalStartConfirmed?: () => void
 }) {
   const { copy } = useManagerPresentation()
   const [section, setSection] = useState<'documents' | 'payments'>('documents')
   const [receiptPayment, setReceiptPayment] = useState<string>()
+  const [startPreview, setStartPreview] = useState<RentalStartConfirmation>()
+  const [startAcknowledged, setStartAcknowledged] = useState(false)
+  const [startSubmitting, setStartSubmitting] = useState(false)
+  const [startError, setStartError] = useState<string>()
   const labelClass = "text-xs font-medium text-stone-500"
   const valueClass = "mt-1 text-sm font-semibold text-stone-900"
 
@@ -67,6 +75,32 @@ export default function RentalDetail({
   const accessStatus = rental.access.completeness === "UNKNOWN"
     ? null
     : accessStatusLabels[rental.access.status?.toUpperCase() || ""] || null
+
+  const openStartPreview = async () => {
+    if (!rental.reservationId) return
+    setStartError(undefined)
+    setStartAcknowledged(false)
+    try {
+      setStartPreview(await previewCustomerRentalStart(rental.reservationId))
+    } catch (error) {
+      setStartError(userFacingError(error, 'Không thể xem mốc bắt đầu kỳ thuê.'))
+    }
+  }
+
+  const confirmStart = async () => {
+    if (!rental.reservationId || !startPreview || !startAcknowledged || startSubmitting) return
+    setStartSubmitting(true)
+    setStartError(undefined)
+    try {
+      await confirmCustomerRentalStart(rental.reservationId, startPreview)
+      setStartPreview(undefined)
+      onRentalStartConfirmed?.()
+    } catch (error) {
+      setStartError(userFacingError(error, 'Không thể xác nhận bắt đầu kỳ thuê.'))
+    } finally {
+      setStartSubmitting(false)
+    }
+  }
 
   return (
     <div className="space-y-5 [&_dt]:text-xs [&_dt]:font-normal [&_dt]:text-stone-500 [&_dd]:mt-1.5 [&_dd]:break-words [&_dd]:text-sm [&_dd]:font-medium [&_dd]:leading-relaxed [&_dd]:text-stone-900">
@@ -79,7 +113,7 @@ export default function RentalDetail({
       <Card className="overflow-hidden rounded-xl border-t-4 border-t-amber-500 bg-white px-5 py-6 sm:px-8 sm:py-8">
         <div className="mb-6 flex flex-wrap items-start justify-between gap-4 border-b border-stone-200 pb-6">
           <div><p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-amber-700">StorageHub · Hồ sơ lưu trữ</p><h3 className="text-2xl font-bold text-stone-900">Thông tin hồ sơ thuê</h3><p className="mt-2 text-sm text-stone-500">{rental.facility.name}</p></div>
-          <span className={`rounded-full px-3 py-1 text-xs font-medium ${rental.status === 'active' ? 'bg-emerald-50 text-emerald-800' : 'bg-stone-100 text-stone-700'}`}>{copy(rentalLabels[rental.status])}</span>
+          <span className={`rounded-full px-3 py-1 text-xs font-medium ${rental.status === 'active' ? 'bg-emerald-50 text-emerald-800' : 'bg-stone-100 text-stone-700'}`}>{copy(rentalStatusLabel(rental))}</span>
         </div>
         <dl className="divide-y divide-stone-100 [&>div]:grid [&>div]:min-w-0 [&>div]:gap-1 [&>div]:py-4 sm:[&>div]:grid-cols-[180px_minmax(0,1fr)] sm:[&>div]:gap-6 [&_dd]:!mt-0">
           <div>
@@ -125,13 +159,25 @@ export default function RentalDetail({
             <dd className="space-y-3">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-lg border border-stone-200 bg-stone-50 p-3"><p className="text-xs text-stone-500">Bàn giao thực tế</p><p className="mt-1 font-semibold">{rentalDate(vietnamDateInput(rental.setupStartedAt))}</p><p className="mt-1 text-xs text-stone-500">{new Date(rental.setupStartedAt).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })}</p></div>
-                <div className="rounded-lg border border-stone-200 bg-stone-50 p-3"><p className="text-xs text-stone-500">Ngày cuối thời gian chuẩn bị miễn phí</p><p className="mt-1 font-semibold">{rentalDate(vietnamDateInput(new Date(new Date(rental.setupEndsAt).getTime() - 1)))}</p></div>
+                <div className="rounded-lg border border-stone-200 bg-stone-50 p-3"><p className="text-xs text-stone-500">Kết thúc thời gian miễn phí</p><p className="mt-1 font-semibold">{rentalDate(rental.setupEndsAt)}</p></div>
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3"><span className="text-sm text-emerald-800">Bắt đầu kỳ thuê có tính tiền</span><span className="font-bold text-emerald-900">{rentalDate(rental.startDate)}</span></div>
               {rental.moveInCompletedAt && <p className="border-t border-stone-100 pt-3 text-xs text-stone-500">Đã báo hoàn tất chuẩn bị lúc {new Date(rental.moveInCompletedAt).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })} ngày {rentalDate(vietnamDateInput(rental.moveInCompletedAt))}</p>}
             </dd>
           </div>}
-          {rental.inventoryPending && <div>
+          {rental.inventoryVerifiedAt ? <div>
+            <dt>Kiểm kê đầu vào</dt>
+            <dd><Badge variant="success">Đã hoàn tất</Badge>
+              <p className="mt-1 text-xs text-stone-500">Nhân viên đã xác nhận lúc {rentalDate(rental.inventoryVerifiedAt)}.</p>
+              {role === 'customer' && rental.canConfirmRentalStart && rental.reservationId && (
+                <div className="mt-3 space-y-2">
+                  <p className="text-sm text-stone-700">Hàng đã được kiểm kê. Bạn có thể xác nhận bắt đầu kỳ thuê hôm nay.</p>
+                  <Button size="sm" onClick={openStartPreview}>Xem mốc kỳ thuê mới</Button>
+                  {startError && !startPreview && <p role="alert" className="text-sm text-red-700">{startError}</p>}
+                </div>
+              )}
+            </dd>
+          </div> : rental.inventoryPending && <div>
             <dt>Kiểm kê đầu vào</dt>
             <dd><Badge variant="warning">Chưa kiểm kê</Badge>
               <p className="mt-2 text-xs leading-5 text-stone-500">Kỳ thuê vẫn tính theo mốc đã bàn giao, hồ sơ kiểm kê cần được hoàn tất trước hạn xử lý.</p>
@@ -235,6 +281,25 @@ export default function RentalDetail({
       </div>
       {receiptPayment && rental.reservationId && <Modal open onClose={() => setReceiptPayment(undefined)} title="Biên lai thanh toán" size="lg">
         <BookingTransactionReceipt reservationId={rental.reservationId} paymentId={receiptPayment} />
+      </Modal>}
+      {startPreview && <Modal open onClose={() => { if (!startSubmitting) setStartPreview(undefined) }} title="Xác nhận bắt đầu kỳ thuê" size="lg">
+        <div className="space-y-4 text-sm">
+          <p>Thời gian miễn phí kết thúc khi bạn xác nhận. Kỳ thuê {startPreview.rentalMonths} tháng sẽ tính từ hôm nay theo báo giá đã chốt.</p>
+          <dl className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-4 sm:grid-cols-3">
+            <div><dt>Ngày tính tiền theo lịch cũ</dt><dd>{rentalDate(startPreview.scheduledStartDate)}</dd></div>
+            <div><dt>Bắt đầu tính tiền</dt><dd>{rentalDate(startPreview.startDate)}</dd></div>
+            <div><dt>Ngày cuối kỳ thuê</dt><dd>{rentalDate(startPreview.lastPermittedDate)}</dd></div>
+          </dl>
+          <label className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+            <input type="checkbox" className="mt-1" checked={startAcknowledged} disabled={startSubmitting} onChange={event => setStartAcknowledged(event.target.checked)} />
+            <span>Tôi đã đối chiếu kết quả kiểm kê và đồng ý bắt đầu kỳ thuê tính tiền từ {rentalDate(startPreview.startDate)}.</span>
+          </label>
+          {startError && <p role="alert" className="text-sm text-red-700">{startError}</p>}
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="outline" disabled={startSubmitting} onClick={() => setStartPreview(undefined)}>Xem lại hồ sơ</Button>
+            <Button disabled={!startAcknowledged || startSubmitting} onClick={confirmStart}>{startSubmitting ? 'Đang xác nhận…' : 'Xác nhận bắt đầu kỳ thuê'}</Button>
+          </div>
+        </div>
       </Modal>}
       {showTechnicalWarnings && warnings.length > 0 && (
         <div role="status" className="rounded-lg bg-amber-50 p-4">

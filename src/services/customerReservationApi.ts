@@ -341,6 +341,7 @@ export interface CheckInDocument {
   entityId: string
   status: string
   createdAt: string
+  kind?: 'SIGNED_CONTRACT' | 'PAYMENT_RECEIPT' | 'HANDOVER_EVIDENCE' | 'INVENTORY_EVIDENCE' | 'OTHER'
 }
 
 export interface ReservationGoodsItem extends GoodsItemInput {
@@ -646,6 +647,28 @@ export async function confirmCustomerReceipt(reservationId: string) {
   const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
     `/api/customer/reservations/${encodeURIComponent(reservationId)}/receipt-confirmation`,
     { method: 'POST' },
+  )
+  return checkedReservationDetail(response.data)
+}
+
+export interface RentalStartConfirmation {
+  scheduledStartDate: string
+  startDate: string
+  lastPermittedDate: string
+  rentalMonths: number
+}
+
+export async function previewCustomerRentalStart(reservationId: string) {
+  const response = await apiRequest<ApiEnvelope<RentalStartConfirmation>>(
+    `/api/customer/reservations/${encodeURIComponent(reservationId)}/rental-start-confirmation`,
+  )
+  return response.data
+}
+
+export async function confirmCustomerRentalStart(reservationId: string, preview: RentalStartConfirmation) {
+  const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
+    `/api/customer/reservations/${encodeURIComponent(reservationId)}/rental-start-confirmation`,
+    { method: 'POST', body: JSON.stringify({ startDate: preview.startDate, lastPermittedDate: preview.lastPermittedDate }) },
   )
   return checkedReservationDetail(response.data)
 }
