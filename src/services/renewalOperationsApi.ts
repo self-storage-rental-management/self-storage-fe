@@ -295,12 +295,12 @@ export async function listRenewalOperationEvents(
   const suffix = rentalQuery({ page, size }, ["page", "size"], [])
   const allowed =
     category === "payments"
-      ? ["DEPOSIT", "FULL_RENT_PAYMENT", "CASH"]
+      ? ["DEPOSIT", "FULL_RENT_PAYMENT", "CASH", "INSTALLMENT_PAYMENT"]
       : category === "documents"
         ? ["ARRIVAL", "COMPLETION"]
         : category === "refunds"
-        ? ["REFUND", "DEPOSIT_DISPOSITION", "REFUND_EXECUTION"]
-        : ["INCIDENT", "FAULT_REVIEW", "EXCEPTION"]
+        ? ["REFUND", "DEPOSIT_DISPOSITION", "REFUND_EXECUTION", "DEPOSIT_REVIEW_REQUIRED"]
+        : ["INCIDENT", "FAULT_REVIEW", "EXCEPTION", "PREPARATION_BLOCKED", "PREPARATION_RESOLUTION"]
   return readRentalPage<RenewalOperationEvent>(
     await apiRequest(`${path(role, id)}/${category}${suffix}`),
     (v) =>

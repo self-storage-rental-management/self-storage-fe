@@ -250,7 +250,7 @@ function InventoryRead({
         facilityId={facilityId}
         existingCodes={read.data.catalog.map(c => c.code)}
         onClose={() => setCreateOpen(false)}
-        onCreated={() => { setCreateOpen(false); read.refresh() }}
+        onCreated={() => { setCreateOpen(false); read.refresh(); unitTypes.refresh() }}
       />
       {reviewNotice && <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{reviewNotice}</p>}
       {editingType && (
@@ -261,7 +261,7 @@ function InventoryRead({
           initial={editingType}
           existingCodes={read.data.catalog.map(c => c.code)}
           onClose={() => setEditingType(undefined)}
-          onCreated={() => { setEditingType(undefined); setReviewNotice('Đã lưu thay đổi loại kho và cập nhật số lượng gian kho thành công.'); read.refresh() }}
+          onCreated={() => { setEditingType(undefined); setReviewNotice('Đã lưu thay đổi loại kho và cập nhật số lượng gian kho thành công.'); read.refresh(); unitTypes.refresh() }}
         />
       )}
       <Modal open={!!deletingType} onClose={() => { if (!actionBusy) setDeletingType(undefined) }} title="Lưu trữ loại kho">
@@ -270,7 +270,7 @@ function InventoryRead({
           <div className="flex justify-end gap-2"><Button variant="outline" disabled={actionBusy} onClick={() => setDeletingType(undefined)}>Hủy</Button><Button disabled={actionBusy} onClick={async () => {
             if (!deletingType) return
             setActionBusy(true); setActionError(undefined)
-            try { await archiveManagerUnitType(deletingType.id); setDeletingType(undefined); read.refresh() }
+            try { await archiveManagerUnitType(deletingType.id); setDeletingType(undefined); read.refresh(); unitTypes.refresh() }
             catch (error) { setActionError(managerDisplayError(error)) } finally { setActionBusy(false) }
           }}>{actionBusy ? 'Đang lưu trữ...' : 'Xác nhận lưu trữ'}</Button></div>
         </div>

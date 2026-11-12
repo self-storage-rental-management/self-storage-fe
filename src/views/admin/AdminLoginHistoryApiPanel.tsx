@@ -142,6 +142,7 @@ export default function AdminLoginHistoryApiPanel({
 
   // Main data states
   const [history, setHistory] = useState<AdminApiLoginHistory[]>([])
+  const [historyTotalItems, setHistoryTotalItems] = useState<number>(0)
   const [sessions, setSessions] = useState<AdminApiSession[]>([])
   const [users, setUsers] = useState<AdminApiUser[]>([])
   const [loading, setLoading] = useState(true)
@@ -201,11 +202,13 @@ export default function AdminLoginHistoryApiPanel({
     ])
       .then(([historyPage, sessionsPage, userPage]) => {
         setHistory(historyPage.data)
+        setHistoryTotalItems(historyPage.pagination.totalItems)
         setSessions(sessionsPage.data)
         if (!users.length && userPage.data) setUsers(userPage.data)
       })
       .catch(reason => {
         setHistory([])
+        setHistoryTotalItems(0)
         setSessions([])
         setError(reason instanceof Error ? reason.message : 'Không thể tải lịch sử đăng nhập từ cơ sở dữ liệu.')
       })
@@ -216,8 +219,9 @@ export default function AdminLoginHistoryApiPanel({
   }
 
   useEffect(() => {
-    load()
-  }, [userFilter, statusFilter, sessionUserFilter])
+    const timer = window.setTimeout(() => load(history.length > 0), search.trim() ? 250 : 0)
+    return () => window.clearTimeout(timer)
+  }, [userFilter, statusFilter, sessionUserFilter, search])
 
   // Filtered Login History List
   const filteredHistory = useMemo(() => {
@@ -313,19 +317,19 @@ export default function AdminLoginHistoryApiPanel({
 
   // High-level summary metrics
   const activeSessionsCount = useMemo(() => sessions.filter(s => s.active).length, [sessions])
-  const totalHistoryCount = history.length
-  const failedLoginsCount = useMemo(() => history.filter(h => !h.success).length, [history])
+  const totalHistoryCount = filteredHistory.length
+  const failedLoginsCount = useMemo(() => filteredHistory.filter(h => !h.success).length, [filteredHistory])
   const successRate = useMemo(() => {
     if (!totalHistoryCount) return '-'
-    const successCount = history.filter(h => h.success).length
+    const successCount = filteredHistory.filter(h => h.success).length
     return `${Math.round((successCount / totalHistoryCount) * 100)}%`
-  }, [history, totalHistoryCount])
+  }, [filteredHistory, totalHistoryCount])
   const highRiskIncidentsCount = useMemo(() => {
-    return history.filter(item => {
+    return filteredHistory.filter(item => {
       const risk = assessSecurityRisk(item, history)
       return risk.level === 'high' || risk.level === 'warning'
     }).length
-  }, [history])
+  }, [filteredHistory, history])
 
   // Revoke single session
   const handleRevokeSession = async (session: AdminApiSession) => {
@@ -445,7 +449,7 @@ export default function AdminLoginHistoryApiPanel({
         <StatCard
           title="Tổng lượt đăng nhập"
           value={totalHistoryCount}
-          delta="Toàn hệ thống"
+          delta={historyTotalItems > history.length ? `Hiển thị ${totalHistoryCount}/${historyTotalItems} bản ghi` : 'Theo bộ lọc hiện tại'}
           deltaPositive
           icon={
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-50 text-sky-600 ring-1 ring-sky-200">

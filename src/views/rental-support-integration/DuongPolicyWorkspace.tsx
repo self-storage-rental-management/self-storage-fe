@@ -621,18 +621,43 @@ function PolicyEditor({
               )
               read.refresh()
             } else {
-              const actual = await publishIntegrationPolicy(kind, facility, baseInput)
-              if (!policyMatches(actual, baseInput, actor.id))
-                throw new ApiClientError("Chưa đối chiếu được chính sách.", {
-                  code: "INVALID_RESPONSE",
-                })
-              pending.current = undefined
-              clearPendingPolicy(pendingKey)
-              isDirty.current = false
-              setUncertain(false)
-              setDraft(policyDraft(actual))
-              setMessage("Đã lưu chính sách.")
-              read.refresh()
+              if (applyAllFacilities) {
+                const targetFacilities = facilitiesList && facilitiesList.length > 0
+                  ? facilitiesList
+                  : [{ id: facility, name: "Toàn hệ thống" } as CustomerFacility]
+
+                for (const targetFac of targetFacilities) {
+                  let facRev = 0
+                  try {
+                    const existing = await getStoredIntegrationPolicy(kind, targetFac.id)
+                    facRev = existing.revision
+                  } catch {
+                    facRev = 0
+                  }
+                  const facInput = { ...baseInput, expectedRevision: facRev }
+                  await publishIntegrationPolicy(kind, targetFac.id, facInput)
+                }
+
+                pending.current = undefined
+                clearPendingPolicy(pendingKey)
+                isDirty.current = false
+                setUncertain(false)
+                setMessage(`Đã lưu và đồng bộ chính sách thông báo cho toàn bộ ${targetFacilities.length} cơ sở trong hệ thống!`)
+                read.refresh()
+              } else {
+                const actual = await publishIntegrationPolicy(kind, facility, baseInput)
+                if (!policyMatches(actual, baseInput, actor.id))
+                  throw new ApiClientError("Chưa đối chiếu được chính sách.", {
+                    code: "INVALID_RESPONSE",
+                  })
+                pending.current = undefined
+                clearPendingPolicy(pendingKey)
+                isDirty.current = false
+                setUncertain(false)
+                setDraft(policyDraft(actual))
+                setMessage("Đã lưu chính sách.")
+                read.refresh()
+              }
             }
           } catch (err) {
             const unknown =
@@ -856,11 +881,9 @@ function PolicyEditor({
                                   {selectedCount}/{pkgs.length} gói đã chọn
                                 </span>
                                 <span
-                                  className={`text-xs transition-transform duration-200 inline-block transform ${
-                                    isOpen ? "rotate-180" : ""
-                                  } ${isOrange ? "text-amber-700 font-bold" : "text-stone-400"}`}
+                                  className={`text-xs inline-block ${isOrange ? "text-amber-700 font-bold" : "text-stone-500 font-semibold"}`}
                                 >
-                                  ▼
+                                  {isOpen ? "Thu gọn" : "Chi tiết"}
                                 </span>
                               </div>
                             </button>

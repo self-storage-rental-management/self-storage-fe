@@ -8,7 +8,6 @@ import { rentalDate, rentalMoney } from '../rental-api/presentation'
 import RecoveryReturnSettlement from './RecoveryReturnSettlement'
 import RecoveryTaskLink from '../rental-api/RecoveryTaskLink'
 import {
-  completeRefund,
   confirmReturn,
   feeKeys,
   inspectReturn,
@@ -268,7 +267,7 @@ function ReturnWorkspace({
                 onClick={toggleAllExpanded}
                 className="text-xs font-medium cursor-pointer"
               >
-                {allExpanded ? '▲ Thu gọn tất cả' : '▼ Trải ra tất cả'}
+                {allExpanded ? 'Thu gọn tất cả' : 'Trải ra tất cả'}
               </Button>
             </div>
           )}
@@ -283,7 +282,7 @@ function ReturnWorkspace({
               onClick={toggleAllExpanded}
               className="text-xs font-medium cursor-pointer"
             >
-              {allExpanded ? '▲ Thu gọn tất cả' : '▼ Trải ra tất cả'}
+              {allExpanded ? 'Thu gọn tất cả' : 'Trải ra tất cả'}
             </Button>
           </div>
         )
@@ -368,7 +367,7 @@ function ReturnWorkspace({
                   }`}
                   title={isExpanded ? 'Thu gọn hồ sơ này' : 'Trải ra xem chi tiết và xử lý'}
                 >
-                  {isExpanded ? '▲ Thu gọn' : '▼ Trải ra'}
+                  {isExpanded ? 'Thu gọn' : 'Trải ra'}
                 </button>
               </div>
             </div>
@@ -416,7 +415,7 @@ function ReturnWorkspace({
                     onClick={() => toggleExpand(record.id)}
                     className="inline-flex items-center gap-1 text-xs font-medium text-stone-500 hover:text-stone-800 hover:underline cursor-pointer"
                   >
-                    ▲ Thu gọn hồ sơ {record.unitNumber}
+                    Thu gọn hồ sơ {record.unitNumber}
                   </button>
                 </div>
               </div>
@@ -1035,93 +1034,17 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
           </div>
         </div>
       )}
-      {role === 'staff' && !recovery && record.status === 'disputed' && (
-        <div className="rounded-xl border border-rose-300 bg-rose-50/80 p-3.5 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-rose-900">Khiếu nại từ khách hàng</span>
-            <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-300">Có thể duyệt trả kho</span>
-          </div>
-          <p className="text-xs text-rose-800">
-            Ý kiến khách: {record.customerDecisionNote || 'Cần xem xét lại'}. Bạn có thể bỏ qua khiếu nại và duyệt cho trả kho ngay.
-          </p>
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant="primary"
-              disabled={busy}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer"
-              onClick={() => void run(() => reviewDispute(id, {
-                damageFee: 0,
-                cleaningFee: 0,
-                lostItemFee: 0,
-                overdueFee: 0,
-                outstandingFee: 0,
-                resolutionNote: note.trim() || 'Nhân viên duyệt bỏ qua khiếu nại và cho trả kho ngay',
-                proposedUnitStatus: 'available',
-              }))}
-            >
-              Duyệt trả kho & Hoàn tất ngay
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {role === 'staff' && !recovery && record.status === 'refund_pending' && (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/90 p-4 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              
-              <div>
-                <p className="font-bold text-emerald-950 text-sm">
-                  Khách hàng đã hoàn thành nghĩa vụ tài chính · Tiền cọc hoàn: {rentalMoney(record.netRefundAmount, 'VND')}
-                </p>
-                <p className="text-xs text-emerald-800">
-                  Hồ sơ đã được xác nhận quyết toán. Bấm xác nhận để hoàn tất thủ tục trả kho và giải phóng gian kho.
-                </p>
-              </div>
-            </div>
-            <Button
-              size="sm"
-              variant="primary"
-              disabled={busy}
-              className="!bg-emerald-600 hover:!bg-emerald-700 text-white font-bold px-5 py-2.5 cursor-pointer shadow-sm whitespace-nowrap"
-              onClick={() => void run(() => completeRefund(id, { amount: record.netRefundAmount ?? undefined }))}
-            >
-              Xác nhận hoàn tất đóng hồ sơ
-            </Button>
-          </div>
-        </div>
-      )}
-      {role === 'staff' && !recovery && record.status === 'payment_due' && (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50/90 p-4 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              
-              <div>
-                <p className="font-bold text-amber-950 text-sm">
-                  Phụ phí phát sinh: {rentalMoney(record.amountDueFromCustomer, 'VND')}
-                </p>
-                <p className="text-xs text-amber-800">
-                  Khách hàng đã thanh toán phụ phí trực tiếp tại quầy. Bấm xác nhận để đóng hồ sơ trả kho.
-                </p>
-              </div>
-            </div>
-            <Button
-              size="sm"
-              variant="primary"
-              disabled={busy}
-              className="!bg-amber-600 hover:!bg-amber-700 text-white font-bold px-5 py-2.5 cursor-pointer shadow-sm whitespace-nowrap"
-              onClick={() => void run(() => confirmReturn(id, 'accepted', 'Nhân viên xác nhận hoàn tất phụ phí và đóng hồ sơ trả kho', role))}
-            >
-              Xác nhận đã thu & Đóng hồ sơ
-            </Button>
-
-
-          </div>
-        </div>
+      {write && !recovery && role === 'staff' && ['payment_due', 'refund_pending'].includes(record.status) && (
+        <RecoveryReturnSettlement
+          role={role}
+          record={record}
+          busy={busy}
+          onLocked={onRecoveryLocked}
+          onChanged={onRecoveryChanged}
+        />
       )}
       {recovery && (role === 'staff' || role === 'manager') && record.recoveryTaskId && <RecoveryTaskLink role={role} taskId={record.recoveryTaskId} facilityId={record.facilityId} disabled={busy || recoveryLocked} onChanged={onRecoveryChanged} />}
-      {write && recovery && role === 'staff' && ['payment_due', 'refund_pending'].includes(record.status) && <RecoveryReturnSettlement record={record} busy={busy} onLocked={onRecoveryLocked} onChanged={onRecoveryChanged} />}
+      {write && recovery && role === 'staff' && ['payment_due', 'refund_pending'].includes(record.status) && <RecoveryReturnSettlement role={role} record={record} busy={busy} onLocked={onRecoveryLocked} onChanged={onRecoveryChanged} />}
       {role === 'customer' && record.status === 'awaiting_customer_confirmation' && (
         <div className="space-y-2">
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900">

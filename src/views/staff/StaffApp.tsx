@@ -34,8 +34,10 @@ import StaffSupportPanel from "./StaffSupportPanel"
 import { SupportApiRoute } from "../support-api/SupportApiEntry"
 
 import StaffCheckInOperationsPanel from "./StaffCheckInOperationsPanel"
+import StaffCredentialReissuePanel from "./StaffCredentialReissuePanel"
 import StaffMaintenanceOperationsPanel from "./StaffMaintenanceOperationsPanel"
 import StaffRenewalOperationsApiPanel from "./StaffRenewalOperationsApiPanel"
+import StaffUnitReleasePanel from "./StaffUnitReleasePanel"
 import StaffDailyTaskQueue from "./StaffDailyTaskQueue"
 import RecoveryTaskDetail from "../rental-api/RecoveryTaskDetail"
 import ReturnApiPanel from "../return-api/ReturnApiPanel"
@@ -856,6 +858,10 @@ export default function StaffApp({
     },
 
     ...(isApiAuthenticated() ? [{ id: "renewal-signing", label: "Ký gia hạn", icon: Icon.policy, group: "Vận hành", permission: "renewals:operate" as const }] : []),
+    ...(isApiAuthenticated() ? [
+      { id: "unit-release", label: "Giải phóng kho hủy", icon: Icon.box, group: "Vận hành", permission: "checkins:read" as const },
+      { id: "credentials", label: "Cấp lại quyền truy cập", icon: Icon.key, group: "Vận hành", permission: "checkins:read" as const },
+    ] : []),
 
     {
       id: "support",
@@ -2196,8 +2202,9 @@ export default function StaffApp({
     if (type === "RETURN") return "return"
     if (type === "RENEWAL") return "renewal-signing"
     if (type === "OVERDUE") return "dashboard"
-    if (type === "PAYMENT") return "payments"
+    if (type === "PAYMENT") return "checkin"
     if (type === "RESERVATION") return "reservations"
+    if (type === "SYSTEM") return "tasks"
     return "dashboard"
   }
 
@@ -2252,6 +2259,9 @@ export default function StaffApp({
           }
           if (notification.page === "reservations") {
             window.setTimeout(() => window.dispatchEvent(new Event("storagehub:staff-reservations-refresh")), 0)
+          }
+          if (notification.page === "tasks" && notification.targetId) {
+            setSelectedMaintenanceTaskId(notification.targetId)
           }
           return
         }
@@ -2912,6 +2922,8 @@ export default function StaffApp({
 
       {/* ── CHECK-IN / HANDOVER ───────────────────────────────── */}
       {page === "checkin" && <StaffCheckInOperationsPanel showToast={showToast} />}
+      {page === "unit-release" && isApiAuthenticated() && <StaffUnitReleasePanel showToast={showToast} />}
+      {page === "credentials" && isApiAuthenticated() && <StaffCredentialReissuePanel showToast={showToast} />}
 
       {/* ── RETURN INSPECTION ────────────────────────────────── */}
 
@@ -4674,12 +4686,10 @@ export default function StaffApp({
             <button
               type="button"
               aria-label="Đóng"
-              className="text-[#767268] hover:text-[#191b20] hover:bg-[#f4f1ea] p-1.5 rounded-lg transition flex items-center justify-center cursor-pointer"
+              className="text-[#767268] hover:text-[#191b20] hover:bg-[#f4f1ea] px-2.5 py-1 text-xs font-semibold rounded-lg transition cursor-pointer"
               onClick={() => setRespondModal(false)}
             >
-              <svg className="w-5 h-5 show-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              Đóng
             </button>
           </div>
         }

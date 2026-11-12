@@ -373,6 +373,9 @@ export interface CustomerReservationDetail {
   confirmedAt: string | null
   cancelledAt: string | null
   cancelReason: string | null
+  cancellationType?: string | null
+  cancellationRefundAmount?: number | null
+  cancellationChargeAmount?: number | null
   goodsItems: ReservationGoodsItem[]
   payments: ReservationPaymentResult[]
   checkInStatus?: string | null

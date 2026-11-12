@@ -786,18 +786,24 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                         )}
 
                         {ret.status === 'refund_pending' && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-emerald-700 border-emerald-500 hover:bg-emerald-50 font-medium whitespace-nowrap"
-                            onClick={() => {
-                              setSelectedReturn(ret)
-                              setRefundTxnRef('')
-                              setRefundModalOpen(true)
-                            }}
-                          >
-                            {'Hoàn cọc'}
-                          </Button>
+                          useApi ? (
+                            <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800 whitespace-nowrap">
+                              Chờ Staff hoàn cọc
+                            </span>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-emerald-700 border-emerald-500 hover:bg-emerald-50 font-medium whitespace-nowrap"
+                              onClick={() => {
+                                setSelectedReturn(ret)
+                                setRefundTxnRef('')
+                                setRefundModalOpen(true)
+                              }}
+                            >
+                              {'Hoàn cọc'}
+                            </Button>
+                          )
                         )}
 
                         {ret.status === 'completed' && (
@@ -1074,17 +1080,23 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                 </Button>
               )}
               {selectedReturn.status === 'refund_pending' && (
-                <Button
-                  variant="primary"
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                  onClick={() => {
-                    setDetailModalOpen(false)
-                    setRefundTxnRef('')
-                    setRefundModalOpen(true)
-                  }}
-                >
-                  {'Hoàn cọc ngay'}
-                </Button>
+                useApi ? (
+                  <span className="inline-flex items-center rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">
+                    Chờ nhân viên (Staff) xác nhận biên lai hoàn cọc
+                  </span>
+                ) : (
+                  <Button
+                    variant="primary"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                    onClick={() => {
+                      setDetailModalOpen(false)
+                      setRefundTxnRef('')
+                      setRefundModalOpen(true)
+                    }}
+                  >
+                    {'Hoàn cọc ngay'}
+                  </Button>
+                )
               )}
             </div>
           </div>
