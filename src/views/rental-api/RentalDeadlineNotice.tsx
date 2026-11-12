@@ -20,9 +20,11 @@ export function rentalDeadlineState(rental: RentalApiRecord, now = new Date()) {
   return days < 0 ? 'overdue' : days <= 7 ? 'upcoming' : null
 }
 export default function RentalDeadlineNotice({ rental, role, now = new Date() }: { rental: RentalApiRecord; role: RentalApiRole; now?: Date }) {
-  const read = useRentalApiResource(`deadline:${role}:${rental.id}`, async () =>
-    readRentalEnvelope<Risk>(await apiRequest(`/api/${role}/rentals/${encodeURIComponent(rental.id)}/renewal-risk`),
-      value => validRenewalRisk(value) && value.rentalId === rental.id))
+  const read = useRentalApiResource(`deadline:${role}:${rental.id}`, async () => {
+    if (role === 'staff') return null
+    return readRentalEnvelope<Risk>(await apiRequest(`/api/${role}/rentals/${encodeURIComponent(rental.id)}/renewal-risk`),
+      value => validRenewalRisk(value) && value.rentalId === rental.id)
+  })
   const risk = read.data
   const last = rental.dateSemantics?.lastPermittedDate || rental.contractEndDate
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)

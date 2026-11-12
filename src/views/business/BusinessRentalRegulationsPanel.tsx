@@ -123,9 +123,13 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
           </div>
 
           <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
-<span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Phí Giữ Chỗ (20%)</span>
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
+              Phí Giữ Chỗ ({config ? `${Math.round(config.defaultDepositRatio * 100)}%` : '20%'})
+            </span>
             <div className="text-base font-extrabold text-amber-600 font-mono mt-1">{config ? `${Math.round(config.defaultDepositRatio * 100)}%` : '10% - 30%'}</div>
-            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Cấu hình theo từng gói thuê (mặc định 20%). Trừ trực tiếp vào tiền thuê khi nhận kho.</p>
+            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+              Cấu hình theo từng gói thuê (mặc định {config ? `${Math.round(config.defaultDepositRatio * 100)}%` : '20%'}). Trừ trực tiếp vào tiền thuê khi nhận kho.
+            </p>
           </div>
 
           <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
@@ -143,7 +147,9 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
           <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
             <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Gia Hạn Quá Hạn</span>
             <div className="text-base font-extrabold text-blue-700 font-mono mt-1">{config ? `Ân hạn ${config.gracePeriodDays} ngày` : 'Tối Đa 7 Ngày'}</div>
-            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Khách có tối đa 7 ngày để hoàn tất gia hạn. Đến ngày thứ 8 chuyển thu hồi kho.</p>
+            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+              Khách có tối đa {config?.gracePeriodDays ?? 7} ngày để hoàn tất gia hạn. Đến ngày thứ {(config?.gracePeriodDays ?? 7) + 1} chuyển thu hồi kho.
+            </p>
           </div>
         </div>
 

@@ -214,6 +214,36 @@ export async function completeMaintenanceTask(taskId: string, request: CompleteM
   )
 }
 
+export interface UpdateStorageUnitStatusRequest {
+  status: 'available' | 'maintenance'
+  reason?: string
+  createMaintenanceTask?: boolean
+  assignedStaffId?: string
+  priority?: MaintenanceTaskPriority
+  dueAt?: string
+}
+
+export async function updateStorageUnitStatus(unitId: string, body: UpdateStorageUnitStatusRequest) {
+  const response = await apiRequest<{ data: MaintenanceTaskApi | null }>(
+    `/api/manager/storage-units/${encodeURIComponent(unitId)}/status`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    },
+  )
+  return response?.data ? (isMaintenanceTask(response.data) ? response.data : null) : null
+}
+
+export async function cancelMaintenanceTask(taskId: string, reason?: string) {
+  return readRentalEnvelope<MaintenanceTaskApi>(
+    await apiRequest(`/api/manager/maintenance-tasks/${encodeURIComponent(taskId)}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify(reason?.trim() ? { reason: reason.trim() } : {}),
+    }),
+    isMaintenanceTask,
+  )
+}
+
 export async function uploadMaintenanceEvidence(taskId: string, file: File) {
   if (!file || file.size <= 0) throw new Error('Tệp ảnh bảo trì không được để trống.')
   const form = new FormData()

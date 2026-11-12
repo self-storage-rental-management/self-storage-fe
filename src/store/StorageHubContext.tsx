@@ -1603,7 +1603,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     } catch {}
 
     return {
-      users: USERS,
+      users: DEMO_DATA_ENABLED ? USERS : [],
       rolePermissions: normalizeRuntimeRolePermissions(undefined),
       facilities: fallbackFacilities,
       units: fallbackUnits,
@@ -1621,7 +1621,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       loginHistory: DEMO_DATA_ENABLED ? INITIAL_LOGIN_HISTORY : [],
       sessions: DEMO_DATA_ENABLED ? INITIAL_SESSIONS : [],
       securityAlerts: DEMO_DATA_ENABLED ? INITIAL_SECURITY_ALERTS : [],
-      profileChangeRequests: INITIAL_PROFILE_CHANGE_REQUESTS,
+      profileChangeRequests: DEMO_DATA_ENABLED ? INITIAL_PROFILE_CHANGE_REQUESTS : [],
       tickets: DEMO_DATA_ENABLED ? TICKETS : [],
       config: DEFAULT_BUSINESS_CONFIG
     }
@@ -2014,6 +2014,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
   // Sync state across browser tabs
   useEffect(() => {
+    if (!DEMO_DATA_ENABLED) return
     const handleStorage = (e: StorageEvent) => {
       if (e.key === STORAGE_KEY && e.newValue) {
         try {

@@ -40,7 +40,7 @@ function ReceiptForm({ role = 'staff', embedded = false, record, view, busy, onC
   const [uploading, setUploading] = useState(false)
   const [files, setFiles] = useState<string[]>([])
   const [reference, setReference] = useState('')
-  const [method, setMethod] = useState<'CASH' | 'BANK_TRANSFER'>('BANK_TRANSFER')
+  const [method, setMethod] = useState<'CASH' | 'BANK_TRANSFER'>(role === 'staff' ? 'CASH' : 'BANK_TRANSFER')
   const [confirmed, setConfirmed] = useState(false)
   const [validation, setValidation] = useState('')
   useEffect(() => () => listener.current(false), [])
@@ -70,7 +70,7 @@ function ReceiptForm({ role = 'staff', embedded = false, record, view, busy, onC
   }
 
   const allowed = actor?.status === 'ACTIVE' && actor.roles.some(r => ['STAFF', 'MANAGER', 'BUSINESS', 'ADMIN'].includes(r))
-    && actor.permissions.includes(record.status === 'refund_pending' && !view ? 'refunds:execute' : 'payments:collect')
+    && actor.permissions.includes(record.status === 'refund_pending' ? 'refunds:execute' : 'payments:collect')
     && (actor.roles.includes('ADMIN') || actor.roles.includes('BUSINESS') && !Object.keys(actor.facilityScopes).length || (role === 'staff' ? ['OPERATE', 'MANAGE'].includes(actor.facilityScopes[record.facilityId]) : actor.facilityScopes[record.facilityId] === 'MANAGE'))
     && (!view || (view.status === 'IN_PROGRESS' && view.settlementStatus === record.status))
     && !record.settlementBlocker && (record.status === 'payment_due' ? (record.amountDueFromCustomer ?? 0) > 0 : record.status === 'refund_pending' && (record.netRefundAmount ?? 0) > 0)

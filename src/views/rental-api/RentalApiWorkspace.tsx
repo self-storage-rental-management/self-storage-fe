@@ -248,6 +248,9 @@ function WorkspaceData({
           return { ...first, data, pagination: { ...first.pagination, page: 0, totalPages: 1, totalItems: data.length } }
         })() }
         : { kind: "renewal" as const, page: await (async () => {
+          if (role === 'staff') {
+            return { data: [], pagination: { page: 0, pageSize: nq.size ?? 20, totalItems: 0, totalPages: 0, sort: '' } }
+          }
           if (role !== 'customer') return listRenewals(role, nq)
           const first = await listRenewals(role, { ...nq, page: 0, size: 100 })
           const rows = [...first.data]
@@ -286,6 +289,7 @@ function WorkspaceData({
       const end = parseVietnamDate(`${date}T00:00:00Z`)
       end.setUTCDate(end.getUTCDate() + 30)
       const scope = role === "manager" ? { facilityId: query.facilityId } : {}
+      const emptyRenewals = { data: [], pagination: { page: 0, pageSize: 1, totalItems: 0, totalPages: 0, sort: '' } }
       const result = await Promise.all([
         listRentals(role, { ...scope, size: 1 }),
         listRentals(role, { ...scope, size: 1, status: "active" }),
@@ -296,8 +300,12 @@ function WorkspaceData({
           endFrom: date,
           endTo: vietnamDateInput(end),
         }),
-        listRenewals(role, { ...scope, size: 1, status: "pending" }),
-        listRenewals(role, { ...scope, size: 1, status: "accepted" }),
+        role === "staff"
+          ? Promise.resolve(emptyRenewals)
+          : listRenewals(role, { ...scope, size: 1, status: "pending" }),
+        role === "staff"
+          ? Promise.resolve(emptyRenewals)
+          : listRenewals(role, { ...scope, size: 1, status: "accepted" }),
       ])
       return [
         result[0].pagination.totalItems,
