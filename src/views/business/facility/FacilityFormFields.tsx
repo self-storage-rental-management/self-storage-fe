@@ -537,10 +537,10 @@ export const FacilityOperations: React.FC<FacilityOperationsProps> = ({
             <option value="inactive">Ngừng hoạt động</option>
           </select>
           <p className="text-[10px] text-stone-500 mt-1">
-            {status === 'setup' ? '● Cơ sở mới tạo, chưa được công bố cho Customer'
-              : status === 'active' ? '● Cơ sở đã công bố và sẵn sàng nhận khách'
-                : status === 'maintenance' ? '▲ Cơ sở đang tạm dừng vận hành / bảo dưỡng'
-                  : '● Cơ sở đã ngừng hoạt động'}
+            {status === 'setup' ? 'Cơ sở mới tạo, chưa được công bố cho Customer'
+              : status === 'active' ? 'Cơ sở đã công bố và sẵn sàng nhận khách'
+                : status === 'maintenance' ? 'Cơ sở đang tạm dừng vận hành / bảo dưỡng'
+                  : 'Cơ sở đã ngừng hoạt động'}
           </p>
           {status === 'active' && initialStatus === 'active' ? (
             <div className="mt-2.5 rounded-lg border border-emerald-200 bg-emerald-50/90 p-2.5 text-xs text-emerald-950 flex items-center gap-2 shadow-2xs">

@@ -1049,7 +1049,7 @@ setSavingProfile(true)
             <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4">
               <span className="text-sm font-semibold text-emerald-900">Phạm vi dữ liệu</span>
               <Badge variant="success">{apiMode
-                ? (user.role as string) === 'admin'
+                ? ((user.role as string) === 'admin' || (user.role as string) === 'business')
                   ? 'Toàn hệ thống'
                   : Object.keys(apiActor?.facilityScopes ?? {}).length
                     ? 'Theo cơ sở được cấp'
@@ -1275,9 +1275,13 @@ setSavingProfile(true)
               <Card className="p-5 bg-[#fbfaf6] border-stone-200">
                 <h3 className="font-semibold text-stone-900 mb-2 text-sm">Thông tin tổ chức</h3>
                 <p className="text-xs text-stone-600 leading-relaxed">Vai trò và cơ sở của tài khoản do công ty cấp. Mọi thay đổi cần Admin/HR duyệt và lưu audit log.</p>
-                <Button className="mt-4 w-full cursor-pointer" size="sm" onClick={() => setRequestModalOpen(true)}>
-                  Gửi yêu cầu chỉnh sửa
-                </Button>
+                {apiMode ? (
+                  <p className="mt-3 text-xs text-stone-500">Vui lòng liên hệ Quản trị viên hoặc HR để điều chỉnh vai trò / phạm vi cơ sở.</p>
+                ) : (
+                  <Button className="mt-4 w-full cursor-pointer" size="sm" onClick={() => setRequestModalOpen(true)}>
+                    Gửi yêu cầu chỉnh sửa
+                  </Button>
+                )}
               </Card>
             )}
 
@@ -1297,6 +1301,16 @@ setSavingProfile(true)
       {activeTab === 'security' && (
         <div className="space-y-6">
           <div className="max-w-5xl space-y-6">
+            {apiMode && isInternal ? (
+              <Card className="p-6">
+                <div className="pb-3 mb-3 border-b border-stone-100">
+                  <h2 className="text-lg font-bold text-stone-900">Quản lý mật khẩu tài khoản nội bộ</h2>
+                </div>
+                <p className="text-sm text-stone-600">
+                  Tài khoản nhân sự nội bộ không tự đổi mật khẩu trên cổng này. Vui lòng liên hệ Quản trị viên (Admin) nếu cần đặt lại mật khẩu.
+                </p>
+              </Card>
+            ) : (
             <Card className="p-6">
               <div className="pb-4 mb-5 border-b border-stone-100">
                 <h2 className="text-lg font-bold text-stone-900">Đổi mật khẩu cá nhân</h2>
@@ -1336,6 +1350,7 @@ setSavingProfile(true)
                 </div>
               </form>
             </Card>
+            )}
 
             {/* Active Sessions */}
             <Card className="p-6">

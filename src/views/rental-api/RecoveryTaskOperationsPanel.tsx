@@ -112,7 +112,7 @@ export default function RecoveryTaskOperationsPanel({ role, task, view, identity
       {['Tiếp nhận', 'Kiểm kê', 'Quyết toán', 'Hoàn tất thu hồi'].map((label, index) => <li key={label}
         aria-current={stage === index ? 'step' : undefined}
         className={`rounded-lg border p-3 text-sm ${index < stage ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : index === stage ? 'border-amber-400 bg-amber-50 font-semibold' : 'border-stone-200 text-stone-500'}`}>
-        <span className="mr-2 font-bold">{index < stage ? '✓' : index + 1}</span>{label}
+        <span className="mr-2 font-bold">{index + 1}</span>{label}
       </li>)}
     </ol>
     {view.returnCaseId && <details className="rounded-lg border border-stone-200 p-4" open={action === 'settlement-receipts'}>
