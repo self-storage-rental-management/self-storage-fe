@@ -167,10 +167,7 @@ export default function CustomerRenewalRequestModal({
                     onBlur={() => setStartInfoOpen(false)}
                     className="flex h-7 w-7 items-center justify-center rounded-full text-stone-500 hover:bg-stone-100 hover:text-stone-800 focus-visible:outline-2 focus-visible:outline-amber-600"
                   >
-                    <svg className="show-icon h-4 w-4" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                      <circle cx="12" cy="12" r="9" />
-                      <path d="M12 11v5M12 8h.01" />
-                    </svg>
+                    <span className="text-xs font-semibold text-stone-500">[?]</span>
                   </button>
                   <div hidden={!startInfoOpen} className="absolute right-0 top-full z-20 w-64 max-w-[calc(100vw-4rem)] pt-1">
                   <p id="renewal-start-policy" role="tooltip" className="rounded-lg border border-stone-200 bg-white p-3 text-sm leading-relaxed text-stone-600 shadow-md">
@@ -229,7 +226,7 @@ export default function CustomerRenewalRequestModal({
             <h3 className="mb-2 text-xs font-medium uppercase text-stone-500">Quy trình gia hạn</h3>
             <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-4 text-emerald-950 space-y-2">
               <div className="flex items-center gap-2">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-white text-xs font-bold">✓</span>
+                <span className="h-2 w-2 rounded-full bg-emerald-600 shrink-0" />
                 <p className="font-semibold text-sm text-emerald-900">Thanh toán trực tuyến và ký tại cơ sở</p>
               </div>
               <p className="text-xs text-emerald-800 leading-relaxed">
@@ -277,7 +274,7 @@ export default function CustomerRenewalRequestModal({
                   Hợp đồng thuê này đã được tạo một yêu cầu gia hạn trước đó và hiện đang chờ hoàn tất thanh toán. Để tránh phát sinh chi phí trùng lặp, hệ thống không cho phép tạo thêm yêu cầu mới.
                 </p>
                 <p className="text-xs font-medium text-amber-800">
-                  💡 Bạn có thể đi đến yêu cầu gia hạn đã có để thanh toán online ngay hoặc kiểm tra thông tin.
+                  Bạn có thể đi đến yêu cầu gia hạn đã có để thanh toán online ngay hoặc kiểm tra thông tin.
                 </p>
               </div>
             </div>

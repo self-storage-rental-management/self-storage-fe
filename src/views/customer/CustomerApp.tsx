@@ -341,7 +341,11 @@ function SizeCategoryCard({ facility, unitType, apiSpec, availableCount, onReser
           <p className="text-xs text-stone-500">{'Giá thuê từ'}</p>
           <p className="text-2xl font-bold tracking-tight text-black">{apiSpec ? formatVndAmount(apiSpec.monthlyPrice) : formatVnd(unitType.monthlyPrice)}<span className="text-sm font-normal text-stone-500">/{'tháng'}</span></p>
           <p className="mt-1 text-xs text-stone-600">Cọc giữ chỗ theo báo giá hệ thống</p>
-          <p className="mt-1 text-xs text-stone-600">{`Tiền cọc đảm bảo thuê: ${apiSpec?.securityDepositAmount != null ? formatVndAmount(apiSpec.securityDepositAmount) : isApiAuthenticated() ? 'Chưa có dữ liệu' : formatVndAmount(unitType.monthlyPrice)} (hoàn sau nghiệm thu nếu không phát sinh khấu trừ)`}</p>
+          {apiSpec?.securityDepositAmount && apiSpec.securityDepositAmount > 0 ? (
+            <p className="mt-1 text-xs text-stone-600">{`Tiền cọc đảm bảo thuê: ${formatVndAmount(apiSpec.securityDepositAmount)} (hoàn sau nghiệm thu nếu không phát sinh khấu trừ)`}</p>
+          ) : (
+            <p className="mt-1 text-xs text-emerald-700 font-semibold">Miễn tiền cọc đảm bảo thuê (0 ₫)</p>
+          )}
           {!isAvailable && <p className="mt-2 text-xs font-bold text-red-700">{'Cỡ kho này hiện chưa thể đặt.'}</p>}
           <div className="mt-4 grid grid-cols-2 gap-2">
             <Button variant="outline" size="sm" onClick={() => onViewSpecs(facility, unitType, availableCount)}>{'Xem chi tiết'}</Button>
@@ -663,6 +667,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   const [page, setPage] = useState(() =>
     resolveCustomerInitialPage(window.location.search, getInitialPage(NAV, 'overview')))
+  const initialDeepLinkReservationId = useRef<string | null>(
+    new URLSearchParams(window.location.search).get('reservationId'),
+  )
   const [previousPage, setPreviousPage] = useState('overview')
   const [paymentRentalId, setPaymentRentalId] = useState<string | undefined>()
   useEffect(() => {
@@ -1013,8 +1020,16 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     setAcceptedSetupQuoteId(null)
     reservationIdempotencyKey.current = null
     setReservationSubmitError('Gói thuê hoặc loại kho đã thay đổi. Vui lòng kiểm tra và lấy báo giá mới.')
-    if (bookingStep === 4) setBookingStep(2)
+    if (bookingStep >= 3) setBookingStep(2)
   }, [serverQuote, selectedTarget, selectedPackageId, bookingStep])
+
+  useEffect(() => {
+    if (!bookOpen) return
+    if (bookingStep >= 3 && isApiAuthenticated() && (!serverQuote || !bookingReview)) {
+      setBookingStep(2)
+      showToast('Chưa có thông tin báo giá hoặc phiên báo giá đã hết hạn. Vui lòng lấy lại báo giá.')
+    }
+  }, [bookOpen, bookingStep, serverQuote, bookingReview])
 
   useEffect(() => {
     if (!bookOpen) return
@@ -1303,6 +1318,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       page: notification.title === 'Biên bản bàn giao đang chờ xác nhận' ? 'reservations'
         : notification.type === 'RENEWAL' || notification.type === 'OVERDUE' ? 'rental-records'
         : notification.type === 'RETURN' || notification.type === 'CHECKIN' ? 'rental-records'
+        : notification.type === 'PAYMENT' ? 'payments'
         : notification.type === 'SUPPORT' ? 'support'
           : notification.type === 'SYSTEM' ? 'overview' : 'reservations',
       targetId: notification.relatedEntityId || undefined,
@@ -1437,7 +1453,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     const isSameTarget = selectedTarget?.unitType.id === unitType.id || selectedTarget?.unitType.name === unitType.name
     let stepToSet: 1 | 2 | 3 | 4 = initialStep
     if (isSameTarget && bookingStep > 1) {
-      stepToSet = bookingStep
+      stepToSet = Math.min(2, bookingStep) as 1 | 2 | 3 | 4
     } else {
       try {
         if (typeof window !== 'undefined' && window.sessionStorage) {
@@ -1445,7 +1461,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           if (raw) {
             const draft = JSON.parse(raw)
             if ((draft.unitTypeId === unitType.id || draft.unitTypeId === unitType.name) && draft.bookingStep > 1) {
-              stepToSet = draft.bookingStep as 1 | 2 | 3 | 4
+              stepToSet = Math.min(2, draft.bookingStep) as 1 | 2 | 3 | 4
               if (draft.customerIdCard) setCustomerIdCard(draft.customerIdCard)
               if (draft.customerPhone) setCustomerPhone(draft.customerPhone)
               if (draft.customerAddress) setCustomerAddress(draft.customerAddress)
@@ -1844,13 +1860,17 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   const handleNotificationClick = (notification: LayoutNotification) => {
     setReceiptRentalTarget(undefined)
+    let markReadPromise: Promise<unknown> | undefined
     if (notification.id.startsWith('api-notification-')) {
       const notificationId = notification.id.slice('api-notification-'.length)
-      void markNotificationRead(notificationId).then(updated => {
+      markReadPromise = markNotificationRead(notificationId).then(updated => {
         setBackendNotifications(current => current.map(item => item.id === updated.id ? updated : item))
-      }).catch(reason => notificationFeed.reportFailure(reason))
+      }).catch(reason => {
+        notificationFeed.reportFailure(reason)
+        throw reason
+      })
     }
-    if (notification.page === 'support') { openSupportWidget(notification.targetId); return }
+    if (notification.page === 'support') { openSupportWidget(notification.targetId); return markReadPromise }
     navigateTo(notification.page)
     if (notification.page === 'reservations') {
       setReservationFacilityFilter('all')
@@ -1861,6 +1881,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       setSupportSearch('')
     }
     revealNotificationTarget(notification.targetId)
+    return markReadPromise
   }
 
   const revealNotificationTarget = (targetId?: string) => {
@@ -1901,6 +1922,13 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     }, 100)
     notificationRevealTimers.current.push(scrollTimer)
   }
+
+  useEffect(() => {
+    if (!initialDeepLinkReservationId.current || page !== 'reservations' || !backendReservations.length) return
+    const targetId = initialDeepLinkReservationId.current
+    initialDeepLinkReservationId.current = null
+    revealNotificationTarget(targetId)
+  }, [backendReservations, page])
 
   useEffect(() => {
     return () => {
@@ -2319,7 +2347,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const deleteBackendExpiredReservation = (reservation: CustomerReservation) => {
     return deleteExpiredReservationHistory(reservation.id)
       .then(() => refreshBackendReservations())
-      .then(() => showToast(`Đã xóa ${reservation.reservationCode} khỏi danh sách ${reservation.status === 'COMPLETED' ? 'đơn hoàn thành' : 'đơn hết hạn'}.`))
+      .then(() => showToast(`Đã xóa ${reservation.reservationCode} khỏi danh sách ${
+        reservation.status === 'COMPLETED' ? 'đơn hoàn thành'
+          : reservation.status === 'CANCELLED' ? 'đơn đã hủy'
+            : reservation.status === 'REJECTED' ? 'đơn bị từ chối'
+              : 'đơn hết hạn'
+      }.`))
       .catch(error => showToast(userFacingError(error, 'Không thể xóa đơn đặt giữ kho.')))
   }
 
@@ -2511,21 +2544,18 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               <h2 className="mt-1 font-bold text-stone-900">{'Quy trình thuê kho khép kín'}</h2>
               <div className="mt-4 grid gap-2">
                 <button onClick={() => navigateTo('browse-units')} className="group flex items-center gap-3 rounded-lg border border-stone-200 p-3 text-left transition hover:border-amber-600 hover:bg-amber-600 hover:text-white">
-                  <span className="text-amber-700 group-hover:text-white">{Icon.building}</span>
                   <span>
                     <b className="block text-sm">{'1. Chọn kho & Khai báo hàng hóa'}</b>
                     <small className="text-stone-500 group-hover:text-white">{'Kho được giữ khi yêu cầu đặt kho được ghi nhận thành công'}</small>
                   </span>
                 </button>
                 <button onClick={() => navigateTo('reservations')} className="group flex items-center gap-3 rounded-lg border border-stone-200 p-3 text-left transition hover:border-amber-600 hover:bg-amber-600 hover:text-white">
-                  <span className="text-amber-700 group-hover:text-white">{Icon.calendar}</span>
                   <span>
                     <b className="block text-sm">{'2. Tiến độ đơn đặt giữ kho'}</b>
                     <small className="text-stone-500 group-hover:text-white">{'Đặt cọc giữ chỗ (20%) theo báo giá trong 15 phút'}</small>
                   </span>
                 </button>
                 <button onClick={() => navigateTo('support')} className="group flex items-center gap-3 rounded-lg border border-stone-200 p-3 text-left transition hover:border-amber-600 hover:bg-amber-600 hover:text-white">
-                  <span className="text-amber-700 group-hover:text-white">{Icon.support}</span>
                   <span>
                     <b className="block text-sm">{'3. Hỗ trợ kỹ thuật & Mở cổng'}</b>
                     <small className="text-stone-500 group-hover:text-white">{'Đội ngũ trực cơ sở hỗ trợ 24/7'}</small>
@@ -2735,7 +2765,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         <div className="fade-in space-y-4">
           <SectionHeader
             title={'Đơn Đặt Giữ Kho Của Tôi'}
-            action={<Button size="sm" onClick={() => navigateTo('browse-units')}>{Icon.plus} {'Đặt giữ kho mới'}</Button>}
+            action={<Button size="sm" onClick={() => navigateTo('browse-units')}>{'Đặt giữ kho mới'}</Button>}
           />
 
           <Card className="p-4">
@@ -3053,7 +3083,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             </div>
           ) : (
             <Card className="p-10 text-center">
-              <div className="mx-auto w-fit text-stone-300">{Icon.calendar}</div>
               <h2 className="mt-3 font-semibold text-stone-700">{visibleMyHolds.length ? 'Không tìm thấy đơn phù hợp' : 'Chưa có đơn đặt giữ kho nào'}</h2>
               <p className="mt-1 text-sm text-stone-500">{visibleMyHolds.length ? 'Hãy chọn lại cơ sở hoặc kích thước kho.' : 'Đơn đặt giữ kho của bạn sẽ hiển thị tại đây.'}</p>
               {visibleMyHolds.length ? <Button className="mt-4" size="sm" variant="outline" onClick={() => { setReservationFacilityFilter('all'); setReservationSizeFilter('all') }}>Xóa bộ lọc</Button> : <Button className="mt-4" size="sm" onClick={() => navigateTo('browse-units')}>{'Khám phá gian kho'}</Button>}
@@ -3370,7 +3399,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                           </div>
                         </div>
                       )}
-                      {returnCase.status === 'payment_due' && <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-300 bg-red-50 p-3"><div><p className="font-bold text-red-900">{`Cần thanh toán thêm ${formatVnd(returnCase.amountDueFromCustomer ?? 0)}`}</p><p className="mt-1 text-red-700">{'Sau khi thanh toán, hệ thống sẽ đóng hồ sơ và phát hành biên nhận trong Lịch sử thanh toán.'}</p></div><Button size="sm" onClick={() => requestConfirmation({ title: 'Xác nhận thanh toán', message: `Thanh toán ${formatVnd(returnCase.amountDueFromCustomer ?? 0)} bằng chuyển khoản?`, confirmLabel: 'Thanh toán', onConfirm: () => { const reference = `RET-BAL-${Date.now()}`; try { payReturnBalance(returnCase.id, user, 'BANK_TRANSFER', reference); showToast('Đã thanh toán phần thiếu và phát hành biên nhận.') } catch (error) { showToast(userFacingError(error, 'Không thể thanh toán.')) } } })}>{'Thanh toán phần thiếu'}</Button></div>}
+                      {returnCase.status === 'payment_due' && <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-300 bg-red-50 p-3"><div><p className="font-bold text-red-900">{`Cần thanh toán thêm ${formatVnd(returnCase.amountDueFromCustomer ?? 0)}`}</p><p className="mt-1 text-red-700">{'Vui lòng liên hệ nhân viên tại quầy hoặc chuyển khoản cho cơ sở để xác nhận biên lai thu khoản thiếu và đóng hồ sơ.'}</p></div><Button size="sm" onClick={() => requestConfirmation({ title: 'Hướng dẫn thanh toán phần thiếu', message: `Quý khách vui lòng liên hệ nhân viên cơ sở hoặc chuyển khoản ${formatVnd(returnCase.amountDueFromCustomer ?? 0)} theo thông tin tài khoản cơ sở. Nhân viên sẽ đối soát và phát hành biên lai quyết toán đóng hồ sơ.`, confirmLabel: 'Đã hiểu', onConfirm: () => {} })}>{'Thanh toán phần thiếu'}</Button></div>}
                       {returnCase.status === 'disputed' && <p className="mt-3 rounded-lg bg-amber-100 p-3 font-semibold text-amber-900">{'Đang chờ quản lý cơ sở xem xét lại'}: {returnCase.customerDecisionNote}</p>}
                       {returnCase.status === 'refund_pending' && <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 font-semibold text-amber-900">{'Hồ sơ thuê và mã ra vào đã hết hiệu lực. Nhân viên đang chuyển hoàn cọc, biên nhận sẽ xuất hiện sau khi xác nhận giao dịch.'}</p>}
                       {rental.status === 'completed' && units.find(unit => unit.id === rental.unitId)?.status === 'maintenance' && <p className="mt-3 rounded-lg border border-stone-300 bg-stone-100 p-3 font-semibold text-stone-700">{'Gian kho đang chờ quản lý cơ sở nghiệm thu vệ sinh hoặc bảo trì. Kho chưa được tính vào số lượng còn trống.'}</p>}
@@ -3381,7 +3410,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             </div>
           ) : (
             <Card className="p-10 text-center">
-              <div className="mx-auto w-fit text-stone-300">{Icon.key}</div>
               <h2 className="mt-3 font-semibold text-stone-700">{visibleMyRentals.length ? 'Không tìm thấy hồ sơ phù hợp' : 'Chưa có hồ sơ thuê nào đang hoạt động'}</h2>
               <p className="mt-1 text-sm text-stone-500">{visibleMyRentals.length ? 'Hãy chọn lại cơ sở, loại kho hoặc tình trạng thời hạn.' : 'Hồ sơ thuê chỉ được tạo sau khi đơn giữ kho được nhân viên bàn giao thành công.'}</p>
               {visibleMyRentals.length ? <Button className="mt-4" size="sm" variant="outline" onClick={() => { setRentalFacilityFilter('all'); setRentalTypeFilter('all'); setRentalDeadlineFilter('all') }}>Xóa bộ lọc</Button> : <Button className="mt-4" size="sm" onClick={() => navigateTo('browse-units')}>{'Tìm gian kho trống'}</Button>}
@@ -4092,8 +4120,32 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             </>}
             </div>
 
-            {bookingStep === 3 && bookingReview && isApiAuthenticated() && serverQuote && <ReservationQuoteSummary quote={previewRentalPeriod ? { ...serverQuote, ...previewRentalPeriod } : serverQuote} needsReview={hasOtherGoods} />}
-            {bookingStep === 3 && bookingReview && isApiAuthenticated() && serverQuote && <label className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><input type="checkbox" className="mt-1 h-4 w-4" checked={termsAccepted} onChange={event => setTermsAccepted(event.target.checked)} /><span>Tôi đã đọc và đồng ý với báo giá và thời gian chuẩn bị miễn phí nêu trên. Bản điều khoản này sẽ được lưu cùng hồ sơ trước khi thanh toán.</span></label>}
+            {bookingStep === 3 && bookingReview && isApiAuthenticated() && serverQuote && (
+              <ReservationQuoteSummary
+                quote={previewRentalPeriod ? { ...serverQuote, ...previewRentalPeriod } : serverQuote}
+                needsReview={hasOtherGoods}
+              />
+            )}
+            {bookingStep === 3 && bookingReview && isApiAuthenticated() && serverQuote && (
+              <label className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4"
+                  checked={termsAccepted}
+                  onChange={event => setTermsAccepted(event.target.checked)}
+                />
+                <span>Tôi đã đọc và đồng ý với báo giá và thời gian chuẩn bị miễn phí nêu trên. Bản điều khoản này sẽ được lưu cùng hồ sơ trước khi thanh toán.</span>
+              </label>
+            )}
+            {bookingStep === 3 && isApiAuthenticated() && (!serverQuote || !bookingReview) && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center text-sm text-stone-700">
+                <p className="font-semibold text-stone-900">Chưa có thông tin báo giá hoặc phiên báo giá đã hết hạn</p>
+                <p className="mt-1 text-xs text-stone-500">Vui lòng quay lại bước Hàng hóa & số liệu để hệ thống tính toán báo giá mới nhất.</p>
+                <div className="mt-4">
+                  <Button onClick={() => setBookingStep(2)}>Quay lại: Kiểm tra và lấy báo giá</Button>
+                </div>
+              </div>
+            )}
             {bookingStep === 3 && bookingReview && !isApiAuthenticated() && (() => {
               const totalValue = Math.max(0, currentQuote!.baseMonthlyPrice * rentalMonths - totalCombinedDiscount)
               const deposit = Math.round((totalValue + (currentQuote!.depositAmount || currentQuote!.baseMonthlyPrice)) * 0.2 * 100) / 100
@@ -4151,7 +4203,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               <p className="mt-1 leading-5">{reservationSubmitError}</p>
             </div>}
 
-            <div className="flex flex-wrap justify-between gap-2 border-t border-stone-100 pt-3">
+            <div className="sticky bottom-0 z-10 -mx-4 -mb-4 sm:-mx-6 sm:-mb-6 bg-white/95 backdrop-blur-sm p-4 sm:px-6 border-t border-stone-200 flex flex-wrap justify-between gap-2 shadow-xs">
               <div>
                 {bookingStep === 1
                   ? <Button variant="outline" onClick={() => { resetReservationDraft(); resetBookingForm(); setBookOpen(false); showToast('Đã hủy thao tác đặt kho.'); }}>Hủy đặt kho</Button>
@@ -4177,7 +4229,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   {reservationSubmitting ? 'Đang lập báo giá...' : 'Kiểm tra và lấy báo giá'}
                 </Button>
               )}
-              {bookingStep === 3 && <Button disabled={!termsAccepted} onClick={() => setBookingStep(4)}>Tiếp theo: Chọn lịch check-in</Button>}
+              {bookingStep === 3 && <Button disabled={!termsAccepted || !serverQuote} onClick={() => setBookingStep(4)}>Tiếp theo: Chọn lịch check-in</Button>}
               {bookingStep === 4 && <Button disabled={reservationSubmitting || !termsAccepted} onClick={() => confirmReservation()}>{reservationSubmitting ? 'Đang xử lý...' : hasOtherGoods ? 'Gửi yêu cầu nhân viên cơ sở duyệt' : 'Xác nhận đặt kho'}</Button>}
             </div>
           </div>
@@ -4282,6 +4334,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           const reservationDeposit = activeHoldForPayment.reservationDepositAmount ?? Math.round((totalDue + (activeHoldForPayment.securityDepositAmount ?? originalRent)) * 0.2 * 100) / 100
           const securityDeposit = activeHoldForPayment.securityDepositAmount ?? originalRent
           const dueAtCheckIn = activeHoldForPayment.remainingAmount ?? totalDue - reservationDeposit + securityDeposit
+          const depositRatePercent = Math.round((reservationDeposit / ((totalDue + securityDeposit) || 1)) * 100)
 
           return (
             <div className="space-y-4">
@@ -4304,10 +4357,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     <span>{'Tổng giá trị kỳ thuê:'}</span>
                     <span className="">{formatVnd(totalDue)}</span>
                   </div>
-                  <div className="flex justify-between font-bold text-black"><span>{'Cọc cần thanh toán (20%):'}</span><span>{formatVnd(reservationDeposit)}</span></div>
+                  <div className="flex justify-between font-bold text-black"><span>{`Cọc cần thanh toán (${depositRatePercent}%):`}</span><span>{formatVnd(reservationDeposit)}</span></div>
                   <div className="flex justify-between"><span>{'Tiền cọc đảm bảo thuê:'}</span><span className="font-semibold text-emerald-700">{formatVnd(securityDeposit)}</span></div>
                   <div className="flex justify-between"><span>{'Còn thu tại nhận kho:'}</span><span>{formatVnd(dueAtCheckIn)}</span></div>
-                  <p className="border-t border-stone-200 pt-2 text-xs text-stone-600">{'Đặt cọc giữ chỗ (20%) được khấu trừ vào tiền thuê. Tiền cọc đảm bảo thuê được thu riêng khi bàn giao kho, dùng để bảo đảm hư hại, vệ sinh và công nợ. Phần không bị khấu trừ sẽ hoàn sau nghiệm thu trả kho.'}</p>
+                  <p className="border-t border-stone-200 pt-2 text-xs text-stone-600">{`Đặt cọc giữ chỗ (${depositRatePercent}%) được khấu trừ vào tiền thuê. Tiền cọc đảm bảo thuê được thu riêng khi bàn giao kho, dùng để bảo đảm hư hại, vệ sinh và công nợ. Phần không bị khấu trừ sẽ hoàn sau nghiệm thu trả kho.`}</p>
                 </div>
               </div>
 
@@ -4835,7 +4888,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         <div className="fixed bottom-4 left-4 z-40 max-w-sm rounded-2xl border-2 border-amber-500 bg-white p-3.5 shadow-2xl transition sm:bottom-6 sm:left-6 animate-fade-in">
           <div className="flex items-center gap-3">
             <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-500 text-base font-extrabold text-white shadow-sm">
-              {bookingStep}
+              {bookingStep >= 3 && !serverQuote ? 2 : bookingStep}
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[11px] font-bold uppercase tracking-wider text-amber-700">Tiến trình chưa hoàn tất</p>
@@ -4843,7 +4896,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 {unitTypeLabel(selectedTarget.unitType.name)} · {selectedTarget.facility.name}
               </p>
               <p className="text-xs text-stone-500">
-                Đang dừng tại: <b className="text-stone-800">Bước {bookingStep}/4</b>
+                Đang dừng tại: <b className="text-stone-800">Bước {bookingStep >= 3 && !serverQuote ? 2 : bookingStep}/4</b>
               </p>
             </div>
           </div>
@@ -4862,8 +4915,13 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             <button
               type="button"
               onClick={() => {
+                if (bookingStep >= 3 && !serverQuote) {
+                  setBookingStep(2)
+                  showToast('Tiếp tục đặt kho tại Bước 2 (Hàng hóa & số liệu).')
+                } else {
+                  showToast(`Tiếp tục đặt kho tại Bước ${bookingStep}.`)
+                }
                 setBookOpen(true)
-                showToast(`Tiếp tục đặt kho tại Bước ${bookingStep}.`)
               }}
               className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white shadow hover:bg-amber-700 transition"
             >
