@@ -97,7 +97,7 @@ interface LayoutProps {
   onLoadMoreNotifications?: () => void
   onRetryNotifications?: () => void
   additionalNotifications?: LayoutNotification[]
-  onNotificationClick?: (notification: LayoutNotification) => void
+  onNotificationClick?: (notification: LayoutNotification) => void | Promise<unknown>
   canAccess?: (permission: PermissionKey) => boolean
 }
 
@@ -381,17 +381,23 @@ export default function Layout({
   }
 
   const openNotificationDetail = (notification: LayoutNotification) => {
-    const nextReadIds = Array.from(new Set([...readNotificationIds, notification.id]))
-    setReadNotificationIds(nextReadIds)
-    localStorage.setItem(notificationReadKey, JSON.stringify(nextReadIds))
-    setBellActionNotifications(prev => {
-      const updated = prev.map(item => item.id === notification.id ? { ...item, isRead: true } : item)
-      try { localStorage.setItem(bellActionStorageKey, JSON.stringify(updated)) } catch {}
-      return updated
-    })
+    const commitLocalRead = () => {
+      const nextReadIds = Array.from(new Set([...readNotificationIds, notification.id]))
+      setReadNotificationIds(nextReadIds)
+      localStorage.setItem(notificationReadKey, JSON.stringify(nextReadIds))
+      setBellActionNotifications(prev => {
+        const updated = prev.map(item => item.id === notification.id ? { ...item, isRead: true } : item)
+        try { localStorage.setItem(bellActionStorageKey, JSON.stringify(updated)) } catch {}
+        return updated
+      })
+    }
     setNotificationsOpen(false)
-    if (onNotificationClick) onNotificationClick(notification)
-    else navigate(notification.page, false)
+    if (onNotificationClick) {
+      Promise.resolve(onNotificationClick(notification)).then(commitLocalRead).catch(() => undefined)
+    } else {
+      commitLocalRead()
+      navigate(notification.page, false)
+    }
   }
 
   const markAllAsRead = async () => {

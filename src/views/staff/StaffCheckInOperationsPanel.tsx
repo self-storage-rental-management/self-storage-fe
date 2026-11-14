@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 
 import {
   completeCheckIn,
+  completeCheckInSetup,
   confirmCheckInPayment,
   downloadCheckInEvidence,
   listCheckIns,
@@ -667,6 +668,9 @@ export default function StaffCheckInOperationsPanel({
         }
         setChecklist((current) => ({ ...current, paymentVerified: true }))
       } else if (handoverStep === 4) {
+        if (/\b(pin|password|mật khẩu|mat khau)\b/i.test(keyLockReference)) {
+          throw new Error("Không nhập mật khẩu hoặc mã PIN vào ô Mã ổ khóa / Chìa khóa.")
+        }
         if (!emptyStorageHandoverReady) {
           throw new Error("Cần nhập mã ổ khóa, ghi nhận hiện trạng và chọn ít nhất một ảnh hoặc PDF bằng chứng kho trống.")
         }
@@ -684,6 +688,8 @@ export default function StaffCheckInOperationsPanel({
           evidenceReferences: emptyStorageEvidence,
         })
         setChecklist((current) => ({ ...current, accessHandedOver: true, unitWalkthrough: true }))
+      } else if (handoverStep === 5) {
+        updated = await completeCheckInSetup(handoverTarget.checkInId, "Xác nhận hoàn tất chuẩn bị hàng, chuyển sang kiểm kê thực tế")
       }
       if (updated) setHandoverTarget(updated)
       setHandoverStep((current) => Math.min(6, current + 1))
@@ -1275,11 +1281,11 @@ export default function StaffCheckInOperationsPanel({
                     <p className="text-xs font-bold uppercase tracking-wider text-stone-700">1. Thông tin khóa & Hiện trạng ban đầu</p>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <Input
-                        label="Mã ổ khóa / Chìa khóa / Mã PIN *"
+                        label="Mã ổ khóa / Chìa khóa *"
                         value={keyLockReference}
                         disabled={isReviewingCompletedStep}
                         onChange={(event) => setKeyLockReference(event.target.value)}
-                        placeholder="Ví dụ: LOCK-018 hoặc PIN-6882"
+                        placeholder="Ví dụ: LOCK-018 hoặc KEY-A04"
                       />
                       <Input
                         label="Hiện trạng kho trống bàn giao *"
@@ -1462,7 +1468,12 @@ export default function StaffCheckInOperationsPanel({
               {isReviewingCompletedStep ? (
                 <span className="text-xs text-stone-500">Đang xem lại dữ liệu đã lưu, không thể thay đổi bước này.</span>
               ) : handoverStep === 5 ? (
-                <span className="text-xs text-violet-800">Đang chờ khách xác nhận nhận kho và báo đã chuẩn bị hàng xong.</span>
+                <div className="flex flex-wrap items-center justify-end gap-3">
+                  <span className="text-xs text-violet-800">Khách có thể bấm tự xác nhận trên cổng khách hàng hoặc nhân viên xác nhận tại đây.</span>
+                  <Button onClick={() => submitWorkflowStep()} disabled={submitting}>
+                    {submitting ? "Đang xác nhận…" : "Xác nhận setup xong, tiếp tục kiểm kê"}
+                  </Button>
+                </div>
               ) : handoverStep < 6 ? (
                 <Button disabled={submitting ||
                   (handoverStep === 1 && (!checklist.identityVerified || !checklist.reservationMatched || identityVerificationBlocked)) ||
@@ -1730,7 +1741,7 @@ export default function StaffCheckInOperationsPanel({
                       : "text-red-700"
                   }
                 >
-                  {detailTarget.handover?.checklist[key] ? "✓" : "✕"} {label}
+                  {detailTarget.handover?.checklist[key] ? "[Đạt]" : "[Chưa]"} {label}
                 </div>
               ))}
             </div>

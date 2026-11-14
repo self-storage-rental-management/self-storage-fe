@@ -14,6 +14,7 @@ import {
   verifyEmailWithApi,
   type ApiActor
 } from '../services/authApi'
+import { clearAuthTokens } from '../services/apiClient'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } from '../utils/passwordPolicy'
 import { isVietnameseMobilePhone, VIETNAMESE_PHONE_HINT } from '../domain/vietnamesePhone'
 import StepIndicator from './auth/StepIndicator'
@@ -319,12 +320,7 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
       }
       onLogin(actorToUser(actor))
     } catch (apiError) {
-      const matchedDemo = DEMO_LOGIN_ACCOUNTS.find(a => a.email.toLowerCase() === normalizedEmail)
-      if (matchedDemo && password !== matchedDemo.password) {
-        setError(`Mật khẩu không đúng cho tài khoản ${matchedDemo.label}. Mật khẩu chính xác là: ${matchedDemo.password}`)
-      } else {
-        setError(formatAuthError(apiError, 'Đăng nhập thất bại. Vui lòng kiểm tra email hoặc mật khẩu.'))
-      }
+      setError(formatAuthError(apiError, 'Đăng nhập thất bại. Vui lòng kiểm tra email hoặc mật khẩu.'))
     } finally {
       setIsSubmitting(false)
     }
@@ -533,6 +529,10 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
   }
 
   function switchTab(next: AuthTab) {
+    if (googleActor) {
+      clearAuthTokens()
+      setGoogleActor(null)
+    }
     window.history.pushState({ tab: next }, '', next === 'login' ? '/login' : '/register')
     setTab(next)
     setRegisterStep(1)
@@ -1171,6 +1171,12 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
                     <SecondaryButton
                       onClick={() => {
                         setError('')
+                        if (googleActor) {
+                          clearAuthTokens()
+                          setGoogleActor(null)
+                          switchTab('login')
+                          return
+                        }
                         setRegisterStep(1)
                       }}
                       disabled={isSubmitting}
@@ -1494,7 +1500,7 @@ function RecoveryFlow({
   const copy = {
     identify: {
       title: 'Tìm tài khoản của bạn',
-      text: 'Nhập số điện thoại hoặc email liên kết với tài khoản StorageHub.'
+      text: 'Nhập email liên kết với tài khoản StorageHub.'
     },
     verify: {
       title: purpose === 'email-verification' ? 'Xác minh email để hoàn tất đăng ký' : 'Nhập mã khôi phục tài khoản',
@@ -1528,13 +1534,14 @@ function RecoveryFlow({
 
       {step === 'identify' && (
         <form onSubmit={onFindAccount}>
-          <FormField id="recovery-account" label="Số điện thoại hoặc Email">
+          <FormField id="recovery-account" label="Email">
             <input
               id="recovery-account"
+              type="email"
               value={account}
               onChange={event => setAccount(event.target.value)}
               autoFocus
-              placeholder="Nhập SĐT hoặc email..."
+              placeholder="Nhập email..."
               className={getInputClassName(false, null, Boolean(account))}
             />
           </FormField>

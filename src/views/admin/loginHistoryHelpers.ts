@@ -257,7 +257,7 @@ export function parseIpLocation(ip: string | null | undefined): ParsedIpLocation
   let city = 'Hồ Chí Minh'
   let country = 'Việt Nam'
   let countryCode = 'VN'
-  let flag = '🇻🇳'
+  let flag = ''
   let isp = 'Viettel Internet'
   let isForeign = false
 
@@ -277,21 +277,21 @@ export function parseIpLocation(ip: string | null | undefined): ParsedIpLocation
     city = 'San Jose, CA'
     country = 'Hoa Kỳ'
     countryCode = 'US'
-    flag = '🇺🇸'
+    flag = ''
     isp = 'Cloudflare US Gateway'
     isForeign = true
   } else if (cleanIp.startsWith('13.250.') || cleanIp.startsWith('54.255.')) {
     city = 'Singapore'
     country = 'Singapore'
     countryCode = 'SG'
-    flag = '🇸🇬'
+    flag = ''
     isp = 'AWS Asia-Pacific'
     isForeign = true
   } else if (cleanIp.startsWith('133.') || cleanIp.startsWith('210.140.')) {
     city = 'Tokyo'
     country = 'Nhật Bản'
     countryCode = 'JP'
-    flag = '🇯🇵'
+    flag = ''
     isp = 'NTT Communications'
     isForeign = true
   }

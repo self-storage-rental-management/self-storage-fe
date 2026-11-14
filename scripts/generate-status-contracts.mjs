@@ -1,9 +1,12 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const backend = resolve(process.env.STORAGEHUB_BE_ROOT || resolve(root, '../self-storage-be'))
+const defaultBackend = existsSync(resolve(root, '../self-storage-be'))
+  ? resolve(root, '../self-storage-be')
+  : resolve(root, '../../BE/self-storage-be')
+const backend = resolve(process.env.STORAGEHUB_BE_ROOT || defaultBackend)
 const domain = 'src/main/java/com/storagehub/domain/model'
 const readModels = 'src/main/java/com/storagehub/api/StatusContract.java'
 const definitions = [
@@ -19,7 +22,7 @@ const sections = definitions.map(([name, path]) => {
   return `// Backend: ${path}\nexport const ${constant} = ${JSON.stringify(values)} as const\nexport type ${name} = (typeof ${constant})[number]\nexport const is${name} = (value: unknown): value is ${name} => typeof value === 'string' && (${constant} as readonly string[]).includes(value)\n`
 })
 const output = '// Generated from backend enums. Run npm run statuses:generate; do not edit manually.\n\n' + sections.join('\n')
-const target = resolve(root, 'src/types/statusContracts.ts')
+const target = resolve(root, 'src/types/statusContracts.generated.ts')
 if (process.argv.includes('--check')) {
   if (readFileSync(target, 'utf8').replace(/\r\n/g, '\n') !== output) throw new Error('FE status contract differs from backend. Run npm run statuses:generate.')
   console.log('FE status contracts match all 9 backend enums.')

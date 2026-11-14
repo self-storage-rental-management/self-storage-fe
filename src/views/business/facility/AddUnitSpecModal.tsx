@@ -629,14 +629,14 @@ export const AddUnitSpecModal: React.FC<AddUnitSpecModalProps> = ({
                   <svg className="w-4 h-4 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                   </svg>
-                  <span>✓ ĐẠT CHUẨN LỐI XE LƯU THÔNG</span>
+                  <span>ĐẠT CHUẨN LỐI XE LƯU THÔNG</span>
                 </div>
               ) : (
                 <div className="p-2 rounded-lg bg-red-50 border border-red-300 text-red-900 text-xs font-bold flex items-center gap-2">
                   <svg className="w-4 h-4 text-red-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                   </svg>
-                  <span>✕ CHƯA ĐẠT (Cần tối thiểu {vehicleStandard.minLaneM}m)</span>
+                  <span>CHƯA ĐẠT (Cần tối thiểu {vehicleStandard.minLaneM}m)</span>
                 </div>
               )}
             </div>

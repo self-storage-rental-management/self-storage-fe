@@ -58,10 +58,10 @@ export function SupportTicketSummary({ ticket: t, role = "customer" }: { ticket:
         <div className="min-w-0 flex-1 space-y-1">
           <h3 className="break-words text-lg font-semibold text-stone-900">{t.subject}</h3>
           <span className="inline-flex items-center gap-1 text-xs text-stone-500" title={t.id}>Mã yêu cầu: <span className="font-mono">{t.displayCode || `#${t.id.slice(0, 8)}`}</span>
-            <button type="button" className="rounded p-0.5 hover:bg-stone-100 hover:text-stone-900" title={copied ? "Đã sao chép" : "Sao chép mã yêu cầu"} aria-label="Sao chép mã yêu cầu" onClick={async () => {
+            <button type="button" className="rounded px-1 text-[11px] font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-900" title={copied ? "Đã sao chép" : "Sao chép mã yêu cầu"} aria-label="Sao chép mã yêu cầu" onClick={async () => {
               try { await navigator.clipboard.writeText(t.displayCode || t.id); setCopied(true) }
               catch { setCopied(false) }
-            }}>{copied ? "✓" : "⧉"}</button>
+            }}>{copied ? "Đã chép" : "Sao chép"}</button>
           </span>
         </div>
         <span className={`inline-flex shrink-0 whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold ${t.status === "open" ? "bg-slate-100 text-slate-700" : t.status === "in_progress" ? "bg-blue-50 text-blue-700" : t.status === "resolved" || t.status === "closed" ? "bg-green-100 text-green-700" : "bg-amber-50 text-amber-800"}`}>{copy(supportStatusLabels[t.status])}</span>

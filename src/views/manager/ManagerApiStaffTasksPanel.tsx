@@ -10,10 +10,12 @@ import { rentalDate } from '../rental-api/presentation'
 import { managerFacilityNotice, singleManagerFacility } from './managerFacilityUi'
 import {
   assignMaintenanceTask,
+  cancelMaintenanceTask,
   createMaintenanceTask,
   listFacilityStorageUnits,
   listMaintenanceStaff,
   listManagerMaintenanceTasks,
+  updateStorageUnitStatus,
   type MaintenanceStaffOption,
   type MaintenanceStorageUnit,
   type MaintenanceTaskApi,
@@ -69,6 +71,14 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
   const [priority, setPriority] = useState<MaintenanceTaskPriority>('medium')
   const [dueAt, setDueAt] = useState(new Date(Date.now() + 86_400_000).toISOString().slice(0, 10))
   const [saving, setSaving] = useState(false)
+  const [cancelTarget, setCancelTarget] = useState<MaintenanceTaskApi | null>(null)
+  const [cancelReason, setCancelReason] = useState('')
+  const [statusModalOpen, setStatusModalOpen] = useState(false)
+  const [unitStatusTargetId, setUnitStatusTargetId] = useState('')
+  const [unitStatusTargetValue, setUnitStatusTargetValue] = useState<'available' | 'maintenance'>('maintenance')
+  const [unitStatusReason, setUnitStatusReason] = useState('')
+  const [unitStatusCreateTask, setUnitStatusCreateTask] = useState(true)
+  const [unitStatusStaffId, setUnitStatusStaffId] = useState('')
 
   const reload = useCallback(async () => {
     if (!facilityId) {
@@ -174,13 +184,68 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
     }
   }
 
+  const handleCancelTask = async () => {
+    if (!cancelTarget) return
+    setSaving(true)
+    try {
+      await cancelMaintenanceTask(cancelTarget.id, cancelReason)
+      showToast('Đã hủy nhiệm vụ bảo trì.')
+      setCancelTarget(null)
+      setCancelReason('')
+      await reload()
+    } catch (nextError) {
+      showToast(managerDisplayError(nextError))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleUpdateUnitStatus = async () => {
+    if (!unitStatusTargetId) return
+    setSaving(true)
+    try {
+      await updateStorageUnitStatus(unitStatusTargetId, {
+        status: unitStatusTargetValue,
+        reason: unitStatusReason.trim() || undefined,
+        createMaintenanceTask: unitStatusTargetValue === 'maintenance' ? unitStatusCreateTask : undefined,
+        assignedStaffId: unitStatusTargetValue === 'maintenance' && unitStatusCreateTask && unitStatusStaffId ? unitStatusStaffId : undefined,
+      })
+      showToast('Đã cập nhật trạng thái gian kho.')
+      setStatusModalOpen(false)
+      setUnitStatusTargetId('')
+      setUnitStatusReason('')
+      setUnitStatusStaffId('')
+      await reload()
+    } catch (nextError) {
+      showToast(managerDisplayError(nextError))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div className="fade-in space-y-5">
       <SectionHeader
         eyebrow="Điều phối ca làm việc"
         title="Nhân viên & Nhiệm vụ"
         subtitle="Theo dõi công việc bảo trì và thu hồi kho tại cơ sở."
-        action={<Button disabled={loading || !facilityId || unitReadFailed || staffReadFailed || !units.length || !staff.length} onClick={() => setModalOpen(true)}>Tạo nhiệm vụ</Button>}
+        action={
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              disabled={loading || !facilityId || unitReadFailed || !units.length}
+              onClick={() => setStatusModalOpen(true)}
+            >
+              Đổi trạng thái kho
+            </Button>
+            <Button
+              disabled={loading || !facilityId || unitReadFailed || staffReadFailed || !units.length || !staff.length}
+              onClick={() => setModalOpen(true)}
+            >
+              Tạo nhiệm vụ
+            </Button>
+          </div>
+        }
       />
 
       {!loading && !taskError && !staffReadFailed && !staff.length && <ManagerActionNotice tone="info">Chưa có nhân viên được phân công để nhận nhiệm vụ tại cơ sở này.</ManagerActionNotice>}
@@ -223,7 +288,22 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
                 </Td>
                 <Td>{task.dueAt || 'Chưa đặt hạn'}</Td>
                 <Td><Badge variant={statusVariant(task.status)}>{taskStatusLabel[task.status]}</Badge></Td>
-                <Td><span className="text-stone-400">-</span></Td>
+                <Td>
+                  {(task.status === 'open' || task.status === 'in_progress') ? (
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      onClick={() => {
+                        setCancelTarget(task)
+                        setCancelReason('')
+                      }}
+                    >
+                      Hủy
+                    </Button>
+                  ) : (
+                    <span className="text-stone-400">-</span>
+                  )}
+                </Td>
               </Tr>
             ))}
           </Tbody>
@@ -241,6 +321,77 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
           <Select label="Nhân viên phụ trách" value={assignedStaffId} onChange={event => setAssignedStaffId(event.target.value)}><option value="">Chọn Staff</option>{staff.map(member => <option key={member.id} value={member.id}>{member.fullName}</option>)}</Select>
           <div className="grid gap-3 sm:grid-cols-2"><Select label="Mức ưu tiên" value={priority} onChange={event => setPriority(event.target.value as MaintenanceTaskPriority)}><option value="low">Thấp</option><option value="medium">Trung bình</option><option value="high">Cao</option></Select><Input label="Hạn xử lý" type="date" value={dueAt} onChange={event => setDueAt(event.target.value)} /></div>
           <div className="flex justify-end gap-2"><Button variant="outline" disabled={saving} onClick={() => setModalOpen(false)}>Đóng</Button><Button disabled={saving || !title.trim() || !reason.trim() || !storageUnitId || !assignedStaffId || !dueAt} onClick={() => void createTask()}>{saving ? 'Đang tạo…' : 'Tạo & giao nhiệm vụ'}</Button></div>
+        </div>
+      </Modal>
+
+      <Modal open={Boolean(cancelTarget)} onClose={() => !saving && setCancelTarget(null)} title="Hủy nhiệm vụ bảo trì">
+        {cancelTarget && (
+          <div className="space-y-4">
+            <p className="text-sm text-stone-700">
+              Xác nhận hủy nhiệm vụ <strong>{cancelTarget.title}</strong> ({cancelTarget.unitCode})?
+            </p>
+            <Input
+              label="Lý do hủy (tùy chọn)"
+              value={cancelReason}
+              onChange={event => setCancelReason(event.target.value)}
+              maxLength={500}
+              placeholder="Ví dụ: Không cần bảo trì, tạo nhầm gian kho..."
+            />
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" disabled={saving} onClick={() => setCancelTarget(null)}>Đóng</Button>
+              <Button variant="danger" disabled={saving} onClick={() => void handleCancelTask()}>
+                {saving ? 'Đang hủy…' : 'Xác nhận hủy'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal open={statusModalOpen} onClose={() => !saving && setStatusModalOpen(false)} title="Cập nhật trạng thái bảo trì gian kho">
+        <div className="space-y-4">
+          <Select label="Gian kho" value={unitStatusTargetId} onChange={event => setUnitStatusTargetId(event.target.value)}>
+            <option value="">Chọn gian kho</option>
+            {units.map(unit => (
+              <option key={unit.id} value={unit.id}>{unit.code} · {unit.status}</option>
+            ))}
+          </Select>
+          <Select label="Trạng thái mới" value={unitStatusTargetValue} onChange={event => setUnitStatusTargetValue(event.target.value as 'available' | 'maintenance')}>
+            <option value="maintenance">Đưa vào bảo trì (maintenance)</option>
+            <option value="available">Mở lại sẵn sàng (available)</option>
+          </Select>
+          <Input
+            label="Lý do / Ghi chú"
+            value={unitStatusReason}
+            onChange={event => setUnitStatusReason(event.target.value)}
+            maxLength={2000}
+            placeholder="Nhập lý do chuyển trạng thái..."
+          />
+          {unitStatusTargetValue === 'maintenance' && (
+            <>
+              <label className="flex items-center gap-2 text-sm text-stone-700">
+                <input
+                  type="checkbox"
+                  checked={unitStatusCreateTask}
+                  onChange={event => setUnitStatusCreateTask(event.target.checked)}
+                />
+                <span>Tự động tạo phiếu nhiệm vụ bảo trì</span>
+              </label>
+              {unitStatusCreateTask && (
+                <Select label="Phân công nhân viên (tùy chọn)" value={unitStatusStaffId} onChange={event => setUnitStatusStaffId(event.target.value)}>
+                  <option value="">Chưa phân công</option>
+                  {staff.map(member => (
+                    <option key={member.id} value={member.id}>{member.fullName}</option>
+                  ))}
+                </Select>
+              )}
+            </>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" disabled={saving} onClick={() => setStatusModalOpen(false)}>Đóng</Button>
+            <Button disabled={saving || !unitStatusTargetId} onClick={() => void handleUpdateUnitStatus()}>
+              {saving ? 'Đang cập nhật…' : 'Xác nhận'}
+            </Button>
+          </div>
         </div>
       </Modal>
     </div>

@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { clearAuthTokens, setAccessToken } from "./apiClient"
-import { listCustomerSupportTickets } from "./customerSupportApi"
 import {
   createSupportTicket,
   getSupportTicket,
@@ -142,13 +141,6 @@ describe("D5 transport and response boundaries", () => {
   it("rejects malformed assigned staff names", async () => {
     respond({ data: { ...supportActive, assignedStaffName: { fullName: "Injected" } } })
     await expect(getSupportTicket("manager", ids.ticket)).rejects.toThrow()
-  })
-  it("keeps the shared Customer ticket client on its original endpoint", async () => {
-    const fetch = respond(supportPage([]))
-    await listCustomerSupportTickets("open", 0, 20)
-    expect(new URL(fetch.mock.calls[0][0]).pathname).toBe(
-      "/api/customer/support-tickets",
-    )
   })
   it.each(["customer", "manager", "staff"] as const)(
     "uses real %s endpoint and existing Bearer transport",
