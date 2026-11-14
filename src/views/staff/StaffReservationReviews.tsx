@@ -375,7 +375,7 @@ export default function StaffReservationReviews({
           </div>
           <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
             {progressSteps.map((step, index) => <div key={step} className={`rounded-lg border p-2 text-[11px] ${index < current ? "border-emerald-300 bg-emerald-50 text-emerald-900" : index === current ? "border-amber-500 bg-amber-50 font-bold text-amber-950" : "border-stone-200 bg-stone-50 text-stone-400"}`}>
-              <span className="mr-1 font-bold">{index < current ? "✓" : index + 1}.</span>{step}
+              <span className="mr-1 font-bold">{index + 1}.</span>{step}
             </div>)}
           </div>
         </Card>

@@ -69,6 +69,7 @@ export function clearAuthTokens() {
     sessionStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY)
     sessionStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY)
     sessionStorage.removeItem('storagehub:current_actor')
+    sessionStorage.removeItem('storagehub_customer_booking_draft')
   } catch {}
 }
 
