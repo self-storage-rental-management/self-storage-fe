@@ -2985,6 +2985,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                         <div className="min-w-[220px] rounded-lg border border-red-700 bg-red-700 p-3 text-right text-xs text-white shadow-sm">
                           <p className="font-bold text-white">{'Cần thanh toán cọc trong 15 phút'}</p>
                           <p className="mt-1 text-lg font-bold text-white">{formatCountdown(hold.paymentExpiresAt).text}</p>
+                          <div className="mt-2 rounded border border-amber-300/40 bg-amber-500/20 px-2 py-1.5 text-center text-[11px] font-semibold text-amber-100">
+                            ⚠️ Khoản cọc giữ chỗ không được hoàn lại nếu tự ý huỷ đơn trước khi nhận kho.
+                          </div>
                           <Button className="mt-2" size="sm" disabled={formatCountdown(hold.paymentExpiresAt).isExpired} onClick={() => { setActiveHoldForPayment(hold); setPayModalOpen(true) }}>{'Thanh toán cọc 20%'}</Button>
                         </div>
                       )}
@@ -4374,6 +4377,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 <option value="Ví điện tử MoMo / ZaloPay">Ví điện tử MoMo / ZaloPay</option>
               </Select>
 
+              <div className="flex items-center gap-2 rounded-lg border-2 border-amber-500 bg-amber-50 p-3 text-xs font-semibold text-amber-950 shadow-xs">
+                <span className="text-base text-amber-600">⚠️</span>
+                <span><b>Cảnh báo quan trọng:</b> Khoản cọc giữ chỗ không được hoàn lại nếu tự ý huỷ đơn trước khi nhận kho.</span>
+              </div>
+
               <div className="flex justify-end gap-2 border-t border-stone-100 pt-3">
                 <Button variant="outline" onClick={() => setPayModalOpen(false)}>{'Hủy'}</Button>
                 <Button
@@ -4487,7 +4495,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       'Khi trả kho, nhân viên lập biên bản trước-sau, khấu trừ phải có nội dung, số tiền và minh chứng.',
                       'Khách được xem, đồng ý hoặc yêu cầu xem xét lại quyết toán trước khi đóng hồ sơ.',
                       'Sự cố kết cấu hạ tầng: Cơ sở chịu 100% trách nhiệm, xử lý khẩn cấp trong 4 đến 12 giờ. Cơ sở kích hoạt di dời khẩn cấp miễn phí sang kho tương đương và giữ nguyên hợp đồng.',
-                      'Phân định trách nhiệm ẩm mốc khi trả kho: Hoàn 100% cọc và đền bù nếu do thấm dột hoặc hỏng máy lạnh của cơ sở. Khách hàng tự chịu và bị khấu trừ phí khử trùng 1.500.000₫ nếu do đóng gói ẩm hoặc vi phạm hàng cấm.'
+                      'Phân định trách nhiệm ẩm mốc khi trả kho: Hoàn 100% cọc và đền bù nếu do thấm dột hoặc lỗi hạ tầng của cơ sở. Khách hàng tự chịu và bị khấu trừ phí khử trùng 1.500.000₫ nếu do đóng gói ẩm hoặc vi phạm hàng cấm.'
                     ].map((term, index) => <div key={term} className="flex gap-2 rounded-lg bg-stone-50 p-3 leading-5"><span className="font-bold text-amber-700">{index + 1}.</span><span>{term}</span></div>)}</div></section>
                     {completedRenewals.length > 0 && <section><p className="mb-2 text-[10px] font-bold uppercase tracking-[.14em] text-amber-700">{'4. Hợp đồng gia hạn đã phát hành'}</p><div className="space-y-2">{completedRenewals.map(renewal => {
                       const renewalContract = contracts.find(contract => contract.id === renewal.renewalContractId || contract.renewalId === renewal.id)
@@ -4716,7 +4724,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             <ul className="space-y-1 pl-1 leading-relaxed">
               <li className="flex items-start gap-1.5">
                 <span className="text-sky-600 font-bold shrink-0">•</span>
-                <span><strong>Lỗi cơ sở (vách/trần loang ố, dột hoặc máy lạnh hỏng):</strong> Hoàn 100% cọc + bồi thường hàng + khóa kho sửa chữa.</span>
+                <span><strong>Lỗi cơ sở (vách/trần loang ố, dột hoặc lỗi hạ tầng cơ sở):</strong> Hoàn 100% cọc + bồi thường hàng + khóa kho sửa chữa.</span>
               </li>
               <li className="flex items-start gap-1.5">
                 <span className="text-sky-600 font-bold shrink-0">•</span>
