@@ -60,7 +60,6 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
       'unit-assignment': 'Phân kho',
       rentals: 'Hồ sơ thuê & Gia hạn',
       returns: 'Trả kho & Quyết toán',
-      moves: 'Nhận kho & Trả kho',
       payments: 'Lịch sử thanh toán',
       'overdue-cases': 'Theo dõi quá hạn',
       'payment-complaints': 'Khiếu nại thanh toán',
