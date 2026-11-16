@@ -2629,7 +2629,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       {facility.rating > 0 && <span className="text-sm font-semibold text-amber-700">Đánh giá: {facility.rating}</span>}
                     </div>
                     <div className="my-4 flex flex-wrap gap-2">
-                      {!isApiAuthenticated() && <Badge variant="muted">{'Camera 24/7'}</Badge>}
+                      {!isApiAuthenticated() && <Badge variant="muted">{'Kho tiêu chuẩn'}</Badge>}
                       {facility.climate && <Badge variant="info">{'Điều hòa độ ẩm'}</Badge>}
                       {isApiAuthenticated() && facility.security && <Badge variant="muted">{facility.security}</Badge>}
                     </div>
