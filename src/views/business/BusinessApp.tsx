@@ -7,6 +7,7 @@ import BusinessRefundRequestsPanel from "./BusinessRefundRequestsPanel"
 import BusinessDamageIncidentsPanel from "./BusinessDamageIncidentsPanel"
 import BusinessRentalRegulationsPanel from "./BusinessRentalRegulationsPanel"
 import BusinessDashboardPanel from "./BusinessDashboardPanel"
+import BusinessDiscountCodesPanel from "./BusinessDiscountCodesPanel"
 
 import {
   XAxis,
@@ -607,7 +608,7 @@ export default function BusinessApp({
     // ── TỔNG QUAN & BÁO CÁO ──
     {
       id: "dashboard",
-      label: "Bảng Điều Khiển",
+      label: "Doanh Thu",
       icon: Icon.chart,
       group: "Tổng Quan & Báo Cáo",
       permission: "facilities:read",
@@ -634,6 +635,13 @@ export default function BusinessApp({
       id: "policies",
       label: "Gói Thuê",
       icon: Icon.calendar,
+      group: "Giá & Khuyến Mãi",
+      permission: "policies:read",
+    },
+    {
+      id: "discounts",
+      label: "Mã Giảm Giá (Voucher)",
+      icon: Icon.tag,
       group: "Giá & Khuyến Mãi",
       permission: "policies:read",
     },
@@ -1077,7 +1085,7 @@ export default function BusinessApp({
           discountPercent: Number(policy.discountRate) * 100,
           depositPercent: policy.depositRate !== undefined ? Math.round(Number(policy.depositRate) * 100) : 20,
           renewalDiscountPercent: 0,
-          description: policy.name,
+          description: policy.description?.trim() || policy.name,
           appliesTo: 'Đặt mới',
           status: (pubStatus === 'PUBLISHED' && runStatus === 'ACTIVE') ? 'active' : 'inactive',
           publicationStatus: pubStatus,
@@ -1244,6 +1252,7 @@ export default function BusinessApp({
             rentalMonths: rentalMonthsNumber,
             rentalYears,
             freeSetupDays: newPkg.freeSetupDays,
+            description: formCreateDurationDesc.trim() || null,
             discountRate: newPkg.discountPercent / 100,
             depositRate: (newPkg.depositPercent ?? 20) / 100,
             policyVersion: `v${Date.now()}`,
@@ -1325,6 +1334,7 @@ export default function BusinessApp({
           name: formDurationTitle.trim() || selectedDurationItem.title,
           rentalMonths: typeof selectedDurationItem.months === 'number' ? selectedDurationItem.months : 1,
           freeSetupDays: formDurationSetupDays === '' ? undefined : Math.max(0, Number(formDurationSetupDays) || 0),
+          description: formDurationDesc.trim() || null,
           discountRate: Math.max(0, Math.min(100, Number(formDurationPercent) || 0)) / 100,
           depositRate: Math.max(5, Math.min(50, Number(formDurationDepositPercent) || 20)) / 100,
           policyVersion: `v${Date.now()}`,
@@ -3774,7 +3784,6 @@ export default function BusinessApp({
                 className="bg-amber-600 hover:bg-amber-700 text-white font-semibold shadow-sm flex items-center gap-1.5"
                 onClick={handleOpenCreateFacility}
               >
-                {Icon.plus}{" "}
                 {lang === "vi" ? "Thêm Cơ Sở Mới" : "Add New Facility"}
               </Button>
             }
@@ -3889,9 +3898,6 @@ export default function BusinessApp({
           {filteredFacilities.length === 0 ? (
             <Card className="p-12 text-center border-dashed border-2 border-stone-300">
               <div className="max-w-md mx-auto space-y-3">
-                <div className="w-12 h-12 bg-amber-100 text-amber-700 rounded-full flex items-center justify-center mx-auto text-xl">
-                  {Icon.building}
-                </div>
                 <h4 className="font-bold text-slate-800 text-base">
                   {lang === "vi"
                     ? "Không tìm thấy cơ sở phù hợp"
@@ -4133,7 +4139,7 @@ export default function BusinessApp({
                   onClick={handleOpenCreateDuration}
                   className="flex items-center gap-1.5 shadow-sm"
                 >
-                  {Icon.plus} {lang === "vi" ? "Thêm Gói Thuê Mới" : "Add Rental Package"}
+                  {lang === "vi" ? "Thêm Gói Thuê Mới" : "Add Rental Package"}
                 </Button>
               </div>
             }
@@ -4371,7 +4377,7 @@ export default function BusinessApp({
                     className="text-xs"
                     title={areAllPricingCollapsed ? "Mở rộng danh sách tất cả cơ sở" : "Thu gọn danh sách tất cả cơ sở"}
                   >
-                    <span>{areAllPricingCollapsed ? "▼ Mở rộng tất cả" : "▲ Thu gọn tất cả"}</span>
+                    <span>{areAllPricingCollapsed ? "Mở rộng tất cả" : "Thu gọn tất cả"}</span>
                   </Button>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold text-slate-600 whitespace-nowrap">
@@ -4463,7 +4469,7 @@ export default function BusinessApp({
                     >
                       <div className="flex items-center gap-3">
                         <span className="text-stone-400 font-bold text-xs">
-                          {isCollapsed ? "▶" : "▼"}
+                          {isCollapsed ? "[+]" : "[-]"}
                         </span>
                         <div>
                           <div className="flex items-center gap-2">
@@ -4529,7 +4535,7 @@ export default function BusinessApp({
                           </b>
                         </span>
                         <span className="text-amber-800 font-semibold hover:underline">
-                          Nhấp để mở rộng bảng giá ▼
+                          Nhấp để mở rộng bảng giá
                         </span>
                       </div>
                     ) : (
@@ -4589,7 +4595,7 @@ export default function BusinessApp({
               >
                 <div className="flex items-center gap-2">
                   <span className="text-stone-400 font-bold text-xs">
-                    {feeScheduleCollapsed ? "▶" : "▼"}
+                    {feeScheduleCollapsed ? "[+]" : "[-]"}
                   </span>
                   <h3 className="font-semibold text-slate-800">
                     {lang === "vi" ? "Biểu Phí Dịch Vụ Quy Định" : "Fee Schedule"}
@@ -4657,6 +4663,15 @@ export default function BusinessApp({
         )
       })()}
 
+
+      {/* ── DISCOUNT VOUCHERS ── */}
+      {page === "discounts" && (
+        <BusinessDiscountCodesPanel
+          lang={lang}
+          facilitiesList={facilitiesList}
+          showToast={showToast}
+        />
+      )}
 
       {/* ── DAMAGE INCIDENTS (NHÓM 3) ── */}
       {page === "damage-incidents" && (
@@ -5390,22 +5405,24 @@ export default function BusinessApp({
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className={isApiAuthenticated() ? "space-y-3" : "grid grid-cols-1 sm:grid-cols-2 gap-3"}>
             <Input
               label={lang === "vi" ? "Tên gói thuê đầy đủ" : "Package Title"}
               placeholder="VD: Gói thuê 9 tháng"
               value={formCreateDurationTitle}
               onChange={(e) => setFormCreateDurationTitle(e.target.value)}
             />
-            <Input
-              label={lang === "vi" ? "Nhãn ngắn gọn (Hiển thị thẻ)" : "Short Label"}
-              placeholder="VD: 9 tháng"
-              value={formCreateDurationLabel}
-              onChange={(e) => setFormCreateDurationLabel(e.target.value)}
-            />
+            {!isApiAuthenticated() && (
+              <Input
+                label={lang === "vi" ? "Nhãn ngắn gọn (Hiển thị thẻ)" : "Short Label"}
+                placeholder="VD: 9 tháng"
+                value={formCreateDurationLabel}
+                onChange={(e) => setFormCreateDurationLabel(e.target.value)}
+              />
+            )}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className={isApiAuthenticated() ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3"}>
             <Input
               label={lang === "vi" ? "Số tháng kỳ hạn" : "Months"}
               type="number"
@@ -5431,14 +5448,16 @@ export default function BusinessApp({
               value={formCreateDurationPercent.toString()}
               onChange={(e) => setFormCreateDurationPercent(Number(e.target.value))}
             />
-            <Input
-              label={lang === "vi" ? "Giảm giá gia hạn (%)" : "Renewal (%)"}
-              type="number"
-              min={0}
-              max={100}
-              value={formCreateDurationRenewalPercent.toString()}
-              onChange={(e) => setFormCreateDurationRenewalPercent(Number(e.target.value))}
-            />
+            {!isApiAuthenticated() && (
+              <Input
+                label={lang === "vi" ? "Giảm giá gia hạn (%)" : "Renewal (%)"}
+                type="number"
+                min={0}
+                max={100}
+                value={formCreateDurationRenewalPercent.toString()}
+                onChange={(e) => setFormCreateDurationRenewalPercent(Number(e.target.value))}
+              />
+            )}
             <Input
               label={lang === "vi" ? "Đặt cọc giữ chỗ (%)" : "Deposit (%)"}
               type="number"
@@ -5449,17 +5468,19 @@ export default function BusinessApp({
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Select
-              label={lang === "vi" ? "Phạm vi giao dịch áp dụng" : "Applies To"}
-              value={formCreateDurationAppliesTo}
-              onChange={(e) => setFormCreateDurationAppliesTo(e.target.value)}
-            >
-              <option value="Đặt mới & Gia hạn">Đặt mới & Gia hạn</option>
-              <option value="Chỉ đặt mới">Chỉ đặt mới</option>
-              <option value="Chỉ gia hạn">Chỉ gia hạn</option>
-              <option value="Không áp dụng giảm">Không áp dụng giảm</option>
-            </Select>
+          <div className={isApiAuthenticated() ? "space-y-3" : "grid grid-cols-1 sm:grid-cols-2 gap-3"}>
+            {!isApiAuthenticated() && (
+              <Select
+                label={lang === "vi" ? "Phạm vi giao dịch áp dụng" : "Applies To"}
+                value={formCreateDurationAppliesTo}
+                onChange={(e) => setFormCreateDurationAppliesTo(e.target.value)}
+              >
+                <option value="Đặt mới & Gia hạn">Đặt mới & Gia hạn</option>
+                <option value="Chỉ đặt mới">Chỉ đặt mới</option>
+                <option value="Chỉ gia hạn">Chỉ gia hạn</option>
+                <option value="Không áp dụng giảm">Không áp dụng giảm</option>
+              </Select>
+            )}
 
             <Select
               label={lang === "vi" ? "Trạng thái ban đầu" : "Status"}
@@ -5645,20 +5666,22 @@ export default function BusinessApp({
               </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className={isApiAuthenticated() ? "space-y-3" : "grid grid-cols-1 sm:grid-cols-2 gap-3"}>
               <Input
                 label="Tên gói thuê"
                 value={formDurationTitle}
                 onChange={(e) => setFormDurationTitle(e.target.value)}
               />
-              <Input
-                label="Nhãn ngắn gọn"
-                value={formDurationLabel}
-                onChange={(e) => setFormDurationLabel(e.target.value)}
-              />
+              {!isApiAuthenticated() && (
+                <Input
+                  label="Nhãn ngắn gọn"
+                  value={formDurationLabel}
+                  onChange={(e) => setFormDurationLabel(e.target.value)}
+                />
+              )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <div className={isApiAuthenticated() ? "grid grid-cols-1 sm:grid-cols-3 gap-3" : "grid grid-cols-1 sm:grid-cols-4 gap-3"}>
               <Input
                 label="Hạn chuẩn bị (miễn phí, ngày)"
                 type="number"
@@ -5677,14 +5700,16 @@ export default function BusinessApp({
                 onChange={(e) => setFormDurationPercent(Number(e.target.value))}
               />
 
-              <Input
-                label="Giảm giá khi gia hạn (%)"
-                type="number"
-                min={0}
-                max={100}
-                value={formDurationRenewalPercent.toString()}
-                onChange={(e) => setFormDurationRenewalPercent(Number(e.target.value))}
-              />
+              {!isApiAuthenticated() && (
+                <Input
+                  label="Giảm giá khi gia hạn (%)"
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={formDurationRenewalPercent.toString()}
+                  onChange={(e) => setFormDurationRenewalPercent(Number(e.target.value))}
+                />
+              )}
 
               <Input
                 label="Đặt cọc giữ chỗ (%)"
@@ -5696,17 +5721,19 @@ export default function BusinessApp({
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Select
-                label="Phạm vi giao dịch áp dụng"
-                value={formDurationAppliesTo}
-                onChange={(e) => setFormDurationAppliesTo(e.target.value)}
-              >
-                <option value="Đặt mới & Gia hạn">Đặt mới & Gia hạn</option>
-                <option value="Chỉ đặt mới">Chỉ đặt mới</option>
-                <option value="Chỉ gia hạn">Chỉ gia hạn</option>
-                <option value="Không áp dụng giảm">Không áp dụng giảm</option>
-              </Select>
+            <div className={isApiAuthenticated() ? "space-y-3" : "grid grid-cols-1 sm:grid-cols-2 gap-3"}>
+              {!isApiAuthenticated() && (
+                <Select
+                  label="Phạm vi giao dịch áp dụng"
+                  value={formDurationAppliesTo}
+                  onChange={(e) => setFormDurationAppliesTo(e.target.value)}
+                >
+                  <option value="Đặt mới & Gia hạn">Đặt mới & Gia hạn</option>
+                  <option value="Chỉ đặt mới">Chỉ đặt mới</option>
+                  <option value="Chỉ gia hạn">Chỉ gia hạn</option>
+                  <option value="Không áp dụng giảm">Không áp dụng giảm</option>
+                </Select>
+              )}
 
               <Select
                 label="Trạng thái chính sách"

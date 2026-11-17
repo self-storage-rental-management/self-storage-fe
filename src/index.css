@@ -34,8 +34,6 @@ svg:not(.recharts-surface):not(.show-icon) { display: none !important; }
 .show-icon,
 .show-svg,
 .show-svg svg:not(.show-icon),
-.unit-allocation-table svg,
-.btn-action-icon svg,
 .rbac-matrix svg:not(.show-icon),
 .home-page svg:not(.show-icon),
 .brand-logo svg:not(.show-icon),

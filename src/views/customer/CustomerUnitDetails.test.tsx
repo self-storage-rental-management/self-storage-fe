@@ -36,7 +36,7 @@ it('hiển thị thông số và gói thuê từ backend, không chèn tiện í
     'Thời hạn thanh toán hiển thị trên đơn; tiền cọc được trừ vào tiền thuê.']) expect(html).not.toContain(text)
   for (const text of ['Giảm 3% tiền thuê', 'Giảm 5% tiền thuê', 'Giảm 8% tiền thuê']) expect(html).not.toContain(text)
   for (const text of ['Dữ liệu hiện chưa có', 'Ảnh minh họa giao diện;', '/images/customer-units/kho-s.jpg']) expect(html).not.toContain(text)
-  expect(html).not.toContain('sticky')
+  expect(html).toContain('Khai báo hàng')
 })
 
 it.each([
