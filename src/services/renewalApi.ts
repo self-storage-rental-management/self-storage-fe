@@ -1,4 +1,4 @@
-import { apiRequest } from "./apiClient"
+import { ApiClientError, apiRequest } from "./apiClient"
 import { isRenewalStatusSummary, isRenewalTransactionStatus } from '../types/renewalStatus'
 import { isRenewalStatus, isPaymentStatus } from '../types/statusContracts'
 import { readRentalEnvelope, readRentalPage, rentalQuery } from "./rentalApi"
@@ -98,6 +98,11 @@ export async function listRenewals(
   role: RentalApiRole,
   query: RenewalApiQuery = {},
 ) {
+  if (role === "staff") {
+    throw new ApiClientError("Staff không có API danh sách gia hạn.", {
+      status: 403,
+    })
+  }
   const suffix = rentalQuery(
     query,
     [
@@ -106,7 +111,7 @@ export async function listRenewals(
       "status",
       "rentalId",
       "sort",
-      ...(role === "manager" || role === "staff" ? ["facilityId", "search"] : []),
+      ...(role === "manager" ? ["facilityId", "search"] : []),
     ],
     ["createdAt", "newEndDate", "amount", "id"],
   )

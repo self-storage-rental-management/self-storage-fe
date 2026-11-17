@@ -374,6 +374,16 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         <div className="mt-3 space-y-2">
           <p className="text-xs leading-5 text-stone-600">{savedQuote?.rentalPeriodConfirmed ? 'Lịch thuê đã chốt:' : 'Lịch thuê dự kiến sau thời gian chuẩn bị:'} <b className="text-stone-900">{formatDisplayDate(savedQuote?.startDate || r.startDate)} đến {formatDisplayDate(rentalEndDateForDisplay(savedQuote?.endDate || r.endDate))}</b></p>
           <p className="text-xs leading-5 text-blue-800">Lịch nhận kho khách đặt: <b>{savedAppointmentAt ? formatCustomerDateTime(new Date(savedAppointmentAt)) : 'Chưa đặt lịch'}</b></p>
+          {r.status === 'CANCELLED' && detail?.cancelledAt && (
+            <div className="rounded-lg border border-stone-200 bg-stone-50 p-2.5 text-xs text-stone-700">
+              <p><b>Đã hủy lúc:</b> {formatCustomerDateTime(new Date(detail.cancelledAt))}{detail.cancelReason ? ` · Lý do: ${detail.cancelReason}` : ''}</p>
+              {(detail.cancellationChargeAmount ?? 0) > 0 && (
+                <p className="mt-0.5 text-amber-800">
+                  Khoản giữ theo điều khoản hủy: <b>{formatVnd(detail.cancellationChargeAmount ?? 0)}</b> · Hoàn tiền: <b>{formatVnd(detail.cancellationRefundAmount ?? 0)}</b>
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </div>
         <div className="reservation-card-actions flex w-full min-w-0 flex-col items-end gap-2 md:w-64 md:shrink-0">
@@ -397,7 +407,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         {handoverDocumentsAvailable && <Button variant="outline" size="sm" className="min-h-10 w-full justify-center" disabled={busy} onClick={() => loadHandoverDocuments()}>{busy ? 'Đang tải…' : 'Xem hợp đồng và chứng từ'}</Button>}
         {['PAYMENT_GRACE', 'PAYMENT_REVIEW'].includes(r.status) && <CustomerPaymentComplaint reservation={r} complaintExpiresAt={detail?.complaintExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />}
         {APPOINTMENT_EDITABLE_STATUSES.some(status => status === r.status) && <Button variant="ghost" size="sm" className="reservation-action reservation-action-cancel" onClick={() => setCancelConfirmOpen(true)}>Hủy giữ kho</Button>}
-        {['EXPIRED', 'COMPLETED'].includes(r.status) && onDelete && <Button variant="danger" size="sm" className="min-h-10 w-full justify-center" onClick={() => setDeleteConfirmOpen(true)}>Xóa đơn đặt giữ kho</Button>}
+        {['EXPIRED', 'COMPLETED', 'CANCELLED', 'REJECTED'].includes(r.status) && onDelete && <Button variant="danger" size="sm" className="min-h-10 w-full justify-center" onClick={() => setDeleteConfirmOpen(true)}>Xóa đơn đặt giữ kho</Button>}
       </div>
       </div>
       <section role="tabpanel" id={`reservation-info-${r.id}`} aria-labelledby={`reservation-info-tab-${r.id}`} hidden={activeSection !== 'information'} className="w-full min-w-0">
@@ -544,7 +554,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
       <div className="space-y-5">
         <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-900">
           {progress !== null && progress >= 3
-            ? `Đơn ${r.reservationCode} đã được xác nhận thanh toán đặt cọc giữ chỗ. Hủy trước khi nhận kho có thể mất cọc theo chính sách. Bạn chắc chắn muốn hủy?`
+            ? `Đơn ${r.reservationCode} đã thanh toán đặt cọc giữ chỗ. Theo chính sách cam kết, tiền cọc sẽ KHÔNG được hoàn lại khi bạn chủ động hủy đơn. Suất kho đang giữ sẽ được giải phóng. Bạn chắc chắn muốn hủy?`
             : `Bạn có chắc muốn hủy ${r.reservationCode}? Suất kho đang giữ sẽ được giải phóng.`}
         </p>
         <div className="flex justify-end gap-2 border-t border-stone-100 pt-4">

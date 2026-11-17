@@ -49,9 +49,16 @@ export interface BusinessPerformanceReport {
   facilityComparisons: FacilityPerformance[]
 }
 
-export async function getBusinessRevenueReportApi(months = 6): Promise<BusinessRevenueReport> {
+export async function getBusinessRevenueReportApi(
+  months = 6,
+  facilityId?: string
+): Promise<BusinessRevenueReport> {
+  const params = new URLSearchParams({ months: String(months) })
+  if (facilityId) {
+    params.set('facilityId', facilityId)
+  }
   const res = await apiRequest<{ data: BusinessRevenueReport } | BusinessRevenueReport>(
-    `/api/business/reports/revenue?months=${encodeURIComponent(months)}`
+    `/api/business/reports/revenue?${params.toString()}`
   )
   if (res && typeof res === 'object' && 'data' in res && res.data) {
     return res.data

@@ -934,22 +934,22 @@ export default function BusinessReturnsPanel({ user }: Props) {
 
     // Bước 2
     await new Promise((r) => setTimeout(r, 1500))
-    addLog('2. Staff tiến hành nghiệm thu: Thu đủ chìa & thẻ, phát hiện xước sàn (-200k), vệ sinh bụi (-100k) ➔ Tổng trừ: 300,000 ₫')
+    addLog('2. Staff tiến hành nghiệm thu: Thu đủ chìa & thẻ, phát hiện xước sàn (-200k), vệ sinh bụi (-100k) -> Tổng trừ: 300,000 ₫')
     setDemoStep(3)
 
     // Bước 3
     await new Promise((r) => setTimeout(r, 1600))
-    addLog('3. Customer xem biên bản: Không đồng ý phí vệ sinh 100k, gửi khiếu nại lên Ban Điều Hành ➔ Trạng thái: DISPUTED')
+    addLog('3. Customer xem biên bản: Không đồng ý phí vệ sinh 100k, gửi khiếu nại lên Ban Điều Hành -> Trạng thái: DISPUTED')
     setDemoStep(4)
 
     // Bước 4
     await new Promise((r) => setTimeout(r, 1800))
-    addLog('4. Ban Điều Hành (BO) thẩm định: Miễn giảm 100% phí vệ sinh (100k -> 0k). Tái quyết toán: Hoàn cọc 9,300,000 ₫ ➔ Trạng thái: REFUND_PENDING')
+    addLog('4. Ban Điều Hành (BO) thẩm định: Miễn giảm 100% phí vệ sinh (100k -> 0k). Tái quyết toán: Hoàn cọc 9,300,000 ₫ -> Trạng thái: REFUND_PENDING')
     setDemoStep(5)
 
     // Bước 5
     await new Promise((r) => setTimeout(r, 1800))
-    addLog('5. Kế toán giải ngân hoàn tiền cọc 9,300,000 ₫ qua VNPay (Mã GD: VNPAY-REFUND-20261017) ➔ Hợp đồng thanh lý thành công, Gian kho chuyển sang AVAILABLE!')
+    addLog('5. Kế toán giải ngân hoàn tiền cọc 9,300,000 ₫ qua VNPay (Mã GD: VNPAY-REFUND-20261017) -> Hợp đồng thanh lý thành công, Gian kho chuyển sang AVAILABLE!')
 
     // Cập nhật demo record vào danh sách
     const demoRecord = {
@@ -1073,7 +1073,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
 
               <option value="refund_pending">Chờ giải ngân hoàn cọc</option>
               <option value="payment_due">Chờ khách đóng thêm tiền</option>
-              <option value="awaiting_customer_confirmation">⏳ Chờ khách xác nhận biên bản</option>
+              <option value="awaiting_customer_confirmation">Chờ khách xác nhận biên bản</option>
               <option value="scheduled">Đã hẹn nghiệm thu hiện trường</option>
               <option value="completed">Đã hoàn tất thanh lý</option>
             </select>
@@ -1261,7 +1261,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                             className="bg-amber-600 hover:bg-amber-700 text-white font-bold cursor-pointer shadow-2xs"
                             onClick={() => handleOpenDetail(item, 'overview')}
                           >
-                            ⏳ Duyệt Quyết Toán
+                            Duyệt quyết toán
                           </Button>
                         )
                       ) : (
@@ -1341,7 +1341,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                   >
                     <span>{s.title}</span>
                     <span className="block text-[10px] font-normal mt-0.5">
-                      {s.done ? '✓ Xong' : s.active ? '● Đang xử lý' : 'Chưa đến'}
+                      {s.done ? 'Hoàn thành' : s.active ? 'Đang xử lý' : 'Chưa đến'}
                     </span>
                   </div>
                 ))}
@@ -1739,7 +1739,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
 
                   {selectedItem.status === 'completed' && (
                     <div className="flex items-center gap-2 text-emerald-800 text-xs font-bold">
-                      <span>✓ Hồ sơ đã hoàn tất mọi thủ tục pháp lý và tài chính.</span>
+                      <span>Hồ sơ đã hoàn tất mọi thủ tục pháp lý và tài chính.</span>
                     </div>
                   )}
                 </div>

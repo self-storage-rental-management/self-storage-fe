@@ -78,11 +78,11 @@ export default function ReturnSettlementModal({
           <div className="text-right">
             {netRefund > 0 ? (
               <Badge variant={isCompleted ? 'success' : isRefundPending ? 'purple' : 'warning'}>
-                {isCompleted ? (role === 'customer' ? 'Đã hoàn cọc' : '✓ Đã hoàn cọc') : 'Chờ hoàn cọc'}
+                {isCompleted ? 'Đã hoàn cọc' : 'Chờ hoàn cọc'}
               </Badge>
             ) : amountDue > 0 ? (
               <Badge variant={isCompleted ? 'success' : isPaymentDue ? 'error' : 'warning'}>
-                {isCompleted ? (role === 'customer' ? 'Đã thu đủ' : '✓ Đã thu đủ') : 'Chờ nộp thêm'}
+                {isCompleted ? 'Đã thu đủ' : 'Chờ nộp thêm'}
               </Badge>
             ) : (
               <Badge variant="muted">{balancedKnown ? 'Quyết toán cân bằng' : 'Chưa đủ dữ liệu quyết toán'}</Badge>
@@ -239,7 +239,7 @@ export default function ReturnSettlementModal({
                     {totalDeductions === 0 && (
                       <Tr>
                         <Td colSpan={2} className="text-xs italic text-emerald-700">
-                          {role !== 'customer' && '✓ '}Không phát sinh khoản giảm trừ. Khách hàng bàn giao gian kho nguyên vẹn, đúng hạn.
+                          Không phát sinh khoản giảm trừ. Khách hàng bàn giao gian kho nguyên vẹn, đúng hạn.
                         </Td>
                         <Td className="text-right text-xs font-semibold text-emerald-700">
                           0 ₫
