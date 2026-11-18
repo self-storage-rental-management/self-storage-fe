@@ -5,6 +5,12 @@ import { checkedPayment, checkedReservation, checkedReservationDetail, checkedRe
 export type FacilityStatus = 'setup' | 'active' | 'maintenance' | 'inactive'
 export type UnitTypeStatus = 'active' | 'inactive' | 'archived'
 export type CompatibilityResult = 'PENDING' | 'COMPATIBLE' | 'INCOMPATIBLE' | 'REVIEW_REQUIRED'
+export type ReservationRecommendationStatus =
+  | 'FIT'
+  | 'ALTERNATIVE_AVAILABLE'
+  | 'NO_COMPATIBLE_WAREHOUSE'
+  | 'NO_VACANT_WAREHOUSE'
+  | 'REVIEW_REQUIRED'
 export type PaymentStatus = ApiPaymentStatus
 export type InvoiceStatus = ApiInvoiceStatus
 export type ReservationStatus = ApiReservationStatus
@@ -67,11 +73,17 @@ export interface CustomerUnitType {
   securityDepositAmount: number
   imageUrl: string | null
   maxLoadKg: number
+  maxStoredLoadKg?: number | null
   rackCount: number
   rackLengthM: number
   rackWidthM: number
   rackHeightM: number
   aisleWidthM?: number | null
+  storageAisleWidthM?: number | null
+  gateWidthM?: number | null
+  gateHeightM?: number | null
+  lowestObstructionHeightM?: number | null
+  overheadClearanceM?: number | null
   trolleyType?: string | null
   smallBoxCapacity?: number | null
   largeBoxCapacity?: number | null
@@ -118,6 +130,11 @@ export interface GoodsItemInput {
   widthCm: number
   heightCm: number
   weightPerItemKg: number
+  stackable?: boolean
+  /** Kept for old quotes and old clients. New orders use stackable. */
+  maxStackLayers?: number
+  /** When true, the backend may rotate the package in 3D and lay it flat. */
+  allowHorizontalPlacement?: boolean
   fragile: boolean
 }
 
@@ -171,17 +188,93 @@ export interface CompatibilityCheckResult {
   startDate: string
   endDate: string
   result: CompatibilityResult
+  physicalFitStatus?: 'FIT' | 'INCOMPATIBLE' | 'REVIEW_REQUIRED' | string
+  availabilityStatus?: 'AVAILABLE' | 'NO_VACANT_WAREHOUSE' | 'NOT_EVALUATED' | string
   totalGoodsVolumeM3: number
   totalGoodsWeightKg: number
   unitVolumeM3: number
   unitMaxLoadKg: number
-  rackUtilizationRate: number
-  usableVolumePerRackM3: number
+  maxCargoLengthCm?: number | null
+  maxCargoWidthCm?: number | null
+  maxCargoHeightCm?: number | null
+  maxCargoWeightKg?: number | null
+  rackUtilizationRate?: number | null
+  usableVolumePerRackM3?: number | null
   requiredRackCount: number
   unitRackCount: number
   availableUnitCount: number
+  requiredPallets?: number | null
+  availablePalletSlots?: number | null
   staffReviewRequired: boolean
   issues: string[]
+  palletPlan?: PalletPlan | null
+  palletLayoutMissing?: boolean
+}
+
+export interface PalletPlan {
+  palletLengthCm: number
+  palletWidthCm: number
+  palletHeightCm: number
+  emptyPalletKg: number
+  requiredPallets: number
+  availableSlots: number
+  totalLoadedWeightKg: number
+  items: {
+    itemNumber: number
+    quantity: number
+    requiredPallets: number
+    maxPiecesOnOnePallet: number
+    allowedStackLayers: number
+    weightPerItemKg?: number
+    allocations?: PalletAllocation[]
+  }[]
+  racks: {
+    code: string; usedSlots: number; totalSlots: number; loadedWeightKg: number; maxLoadKg: number
+    slotMaxLoadKg: number; compartments: number; bayLengthCm: number; bayWidthCm: number; maxCargoHeightCm: number
+    levels: { number: number; supportTopCm: number; clearHeightCm: number }[]
+  }[]
+  /** Các tấm kê thực tế, dùng để hiển thị phương án xếp chung nhiều dòng hàng. */
+  pallets?: {
+    palletNumber: number
+    rackCode: string
+    compartmentNumber: number
+    compartmentCargoLimitKg: number
+    cargoWeightKg: number
+    loadedWeightKg: number
+    items: { itemNumber: number; quantity: number; layers: number; cargoWeightKg: number }[]
+    placements: {
+      itemNumber: number
+      boxNumber: number
+      layer: number
+      xCm: number
+      yCm: number
+      zCm: number
+      lengthCm: number
+      widthCm: number
+      heightCm: number
+    }[]
+  }[]
+}
+
+interface PalletAllocation {
+  rackCode: string
+  compartmentNumber?: number
+  palletCount: number
+  compartmentCargoLimitKg?: number
+  piecesPerPallet: number
+  loadedWeightKg: number
+  capacity: {
+    maxLoadedKg: number
+    cargoWeightLimitKg: number
+    piecesPerLayer: number
+    usableLayers: number
+    maxPiecesByDimensions: number
+    maxPiecesByWeight: number
+    maxPieces: number
+    placementLengthCm?: number
+    placementWidthCm?: number
+    placementHeightCm?: number
+  }
 }
 
 export interface ReservationRecommendation {
@@ -197,6 +290,26 @@ export interface ReservationRecommendation {
   evaluatedUnitTypeIds: string[]
   incompatibleUnitTypeIds: string[]
   issues: string[]
+  checksByUnitType?: Record<string, CompatibilityCheckResult>
+  pricingByUnitType?: Record<string, ReservationPackagePricing>
+  noAlternativeReason?: string | null
+  status?: ReservationRecommendationStatus
+  physicallyFitButUnavailableUnitTypeIds?: string[]
+  maxSupportedStorageLimits?: ReservationStorageLimits | null
+}
+
+export interface ReservationStorageLimits {
+  maxCargoLengthCm: number
+  maxCargoWidthCm: number
+  maxCargoHeightCm: number
+  maxCargoWeightKg?: number | null
+}
+
+export interface ReservationPackagePricing {
+  discountRate: number
+  rentAfterPackageDiscount: number
+  securityDepositAmount: number
+  reservationDepositAmount: number
 }
 
 export interface ReservationQuoteInput extends ReservationSelectionInput {
@@ -280,9 +393,25 @@ export interface CustomerReservation {
   pricingQuotedAt?: string | null
   pricingExpiresAt?: string | null
   snapshotWarnings?: string[]
+  facilitySnapshot?: {
+    snapshotVersion?: string | null; capturedAt?: string | null; code?: string | null; name: string
+    address?: string | null; city?: string | null; phone?: string | null; accessHours?: string | null
+    climateControlled?: boolean | null; securityDescription?: string | null
+  } | null
   unitTypeSnapshot?: {
     name: string; lengthM: number; widthM: number; heightM: number; areaM2: number; volumeM3: number
     maxLoadKg: number; rackCount: number; rackLengthM: number; rackWidthM: number; rackHeightM: number
+  } | null
+  storageConfigurationSnapshot?: {
+    snapshotVersion?: string | null; capturedAt?: string | null; maxStoredLoadKg?: number | null
+    aisleWidthM?: number | null; storageAisleWidthM?: number | null; gateWidthM?: number | null
+    gateHeightM?: number | null; lowestObstructionHeightM?: number | null; overheadClearanceM?: number | null
+    rackLayoutJson?: string | null; palletRatingCatalogJson?: string | null
+  } | null
+  assignedUnitSnapshot?: {
+    id?: string | null; code?: string | null; floor?: string | null; zone?: string | null
+    status?: string | null; rackLayoutJson?: string | null; unitTypeCode?: string | null
+    unitTypeName?: string | null; snapshotVersion?: string | null; capturedAt?: string | null
   } | null
   id: string
   reservationCode: string
@@ -410,6 +539,11 @@ export interface ReservationPaymentResult {
   invoiceNumber?: string | null
   invoiceStatus?: InvoiceStatus
   invoiceIssuedAt?: string | null
+  facilityCode?: string | null
+  facilityName?: string | null
+  facilityAddress?: string | null
+  unitTypeName?: string | null
+  assignedUnitCode?: string | null
 }
 
 export interface VnpayPaymentUrlResult {

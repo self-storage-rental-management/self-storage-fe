@@ -260,7 +260,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
                     <Td>
                       <div className="text-xs">
                         <p className="font-medium text-stone-800">{formatManagerDate(c.scheduledDate)}</p>
-                        <p className="text-stone-400 font-mono">{c.scheduledTime || '09:00 AM'}</p>
+                        <p className="text-stone-400 font-mono">{c.scheduledTime || '09:00'}</p>
                       </div>
                     </Td>
                     <Td>
