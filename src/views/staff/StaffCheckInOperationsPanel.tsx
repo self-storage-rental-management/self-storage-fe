@@ -190,7 +190,7 @@ const workflowStepLabels = [
   "Ký hợp đồng",
   "Thu tiền",
   "Bàn giao kho",
-  "Thời gian setup",
+  "Thời gian chuẩn bị",
   "Kiểm kê hàng",
 
 ]
@@ -664,7 +664,7 @@ export default function StaffCheckInOperationsPanel({
           const pageResult = await listCheckIns({ page: 0, pageSize: 100, q: handoverTarget.reservationCode })
           updated = pageResult.data.find((item) => item.checkInId === handoverTarget.checkInId) ?? null
         } else {
-          updated = await confirmCheckInPayment(handoverTarget.checkInId, "Đơn không còn khoản cần thu tại check-in")
+          updated = await confirmCheckInPayment(handoverTarget.checkInId, "Đơn không còn khoản cần thu khi nhận kho")
         }
         setChecklist((current) => ({ ...current, paymentVerified: true }))
       } else if (handoverStep === 4) {
@@ -695,7 +695,7 @@ export default function StaffCheckInOperationsPanel({
       setHandoverStep((current) => Math.min(6, current + 1))
       refresh()
     } catch (reason) {
-      fail(reason, "Không thể hoàn tất bước check-in này.")
+      fail(reason, "Không thể hoàn tất bước nhận kho này.")
     } finally {
       setSubmitting(false)
     }
@@ -1044,7 +1044,7 @@ export default function StaffCheckInOperationsPanel({
                           disabled={item.checkInStatus === "rejected" || item.checkInStatus === "no_show" || item.checkInStatus === "cancelled"}
                           onClick={() => beginHandover(item)}
                         >
-                          {item.checkInStatus ? "Tiếp tục check-in" : "Bắt đầu check-in"}
+                          {item.checkInStatus ? "Tiếp tục nhận kho" : "Bắt đầu nhận kho"}
                         </Button>
                         <Button
                           className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
@@ -1158,7 +1158,7 @@ export default function StaffCheckInOperationsPanel({
               ].map(([label, value]) => <div key={label}><dt className="text-xs text-stone-500">{label}</dt><dd className="mt-1 break-words font-semibold text-stone-900">{value || 'Chưa cập nhật'}</dd></div>)}
             </dl>
             <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">Hoàn tất bàn giao kho trống sẽ chuyển sang chờ khách hàng xác nhận nhận kho. Thời gian chuẩn bị chỉ bắt đầu sau xác nhận của khách; kiểm kê thực hiện khi khách báo đã chuẩn bị xong.</p>
-            <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-6" aria-label="Tiến độ check-in">
+            <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-6" aria-label="Tiến độ nhận kho">
               {workflowStepLabels.map((label, index) => {
                 const step = index + 1
                 return (
@@ -1270,7 +1270,7 @@ export default function StaffCheckInOperationsPanel({
                       <p className="text-base font-bold text-stone-900 mt-0.5">{handoverTarget.facilityName || "Cơ sở StorageHub"}</p>
                     </div>
                     <div className="rounded-lg border border-amber-200 bg-white p-3">
-                      <span className="text-xs text-stone-500">Quyền lợi setup miễn phí</span>
+                      <span className="text-xs text-stone-500">Thời gian chuẩn bị miễn phí</span>
                       <p className="text-base font-bold text-emerald-700 mt-0.5">{handoverTarget.freeSetupDays} ngày miễn phí</p>
                     </div>
                   </div>
@@ -1390,7 +1390,7 @@ export default function StaffCheckInOperationsPanel({
                 <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 text-violet-950">
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-violet-200/60 pb-3">
                     <div>
-                      <p className="font-bold text-base text-violet-950">Khách hàng đang trong thời gian chuẩn bị (Setup)</p>
+                      <p className="font-bold text-base text-violet-950">Khách hàng đang trong thời gian chuẩn bị</p>
                       <p className="text-xs text-violet-800 mt-0.5">Khách hàng đang chủ động đưa hàng hóa vào gian kho và sắp xếp kiện hàng.</p>
                     </div>
                     <span className="rounded-full bg-violet-100 border border-violet-300 px-3 py-1 text-xs font-bold text-violet-900">
@@ -1404,7 +1404,7 @@ export default function StaffCheckInOperationsPanel({
                       <p className="font-bold text-stone-900 mt-0.5">{formatStaffDateTime(handoverTarget.setupStartedAt)}</p>
                     </div>
                     <div className="rounded-lg border border-violet-200 bg-white p-3">
-                      <span className="text-stone-500">Thời gian setup miễn phí:</span>
+                      <span className="text-stone-500">Thời gian chuẩn bị miễn phí:</span>
                       <p className="font-bold text-emerald-700 mt-0.5">{handoverTarget.freeSetupDays} ngày</p>
                     </div>
                     <div className="rounded-lg border border-violet-200 bg-white p-3">
@@ -1417,10 +1417,10 @@ export default function StaffCheckInOperationsPanel({
                 <div className="rounded-xl border border-stone-200 bg-white p-4 text-sm text-stone-700 space-y-2">
                   <p className="font-bold text-stone-900">Quy trình tiếp theo</p>
                   <p className="text-xs text-stone-600 leading-relaxed">
-                    Sau khi khách hàng hoàn tất việc chuyển đồ vào kho hoặc hết thời gian setup miễn phí, nhân viên cơ sở sẽ tiến hành <b>Kiểm kê thực tế</b> (đo đạc kích thước kiện, cân nặng và chụp ảnh lưu hồ sơ).
+                    Sau khi khách hàng hoàn tất việc chuyển đồ vào kho hoặc hết thời gian chuẩn bị miễn phí, nhân viên cơ sở sẽ tiến hành <b>Kiểm kê thực tế</b> (đo đạc kích thước kiện, cân nặng và chụp ảnh lưu hồ sơ).
                   </p>
                   <p className="text-xs text-stone-500">
-                    Bấm <b>"Xác nhận setup xong, tiếp tục kiểm kê"</b> khi khách hàng báo đã sắp xếp xong hoặc khi đến hạn kiểm kê.
+                    Bấm <b>"Xác nhận đã chuẩn bị xong và tiếp tục kiểm kê"</b> khi khách hàng báo đã sắp xếp xong hoặc khi đến hạn kiểm kê.
                   </p>
                 </div>
 
@@ -1471,7 +1471,7 @@ export default function StaffCheckInOperationsPanel({
                 <div className="flex flex-wrap items-center justify-end gap-3">
                   <span className="text-xs text-violet-800">Khách có thể bấm tự xác nhận trên cổng khách hàng hoặc nhân viên xác nhận tại đây.</span>
                   <Button onClick={() => submitWorkflowStep()} disabled={submitting}>
-                    {submitting ? "Đang xác nhận…" : "Xác nhận setup xong, tiếp tục kiểm kê"}
+                    {submitting ? "Đang xác nhận…" : "Xác nhận đã chuẩn bị xong và tiếp tục kiểm kê"}
                   </Button>
                 </div>
               ) : handoverStep < 6 ? (

@@ -23,6 +23,21 @@ interface UnitCategoryCard {
   highlight: string
 }
 
+const unitSizeLabels = {
+  S: 'Gian kho nhỏ (S)',
+  M: 'Gian kho vừa (M)',
+  L: 'Gian kho lớn (L)',
+  XL: 'Gian kho rất lớn (XL)',
+}
+
+const legacyUnitSizeNames = new Map([
+  ['small storage', unitSizeLabels.S],
+  ['medium storage', unitSizeLabels.M],
+  ['large storage', unitSizeLabels.L],
+  ['extra large storage', unitSizeLabels.XL],
+  ['extra large', unitSizeLabels.XL],
+])
+
 function CatalogTierCard({ category, index, onOpen }: { category: UnitCategoryCard; index: number; onOpen: () => void }) {
   const accents = [
     {
@@ -283,7 +298,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
   const unitCategories: UnitCategoryCard[] = [
     {
       id: 'small',
-      name: 'Gian Kho Nhỏ (Small Storage)',
+      name: unitSizeLabels.S,
       size: '12,0 × 11,6 × 5,0 m · 139,20 m² · 696 m³',
       areaLabel: '139,20 m²',
       volumeLabel: '696 m³',
@@ -294,7 +309,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
     },
     {
       id: 'medium',
-      name: 'Gian Kho Vừa (Medium Storage)',
+      name: unitSizeLabels.M,
       size: '17,3 × 11,8 × 5,0 m · 204,14 m² · 1.020,7 m³',
       areaLabel: '204,14 m²',
       volumeLabel: '1.020,7 m³',
@@ -305,7 +320,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
     },
     {
       id: 'large',
-      name: 'Gian Kho Lớn (Large Storage)',
+      name: unitSizeLabels.L,
       size: '23,0 × 12,0 × 5,0 m · 276,00 m² · 1.380 m³',
       areaLabel: '276,00 m²',
       volumeLabel: '1.380 m³',
@@ -316,7 +331,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
     },
     {
       id: 'xlarge',
-      name: 'Gian Kho Rất Lớn (Extra Large)',
+      name: unitSizeLabels.XL,
       size: '29,1 × 12,2 × 5,0 m · 355,02 m² · 1.775,1 m³',
       areaLabel: '355,02 m²',
       volumeLabel: '1.775,1 m³',
@@ -338,15 +353,18 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
   ).map(([code, types]) => {
     const cheapest = types.reduce((current, type) => type.monthlyPrice < current.monthlyPrice ? type : current)
     const availableCount = types.reduce((total, type) => total + type.availableCount, 0)
+    const size = code.trim().toUpperCase()
     return {
       id: code,
-      name: cheapest.name,
+      name: size === 'S' || size === 'M' || size === 'L' || size === 'XL'
+        ? unitSizeLabels[size]
+        : legacyUnitSizeNames.get(cheapest.name.trim().toLowerCase()) ?? cheapest.name,
       size: `${formatMetric(cheapest.lengthM)} × ${formatMetric(cheapest.widthM)} × ${formatMetric(cheapest.heightM)} m · ${formatMetric(cheapest.areaM2)} m² · ${formatMetric(cheapest.volumeM3)} m³`,
       areaLabel: `${formatMetric(cheapest.areaM2)} m²`,
       volumeLabel: `${formatMetric(cheapest.volumeM3)} m³`,
       desc: `Tải trọng tối đa ${formatMetric(cheapest.maxLoadKg)} kg, ${cheapest.rackCount} khung kệ.`,
       estRate: `Từ ${cheapest.monthlyPrice.toLocaleString('vi-VN')} ₫ / tháng`,
-      badge: `Size ${code}`,
+      badge: `Cỡ ${code}`,
       highlight: `${availableCount} gian còn trống`,
     }
   })
@@ -644,7 +662,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                         <span className="text-xs sm:text-sm font-bold text-white group-hover:text-amber-300 transition-colors">
-                          Gian Nhỏ (Small)
+                          {unitSizeLabels.S}
                         </span>
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-stone-300 font-medium whitespace-nowrap">
                           80 m²
@@ -676,7 +694,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                         <span className="text-xs sm:text-sm font-bold text-white group-hover:text-sky-300 transition-colors">
-                          Gian Vừa (Medium)
+                          {unitSizeLabels.M}
                         </span>
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-stone-300 font-medium whitespace-nowrap">
                           131 m²
@@ -708,7 +726,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                         <span className="text-xs sm:text-sm font-bold text-white group-hover:text-indigo-300 transition-colors">
-                          Kho Lớn (Large)
+                          {unitSizeLabels.L}
                         </span>
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-stone-300 font-medium whitespace-nowrap">
                           197,6 m²
@@ -740,7 +758,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                         <span className="text-xs sm:text-sm font-bold text-white group-hover:text-purple-300 transition-colors">
-                          Gian Rất Lớn (XL)
+                          {unitSizeLabels.XL}
                         </span>
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-stone-300 font-medium whitespace-nowrap">
                           280 m²
@@ -1038,10 +1056,9 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-stone-300 mb-3 font-mono">DỊCH VỤ LƯU TRỮ</h4>
               <ul className="space-y-2 text-xs text-stone-400">
-                <li><button type="button" onClick={() => scrollToSection('unit-types')} className="hover:text-white transition cursor-pointer">Gian kho nhỏ · Small</button></li>
-                <li><button type="button" onClick={() => scrollToSection('unit-types')} className="hover:text-white transition cursor-pointer">Gian kho vừa · Medium</button></li>
-                <li><button type="button" onClick={() => scrollToSection('unit-types')} className="hover:text-white transition cursor-pointer">Gian kho lớn · Large</button></li>
-                <li><button type="button" onClick={() => scrollToSection('unit-types')} className="hover:text-white transition cursor-pointer">Gian kho rất lớn · Extra Large</button></li>
+                {Object.entries(unitSizeLabels).map(([code, label]) => (
+                  <li key={code}><button type="button" onClick={() => scrollToSection('unit-types')} className="hover:text-white transition cursor-pointer">{label}</button></li>
+                ))}
               </ul>
             </div>
 
