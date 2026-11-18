@@ -1687,7 +1687,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       return
     }
     let cancelled = false
-    setServerRecommendation(null)
     setRecommendationLoading(true)
     setRecommendationError(null)
     const timer = window.setTimeout(() => {
@@ -3936,16 +3935,19 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
             </div>
 
-            {capacityReady && isApiAuthenticated() && recommendationLoading && (
+            {capacityReady && isApiAuthenticated() && recommendationLoading && !warehouseRecommendation && (
               <div role="status" className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
                 Đang kiểm tra dữ liệu kho, kích thước, tải trọng và kỳ thuê trên hệ thống…
               </div>
             )}
             {capacityReady && warehouseRecommendation && (
-              <div className={`rounded-xl border p-4 text-sm ${selectedUnitTypeIncompatible ? 'border-red-300 bg-red-50 text-red-950' : warehouseRecommendation.id === selectedTarget?.unitType.id ? 'border-emerald-300 bg-emerald-50 text-emerald-950' : 'border-amber-300 bg-amber-50 text-amber-950'}`}>
+              <div className={`rounded-xl border p-4 text-sm transition-opacity duration-200 ${recommendationLoading ? 'opacity-75' : 'opacity-100'} ${selectedUnitTypeIncompatible ? 'border-red-300 bg-red-50 text-red-950' : warehouseRecommendation.id === selectedTarget?.unitType.id ? 'border-emerald-300 bg-emerald-50 text-emerald-950' : 'border-amber-300 bg-amber-50 text-amber-950'}`}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="font-bold">{smallerWarehouseRecommendation ? 'Hệ thống đề xuất kho nhỏ hơn' : largerWarehouseRecommendation ? 'Hệ thống đề xuất kho lớn hơn' : isApiAuthenticated() ? (recommendationNeedsReview ? 'Hệ thống đề xuất kho - cần nhân viên duyệt' : 'Hệ thống đề xuất kho phù hợp') : 'Gợi ý kho phù hợp theo số lượng và kích thước đã nhập'}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-bold">{smallerWarehouseRecommendation ? 'Hệ thống đề xuất kho nhỏ hơn' : largerWarehouseRecommendation ? 'Hệ thống đề xuất kho lớn hơn' : isApiAuthenticated() ? (recommendationNeedsReview ? 'Hệ thống đề xuất kho - cần nhân viên duyệt' : 'Hệ thống đề xuất kho phù hợp') : 'Gợi ý kho phù hợp theo số lượng và kích thước đã nhập'}</p>
+                      {recommendationLoading && <span className="text-xs font-normal text-stone-500 animate-pulse">(Đang cập nhật...)</span>}
+                    </div>
                     <p className="mt-1 text-xs leading-5">Cỡ nhỏ nhất còn chỗ và chứa vừa toàn bộ hàng hóa là <b>{unitTypeLabel(warehouseRecommendation.name || warehouseRecommendation.code)}</b> (~{warehouseRecommendation.volumeM3.toLocaleString('vi-VN')} m³, {warehouseRecommendation.rackCount} khung).</p>
                     {selectedUnitTypeIncompatible && <p className="mt-1 text-xs font-semibold text-red-800">Kho bạn tự chọn không còn phù hợp với hàng hóa hoặc không còn chỗ trong kỳ thuê này.</p>}
                     {warehouseRecommendation.id === selectedTarget?.unitType.id
@@ -4022,7 +4024,15 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             {(() => {
               if (!capacityReady) return null
               if (isApiAuthenticated()) return <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/40 p-4 text-sm text-stone-700">
-                <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-bold text-stone-900">Kiểm tra sức chứa theo khung và cân nặng</p>{recommendationLoading ? <span className="text-xs text-stone-500">Đang kiểm tra kho theo kỳ thuê...</span> : capacityStatus !== 'invalid' && <span className={`rounded-full px-3 py-1 text-xs font-bold ${packagesFitSelectedUnit && goodsWeightNumber <= selectedUnit.maxLoadKg ? smallerWarehouseRecommendation ? 'bg-amber-600 text-white' : 'bg-emerald-700 text-white' : 'bg-red-700 text-white'}`}>{packagesFitSelectedUnit && goodsWeightNumber <= selectedUnit.maxLoadKg ? smallerWarehouseRecommendation ? 'Phù hợp - có thể dùng kho nhỏ hơn' : 'Phù hợp' : 'Không phù hợp'}</span>}</div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-bold text-stone-900">Kiểm tra sức chứa theo khung và cân nặng</p>
+                  {capacityStatus !== 'invalid' && (
+                    <div className="flex items-center gap-2">
+                      {recommendationLoading && <span className="text-xs text-stone-500 animate-pulse">Đang cập nhật...</span>}
+                      <span className={`rounded-full px-3 py-1 text-xs font-bold ${packagesFitSelectedUnit && goodsWeightNumber <= selectedUnit.maxLoadKg ? smallerWarehouseRecommendation ? 'bg-amber-600 text-white' : 'bg-emerald-700 text-white' : 'bg-red-700 text-white'}`}>{packagesFitSelectedUnit && goodsWeightNumber <= selectedUnit.maxLoadKg ? smallerWarehouseRecommendation ? 'Phù hợp - có thể dùng kho nhỏ hơn' : 'Phù hợp' : 'Không phù hợp'}</span>
+                    </div>
+                  )}
+                </div>
                 {capacityStatus === 'invalid' ? <p className="rounded-lg bg-white p-3 text-stone-500">Nhập đủ số lượng, kích thước và cân nặng ở từng hàng hóa để tính.</p> : <div className="space-y-2 rounded-lg border border-stone-200 bg-white p-3">{packageCapacityResults.map(sample => <div key={sample.id} className="grid gap-1 border-b border-stone-100 pb-2 last:border-0 sm:grid-cols-[1fr_auto]"><span><b>{sample.sourceLabel}</b>: {sample.quantity} kiện · {sample.lengthCm} × {sample.widthCm} × {sample.heightCm} cm · {sample.weightKg} kg/kiện · <b>{formatVolumeM3(packageVolumeM3(sample))} m³</b>{sample.arrangement && <span className="mt-1 block text-xs text-stone-600">Mỗi khung: {sample.arrangement.estimatedPerRack} kiện tham khảo (giới hạn hình học {sample.capacityPerFrame}); hướng D × R × C {sample.arrangement.orientedDimensionsCm.join(' × ')} cm, {sample.arrangement.boxesAlongLength} × {sample.arrangement.boxesAlongWidth} kiện/lớp × {sample.arrangement.layers} lớp. Xếp nặng dưới, nhẹ trên; chỉ chồng kiện cho phép chịu lực.</span>}</span>{!sample.canFitFrame && <b className="text-red-700">Không xếp vừa khung</b>}</div>)}<div className="grid gap-2 border-t border-stone-200 pt-3 sm:grid-cols-3"><p><b>Tổng thể tích cần lưu:</b> <span>{formatVolumeM3(serverCompatibility?.totalGoodsVolumeM3 ?? goodsVolumeM3)} m³</span></p><p><b>Sức chứa khung hữu dụng:</b> <span>{formatVolumeM3(serverCompatibility?.usableVolumePerRackM3 ? serverCompatibility.usableVolumePerRackM3 * selectedRackCount : selectedUsableRackVolumeM3)} m³</span></p><p><b>Khung cần dùng:</b> <span className={packagesFitSelectedUnit ? 'text-emerald-700' : 'text-red-700'}>{hasUnplaceablePackage ? 'Không xác định' : totalFramesRequired} khung / {selectedRackCount} khung</span></p><p><b>Tổng cân nặng:</b> <span className={goodsWeightNumber <= selectedUnit.maxLoadKg ? 'text-emerald-700' : 'text-red-700'}>{goodsWeightNumber.toLocaleString('vi-VN')} / {selectedUnit.maxLoadKg.toLocaleString('vi-VN')} kg</span></p></div></div>}
                 {hasOtherGoods && <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-blue-950"><p className="font-bold">Hồ sơ cần được thẩm định</p><p className="mt-1 leading-5">Hàng hóa thuộc nhóm “Khác” được nhân viên cơ sở xem xét trong tối đa 6 giờ kể từ khi bạn gửi yêu cầu. Sau khi chấp thuận, bạn có 15 phút để hoàn tất đặt cọc giữ chỗ.</p></div>}
                 {selectedUnitNeedsAlternative && smallerWarehouseRecommendation && selectedTarget && (
@@ -4058,7 +4068,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       <p className="font-bold text-sm text-stone-900">Kiểm tra sức chứa theo khung & dự toán chi phí</p>
                       <p className="text-[11px] text-stone-500">Mỗi khung {formatRackDimensions(selectedRackDimensions)} m. Diện tích {Number((selectedRackDimensions[0] * selectedRackDimensions[1]).toFixed(2))} m²/khung; thể tích {formatVolumeM3(selectedRackDimensions[0] * selectedRackDimensions[1] * selectedRackDimensions[2])} m³/khung. Số kiện là tham khảo theo kích thước, chưa thay thế kiểm tra tải trọng và độ bền khi xếp chồng.</p>
                     </div>
-                    {recommendationLoading ? <span className="text-xs text-stone-500">Đang kiểm tra kho theo kỳ thuê...</span> : capacityStatus !== 'invalid' && <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${packagesFitSelectedUnit && !isOverload ? smallerWarehouseRecommendation ? 'border-amber-600 bg-amber-600 text-white' : 'border-emerald-700 bg-emerald-700 text-white' : 'border-red-700 bg-red-700 text-white'}`}>{packagesFitSelectedUnit && !isOverload ? smallerWarehouseRecommendation ? 'Kho chứa vừa - có thể dùng kho nhỏ hơn' : 'Kho chứa vừa' : 'Kho không chứa vừa'}</span>}
+                    {capacityStatus !== 'invalid' && (
+                      <div className="flex items-center gap-2">
+                        {recommendationLoading && <span className="text-xs text-stone-500 animate-pulse">Đang cập nhật...</span>}
+                        <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${packagesFitSelectedUnit && !isOverload ? smallerWarehouseRecommendation ? 'border-amber-600 bg-amber-600 text-white' : 'border-emerald-700 bg-emerald-700 text-white' : 'border-red-700 bg-red-700 text-white'}`}>{packagesFitSelectedUnit && !isOverload ? smallerWarehouseRecommendation ? 'Kho chứa vừa - có thể dùng kho nhỏ hơn' : 'Kho chứa vừa' : 'Kho không chứa vừa'}</span>
+                      </div>
+                    )}
                   </div>
 
                   {capacityStatus === 'invalid' ? <div className="rounded-lg border border-stone-300 bg-stone-100 p-4 text-center font-medium text-stone-600">Chưa đủ dữ liệu để kiểm tra sức chứa. Vui lòng nhập đầy đủ số lượng và kích thước hàng hóa hợp lệ.</div> : <div className="space-y-2 rounded-lg border border-stone-200 bg-white p-3">
@@ -4206,7 +4221,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               <p className="mt-1 leading-5">{reservationSubmitError}</p>
             </div>}
 
-            <div className="sticky bottom-0 z-10 -mx-4 -mb-4 sm:-mx-6 sm:-mb-6 bg-white/95 backdrop-blur-sm p-4 sm:px-6 border-t border-stone-200 flex flex-wrap justify-between gap-2 shadow-xs">
+            <div className="h-10 shrink-0" aria-hidden="true" />
+
+            <div className="sticky bottom-0 z-20 -mx-4 -mb-4 sm:-mx-6 sm:-mb-6 bg-white/95 backdrop-blur-sm p-4 sm:px-6 border-t border-stone-200 flex flex-wrap justify-between gap-2 shadow-xs">
               <div>
                 {bookingStep === 1
                   ? <Button variant="outline" onClick={() => { resetReservationDraft(); resetBookingForm(); setBookOpen(false); showToast('Đã hủy thao tác đặt kho.'); }}>Hủy đặt kho</Button>
