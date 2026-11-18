@@ -28,7 +28,7 @@ import type {
   MaintenancePriority,
   FacilityIssueCategory
 } from '../types/storageHub'
-import { generateDefaultRentalPackages } from '../domain/packageRules'
+import { isGeneratedDefaultRentalPackageList, resolveRentalPackagesForUnit } from '../domain/packageRules'
 import { legacyRenewalUnavailable } from '../domain/legacyRenewal'
 import { PERMISSION_KEYS, type PermissionKey, type Role, type RolePermissionsState, type User, type LoginHistoryRecord, type SessionRecord, type SecurityAlert, type ProfileChangeRequest } from '../types'
 import { FACILITIES, UNITS, USERS, TICKETS, LOGIN_HISTORY, UNIT_SPECS, type TicketItem } from '../data/demoDatabase'
@@ -374,9 +374,28 @@ const findCanonicalFacility = (facilityId?: string, facilityName?: string) => {
   return INITIAL_FACILITIES.find(item => item.id === facilityId || item.code === facilityId || item.name === normalizedName)
 }
 
+const clearGeneratedPackagesFromFacility = (facility: Facility): Facility => ({
+  ...facility,
+  rentalPackages: isGeneratedDefaultRentalPackageList(
+    facility.rentalPackages,
+    facility.id || facility.code,
+  ) ? [] : facility.rentalPackages,
+  unitCustomSpecs: facility.unitCustomSpecs?.map(spec => ({
+    ...spec,
+    rentalPackages: isGeneratedDefaultRentalPackageList(
+      spec.rentalPackages,
+      spec.rentalPackages?.[0]?.facilityId || facility.id || facility.code,
+      spec.sizeCode,
+    ) ? [] : spec.rentalPackages,
+  })),
+})
+
 const normalizeStoredFacilities = (facilities: Facility[]): Facility[] => {
   if (!Array.isArray(facilities)) return []
-  const cleaned = facilities.filter(f => !isExcludedFacility(f)).map(sanitizeFacilityStrings)
+  const cleaned = facilities
+    .filter(f => !isExcludedFacility(f))
+    .map(sanitizeFacilityStrings)
+    .map(clearGeneratedPackagesFromFacility)
   const mapped = cleaned.map(stored => {
     stored = sanitizeFacilityStrings(stored)
     const canonical = findCanonicalFacility(stored.id, stored.name) || findCanonicalFacility(stored.code, stored.name)
@@ -527,7 +546,14 @@ const INITIAL_UNITS: StorageUnit[] = UNITS.map((u, idx) => {
 // upgrading older browser snapshots to the current Customer catalog metadata.
 const normalizeStoredUnits = (units: StorageUnit[]): StorageUnit[] => {
   if (!Array.isArray(units)) return []
-  const cleaned = units.filter(u => !isExcludedUnit(u))
+  const cleaned: StorageUnit[] = units.filter(u => !isExcludedUnit(u)).map(unit => ({
+    ...unit,
+    rentalPackages: isGeneratedDefaultRentalPackageList(
+      unit.rentalPackages,
+      unit.rentalPackages?.[0]?.facilityId || unit.facilityId,
+      (unit as any).sizeCode || (unit as any).size,
+    ) ? [] : unit.rentalPackages,
+  }))
   const mapped = cleaned.map(stored => {
     const canonical = INITIAL_UNITS.find(unit => unit.id === stored.id || unit.code === stored.code)
     if (!canonical) return stored
@@ -4268,9 +4294,12 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       const volumeM3 = Math.round(lengthM * widthM * heightM * 10) / 10
 
       const customSpec = data.unitCustomSpecs?.find(s => s.sizeCode === size)
-      const unitRentalPackages = customSpec?.rentalPackages && customSpec.rentalPackages.length > 0
-        ? customSpec.rentalPackages
-        : generateDefaultRentalPackages(newFacility.id, size, monthlyPriceVnd)
+      const unitRentalPackages = resolveRentalPackagesForUnit({
+        rentalPackages: customSpec?.rentalPackages,
+        monthlyPrice: monthlyPriceVnd,
+        sizeCode: size,
+        facilityId: newFacility.id,
+      })
 
       for (let i = 1; i <= count; i++) {
         const unitNumber = String(i).padStart(3, '0')
@@ -4414,9 +4443,12 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
             const maxLoad = customLoad ?? updates.unitLoadLimits?.[size] ?? targetFac.unitLoadLimits?.[size] ?? spec?.maxLoadKg ?? defaultLoad
 
             const cs = customSpecsMap.get(size)
-            const unitRentalPackages = cs?.rentalPackages && cs.rentalPackages.length > 0
-              ? cs.rentalPackages
-              : generateDefaultRentalPackages(targetFacId, size, monthlyPriceVnd)
+            const unitRentalPackages = resolveRentalPackagesForUnit({
+              rentalPackages: cs?.rentalPackages,
+              monthlyPrice: monthlyPriceVnd,
+              sizeCode: size,
+              facilityId: targetFacId,
+            })
 
             for (let i = 1; i <= needed; i++) {
               const unitNum = String(maxNum + i).padStart(3, '0')

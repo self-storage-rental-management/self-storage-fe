@@ -167,7 +167,7 @@ function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; 
     setRefundFeedback('')
     try {
       await requestVnpayRefund(refundTarget.id, Number(refundAmount), refundReason)
-      setRefundFeedback('Đã gửi yêu cầu hoàn tiền VNPay. Nếu vượt hạn mức Manager, hồ sơ đã được chuyển sang Business duyệt.')
+      setRefundFeedback('Đã gửi yêu cầu hoàn tiền VNPay. Nếu vượt hạn mức quản lý cơ sở, hồ sơ đã được chuyển sang quản lý vận hành duyệt.')
       setRefundTarget(undefined)
       setRefundAmount('')
       setRefundReason('')

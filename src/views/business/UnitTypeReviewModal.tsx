@@ -6,9 +6,12 @@ import type { ManagerUnitTypeInput } from '../../services/managerUnitTypeApi'
 const fields: [keyof ManagerUnitTypeInput, string][] = [
   ['name', 'Tên loại kho'], ['description', 'Mô tả'], ['imageUrl', 'Ảnh tổng quan kho'], ['detailImageUrl', 'Ảnh chi tiết / sơ đồ bố trí'],
   ['lengthM', 'Chiều dài (m)'], ['widthM', 'Chiều rộng (m)'], ['heightM', 'Chiều cao (m)'],
-  ['maxLoadKg', 'Tải trọng tối đa (kg)'], ['rackCount', 'Số khung kệ'],
+  ['maxLoadKg', 'Quota hàng tối đa (kg)'], ['maxStoredLoadKg', 'Giới hạn tổng pallet và hàng (kg)'], ['rackCount', 'Số khung kệ'],
   ['rackLengthM', 'Dài khung (m)'], ['rackWidthM', 'Rộng khung (m)'], ['rackHeightM', 'Cao khung (m)'],
-  ['aisleWidthM', 'Chiều rộng lối đi (m)'], ['trolleyType', 'Xe đẩy hỗ trợ'],
+  ['aisleWidthM', 'Chiều rộng lối chính (m)'], ['storageAisleWidthM', 'Khoảng khung kệ thiết kế (m)'],
+  ['gateWidthM', 'Chiều rộng thông thủy cổng (m)'], ['gateHeightM', 'Chiều cao thông thủy cổng (m)'],
+  ['lowestObstructionHeightM', 'Cao độ vật cản thấp nhất (m)'], ['overheadClearanceM', 'Khoảng hở tới trần hoặc vật cản (m)'],
+  ['trolleyType', 'Xe đẩy hỗ trợ'],
   ['smallBoxCapacity', 'Sức chứa thùng nhỏ'], ['largeBoxCapacity', 'Sức chứa thùng lớn'],
 ]
 const statusLabel = { PENDING: 'Chờ duyệt', APPROVED: 'Đã duyệt', REJECTED: 'Đã từ chối' }

@@ -21,7 +21,7 @@ function Receipt({ payment: p }: { payment: RentalPaymentReceipt }) {
       ['Phương thức thanh toán',paymentMethodLabel(p.paymentMethod)],['Người ghi nhận',p.initiatedByName],
       ['Nội dung',purpose(p)],['Số tiền',formatVndAmount(p.amount)],['Tiền tệ',paymentCurrencyLabel(p.currency)],
       ...(p.refundedAmount>0 ? [['Đã hoàn',formatVndAmount(p.refundedAmount)] as [string,string]] : []),
-    ]} footer={p.verification==='SIMULATED' ? 'Giao dịch mô phỏng, không xác nhận thu tiền thật.' : p.verification==='SANDBOX' ? 'Giao dịch VNPay Sandbox, không xác nhận thu tiền thật.' : verified ? 'Biên lai được lưu để đối chiếu thanh toán của hồ sơ thuê.' : 'Khoản thanh toán chưa có đủ bằng chứng đối soát.'} />
+    ]} footer={p.verification==='SIMULATED' ? 'Giao dịch mô phỏng, không xác nhận thu tiền thật.' : p.verification==='SANDBOX' ? 'Giao dịch VNPay thử nghiệm, không xác nhận thu tiền thật.' : verified ? 'Biên lai được lưu để đối chiếu thanh toán của hồ sơ thuê.' : 'Khoản thanh toán chưa có đủ bằng chứng đối soát.'} />
 }
 export default function InventoryRentalPayments({ id }: { id: string }) {
   const actor=getAuthenticatedActor()
@@ -36,7 +36,7 @@ export default function InventoryRentalPayments({ id }: { id: string }) {
     {!read.loading && !read.error && !read.data?.length && <p className="text-sm text-stone-500">Không có dữ liệu</p>}
     <ul className="divide-y divide-stone-100">{read.data?.map(p=><li key={p.paymentId} className="flex flex-wrap items-center justify-between gap-3 py-3">
       <div className="min-w-0"><p className="font-medium">{purpose(p)}</p><p className="mt-1 text-sm text-stone-500">{formatVndAmount(p.amount)} · {rentalDate(p.paidAt || p.createdAt)}</p></div>
-      <div className="flex flex-wrap items-center gap-2"><Badge variant={p.status==='PAID' ? 'success' : ['FAILED','CANCELLED'].includes(p.status) ? 'error' : 'warning'}>{p.status==='PAID' && p.verification==='SIMULATED' ? 'Giao dịch mô phỏng' : p.status==='PAID' && p.verification==='SANDBOX' ? 'Đã thanh toán (Sandbox)' : statuses[p.status]}</Badge>
+      <div className="flex flex-wrap items-center gap-2"><Badge variant={p.status==='PAID' ? 'success' : ['FAILED','CANCELLED'].includes(p.status) ? 'error' : 'warning'}>{p.status==='PAID' && p.verification==='SIMULATED' ? 'Giao dịch mô phỏng' : p.status==='PAID' && p.verification==='SANDBOX' ? 'Đã thanh toán (thử nghiệm)' : statuses[p.status]}</Badge>
         {p.status==='PAID' && <Button size="sm" variant="outline" onClick={()=>setSelected(selected===p.paymentId ? undefined : p.paymentId)}>{selected===p.paymentId ? 'Đóng biên lai' : 'Xem biên lai'}</Button>}
       </div>
     </li>)}</ul>

@@ -121,6 +121,15 @@ export default function ManagerGoodsCatalogPanel() {
     finally { setBusy(false); setDraggingCategoryId(undefined) }
   }
 
+  const moveCategoryByOffset = (categoryId: string, offset: -1 | 1) => {
+    if (!catalog || busy) return
+    const movable = catalog.categories.filter(item => !item.custom)
+    const source = movable.findIndex(item => item.id === categoryId)
+    const target = source + offset
+    if (source < 0 || target < 0 || target >= movable.length) return
+    void moveCategory(categoryId, movable[target].id)
+  }
+
   const moveMaterial = async (category: GoodsCatalogCategory, sourceId: string, targetId: string) => {
     if (!catalog || sourceId === targetId || busy) return
     const previous = catalog
@@ -137,6 +146,14 @@ export default function ManagerGoodsCatalogPanel() {
       setCatalog(current => current && ({ categories: current.categories.map(item => item.id === category.id ? saved : item) }))
     } catch (reason) { setCatalog(previous); setError(`Chưa lưu được thứ tự vật liệu. ${orderError(reason)}`) }
     finally { setBusy(false); setDraggingMaterial(undefined) }
+  }
+
+  const moveMaterialByOffset = (category: GoodsCatalogCategory, materialId: string, offset: -1 | 1) => {
+    if (busy) return
+    const source = category.materials.findIndex(item => item.id === materialId)
+    const target = source + offset
+    if (source < 0 || target < 0 || target >= category.materials.length) return
+    void moveMaterial(category, materialId, category.materials[target].id)
   }
 
   const save = async () => {
@@ -164,7 +181,7 @@ export default function ManagerGoodsCatalogPanel() {
       if (archiving.material) await updateGoodsMaterial(archiving.material.id, { label: archiving.material.label, fragile: archiving.material.fragile, status: 'ARCHIVED' })
       else await updateGoodsCategory(archiving.category.id, { label: archiving.category.label, status: 'ARCHIVED' })
       setArchiving(undefined); await load()
-      setFeedback('Đã ngừng sử dụng mục này cho khai báo mới. Thông tin đã chốt trong đơn cũ được giữ nguyên.')
+      setFeedback('Đã xóa mục này khỏi danh sách khai báo mới. Thông tin đã chốt trong đơn cũ được giữ nguyên.')
     } catch (reason) { setError(managerDisplayError(reason)) }
     finally { setBusy(false) }
   }
@@ -182,6 +199,8 @@ export default function ManagerGoodsCatalogPanel() {
     {!catalog ? <p className="text-sm text-stone-500">Đang tải danh mục...</p> : <div className="space-y-2">
       {catalog.categories.map((category, categoryIndex) => {
         const isOpen = expanded.has(category.id) || editor?.category?.id === category.id
+        const movableCategories = catalog.categories.filter(item => !item.custom)
+        const movableIndex = movableCategories.findIndex(item => item.id === category.id)
         const openEditor = (next: Editor) => { setExpanded(current => new Set(current).add(category.id)); setEditor(next) }
         return <section key={category.id} data-category-id={category.id}
           onDragOver={event => { if (!category.custom && draggingCategoryId) event.preventDefault() }}
@@ -203,7 +222,12 @@ export default function ManagerGoodsCatalogPanel() {
             <div className="flex flex-wrap items-center gap-2 pl-12 xl:justify-end xl:pl-0">
               <Badge variant={category.status === 'ACTIVE' ? 'success' : 'muted'}>{statusText[category.status]}</Badge>
               <span className="mr-2 text-xs text-stone-500">{category.materials.length} vật liệu</span>
+              {!category.custom && <div className="flex items-center gap-1" aria-label={`Đổi thứ tự ${category.label}`}>
+                <Button size="sm" variant="ghost" disabled={busy || movableIndex <= 0} title="Đưa loại hàng lên" aria-label={`Đưa ${category.label} lên`} onClick={() => moveCategoryByOffset(category.id, -1)}>↑</Button>
+                <Button size="sm" variant="ghost" disabled={busy || movableIndex < 0 || movableIndex >= movableCategories.length - 1} title="Đưa loại hàng xuống" aria-label={`Đưa ${category.label} xuống`} onClick={() => moveCategoryByOffset(category.id, 1)}>↓</Button>
+              </div>}
               <Button size="sm" variant="outline" onClick={() => openEditor({ kind: 'category', category, label: category.label, status: category.status })}>Chỉnh sửa</Button>
+              {!category.custom && category.status !== 'ARCHIVED' && <Button size="sm" variant="outline" className="border-red-200 text-red-700 hover:bg-red-50" onClick={() => setArchiving({ category })}>Xóa khỏi danh sách</Button>}
               <Button size="sm" disabled={category.custom} className={category.custom ? 'invisible pointer-events-none' : ''} aria-hidden={category.custom || undefined} tabIndex={category.custom ? -1 : undefined} onClick={() => openEditor({ kind: 'material', category, label: '', fragile: false, status: 'ACTIVE' })}>Thêm vật liệu</Button>
             </div>
           </div>
@@ -214,7 +238,12 @@ export default function ManagerGoodsCatalogPanel() {
                 onDrop={event => { event.preventDefault(); if (draggingMaterial?.categoryId === category.id) void moveMaterial(category, draggingMaterial.materialId, material.id) }}
                 className={`relative flex flex-col gap-2 border-b border-stone-200 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between before:absolute before:-left-5 before:top-6 before:h-px before:w-4 before:bg-stone-300 ${draggingMaterial?.materialId === material.id ? 'rounded-lg border-dashed border-amber-400 bg-amber-50 opacity-30' : dropTarget === material.id && draggingMaterial ? 'rounded-lg bg-amber-50 ring-2 ring-amber-300' : ''}`}>
                 <div className="flex items-center gap-2"><button type="button" draggable={false} onPointerDown={event => startPointerSort(event, category, material)} aria-label={`Kéo để sắp xếp ${material.label}`} title="Giữ và kéo để đổi vị trí" onDragStart={event => { setDraggingMaterial({ categoryId: category.id, materialId: material.id }); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', material.id) }} onDragEnd={() => setDraggingMaterial(undefined)} className="grid h-10 w-9 touch-none select-none shrink-0 cursor-grab place-items-center rounded text-stone-400 hover:bg-stone-200 hover:text-stone-700 active:cursor-grabbing"><span className="text-xs font-semibold tabular-nums">{materialIndex + 1}</span></button><div><div className="flex flex-wrap items-center gap-2"><b className="text-sm">{material.label}</b>{material.fragile && <Badge variant="warning">Dễ vỡ</Badge>}<Badge variant={material.status === 'ACTIVE' ? 'success' : 'muted'}>{statusText[material.status]}</Badge></div><span className="mt-1 block text-xs text-stone-500">Vật liệu chính</span></div></div>
-                <Button size="sm" variant="outline" onClick={() => openEditor({ kind: 'material', category, material, label: material.label, fragile: material.fragile, status: material.status })}>Chỉnh sửa</Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button size="sm" variant="ghost" disabled={busy || materialIndex <= 0} title="Đưa vật liệu lên" aria-label={`Đưa ${material.label} lên`} onClick={() => moveMaterialByOffset(category, material.id, -1)}>↑</Button>
+                  <Button size="sm" variant="ghost" disabled={busy || materialIndex >= category.materials.length - 1} title="Đưa vật liệu xuống" aria-label={`Đưa ${material.label} xuống`} onClick={() => moveMaterialByOffset(category, material.id, 1)}>↓</Button>
+                  <Button size="sm" variant="outline" onClick={() => openEditor({ kind: 'material', category, material, label: material.label, fragile: material.fragile, status: material.status })}>Chỉnh sửa</Button>
+                  {material.status !== 'ARCHIVED' && <Button size="sm" variant="outline" className="border-red-200 text-red-700 hover:bg-red-50" onClick={() => setArchiving({ category, material })}>Xóa khỏi danh sách</Button>}
+                </div>
               </div>)}
             </div>}
           </div>}
@@ -230,14 +259,14 @@ export default function ManagerGoodsCatalogPanel() {
         {editor.kind === 'material' && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={editor.fragile} onChange={event => setEditor({ ...editor, fragile: event.target.checked })} /> Vật liệu dễ vỡ</label>}
       </div>
       <div className="flex flex-col-reverse gap-3 border-t border-stone-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>{(((editor.kind === 'category' && editor.category) || (editor.kind === 'material' && editor.material)) && editor.status !== 'ARCHIVED') && <Button variant="outline" disabled={busy} className="border-red-200 text-red-700 hover:bg-red-50" onClick={() => { if (editor.kind === 'category' && editor.category) setArchiving({ category: editor.category }); else if (editor.kind === 'material' && editor.material) setArchiving({ category: editor.category, material: editor.material }); setEditor(undefined) }}>Ngừng sử dụng mục này</Button>}</div>
+        <div>{(((editor.kind === 'category' && editor.category) || (editor.kind === 'material' && editor.material)) && editor.status !== 'ARCHIVED') && <Button variant="outline" disabled={busy} className="border-red-200 text-red-700 hover:bg-red-50" onClick={() => { if (editor.kind === 'category' && editor.category) setArchiving({ category: editor.category }); else if (editor.kind === 'material' && editor.material) setArchiving({ category: editor.category, material: editor.material }); setEditor(undefined) }}>Xóa khỏi danh sách</Button>}</div>
         <div className="flex justify-end gap-2"><Button variant="outline" disabled={busy} onClick={() => { setEditor(undefined); setError(undefined) }}>Hủy</Button><Button disabled={busy || !editor.label.trim()} onClick={save}>{busy ? 'Đang lưu...' : 'Lưu thay đổi'}</Button></div>
       </div>
     </div>}
     </Modal>
-    <Modal open={Boolean(archiving)} onClose={() => { if (!busy) setArchiving(undefined) }} title="Xác nhận ngừng sử dụng">
+    <Modal open={Boolean(archiving)} onClose={() => { if (!busy) setArchiving(undefined) }} title="Xác nhận xóa khỏi danh sách">
       {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-      {archiving && <div className="space-y-4"><p>Ngừng sử dụng <b>{archiving.material?.label || archiving.category.label}</b>? Mục này sẽ không còn xuất hiện khi khách hàng khai báo hàng hóa, nhưng dữ liệu cũ vẫn được giữ nguyên.</p><div className="flex justify-end gap-2 border-t border-stone-200 pt-4"><Button variant="outline" disabled={busy} onClick={() => setArchiving(undefined)}>Hủy</Button><Button disabled={busy} onClick={archive}>{busy ? 'Đang lưu...' : 'Xác nhận ngừng sử dụng'}</Button></div></div>}
+      {archiving && <div className="space-y-4"><p>Xóa <b>{archiving.material?.label || archiving.category.label}</b> khỏi danh sách khai báo mới? Đây là xóa mềm, dữ liệu lịch sử trong các đơn cũ vẫn được giữ nguyên.</p><div className="flex justify-end gap-2 border-t border-stone-200 pt-4"><Button variant="outline" disabled={busy} onClick={() => setArchiving(undefined)}>Hủy</Button><Button disabled={busy} onClick={archive}>{busy ? 'Đang lưu...' : 'Xác nhận xóa'}</Button></div></div>}
     </Modal>
   </Card>
 }

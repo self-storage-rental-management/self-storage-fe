@@ -1,6 +1,7 @@
 /* Match the shared portal font without changing other roles or identifier styling. */
 .manager-role-layout {
   font-family: var(--font-sans);
+  min-height: 100dvh;
 }
 
 .manager-role-layout :is(h1, h2, h3, h4, label, thead th, .eyebrow),

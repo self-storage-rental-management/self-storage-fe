@@ -22,7 +22,7 @@ export default function ManagerMovesPanel({ user, showToast, statusBadge, onNavi
   const hasDispute = hub.returns.some(item => item.status === 'disputed' && isManagerFacilityVisible(user, item.facilityId, item.facilityName))
   const [tab, setTab] = useState<'move-ins' | 'move-outs' | 'exceptions' | 'credentials'>(() => hasDispute ? 'move-outs' : 'move-ins')
   useEffect(() => { if (hasDispute) setTab('move-outs') }, [hasDispute])
-  const labels = isApiAuthenticated() ? ['Nhận kho', 'Trả kho', 'Credential', 'Ngoại lệ vận hành'] : ['Nhận kho', 'Trả kho', 'Ngoại lệ vận hành']
+  const labels = isApiAuthenticated() ? ['Nhận kho', 'Trả kho', 'Quyền truy cập', 'Ngoại lệ vận hành'] : ['Nhận kho', 'Trả kho', 'Ngoại lệ vận hành']
   const activeLabel = tab === 'move-ins' ? labels[0] : tab === 'move-outs' ? labels[1] : tab === 'credentials' && isApiAuthenticated() ? labels[2] : labels[labels.length - 1]
   return <div className="space-y-5">
     <Tabs tabs={labels} active={activeLabel} onChange={value => setTab(value === labels[0] ? 'move-ins' : value === labels[1] ? 'move-outs' : isApiAuthenticated() && value === labels[2] ? 'credentials' : 'exceptions')} />

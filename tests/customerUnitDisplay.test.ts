@@ -14,19 +14,16 @@ describe('Customer Storage Unit Display Requirements', () => {
   })
 
   it('verifies single aisle width value matching warehouse standards for all sizes', () => {
-    // S: 1.8m aisle
-    expect(UNIT_SPECS.S.aisleM).toBe(1.8)
-    // M: 2.2m aisle
-    expect(UNIT_SPECS.M.aisleM).toBe(2.2)
-    // L: 2.6m aisle
-    expect(UNIT_SPECS.L.aisleM).toBe(2.6)
-    // XL: 3.0m aisle
-    expect(UNIT_SPECS.XL.aisleM).toBe(3.0)
+    // Khoảng cách giữa hai hàng khung sau khi trừ phần tấm kê nhô ra.
+    expect(UNIT_SPECS.S.aisleM).toBe(2.5)
+    expect(UNIT_SPECS.M.aisleM).toBe(2.7)
+    expect(UNIT_SPECS.L.aisleM).toBe(2.9)
+    expect(UNIT_SPECS.XL.aisleM).toBe(3.1)
   })
 
   it('verifies full D x R x C dimensions preserve height without separate height field', () => {
-    expect(UNIT_SPECS.S.dimensions).toContain('8,0')
-    expect(UNIT_SPECS.S.dimensions).toContain('10,0')
+    expect(UNIT_SPECS.S.dimensions).toContain('12,0')
+    expect(UNIT_SPECS.S.dimensions).toContain('11,6')
     expect(UNIT_SPECS.S.dimensions).toContain('5,0')
     expect(UNIT_SPECS.S.heightM).toBe(5.0)
   })

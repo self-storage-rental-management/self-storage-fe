@@ -32,7 +32,7 @@ import { listNotifications, markNotificationRead, type ApiNotification } from '.
 import { reservationProgress } from './reservationPresentation'
 import { requestReturn as requestReturnApi } from '../../services/returnApi'
 import ReturnSettlementModal from '../../components/ReturnSettlementModal'
-import { generateDefaultRentalPackages, resolveRentalPackagesForUnit } from '../../domain/packageRules'
+import { isGeneratedDefaultRentalPackageList, resolveRentalPackagesForUnit } from '../../domain/packageRules'
 import { LEGACY_RENEWAL_NOTICE, LEGACY_RENEWAL_HISTORY_NOTICE, legacyRenewalMoney, isLegacyRenewalPayment } from '../../domain/legacyRenewal'
 import LegacyRenewalPaymentRecord from '../rental-api/LegacyRenewalPaymentRecord'
 import { firstBookableCheckInMinute, firstCheckInMinute, submissionCheckInWindow, formatPolicyDateTime, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyTimeInput, PAYMENT_WINDOW_MINUTES, MANAGER_ASSIGNMENT_HOURS, CHECK_IN_WINDOW_DAYS } from '../../domain/reservationCheckInPolicy'
@@ -45,12 +45,13 @@ import { isVietnamesePhone, VIETNAMESE_PHONE_ERROR_MESSAGE } from '../../domain/
 import {
   dimensionalWeightKg,
   isPackageSampleValid,
-  packageCapacityPerRack,
   packageVolumeM3,
-  requiredRackCountForSamples,
-  usableRackVolumeM3,
   type ReservationPackageSample,
 } from '../../domain/reservationCapacity'
+import CustomerPalletCheck, { customerRackIssue } from './CustomerPalletCheck'
+import CustomerWarehouseSuggestion from './CustomerWarehouseSuggestion'
+import { CustomerNoCompatibleWarehouse, CustomerNoVacantWarehouse } from './CustomerWarehouseOutcome'
+import { resolveWarehouseRecommendation } from './customerWarehouseRecommendation'
 import {
   listCustomerFacilities,
   listCustomerUnitTypes,
@@ -73,6 +74,7 @@ import {
   type CustomerUnitType,
   type CompatibilityCheckResult,
   type ReservationRecommendation,
+  type ReservationRecommendationInput,
   type GoodsCategory,
   type GoodsItemInput,
   type GoodsCatalog,
@@ -160,15 +162,16 @@ type GoodsDeclarationItem = {
   heightCm: string
   weightKg: string
   fragile: '' | 'yes' | 'no'
+  stackable: '' | 'yes' | 'no'
+  allowHorizontalPlacement: '' | 'yes' | 'no'
   customerNote: string
   images: File[]
 }
 type PackageSample = ReservationPackageSample & { id: string; sourceLabel?: string }
-type CapacityStatus = 'invalid' | 'fits' | 'not-fit'
 
 type GoodsCategoryCode = string
 const OPTIONAL_MATERIAL_CATEGORY_CODES = new Set(['ELECTRONICS', 'CAMERA_EQUIPMENT', 'MUSICAL_INSTRUMENTS'])
-const createGoodsDeclarationItem = (id = `goods-${Date.now()}`): GoodsDeclarationItem => ({ id, category: '', materialType: '', materialName: '', customGoodsName: '', description: '', customMaterial: '', quantity: '', lengthCm: '', widthCm: '', heightCm: '', weightKg: '', fragile: '', customerNote: '', images: [] })
+const createGoodsDeclarationItem = (id = `goods-${Date.now()}`): GoodsDeclarationItem => ({ id, category: '', materialType: '', materialName: '', customGoodsName: '', description: '', customMaterial: '', quantity: '', lengthCm: '', widthCm: '', heightCm: '', weightKg: '', fragile: '', stackable: '', allowHorizontalPlacement: '', customerNote: '', images: [] })
 
 const rentalDiscountRate = (months: number, customPackages?: RentalPackage[]) => {
   if (customPackages && customPackages.length > 0) {
@@ -325,7 +328,6 @@ function SizeCategoryCard({ facility, unitType, apiSpec, availableCount, onReser
           <div><p className="text-xs text-stone-500">{'Diện tích'}</p><p className="mt-0.5 font-bold text-black">{unitType.areaM2} m²</p></div>
           <div><p className="text-xs text-stone-500">{'Kích thước (D×R×C)'}</p><p className="mt-0.5 font-bold text-black">{unitType.lengthM} × {unitType.widthM} × {unitType.heightM} m</p></div>
           <div><p className="text-xs text-stone-500">{'Thể tích kho'}</p><p className="mt-0.5 font-bold text-black">{unitType.volumeM3} m³</p></div>
-          <div><p className="text-xs text-stone-500">{'Số khung kệ'}</p><p className="mt-0.5 font-bold text-black">{apiSpec?.rackCount ?? '—'} khung</p></div>
           <div><p className="text-xs text-stone-500">{'Chiều rộng lối đi'}</p><p className="mt-0.5 font-bold text-black">{amenities ? `${amenities.aisleWidthM} m` : 'Chưa có dữ liệu'}</p></div>
           <div><p className="text-xs text-stone-500">{'Tải trọng tối đa'}</p><p className="mt-0.5 font-bold text-black">{unitType.maxLoadKg.toLocaleString('vi-VN')} kg</p></div>
         </div>
@@ -407,7 +409,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     tickets,
     config,
     unitTypes: sharedUnitTypes,
-    validateAndCreateReservation,
     calculateDIMAndQuote,
     verifyHoldEmail,
     resendHoldEmail,
@@ -457,7 +458,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const quotedGoodsItems = useRef<GoodsItemInput[] | null>(null)
   const [acceptedSetupQuoteId, setAcceptedSetupQuoteId] = useState<string | null>(null)
   const [serverCompatibility, setServerCompatibility] = useState<CompatibilityCheckResult | null>(null)
-  const [serverRecommendation, setServerRecommendation] = useState<ReservationRecommendation | null>(null)
+  const [bookingFit, setBookingFit] = useState<{ input: ReservationRecommendationInput; check: CompatibilityCheckResult } | null>(null)
+  const [recommendationResult, setServerRecommendation] = useState<{
+    input: ReservationRecommendationInput
+    response: ReservationRecommendation
+  } | null>(null)
   const [recommendationLoading, setRecommendationLoading] = useState(false)
   const [recommendationError, setRecommendationError] = useState<string | null>(null)
   const [recommendationRetry, setRecommendationRetry] = useState(0)
@@ -620,6 +625,25 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       const smallBoxCapacity = amenities?.smallBoxCapacity ?? 0
       const largeBoxCapacity = amenities?.largeBoxCapacity ?? 0
 
+      const configuredRentalPackages = unit.rentalPackages?.length
+        ? unit.rentalPackages
+        : fac?.unitCustomSpecs?.find(s => s.sizeCode === sizeCode)?.rentalPackages
+      const rentalPackages = isGeneratedDefaultRentalPackageList(
+        configuredRentalPackages,
+        fac?.id || unit.facilityId,
+        sizeCode,
+      ) ? resolveRentalPackagesForUnit({
+        rentalPackages: [],
+        monthlyPrice: price,
+        sizeCode,
+        facilityId: fac?.id || unit.facilityId,
+      }) : resolveRentalPackagesForUnit({
+        rentalPackages: configuredRentalPackages,
+        monthlyPrice: price,
+        sizeCode,
+        facilityId: fac?.id || unit.facilityId,
+      })
+
       return {
         ...unit,
         facilityName,
@@ -639,9 +663,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         maxLoadKg,
         price,
         deposit: backendSpec?.securityDepositAmount ?? unit.deposit ?? 0,
-        rentalPackages: isApiAuthenticated()
-          ? []
-          : unit.rentalPackages || fac?.unitCustomSpecs?.find(s => s.sizeCode === sizeCode)?.rentalPackages || generateDefaultRentalPackages(fac?.id || unit.facilityId, sizeCode, price),
+        rentalPackages: isApiAuthenticated() ? [] : rentalPackages,
         allowedGoods: isApiAuthenticated() ? [] : (unit.allowedGoods?.length ? unit.allowedGoods : ['Đồ gia dụng', 'Thiết bị văn phòng', 'Tài liệu, hồ sơ', 'Hàng thương mại điện tử']),
         prohibitedGoods: isApiAuthenticated() ? [] : (unit.prohibitedGoods?.length ? unit.prohibitedGoods : ['Chất dễ cháy nổ', 'Hóa chất độc hại', 'Hàng cấm theo luật', 'Thực phẩm tươi sống']),
       }
@@ -771,14 +793,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   useEffect(() => setUnitPages({}), [selectedFacilityId, sizeFilter, unitSearch])
 
-  // Validation violation state in booking modal
-  const [validationViolation, setValidationViolation] = useState<{
-    reason: string
-    suggestedUnitTypeId?: string
-    suggestedUnitTypeName?: string
-    suggestedVolumeM3?: number
-  } | null>(null)
-
   // Live timer tick
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
@@ -846,7 +860,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     setBookingErrors({})
     setSchedulePolicyMessage(null)
     setReservationSubmitError(null)
-    setValidationViolation(null)
+    setBookingFit(null)
     setServerRecommendation(null)
     setRecommendationLoading(false)
     setRecommendationError(null)
@@ -863,8 +877,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const packageCountNumber = capacitySamples.reduce((sum, sample) => sum + (Number(sample.quantity) || 0), 0)
   const goodsWeightNumber = capacitySamples.reduce((sum, sample) => sum + ((Number(sample.quantity) || 0) * (Number(sample.weightKg) || 0)), 0)
   const goodsVolumeM3 = capacitySamples.reduce((sum, sample) => sum + packageVolumeM3(sample), 0)
-  const formatVolumeM3 = (value: number) => value.toLocaleString('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-  const formatRackDimensions = (dimensions: [number, number, number]) => dimensions.map(value => value.toLocaleString('vi-VN', { maximumFractionDigits: 2 })).join(' × ')
   const largestPackage = capacitySamples.reduce<PackageSample | null>((largest, sample) => {
     const volume = Number(sample.lengthCm) * Number(sample.widthCm) * Number(sample.heightCm)
     if (!largest) return sample
@@ -918,13 +930,15 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       widthCm: Number(item.widthCm) || cargoWidthNumber,
       heightCm: Number(item.heightCm) || cargoHeightNumber,
       weightPerItemKg: Number(item.weightKg) || Math.max(0.01, goodsWeightNumber / quantity),
+      stackable: item.fragile === 'yes' ? false : item.stackable === 'yes',
+      allowHorizontalPlacement: item.allowHorizontalPlacement === 'yes',
       fragile: item.fragile === 'yes',
     }
   }), [goodsItems, goodsCatalog, packageCountNumber, cargoLengthNumber, cargoWidthNumber, cargoHeightNumber, goodsWeightNumber])
 
   const timelinePackage = backendRentalPackages.find(pkg => pkg.code === selectedPackageId)
   const timelineSetupDays = isApiAuthenticated()
-    ? serverQuote?.freeSetupDays ?? timelinePackage?.freeSetupDays
+    ? serverQuote?.freeSetupDays ?? (timelinePackage ? timelinePackage.freeSetupDays ?? 0 : undefined)
     : selectedUnit?.rentalPackages?.find(pkg => pkg.id === selectedPackageId)?.freeSetupDays ?? 0
   const bookingRentalPeriod = useMemo(() => timelineSetupDays == null ? null
     : estimatedRentalPeriod(moveInDate || earliestCheckInDate, timelineSetupDays, rentalMonths),
@@ -975,8 +989,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   useEffect(() => {
     if (!bookOpen || !bookingRentalPeriod) return
-    setAvailabilityPeriod({ startDate: moveInDate || earliestCheckInDate, endDate: bookingRentalPeriod.endDate })
-  }, [bookOpen, bookingRentalPeriod, moveInDate, earliestCheckInDate])
+    // Availability must use the exact period sent to the compatibility and
+    // recommendation endpoints. Using the handover date here made the card
+    // and the booking result use different intervals when free setup days
+    // existed.
+    setAvailabilityPeriod({ startDate: bookingRentalPeriod.startDate, endDate: bookingRentalPeriod.endDate })
+  }, [bookOpen, bookingRentalPeriod])
 
   useEffect(() => {
     if (!isApiAuthenticated() || !bookOpen || !selectedTarget) return
@@ -1068,11 +1086,30 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       const request = ++warehouseRequest
       try {
         const facilityPage = await listCustomerFacilities()
-        const unitTypePages = await Promise.all(facilityPage.data.map(facility => listCustomerUnitTypes(facility.id)))
+        const facilityTypes = await Promise.all(facilityPage.data.map(async facility => {
+          // The customer card must use the same date-aware availability as the
+          // compatibility check. Calling this endpoint without dates returns
+          // only the operational AVAILABLE count and can show a unit that is
+          // already held for the selected rental period.
+          const first = await listCustomerUnitTypes(facility.id, availabilityPeriod)
+          const remaining = await Promise.all(Array.from({ length: Math.max(0, first.pagination.totalPages - 1) },
+            (_, index) => listCustomerUnitTypes(facility.id, {
+              ...availabilityPeriod,
+              page: index + 1,
+            })))
+          return [first, ...remaining].flatMap(result => result.data)
+        }))
         if (cancelled || request !== warehouseRequest) return
+        const loadedUnitTypes = facilityTypes.flat()
         setWarehouseError(null)
         setBackendFacilities(facilityPage.data)
-        setBackendUnitTypes(unitTypePages.flatMap(result => result.data))
+        setBackendUnitTypes(loadedUnitTypes)
+        // The list response is date-aware too. Seed the card counters from
+        // it immediately so an older availability map cannot briefly show a
+        // stale number while the separate availability refresh is running.
+        setAvailabilityByUnitType(Object.fromEntries(
+          loadedUnitTypes.map(unitType => [unitType.id, unitType.availableCount ?? 0]),
+        ))
       } catch (error) {
         if (!cancelled && request === warehouseRequest) setWarehouseError(catalogLoadError(error))
       } finally {
@@ -1094,7 +1131,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       window.removeEventListener('focus', focus)
       window.removeEventListener('online', focus)
     }
-  }, [catalogRetry])
+  }, [catalogRetry, availabilityPeriod.startDate, availabilityPeriod.endDate])
 
   const badgeFor = (status: string) => {
     const statusClass: Record<string, string> = {
@@ -1343,7 +1380,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     setRecommendationLoading(false)
     setRecommendationError(null)
     reservationIdempotencyKey.current = null
-    setValidationViolation(null)
+    setBookingFit(null)
     setBookingErrors({})
   }
 
@@ -1373,9 +1410,16 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     setPage(nextPage)
   }
 
-  const handleStartReservation = (facility: Facility, unitType: UnitType, exactUnit?: StorageUnit, initialStep: 1 | 2 = 1, preserveSchedule = false) => {
-    const hasAvailablePhysicalUnit = effectiveAvailableCount(facility.id, unitType.name) > 0
-    if (!hasAvailablePhysicalUnit) {
+  const handleStartReservation = (facility: Facility, unitType: UnitType, exactUnit?: StorageUnit,
+    initialStep: 1 | 2 = 1, preserveSchedule = false, checkedAvailableCount?: number) => {
+    if (!isApiAuthenticated()) {
+      showToast('Vui lòng đăng nhập để kiểm tra sức chứa và đặt kho.')
+      return
+    }
+    const backendSpec = backendUnitTypes.find(item => item.id === unitType.id)
+    const availableCount = checkedAvailableCount ?? availabilityByUnitType[unitType.id]
+      ?? backendSpec?.availableCount ?? effectiveAvailableCount(facility.id, unitType.name)
+    if (availableCount <= 0) {
       showToast('Cơ sở hiện không còn gian kho trống cho loại này trong thời gian đã chọn.')
       return
     }
@@ -1389,6 +1433,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     setBookingReview(false)
     setServerQuote(null)
     setServerCompatibility(null)
+    setBookingFit(null)
     setServerRecommendation(null)
     setRecommendationLoading(false)
     setRecommendationError(null)
@@ -1396,11 +1441,20 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     setBookingErrors({})
     setSelectedTarget({ facility, unitType })
     const sizeCode = storageSizeCode(unitType.name)
-    const backendSpec = backendUnitTypes.find(item => item.id === unitType.id)
     const customSpec = facility.unitCustomSpecs?.find(s => s.sizeCode === sizeCode)
-    const unitRentalPackages = isApiAuthenticated()
-      ? []
-      : exactUnit?.rentalPackages || customSpec?.rentalPackages || generateDefaultRentalPackages(facility.id, sizeCode, unitType.monthlyPrice)
+    const configuredRentalPackages = exactUnit?.rentalPackages?.length
+      ? exactUnit.rentalPackages
+      : customSpec?.rentalPackages
+    const unitRentalPackages = isApiAuthenticated() ? [] : resolveRentalPackagesForUnit({
+      rentalPackages: isGeneratedDefaultRentalPackageList(
+        configuredRentalPackages,
+        facility.id,
+        sizeCode,
+      ) ? [] : configuredRentalPackages,
+      monthlyPrice: unitType.monthlyPrice,
+      sizeCode,
+      facilityId: facility.id,
+    })
     if (isApiAuthenticated()) {
       const activeBackendPkg = (selectedPackageId ? backendRentalPackages.find(p => p.code === selectedPackageId) : undefined)
         || backendRentalPackages.find(p => p.rentalMonths === rentalMonths)
@@ -1457,9 +1511,19 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     const sizeCode = storageSizeCode(unitType.name)
     const backendSpec = backendUnitTypes.find(item => item.id === unitType.id)
     const customSpec = facility.unitCustomSpecs?.find(s => s.sizeCode === sizeCode)
-    const unitRentalPackages = isApiAuthenticated()
-      ? []
-      : exactUnit?.rentalPackages || customSpec?.rentalPackages || generateDefaultRentalPackages(facility.id, sizeCode, unitType.monthlyPrice)
+    const configuredRentalPackages = exactUnit?.rentalPackages?.length
+      ? exactUnit.rentalPackages
+      : customSpec?.rentalPackages
+    const unitRentalPackages = isApiAuthenticated() ? [] : resolveRentalPackagesForUnit({
+      rentalPackages: isGeneratedDefaultRentalPackageList(
+        configuredRentalPackages,
+        facility.id,
+        sizeCode,
+      ) ? [] : configuredRentalPackages,
+      monthlyPrice: unitType.monthlyPrice,
+      sizeCode,
+      facilityId: facility.id,
+    })
     const repUnit: StorageUnit = exactUnit ?? {
       id: '',
       code: `${CUSTOMER_FACILITY_DISPLAY[facility.id]?.code ?? facility.code ?? facility.id.toUpperCase()}-${storageSizeCode(unitType.name)}`,
@@ -1535,8 +1599,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     : null
 
   const selectedSizeCode = storageSizeCode(selectedTarget?.unitType.name || selectedUnit?.type) as CustomerCatalogUnit['sizeCode']
-  const selectedCatalogUnit = selectedUnit ? CUSTOMER_CATALOG_UNITS.find(unit =>
-    unit.sizeCode === selectedSizeCode && (!selectedTarget || unit.facilityId === selectedTarget.facility.id)) : undefined
   const selectedBackendUnitType = backendUnitTypes.find(item => item.id === selectedTarget?.unitType.id)
   const bookingCategories = (goodsCatalog?.categories || []).filter(category =>
     !selectedBackendUnitType?.acceptedGoodsCategoryIds?.length || selectedBackendUnitType.acceptedGoodsCategoryIds.includes(category.id))
@@ -1564,18 +1626,15 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       return changed ? next : current
     })
   }, [goodsCatalog, hasValidQuotedGoods])
-  const selectedRackCount = selectedBackendUnitType?.rackCount ?? selectedCatalogUnit?.rackCount ?? 0
-  const selectedRackDimensions: [number, number, number] = selectedBackendUnitType
-    ? [selectedBackendUnitType.rackLengthM, selectedBackendUnitType.rackWidthM, selectedBackendUnitType.rackHeightM]
-    : isApiAuthenticated() ? [0, 0, 0] : [4, 2, 4.5]
-  const selectedUsableRackVolumeM3 = usableRackVolumeM3(selectedRackDimensions) * selectedRackCount
   const allPackageSamplesValid = capacitySamples.length > 0 && capacitySamples.every(isPackageSampleValid)
   const recommendationFormReady = allPackageSamplesValid
-    && !catalogIssues.some(Boolean)
+    && !goodsItems.some(item => goodsCatalogIssue(item, goodsCatalog))
     && Boolean(goodsCondition.trim())
     && goodsItems.every(item => {
       const category = catalogCategoryFor(item.category)
-      return Boolean(item.category && item.description.trim()
+      return Boolean(item.category && item.description.trim() && item.fragile
+        && item.stackable
+        && item.allowHorizontalPlacement
         && (category?.custom
           ? item.customGoodsName.trim()
           : isMaterialOptional(item.category) || item.materialName.trim()))
@@ -1591,60 +1650,56 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     setServerRecommendation(null)
     setRecommendationLoading(true)
     setRecommendationError(null)
-    const timer = window.setTimeout(() => {
-      void recommendReservationUnitType(recommendationInput)
-        .then(result => {
-          if (cancelled) return
-          setServerRecommendation(result)
-          setRecommendationError(null)
-        })
-        .catch(error => {
-          if (cancelled) return
-          setServerRecommendation(null)
-          setRecommendationError(userFacingError(error, 'Không thể kiểm tra kho phù hợp lúc này.'))
-        })
-        .finally(() => { if (!cancelled) setRecommendationLoading(false) })
+    const unitTypeId = selectedTarget.unitType.id
+    const timer = window.setTimeout(async () => {
+      let recommendation: ReservationRecommendation | null = null
+      try {
+        recommendation = await recommendReservationUnitType(recommendationInput)
+        if (!cancelled) setServerRecommendation({ input: recommendationInput, response: recommendation })
+      } catch (error) {
+        if (!cancelled) setRecommendationError(userFacingError(error, 'Không thể kiểm tra loại kho thay thế lúc này.'))
+      }
+      if (cancelled) return
+      if (!recommendation?.checksByUnitType?.[unitTypeId]) {
+        const { facilityId, startDate, endDate, goodsCondition, goodsItems } = recommendationInput
+        try {
+          const check = await checkCompatibility({ facilityId, unitTypeId, startDate, endDate, goodsCondition, goodsItems })
+          if (!cancelled) setBookingFit({ input: recommendationInput, check })
+        } catch (error) {
+          if (!cancelled) setRecommendationError(userFacingError(error, 'Không thể kiểm tra sức chứa của kho lúc này.'))
+        }
+      }
+      if (!cancelled) setRecommendationLoading(false)
     }, 350)
     return () => {
       cancelled = true
       window.clearTimeout(timer)
     }
   }, [bookOpen, selectedTarget?.facility.id, selectedTarget?.unitType.id, recommendationFormReady, recommendationInput, recommendationRetry])
-  const packageCapacityResults = allPackageSamplesValid ? capacitySamples.map(sample => {
-    const capacityPerFrame = selectedUnit ? packageCapacityPerRack(sample, selectedRackDimensions) : 0
-    return {
-      ...sample,
-      capacityPerFrame,
-      canFitFrame: capacityPerFrame > 0,
-    }
-  }) : []
-  const hasUnplaceablePackage = packageCapacityResults.some(sample => !sample.canFitFrame)
-  const totalFramesRequired = hasUnplaceablePackage
-    ? Number.POSITIVE_INFINITY
-    : requiredRackCountForSamples(capacitySamples, selectedRackDimensions)
-  const localWarehouseRecommendation = allPackageSamplesValid && !isApiAuthenticated()
-    ? backendUnitTypes
-      .filter(candidate => !selectedTarget || candidate.facilityId === selectedTarget.facility.id)
-      .filter(candidate => (availabilityByUnitType[candidate.id] ?? candidate.availableCount ?? 0) > 0)
-      .sort((left, right) => left.volumeM3 - right.volumeM3)
-      .find(candidate => {
-        const candidateRackDimensions: [number, number, number] = [candidate.rackLengthM, candidate.rackWidthM, candidate.rackHeightM]
-        const everyPackageFits = capacitySamples.every(sample => packageCapacityPerRack(sample, candidateRackDimensions) > 0)
-        const framesRequired = everyPackageFits
-          ? requiredRackCountForSamples(capacitySamples, candidateRackDimensions)
-          : Number.POSITIVE_INFINITY
-        return framesRequired <= candidate.rackCount && goodsWeightNumber <= candidate.maxLoadKg
-      })
+  const serverRecommendation = recommendationResult && recommendationResult.input === recommendationInput
+    ? recommendationResult.response : undefined
+  const recommendationStatus = serverRecommendation?.status
+  const warehouseSuggestion = recommendationFormReady
+    ? resolveWarehouseRecommendation(serverRecommendation, selectedTarget?.facility.id, backendUnitTypes)
     : undefined
-  const serverRecommendedUnitType = serverRecommendation?.recommendedUnitTypeId
-    ? backendUnitTypes.find(candidate => candidate.id === serverRecommendation.recommendedUnitTypeId)
+  const warehouseRecommendation = warehouseSuggestion?.type
+  const selectedPalletCheck = recommendationFormReady && selectedTarget
+    ? bookingFit && bookingFit.input === recommendationInput && bookingFit.check.unitTypeId === selectedTarget.unitType.id
+      ? bookingFit.check
+      : serverRecommendation?.checksByUnitType?.[selectedTarget.unitType.id]
     : undefined
-  const warehouseRecommendation = allPackageSamplesValid
-    ? isApiAuthenticated() ? serverRecommendedUnitType : localWarehouseRecommendation
-    : undefined
+  const noAlternativeReason = serverRecommendation?.noAlternativeReason
+    && !serverRecommendation.recommendedUnitTypeId ? serverRecommendation.noAlternativeReason : undefined
   const recommendedUnitType = warehouseRecommendation
     ? unitTypes.find(candidate => candidate.id === warehouseRecommendation.id)
     : undefined
+  const comparablePricing = serverRecommendation && recommendationInput && warehouseSuggestion
+    && serverRecommendation.pricingPackageCode === recommendationInput.pricingPackageCode
+    && warehouseSuggestion.check.startDate === recommendationInput.startDate
+    && warehouseSuggestion.check.endDate === recommendationInput.endDate
+    ? serverRecommendation.pricingByUnitType : undefined
+  const currentPricing = selectedTarget ? comparablePricing?.[selectedTarget.unitType.id] : undefined
+  const suggestedPricing = recommendedUnitType ? comparablePricing?.[recommendedUnitType.id] : undefined
   const smallerWarehouseRecommendation = selectedTarget && warehouseRecommendation && recommendedUnitType
     && warehouseRecommendation.id !== selectedTarget.unitType.id
     && warehouseRecommendation.volumeM3 < selectedTarget.unitType.volumeM3
@@ -1655,52 +1710,57 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     && warehouseRecommendation.volumeM3 > selectedTarget.unitType.volumeM3
     ? recommendedUnitType
     : undefined
-  const availableLargerUnitTypes = selectedTarget
-    ? backendUnitTypes
-      .filter(candidate => candidate.facilityId === selectedTarget.facility.id)
-      .filter(candidate => candidate.volumeM3 > selectedTarget.unitType.volumeM3)
-      .filter(candidate => (availabilityByUnitType[candidate.id] ?? candidate.availableCount ?? 0) > 0)
-      .sort((left, right) => right.volumeM3 - left.volumeM3)
-    : []
-  const largestAvailableLargerUnitType = availableLargerUnitTypes[0]
-  const largestAvailableLargerUnitUsableVolumeM3 = largestAvailableLargerUnitType
-    ? largestAvailableLargerUnitType.rackLengthM * largestAvailableLargerUnitType.rackWidthM * largestAvailableLargerUnitType.rackHeightM * 0.8 * largestAvailableLargerUnitType.rackCount
-    : 0
-  const noValidLargerUnitAvailable = Boolean(
-    isApiAuthenticated()
-      && allPackageSamplesValid
-      && recommendationFormReady
-      && !recommendationError
-      && !warehouseRecommendation
-      && largestAvailableLargerUnitType
-      && (goodsWeightNumber > largestAvailableLargerUnitType.maxLoadKg || goodsVolumeM3 > largestAvailableLargerUnitUsableVolumeM3),
-  )
   const selectedUnitTypeIncompatible = Boolean(
     isApiAuthenticated()
       && selectedTarget?.unitType.id
       && serverRecommendation?.incompatibleUnitTypeIds.includes(selectedTarget.unitType.id),
   )
-  const recommendationNeedsReview = Boolean(
-    isApiAuthenticated() && serverRecommendation?.result === 'REVIEW_REQUIRED',
+  const selectedCheckIsIncompatible = Boolean(
+    selectedPalletCheck
+      && !selectedPalletCheck.palletLayoutMissing
+      && selectedPalletCheck.result !== 'REVIEW_REQUIRED'
+      && selectedPalletCheck.physicalFitStatus !== 'REVIEW_REQUIRED'
+      && (selectedPalletCheck.result === 'INCOMPATIBLE' || !selectedPalletCheck.palletPlan),
   )
-  const capacityStatus: CapacityStatus = !allPackageSamplesValid ? 'invalid' : warehouseRecommendation ? 'fits' : 'not-fit'
-  const packagesFitSelectedUnit = capacityStatus === 'fits' && packageCapacityResults.every(sample => sample.capacityPerFrame > 0) && totalFramesRequired <= selectedRackCount
-  const selectedUnitCapacityFits = Boolean(selectedUnit && allPackageSamplesValid
-    && !hasUnplaceablePackage
-    && totalFramesRequired <= selectedRackCount
-    && goodsWeightNumber <= selectedUnit.maxLoadKg)
-  const selectedUnitNeedsAlternative = allPackageSamplesValid && (!selectedUnitCapacityFits || selectedUnitTypeIncompatible)
+  const selectedCheckHasNoVacancy = Boolean(
+    selectedPalletCheck
+      && !selectedPalletCheck.palletLayoutMissing
+      && selectedPalletCheck.palletPlan
+      && selectedPalletCheck.availableUnitCount <= 0,
+  )
+  const showAlternativeOutcome = Boolean(
+    !recommendationLoading && selectedTarget && selectedPalletCheck
+      && (selectedCheckIsIncompatible || selectedCheckHasNoVacancy)
+      && warehouseSuggestion && recommendedUnitType
+      && recommendedUnitType.id !== selectedTarget.unitType.id,
+  )
+  const showNoCompatibleOutcome = Boolean(
+    !recommendationLoading && selectedPalletCheck && !warehouseSuggestion
+      && (recommendationStatus === 'NO_COMPATIBLE_WAREHOUSE'
+        || (!recommendationStatus && selectedCheckIsIncompatible
+          && serverRecommendation?.recommendedUnitTypeId == null)),
+  )
+  const showNoVacantOutcome = Boolean(
+    !recommendationLoading && selectedPalletCheck && !warehouseSuggestion
+      && (recommendationStatus === 'NO_VACANT_WAREHOUSE'
+        || (!recommendationStatus && selectedCheckHasNoVacancy)),
+  )
+  const handledWarehouseOutcome = showAlternativeOutcome || showNoCompatibleOutcome || showNoVacantOutcome
 
   // Active rental packages for the selected unit
   const selectedUnitActivePackages = useMemo(() => {
     if (!selectedUnit || isApiAuthenticated()) return []
     const fac = facilities.find(f => f.id === selectedUnit.facilityId || f.code === selectedUnit.facilityId)
     const customSpec = fac?.unitCustomSpecs?.find(s => s.sizeCode === selectedSizeCode)
+    const configuredRentalPackages = selectedUnit.rentalPackages?.length
+      ? selectedUnit.rentalPackages
+      : customSpec?.rentalPackages
     const packages = resolveRentalPackagesForUnit({
-      rentalPackages: selectedUnit.rentalPackages || customSpec?.rentalPackages,
-      monthlyPrice: selectedUnit.price,
-      sizeCode: selectedSizeCode,
-      facilityId: selectedUnit.facilityId
+      rentalPackages: isGeneratedDefaultRentalPackageList(
+        configuredRentalPackages,
+        fac?.id || selectedUnit.facilityId,
+        selectedSizeCode,
+      ) ? [] : configuredRentalPackages,
     })
     return packages.filter(p => p.status === 'active')
   }, [selectedUnit, facilities, selectedSizeCode])
@@ -1736,27 +1796,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   const previewSetupDays = timelineSetupDays ?? 0
   const previewRentalPeriod = bookingRentalPeriod
-
-  const discountRate = selectedActivePackage
-    ? (selectedActivePackage.discountPercent ?? 0) / 100
-    : rentalDiscountRate(rentalMonths, selectedUnitActivePackages)
-
-  const grossTermValue = currentQuote ? currentQuote.baseMonthlyPrice * rentalMonths : 0
-  const promotionDiscount = selectedActivePackage
-    ? Math.max(0, grossTermValue - selectedActivePackage.packagePrice)
-    : Math.round(grossTermValue * discountRate * 100) / 100
-
-  // Facility policies and discounts for an authenticated booking are already
-  // included in the server quote. The Customer FE must not recalculate them.
-  const evaluatedPolicyBenefits: Array<{
-    policy: { id: string; name: string; value: string }
-    isDiscount: boolean
-    discountAmount: number
-    descriptionVi: string
-  }> = []
-  const facilityPolicyDiscount = 0
-
-  const totalCombinedDiscount = Math.min(grossTermValue, Math.round((promotionDiscount + facilityPolicyDiscount) * 100) / 100)
 
   const handleNotificationClick = (notification: LayoutNotification) => {
     setReceiptRentalTarget(undefined)
@@ -1851,18 +1890,15 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       if (parsePositiveNumber(item.heightCm) === null) errors[`goodsHeight-${item.id}`] = 'Chiều cao phải lớn hơn 0.'
       if (parsePositiveNumber(item.weightKg) === null) errors[`goodsWeight-${item.id}`] = 'Cân nặng mỗi kiện phải lớn hơn 0.'
       if (!item.fragile) errors[`goodsFragile-${item.id}`] = 'Vui lòng chọn hàng có dễ vỡ hay không.'
+      if (!item.stackable) errors[`goodsStackable-${item.id}`] = 'Vui lòng chọn hàng có được phép xếp chồng hay không.'
+      if (!item.allowHorizontalPlacement) errors[`goodsHorizontalPlacement-${item.id}`] = 'Vui lòng cho biết hàng có được phép xoay và đặt nằm ngang hay không.'
       if (item.images.length > 10) errors[`goodsImages-${item.id}`] = 'Mỗi loại hàng hóa được tải tối đa 10 ảnh.'
       if (isFreeformGoods) {
         if (!item.customGoodsName.trim()) errors[`customGoodsName-${item.id}`] = 'Vui lòng nhập tên hàng hóa.'
       }
     })
     if (!goodsCondition.trim()) errors.condition = 'Vui lòng mô tả tình trạng đóng gói.'
-    capacitySamples.forEach((sample, index) => {
-      if (isPackageSampleValid(sample) && packageCapacityPerRack(sample, selectedRackDimensions) === 0) errors[`goodsFit-${sample.id}`] = `Hàng hóa ${index + 1} không thể xếp vào khung theo bất kỳ hướng xoay nào.`
-    })
-    if (!isApiAuthenticated() && allPackageSamplesValid && !hasUnplaceablePackage && totalFramesRequired > selectedRackCount) errors.capacity = `Kho không chứa vừa: cần ${totalFramesRequired} khung nhưng kho chỉ có ${selectedRackCount} khung.`
     if (!Number.isFinite(goodsWeightNumber) || goodsWeightNumber <= 0) errors.weight = 'Vui lòng nhập cân nặng mỗi kiện cho tất cả mẫu hàng.'
-    if (goodsWeightNumber > selectedUnit.maxLoadKg) errors.weightLimit = `${'Tổng cân nặng vượt tải trọng sàn'} (${selectedUnit.maxLoadKg} kg).`
     const dateIsValid = /^\d{4}-\d{2}-\d{2}$/.test(moveInDate)
       && requestedDate !== null
       && !Number.isNaN(requestedDate.getTime())
@@ -1928,7 +1964,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   }
 
   const confirmReservation = async () => {
-    if (!selectedUnit || !selectedTarget || reservationSubmitting) return
+    if (!isApiAuthenticated() || !selectedUnit || !selectedTarget || reservationSubmitting) return
     setReservationSubmitError(null)
     if (isApiAuthenticated() && !selectedBackendRentalPackage && backendRentalPackages.length === 0) {
       setReservationSubmitError('Vui lòng chọn một gói thuê đang hiệu lực trước khi lấy báo giá.')
@@ -1955,90 +1991,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     const endDate = bookingRentalPeriod?.endDate
     if (!endDate || !bookingRentalPeriod) return
 
-    if (!isApiAuthenticated()) {
-      const primaryItem = goodsItems[0]
-      const legacyGoods = {
-        category: primaryItem?.category || '',
-        packageCount: packageCountNumber,
-        lengthCm: cargoLengthNumber,
-        widthCm: cargoWidthNumber,
-        heightCm: cargoHeightNumber,
-        weightKg: goodsWeightNumber,
-        dimWeightKg: dimensionalWeightKg(capacitySamples),
-        material: primaryItem?.materialName || primaryItem?.customMaterial || '',
-        condition: goodsCondition,
-        fragile: goodsItems.some(item => item.fragile === 'yes'),
-        notes: goodsItems.map(item => item.customerNote).filter(Boolean).join(' | '),
-        items: goodsItems.map(item => ({
-          id: item.id,
-          category: item.category,
-          materialType: item.materialType,
-          materialName: item.materialName,
-          customGoodsName: item.customGoodsName,
-          description: item.description,
-          customMaterial: item.customMaterial,
-          quantity: Number(item.quantity) || 1,
-          dimensions: {
-            lengthCm: Number(item.lengthCm) || cargoLengthNumber,
-            widthCm: Number(item.widthCm) || cargoWidthNumber,
-            heightCm: Number(item.heightCm) || cargoHeightNumber,
-          },
-          weightKg: Number(item.weightKg) || goodsWeightNumber,
-          fragile: item.fragile === 'yes',
-          customerNote: item.customerNote,
-        })),
-      }
-      setReservationSubmitting(true)
-      try {
-        const result = validateAndCreateReservation({
-          customer: user,
-          unitTypeId: selectedTarget.unitType.id,
-          facilityId: selectedTarget.facility.id,
-          goods: legacyGoods,
-          rentalMonths,
-          moveInDate: earliestCheckInDate,
-          identityId: customerIdCard.trim(),
-          customerPhone: customerPhone.trim(),
-          customerAddress: customerAddress.trim(),
-          appointmentTime: bookingAppointmentTime,
-          largestItemDimensionsCm: {
-            lengthCm: cargoLengthNumber,
-            widthCm: cargoWidthNumber,
-            heightCm: cargoHeightNumber,
-          },
-          capacityValidatedByFrames: packagesFitSelectedUnit,
-          customerCatalogUnit: selectedCatalogUnit ? {
-            id: selectedCatalogUnit.id,
-            facilityName: selectedCatalogUnit.facilityName,
-            doorWidthM: selectedCatalogUnit.doorDimensions.widthM,
-            doorHeightM: selectedCatalogUnit.doorDimensions.heightM,
-            physicalUnitId: selectedCatalogUnit.id,
-          } : undefined,
-          packageId: selectedActivePackage?.id,
-          packageName: selectedActivePackage?.name,
-          packagePrice: selectedActivePackage?.packagePrice,
-          freeSetupDays: selectedActivePackage?.freeSetupDays,
-        })
-        if (result.outcome === 'HARD_VIOLATION') {
-          setValidationViolation({
-            reason: result.rejectionReason,
-            suggestedUnitTypeId: result.suggestedUnitTypeId,
-            suggestedUnitTypeName: result.suggestedUnitTypeName,
-            suggestedVolumeM3: result.suggestedVolumeM3,
-          })
-          showToast(result.messageVi)
-          return
-        }
-        resetBookingForm()
-        setBookOpen(false)
-        setSelectedUnit(null)
-        setPage('reservations')
-        showToast(result.messageVi)
-      } finally {
-        setReservationSubmitting(false)
-      }
-      return
-    }
 
     const selection = {
       facilityId: selectedTarget.facility.id,
@@ -2054,21 +2006,13 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       if (!bookingReview || !serverQuote || Date.parse(serverQuote.expiresAt) <= Date.now()) {
         const compatibility = await checkCompatibility(selection)
         setServerCompatibility(compatibility)
-        if (compatibility.result === 'INCOMPATIBLE' || compatibility.availableUnitCount <= 0) {
+        if (recommendationInput) setBookingFit({ input: recommendationInput, check: compatibility })
+        if (compatibility.result === 'INCOMPATIBLE' || compatibility.availableUnitCount <= 0 || !compatibility.palletPlan) {
           const recommendation = isApiAuthenticated() && recommendationInput
             ? await recommendReservationUnitType(recommendationInput).catch(() => null)
             : null
-          if (recommendation) setServerRecommendation(recommendation)
-          const suggestedType = recommendation?.recommendedUnitTypeId
-            ? backendUnitTypes.find(item => item.id === recommendation.recommendedUnitTypeId)
-            : undefined
-          setValidationViolation({
-            reason: userFacingError(compatibility.issues.join(' '), 'Loại kho không phù hợp hoặc đã hết chỗ.'),
-            suggestedUnitTypeId: suggestedType?.id,
-            suggestedUnitTypeName: suggestedType?.name,
-            suggestedVolumeM3: suggestedType?.volumeM3,
-          })
-          showToast(userFacingError(compatibility.issues.join(' '), 'Loại kho không phù hợp hoặc đã hết chỗ.'))
+          setServerRecommendation(recommendation && recommendationInput ? { input: recommendationInput, response: recommendation } : null)
+          setRecommendationError(recommendation ? null : 'Chưa thể kiểm tra loại kho thay thế. Vui lòng thử lại.')
           return
         }
         const packageCode = selectedBackendRentalPackage?.code
@@ -2083,7 +2027,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         setServerQuote(quote)
         quotedGoodsItems.current = structuredClone(apiGoodsItems)
         setTermsAccepted(false)
-        setValidationViolation(null)
         setBookingReview(true)
         setBookingStep(3)
         return
@@ -2096,11 +2039,13 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         throw new Error('Vui lòng đọc và đồng ý điều khoản trả kho trong setup trước khi xác nhận đặt kho.')
       }
       const scheduledCompatibility = await checkCompatibility({ ...selection, startDate: moveInDate })
-      setServerCompatibility(scheduledCompatibility)
-      if (scheduledCompatibility.result === 'INCOMPATIBLE' || scheduledCompatibility.availableUnitCount <= 0) {
-        setReservationSubmitError('Kho đã chọn không còn phù hợp hoặc hết chỗ trong lịch nhận mới. Vui lòng chọn ngày nhận khác. Giá và hàng hóa được giữ nguyên.')
+      if (scheduledCompatibility.result === 'INCOMPATIBLE' || scheduledCompatibility.availableUnitCount <= 0 || !scheduledCompatibility.palletPlan) {
+        setServerCompatibility(null)
+        setReservationSubmitError(customerRackIssue(scheduledCompatibility.issues[0],
+          'Chưa tìm được gian phù hợp cho lịch nhận mới.'))
         return
       }
+      setServerCompatibility(scheduledCompatibility)
       const idempotencyKey = reservationIdempotencyKey.current || crypto.randomUUID()
       reservationIdempotencyKey.current = idempotencyKey
       const reservation = await createCustomerReservation({
@@ -2660,10 +2605,25 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 {group.rows.map(reservation => <div key={reservation.id}><CustomerReservationCard
                 reservation={reservation}
                 visualTone={group.id as 'active' | 'expired' | 'completed'}
-                facilityName={facilities.find(item => item.id === reservation.facilityId)?.name || reservation.facilityId}
-                unitTypeName={reservation.unitTypeName || unitTypes.find(item => item.id === reservation.unitTypeId)?.name || reservation.unitTypeId}
-                facilityDetails={backendFacilities.find(item => item.id === reservation.facilityId) || null}
-                unitTypeDetails={backendUnitTypes.find(item => item.id === reservation.unitTypeId) || null}
+                facilityName={reservation.facilitySnapshot?.name || facilities.find(item => item.id === reservation.facilityId)?.name || reservation.facilityId}
+                unitTypeName={reservation.unitTypeSnapshot?.name || reservation.unitTypeName || unitTypes.find(item => item.id === reservation.unitTypeId)?.name || reservation.unitTypeId}
+                facilityDetails={reservation.facilitySnapshot ? {
+                  address: reservation.facilitySnapshot.address || 'Chưa cập nhật',
+                  city: reservation.facilitySnapshot.city || '',
+                  phone: reservation.facilitySnapshot.phone || null,
+                  accessHours: reservation.facilitySnapshot.accessHours || null,
+                } : backendFacilities.find(item => item.id === reservation.facilityId) || null}
+                unitTypeDetails={reservation.unitTypeSnapshot ? {
+                  lengthM: reservation.unitTypeSnapshot.lengthM,
+                  widthM: reservation.unitTypeSnapshot.widthM,
+                  heightM: reservation.unitTypeSnapshot.heightM,
+                  volumeM3: reservation.unitTypeSnapshot.volumeM3,
+                  rackCount: reservation.unitTypeSnapshot.rackCount,
+                  rackLengthM: reservation.unitTypeSnapshot.rackLengthM,
+                  rackWidthM: reservation.unitTypeSnapshot.rackWidthM,
+                  rackHeightM: reservation.unitTypeSnapshot.rackHeightM,
+                  maxLoadKg: reservation.unitTypeSnapshot.maxLoadKg,
+                } : backendUnitTypes.find(item => item.id === reservation.unitTypeId) || null}
                 facility={facilities.find(item => item.id === reservation.facilityId)}
                 unitType={unitTypes.find(item => item.id === reservation.unitTypeId)}
                 onVerify={() => {
@@ -3396,7 +3356,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         {selectedUnit && (() => {
           const backendSpec = backendUnitTypes.find(item => item.id === selectedTarget?.unitType.id)
           if (isApiAuthenticated() && selectedTarget) {
-            if (!backendSpec) return <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">Không tìm thấy thông tin loại kho từ Backend. Vui lòng tải lại dữ liệu trước khi tiếp tục.</div>
+            if (!backendSpec) return <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">Không tìm thấy thông tin loại kho. Bạn hãy tải lại trang.</div>
             return <CustomerUnitDetails
               unitType={backendSpec} facilityName={selectedTarget.facility.name} facilityCode={selectedTarget.facility.code} address={selectedTarget.facility.address}
               availableCount={availabilityByUnitType[backendSpec.id] ?? backendSpec.availableCount ?? 0}
@@ -3406,201 +3366,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               isRecommended={serverRecommendation?.facilityId === selectedTarget.facility.id && serverRecommendation?.recommendedUnitTypeId === backendSpec.id}
               isIncompatible={selectedUnitTypeIncompatible}
               incompatibleReason={selectedUnitTypeIncompatible ? 'Loại kho đang chọn không phù hợp với hàng hóa hoặc không còn chỗ trong kỳ thuê đã chọn.' : undefined}
-              onSelectRecommended={recommendedUnitType && serverRecommendation?.facilityId === selectedTarget.facility.id ? () => {
-                handleStartReservation(selectedTarget.facility, recommendedUnitType, undefined, 2, true)
+              onSelectRecommended={recommendedUnitType && warehouseSuggestion ? () => {
+                handleStartReservation(selectedTarget.facility, recommendedUnitType, undefined, 2, true, warehouseSuggestion.check.availableUnitCount)
               } : undefined}
               onClose={() => setDetailOpen(false)} onReserve={() => handleStartReservation(selectedTarget.facility, selectedTarget.unitType)} />
           }
-          const catalogUnit = CUSTOMER_CATALOG_UNITS.find(unit => unit.sizeCode === storageSizeCode(selectedTarget?.unitType.name || selectedUnit.type))
-
-          return (
-            <div className="flex flex-col gap-5">
-              {/* Top Banner */}
-              <div className="order-1 rounded-2xl bg-gradient-to-br from-[#242521] to-[#3a3b37] p-5 text-white shadow-lg">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs uppercase tracking-[.1em] text-[#e9a12c]">
-                    {selectedTarget ? `${CUSTOMER_FACILITY_DISPLAY[selectedTarget.facility.id]?.name ?? selectedTarget.facility.name} · ${CUSTOMER_FACILITY_DISPLAY[selectedTarget.facility.id]?.address ?? selectedTarget.facility.address}` : selectedUnit.facilityName}
-                  </p>
-                  <span className={`rounded-full border px-3 py-1 text-xs font-bold ${selectedUnit.status === 'available' ? 'border-white text-white' : 'border-amber-300 bg-amber-700 text-white'}`}>{selectedUnit.status === 'available' ? ('Kho đang còn trống') : ('Kho đang được giữ')}</span>
-                </div>
-                <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
-                  <div>
-                    <h3 className="text-2xl font-bold">{unitTypeLabel(selectedTarget?.unitType.name || selectedUnit.type)}</h3>
-                    <p className="mt-1 text-sm font-semibold text-amber-300">Kích thước (Size) {catalogUnit?.sizeCode ?? storageSizeCode(selectedUnit.type)}</p>
-                    <p className="mt-1 text-sm text-stone-300">{'Kích thước kho'}: {selectedUnit.dimensions.lengthM} × {selectedUnit.dimensions.widthM} × {selectedUnit.dimensions.heightM} m ({'dài × rộng × cao'})</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-2xl font-bold text-white">{formatVnd(selectedUnit.price)}<span className="text-sm font-normal text-stone-300">/{'tháng'}</span></p>
-                    <p className="text-xs font-medium text-white/70">{isApiAuthenticated() ? 'Phí giữ chỗ theo báo giá của hệ thống' : 'Tiền cọc = 20% tổng giá trị kỳ thuê đã chọn'}</p>
-                  </div>
-                </div>
-              </div>
-
-              {catalogUnit && <figure className="order-2 overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
-                <img src={getCustomerUnitDetailImage(catalogUnit.sizeCode)} alt={`Sơ đồ chi tiết kho size ${catalogUnit.sizeCode}`} className="max-h-[520px] w-full object-contain bg-white" />
-                <figcaption className="border-t border-stone-200 px-4 py-3 text-center text-xs font-medium text-stone-600">Sơ đồ bố trí kho size {catalogUnit.sizeCode} · Kích thước và lối đi theo hồ sơ kho</figcaption>
-              </figure>}
-
-              <div className="order-3 rounded-2xl border border-amber-200 bg-amber-50/40 p-5">
-                <p className="mb-4 text-xs font-bold uppercase tracking-wider text-amber-800">1. Thông tin kho chi tiết</p>
-                {catalogUnit && (() => {
-                  const displayUnitCode = selectedUnit.code && !selectedUnit.code.toLowerCase().includes('storage')
-                    ? selectedUnit.code
-                    : `${CUSTOMER_FACILITY_DISPLAY[selectedUnit.facilityId]?.code ?? selectedUnit.facilityId.toUpperCase()}-${catalogUnit.sizeCode}`
-                  return (
-                    <ul className="divide-y divide-amber-200/70 overflow-hidden rounded-xl border border-amber-200 bg-white text-sm">
-                      {[
-                        ['Mã kho', displayUnitCode],
-                        ['Kích thước / Size', catalogUnit.sizeCode],
-                        ['Kích thước kho (D × R × C)', `${selectedUnit.dimensions.lengthM} × ${selectedUnit.dimensions.widthM} × ${selectedUnit.dimensions.heightM} m`],
-                        ['Thể tích kho', `${selectedUnit.volumeM3.toLocaleString('vi-VN')} m³`],
-                        ['Số khung kệ', `${catalogUnit.rackCount} khung`],
-                        ['Kích thước mỗi khung (R × S × C)', catalogUnit.rackDimensions],
-                        ['Chiều rộng lối đi', catalogUnit.aisleWidthM > 0 ? `${catalogUnit.aisleWidthM} m` : 'Chưa có dữ liệu'],
-                        ['Tải trọng tối đa', `${selectedUnit.maxLoadKg.toLocaleString('vi-VN')} kg`],
-                        ['Xe đẩy hỗ trợ', customerTrolleyVi(catalogUnit.sizeCode, catalogUnit.trolley)],
-                        ['Giá thuê', `${formatVnd(selectedUnit.price)}/tháng`],
-                      ].map(([label, value]) => <li key={label} className="grid gap-1 px-4 py-3 sm:grid-cols-[220px_1fr]"><span className="font-medium text-stone-500">{label}</span><b className="text-stone-950">{value}</b></li>)}
-                    </ul>
-                  )
-                })()}
-              </div>
-
-              <div className="order-4 rounded-2xl border border-stone-200 bg-stone-50 p-5">
-                <p className="mb-4 text-xs font-bold uppercase tracking-wider text-stone-500">2. Thiết bị hỗ trợ</p>
-                {catalogUnit && (
-                  <div className="space-y-3">
-                    {/* Trolley card */}
-                    <div className="rounded-xl border border-stone-200 bg-white p-4">
-                      <p className="text-xs font-bold text-stone-700 mb-2">Xe đẩy hỗ trợ tại cơ sở</p>
-                      <div className="flex items-start gap-3">
-                        <div>
-                          <p className="font-bold text-stone-950 text-sm">{customerTrolleyVi(catalogUnit.sizeCode, catalogUnit.trolley)}</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Box capacity */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="rounded-xl border border-stone-200 bg-white p-4">
-                        <p className="text-xs font-bold text-stone-700">Thùng nhỏ (50×40×40 cm)</p>
-                        <p className="mt-2 text-2xl font-extrabold text-stone-950">{catalogUnit.smallBoxCapacity}<span className="text-sm font-normal text-stone-500"> thùng</span></p>
-                      </div>
-                      <div className="rounded-xl border border-stone-200 bg-white p-4">
-                        <p className="text-xs font-bold text-stone-700">Thùng to (70×50×50 cm)</p>
-                        <p className="mt-2 text-2xl font-extrabold text-stone-950">{catalogUnit.largeBoxCapacity}<span className="text-sm font-normal text-stone-500"> thùng</span></p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Dynamic Rental Packages Configured by BO */}
-              {(() => {
-                const fac = facilities.find(f => f.id === selectedUnit.facilityId || f.code === selectedUnit.facilityId)
-                const unitSpec = fac?.unitCustomSpecs?.find(s => s.sizeCode === catalogUnit?.sizeCode)
-                const activePackages = resolveRentalPackagesForUnit({
-                  rentalPackages: selectedUnit.rentalPackages || unitSpec?.rentalPackages,
-                  monthlyPrice: selectedUnit.price,
-                  sizeCode: catalogUnit?.sizeCode,
-                  facilityId: selectedUnit.facilityId
-                }).filter(p => p.status === 'active')
-
-                if (activePackages.length === 0) return null
-
-                return (
-                  <div className="order-4 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-5 space-y-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-200/80 pb-2">
-                      <div>
-                        <p className="text-xs font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
-
-                          <span>Gói thuê ưu đãi cho loại kho này</span>
-                        </p>
-                        <p className="mt-0.5 text-xs text-emerald-950">
-                          Được thiết lập bởi cơ sở cho cỡ kho {catalogUnit?.sizeCode}. Thuê dài hạn để nhận mức giá ưu đãi nhất.
-                        </p>
-                      </div>
-                      <span className="rounded-full bg-emerald-200/80 px-2.5 py-0.5 text-[11px] font-bold text-emerald-900">
-                        {activePackages.length} gói khả dụng
-                      </span>
-                    </div>
-
-                    <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-                      {activePackages.map((pkg) => (
-                        <div
-                          key={pkg.id}
-                          className="rounded-xl border border-emerald-200 bg-white p-3.5 shadow-2xs flex flex-col justify-between"
-                        >
-                          <div>
-                            <div className="flex items-center justify-between gap-1">
-                              <span className="font-extrabold text-stone-900 text-sm">{pkg.name}</span>
-                              {(pkg.discountPercent ?? 0) > 0 ? (
-                                <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-200">
-                                  Giảm {pkg.discountPercent}%
-                                </span>
-                              ) : (
-                                <span className="rounded bg-stone-100 px-1.5 py-0.5 text-[10px] font-medium text-stone-600">
-                                  Tiêu chuẩn
-                                </span>
-                              )}
-                            </div>
-                            <p className="mt-2 text-base font-extrabold text-emerald-900">
-                              {formatVnd(pkg.packagePrice)}
-                            </p>
-                            <p className="text-[11px] text-stone-500">
-                              ~ {formatVnd(pkg.monthlyEquivalentPrice)}/tháng
-                            </p>
-                          </div>
-                          {pkg.description && (
-                            <p className="mt-2 text-[10px] text-stone-600 border-t border-stone-100 pt-1.5 line-clamp-2">
-                              {pkg.description}
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-
-                    <p className="text-[11px] text-emerald-800">
-                      Giá và ưu đãi gia hạn được xác định trong báo giá khi đăng nhập và mở Hồ sơ thuê.
-                    </p>
-                  </div>
-                )
-              })()}
-
-              {/* 3. Reservation & Financial Transparency Guarantee */}
-              <div className="order-5 rounded-2xl border border-stone-300 bg-white p-4 text-xs text-black sm:p-5">
-                <p className="font-bold text-sm text-black mb-1 flex items-center gap-1.5">
-                  <span></span> {'3. Quy trình đặt kho và thanh toán'}
-                </p>
-                <div className="mt-3 grid gap-2 sm:grid-cols-4">
-                  {[
-                    'Chọn cỡ kho phù hợp',
-                    'Xác nhận giữ suất theo loại kho',
-                    'Thanh toán cọc 20% trong 15 phút',
-                    'Quản lý phân gian trong 6 giờ. Khách nhận kho trong 7 ngày'
-                  ].map((item, index) => <div key={item} className="flex gap-2 rounded-xl bg-stone-50 p-3"><span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-stone-900 text-[10px] font-bold text-white">{index + 1}</span><span className="font-medium leading-4 text-stone-700">{item}</span></div>)}
-                </div>
-              </div>
-
-              <div className="order-6 flex justify-end gap-2 border-t border-stone-100 pt-4">
-                <Button variant="outline" onClick={() => setDetailOpen(false)}>{'Đóng lại'}</Button>
-                <Button
-                  disabled={selectedUnit.status !== 'available' || effectiveAvailableCount(selectedUnit.facilityId, selectedUnit.type) === 0}
-                  onClick={() => {
-                    if (selectedTarget) {
-                      handleStartReservation(selectedTarget.facility, selectedTarget.unitType)
-                    } else {
-                      setDetailOpen(false)
-                      setBookingStartedAt(Date.now())
-                      setBookOpen(true)
-                    }
-                  }}
-                >
-                  {selectedUnit.status !== 'available' ? ('Loại kho đang hết chỗ') : effectiveAvailableCount(selectedUnit.facilityId, selectedUnit.type) === 0 ? ('Hết kho') : ('Khai báo hàng & Đặt loại kho này')}
-                </Button>
-              </div>
-            </div>
-          )
+          return <p className="rounded-lg bg-stone-50 p-4 text-sm">Đăng nhập để xem thông tin kệ và kiểm tra hàng có vừa không.</p>
         })()}
       </Modal>
 
@@ -3664,11 +3435,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             </section>}
 
             {bookingStep === 2 && <>
-              <section className="rounded-xl border border-stone-200 bg-stone-50 p-4">
+            <section id="reservation-rental-package" className="rounded-xl border border-stone-200 bg-stone-50 p-4">
                 <p className="mb-3 font-bold text-stone-900">Nhu cầu thuê kho</p>
               <Select
                 label={'Gói thuê & Kỳ hạn'}
-                value={isApiAuthenticated() ? selectedPackageId : selectedPackageId || selectedActivePackage?.id || rentalMonths.toString()}
+                value={isApiAuthenticated() ? selectedPackageId : selectedPackageId || selectedActivePackage?.id || ''}
                 disabled={isApiAuthenticated() && rentalPackagesLoading}
                 onChange={e => {
                   const val = e.target.value
@@ -3708,18 +3479,13 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     </option>
                   ))
                 ) : (
-                  <>
-                    <option value="1">1 tháng — {formatVnd(currentQuote?.baseMonthlyPrice || selectedUnit?.price || 0)}</option>
-                    <option value="3">3 tháng — Giảm 3%</option>
-                    <option value="6">6 tháng — Giảm 5%</option>
-                    <option value="12">12 tháng — Giảm 8%</option>
-                  </>
+                  <option value="" disabled>Chưa có gói thuê đang hoạt động</option>
                 )}
               </Select>
               </section>
 
             {/* Goods Declaration */}
-            <div className="border-t border-stone-200 pt-3">
+            <div id="customer-goods-declaration" className="border-t border-stone-200 pt-3">
               <p className="mb-3 text-sm font-semibold text-stone-900">Khai báo hàng hóa</p>
               {catalogUpdateNotice && <p role="status" className="mb-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">{catalogUpdateNotice}</p>}
               <div className="space-y-3">
@@ -3739,12 +3505,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                    <div className="mt-4"><label className="text-sm font-medium text-stone-700">Mô tả hàng hóa *</label><textarea className="mt-1 min-h-20 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm" value={item.description} placeholder="Mô tả tên đồ vật, tình trạng hoặc đặc điểm cần lưu ý" onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, description: e.target.value } : row))} />{bookingErrors[`goodsDescription-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsDescription-${item.id}`]}</p>}</div>
                   <div className="mt-4 grid gap-3 border-t border-stone-200 pt-4 sm:grid-cols-5 sm:items-start">
                      <div className="flex h-full flex-col"><Input type="number" min="1" step="1" label="Số lượng *" value={item.quantity} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, quantity: e.target.value } : row))} /><p className="mt-1 min-h-8 text-xs text-red-700">{bookingErrors[`goodsQuantity-${item.id}`] || ''}</p></div>
-                     <div className="flex h-full flex-col"><Input type="number" min="0.1" label="Dài (cm) *" value={item.lengthCm} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, lengthCm: e.target.value } : row))} /><p className="mt-1 min-h-8 text-xs text-red-700">{bookingErrors[`goodsLength-${item.id}`] || ''}</p></div>
-                     <div className="flex h-full flex-col"><Input type="number" min="0.1" label="Rộng (cm) *" value={item.widthCm} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, widthCm: e.target.value } : row))} /><p className="mt-1 min-h-8 text-xs text-red-700">{bookingErrors[`goodsWidth-${item.id}`] || ''}</p></div>
-                     <div className="flex h-full flex-col"><Input type="number" min="0.1" label="Cao (cm) *" value={item.heightCm} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, heightCm: e.target.value } : row))} /><p className="mt-1 min-h-8 text-xs text-red-700">{bookingErrors[`goodsHeight-${item.id}`] || ''}</p></div>
+                     <div className="flex h-full flex-col"><Input type="number" min="0.1" label="Chiều dài (cm) *" value={item.lengthCm} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, lengthCm: e.target.value } : row))} /><p className="mt-1 min-h-8 text-xs text-red-700">{bookingErrors[`goodsLength-${item.id}`] || ''}</p></div>
+                     <div className="flex h-full flex-col"><Input type="number" min="0.1" label="Chiều rộng (cm) *" value={item.widthCm} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, widthCm: e.target.value } : row))} /><p className="mt-1 min-h-8 text-xs text-red-700">{bookingErrors[`goodsWidth-${item.id}`] || ''}</p></div>
+                     <div className="flex h-full flex-col"><Input type="number" min="0.1" label="Chiều cao (cm) *" value={item.heightCm} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, heightCm: e.target.value } : row))} /><p className="mt-1 min-h-8 text-xs text-red-700">{bookingErrors[`goodsHeight-${item.id}`] || ''}</p></div>
                      <div className="flex h-full flex-col"><Input type="number" min="0.1" label="Nặng/kiện (kg) *" value={item.weightKg} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, weightKg: e.target.value } : row))} /><p className="mt-1 min-h-8 text-xs text-red-700">{bookingErrors[`goodsWeight-${item.id}`] || ''}</p></div>
                   </div>
-                  <div className="mt-3"><p className="text-sm font-medium text-stone-700">Hàng dễ bể / dễ vỡ? *</p><div className="mt-2 flex gap-5"><label className="flex items-center gap-2 text-sm"><input type="radio" name={`fragile-${item.id}`} checked={item.fragile === 'no'} onChange={() => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, fragile: 'no' } : row))} />Không</label><label className="flex items-center gap-2 text-sm"><input type="radio" name={`fragile-${item.id}`} checked={item.fragile === 'yes'} onChange={() => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, fragile: 'yes' } : row))} />Có</label></div>{bookingErrors[`goodsFragile-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsFragile-${item.id}`]}</p>}{bookingErrors[`goodsFit-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsFit-${item.id}`]}</p>}</div>
+                   <div className="mt-3"><p className="text-sm font-medium text-stone-700">Hàng dễ bể / dễ vỡ? *</p><div className="mt-2 flex gap-5"><label className="flex items-center gap-2 text-sm"><input type="radio" name={`fragile-${item.id}`} checked={item.fragile === 'no'} onChange={() => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, fragile: 'no' } : row))} />Không</label><label className="flex items-center gap-2 text-sm"><input type="radio" name={`fragile-${item.id}`} checked={item.fragile === 'yes'} onChange={() => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, fragile: 'yes', stackable: 'no' } : row))} />Có</label></div>{bookingErrors[`goodsFragile-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsFragile-${item.id}`]}</p>}</div>
+                   <div className="mt-3"><p className="text-sm font-medium text-stone-700">Hàng có được phép xếp chồng không? *</p><div className="mt-2 flex gap-5"><label className="flex items-center gap-2 text-sm"><input type="radio" name={`stackable-${item.id}`} checked={item.stackable === 'no'} onChange={() => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, stackable: 'no' } : row))} />Không</label><label className="flex items-center gap-2 text-sm"><input type="radio" name={`stackable-${item.id}`} checked={item.stackable === 'yes'} disabled={item.fragile === 'yes'} onChange={() => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, stackable: 'yes' } : row))} />Có</label></div>{bookingErrors[`goodsStackable-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsStackable-${item.id}`]}</p>}</div>
+                   <div className="mt-3"><p className="text-sm font-medium text-stone-700">Hàng có được phép xoay và đặt nằm ngang? *</p><div className="mt-2 flex flex-wrap gap-5"><label className="flex items-center gap-2 text-sm"><input type="radio" name={`horizontalPlacement-${item.id}`} checked={item.allowHorizontalPlacement === 'no'} onChange={() => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, allowHorizontalPlacement: 'no' } : row))} />Không, giữ nguyên chiều đứng</label><label className="flex items-center gap-2 text-sm"><input type="radio" name={`horizontalPlacement-${item.id}`} checked={item.allowHorizontalPlacement === 'yes'} onChange={() => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, allowHorizontalPlacement: 'yes' } : row))} />Có, cho phép xoay và đặt nằm ngang</label></div>{bookingErrors[`goodsHorizontalPlacement-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsHorizontalPlacement-${item.id}`]}</p>}</div>
                    <details open className="mt-4 rounded-lg border border-stone-200 bg-white p-3">
                     <summary className="cursor-pointer font-bold text-stone-900">Thông tin bổ sung và hình ảnh hàng hóa</summary>
                     <div className="mt-3 space-y-3 border-t border-stone-200 pt-3">
@@ -3766,58 +3534,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               </div>
 
             </div>
-
-            {allPackageSamplesValid && isApiAuthenticated() && recommendationLoading && (
-              <div role="status" className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
-                Đang kiểm tra dữ liệu kho, kích thước, tải trọng và kỳ thuê trên hệ thống…
-              </div>
-            )}
-            {allPackageSamplesValid && warehouseRecommendation && (
-              <div className={`rounded-xl border p-4 text-sm ${selectedUnitTypeIncompatible ? 'border-red-300 bg-red-50 text-red-950' : warehouseRecommendation.id === selectedTarget?.unitType.id ? 'border-emerald-300 bg-emerald-50 text-emerald-950' : 'border-amber-300 bg-amber-50 text-amber-950'}`}>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="font-bold">{smallerWarehouseRecommendation ? 'Hệ thống đề xuất kho nhỏ hơn' : largerWarehouseRecommendation ? 'Hệ thống đề xuất kho lớn hơn' : isApiAuthenticated() ? (recommendationNeedsReview ? 'Hệ thống đề xuất kho — cần nhân viên duyệt' : 'Hệ thống đề xuất kho phù hợp') : 'Gợi ý kho phù hợp theo số lượng và kích thước đã nhập'}</p>
-                    <p className="mt-1 text-xs leading-5">Cỡ nhỏ nhất còn chỗ và chứa vừa toàn bộ hàng hóa là <b>{unitTypeLabel(warehouseRecommendation.name || warehouseRecommendation.code)}</b> (~{warehouseRecommendation.volumeM3.toLocaleString('vi-VN')} m³, {warehouseRecommendation.rackCount} khung).</p>
-                    {selectedUnitTypeIncompatible && <p className="mt-1 text-xs font-semibold text-red-800">Kho bạn tự chọn không còn phù hợp với hàng hóa hoặc không còn chỗ trong kỳ thuê này.</p>}
-                    {warehouseRecommendation.id === selectedTarget?.unitType.id
-                      ? <p className="mt-1 text-xs font-semibold">Kho bạn đang chọn cũng chính là kho hệ thống đề xuất.</p>
-                      : largerWarehouseRecommendation
-                        ? null
-                        : <p className="mt-1 text-xs">Kho hiện tại vẫn phù hợp, hệ thống đề xuất kho nhỏ hơn để tránh dư dung tích và chi phí.</p>}
-                  </div>
-                  {warehouseRecommendation.id !== selectedTarget?.unitType.id && selectedTarget && recommendedUnitType && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        handleStartReservation(selectedTarget.facility, recommendedUnitType, undefined, 2, true)
-                        showToast(`Đã chuyển sang cỡ kho gợi ý: ${unitTypeLabel(recommendedUnitType.name)}`)
-                      }}
-                    >
-                      {smallerWarehouseRecommendation ? 'Chuyển sang kho nhỏ hơn' : largerWarehouseRecommendation ? 'Chuyển sang kho lớn hơn' : 'Chọn cỡ kho được gợi ý'}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            )}
-            {allPackageSamplesValid && isApiAuthenticated() && recommendationFormReady && !recommendationLoading && recommendationError && (
-              <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-                <b>Không thể kiểm tra kho phù hợp</b>
-                <p className="mt-1 text-xs">{recommendationError}</p>
-                <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => setRecommendationRetry(value => value + 1)}>
-                  Thử lại
-                </Button>
-              </div>
-            )}
-            {allPackageSamplesValid && (!isApiAuthenticated() || recommendationFormReady) && !recommendationLoading && !recommendationError && !warehouseRecommendation && <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900">
-              <b>Chưa có cỡ kho còn trống phù hợp</b>
-              <p className="mt-1 text-xs">
-                {noValidLargerUnitAvailable && largestAvailableLargerUnitType
-                  ? `Kho lớn nhất còn chỗ là ${unitTypeLabel(largestAvailableLargerUnitType.name)}, nhưng chỉ đáp ứng tối đa ${largestAvailableLargerUnitType.maxLoadKg.toLocaleString('vi-VN')} kg và khoảng ${largestAvailableLargerUnitUsableVolumeM3.toLocaleString('vi-VN', { maximumFractionDigits: 1 })} m³ hữu dụng, hàng đang khai báo ${goodsWeightNumber.toLocaleString('vi-VN')} kg và ${goodsVolumeM3.toLocaleString('vi-VN', { maximumFractionDigits: 1 })} m³. Vui lòng giảm số lượng, kích thước hoặc trọng lượng hàng hóa, hoặc chia thành nhiều kho.`
-                  : isApiAuthenticated() ? userFacingError(serverRecommendation?.issues.join(' '), 'Dữ liệu hàng hóa không phù hợp với các loại kho đang còn chỗ tại cơ sở này.') : 'Kích thước, số lượng hoặc tổng tải trọng hàng hóa vượt khả năng của các cỡ kho đang còn chỗ tại cơ sở này.'}
-              </p>
-            </div>}
 
             {/* Check-in schedule is intentionally placed after goods declaration because OTHER goods add a review stage. */}
             </>}
@@ -3849,164 +3565,75 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
             {bookingStep === 2 && <>
 
-            {/* Storage Space & Cost Breakdown */}
-            {(() => {
-              if (isApiAuthenticated()) return <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/40 p-4 text-sm text-stone-700">
-                <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-bold text-stone-900">Kiểm tra sức chứa theo khung và cân nặng</p>{recommendationLoading ? <span className="text-xs text-stone-500">Đang kiểm tra kho theo kỳ thuê...</span> : capacityStatus !== 'invalid' && <span className={`rounded-full px-3 py-1 text-xs font-bold ${packagesFitSelectedUnit && goodsWeightNumber <= selectedUnit.maxLoadKg ? smallerWarehouseRecommendation ? 'bg-amber-600 text-white' : 'bg-emerald-700 text-white' : 'bg-red-700 text-white'}`}>{packagesFitSelectedUnit && goodsWeightNumber <= selectedUnit.maxLoadKg ? smallerWarehouseRecommendation ? 'Phù hợp — có thể dùng kho nhỏ hơn' : 'Phù hợp' : 'Không phù hợp'}</span>}</div>
-                {capacityStatus === 'invalid' ? <p className="rounded-lg bg-white p-3 text-stone-500">Nhập đủ số lượng, kích thước và cân nặng ở từng hàng hóa để tính.</p> : <div className="space-y-2 rounded-lg border border-stone-200 bg-white p-3">{packageCapacityResults.map(sample => <div key={sample.id} className="grid gap-1 border-b border-stone-100 pb-2 last:border-0 sm:grid-cols-[1fr_auto]"><span><b>{sample.sourceLabel}</b>: {sample.quantity} kiện · {sample.lengthCm} × {sample.widthCm} × {sample.heightCm} cm · {sample.weightKg} kg/kiện · <b>{formatVolumeM3(packageVolumeM3(sample))} m³</b></span>{!sample.canFitFrame && <b className="text-red-700">Không xếp vừa khung</b>}</div>)}<div className="grid gap-2 border-t border-stone-200 pt-3 sm:grid-cols-3"><p><b>Tổng thể tích cần lưu:</b> <span>{formatVolumeM3(serverCompatibility?.totalGoodsVolumeM3 ?? goodsVolumeM3)} m³</span></p><p><b>Sức chứa khung hữu dụng:</b> <span>{formatVolumeM3(serverCompatibility?.usableVolumePerRackM3 ? serverCompatibility.usableVolumePerRackM3 * selectedRackCount : selectedUsableRackVolumeM3)} m³</span></p><p><b>Khung cần dùng:</b> <span className={packagesFitSelectedUnit ? 'text-emerald-700' : 'text-red-700'}>{hasUnplaceablePackage ? 'Không xác định' : totalFramesRequired} khung / {selectedRackCount} khung</span></p><p><b>Tổng cân nặng:</b> <span className={goodsWeightNumber <= selectedUnit.maxLoadKg ? 'text-emerald-700' : 'text-red-700'}>{goodsWeightNumber.toLocaleString('vi-VN')} / {selectedUnit.maxLoadKg.toLocaleString('vi-VN')} kg</span></p></div></div>}
-                {hasOtherGoods && <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-blue-950"><p className="font-bold">Hồ sơ cần được thẩm định</p><p className="mt-1 leading-5">Hàng hóa thuộc nhóm “Khác” được nhân viên cơ sở xem xét trong tối đa 6 giờ kể từ khi bạn xác minh email. Sau khi chấp thuận, bạn có 15 phút để hoàn tất tiền phí giữ chỗ.</p></div>}
-                {selectedUnitNeedsAlternative && smallerWarehouseRecommendation && selectedTarget && (
-                  <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950">
-                    <p className="font-bold">Kho đang chọn không phù hợp</p>
-                    <p className="mt-1 leading-5">Hệ thống tìm thấy kho nhỏ hơn vẫn đáp ứng kích thước, sức chứa và tải trọng của hàng hóa: <b>{unitTypeLabel(smallerWarehouseRecommendation.name)}</b>.</p>
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="mt-3"
-                      onClick={() => {
-                        handleStartReservation(selectedTarget.facility, smallerWarehouseRecommendation, undefined, 2)
-                        showToast(`Đã chuyển sang kho nhỏ hơn: ${unitTypeLabel(smallerWarehouseRecommendation.name)}`)
-                      }}
-                    >
-                      Chuyển sang kho nhỏ hơn
-                    </Button>
-                  </div>
-                )}
-              </div>
-              const isOverload = goodsWeightNumber > selectedUnit.maxLoadKg
-              const totalTermValue = Math.max(0, currentQuote!.baseMonthlyPrice * rentalMonths - totalCombinedDiscount)
-              const reservationDeposit = Math.round((totalTermValue + (currentQuote!.depositAmount || currentQuote!.baseMonthlyPrice)) * 0.2 * 100) / 100
-              const remainingPayment = Math.max(0, totalTermValue - reservationDeposit)
-              const conditionSecurityDeposit = currentQuote!.depositAmount || currentQuote!.baseMonthlyPrice
-              const dueAtCheckIn = remainingPayment + conditionSecurityDeposit
-              const initialObligation = totalTermValue + conditionSecurityDeposit
-
-              return (
-                <div className="rounded-xl border border-stone-200 bg-gradient-to-b from-stone-50/90 to-amber-50/40 p-4 text-xs text-stone-800 space-y-3">
-                  <div className="flex items-center justify-between border-b border-stone-200 pb-2">
-                    <div>
-                      <p className="font-bold text-sm text-stone-900">Kiểm tra sức chứa theo khung & dự toán chi phí</p>
-                      <p className="text-[11px] text-stone-500">Mỗi khung {formatRackDimensions(selectedRackDimensions)} m. Sức chứa hữu dụng tính tối đa 80% thể tích, hệ thống thử đủ 6 hướng xoay.</p>
-                    </div>
-                    {recommendationLoading ? <span className="text-xs text-stone-500">Đang kiểm tra kho theo kỳ thuê...</span> : capacityStatus !== 'invalid' && <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${packagesFitSelectedUnit && !isOverload ? smallerWarehouseRecommendation ? 'border-amber-600 bg-amber-600 text-white' : 'border-emerald-700 bg-emerald-700 text-white' : 'border-red-700 bg-red-700 text-white'}`}>{packagesFitSelectedUnit && !isOverload ? smallerWarehouseRecommendation ? 'Kho chứa vừa — có thể dùng kho nhỏ hơn' : 'Kho chứa vừa' : 'Kho không chứa vừa'}</span>}
-                  </div>
-
-                  {capacityStatus === 'invalid' ? <div className="rounded-lg border border-stone-300 bg-stone-100 p-4 text-center font-medium text-stone-600">Chưa đủ dữ liệu để kiểm tra sức chứa. Vui lòng nhập đầy đủ số lượng và kích thước hàng hóa hợp lệ.</div> : <div className="space-y-2 rounded-lg border border-stone-200 bg-white p-3">
-                    {packageCapacityResults.map((sample, index) => <div key={sample.id} className="flex flex-wrap justify-between gap-2 border-b border-stone-100 pb-2 last:border-0 last:pb-0"><span>{sample.sourceLabel || `Mẫu ${index + 1}`}: {sample.quantity || '—'} kiện · {sample.lengthCm || '—'} × {sample.widthCm || '—'} × {sample.heightCm || '—'} cm · {sample.weightKg || '—'} kg/kiện · tổng {(Number(sample.quantity) * Number(sample.weightKg)).toLocaleString('vi-VN')} kg · <b>{formatVolumeM3(packageVolumeM3(sample))} m³</b></span>{!sample.canFitFrame && <b className="text-red-700">Không thể xếp vào khung {formatRackDimensions(selectedRackDimensions)} m</b>}</div>)}
-                    <div className="grid gap-2 border-t border-stone-100 pt-2 text-sm sm:grid-cols-2"><span><b>Tổng thể tích cần lưu:</b> {formatVolumeM3(serverCompatibility?.totalGoodsVolumeM3 ?? goodsVolumeM3)} m³</span><span><b>Sức chứa khung hữu dụng:</b> {formatVolumeM3(serverCompatibility?.usableVolumePerRackM3 ? serverCompatibility.usableVolumePerRackM3 * selectedRackCount : selectedUsableRackVolumeM3)} m³</span><span className="sm:text-right"><b>Khung cần dùng:</b> <b className={packagesFitSelectedUnit ? 'text-emerald-700' : 'text-red-700'}>{hasUnplaceablePackage ? 'Không xác định' : totalFramesRequired} khung / {selectedRackCount} khung</b></span></div>
-                    {warehouseRecommendation && <p className="border-t border-stone-100 pt-2 text-emerald-700">Cỡ kho nhỏ nhất phù hợp: <b>{storageSizeCode(warehouseRecommendation.name || warehouseRecommendation.code)}</b></p>}
-                  </div>}
-
-                  {/* Floor Weight Check */}
-                  <div className="flex items-center justify-between text-[11px] pt-1">
-                    <span className="text-stone-600">{'Tải trọng hàng hóa thực tế:'}</span>
-                    <span className={isOverload ? 'font-bold text-red-700' : 'font-semibold text-black'}>{goodsWeightNumber > 0 ? goodsWeightNumber.toLocaleString('vi-VN') : '—'} kg / Sức chịu tải sàn {selectedUnit.maxLoadKg} kg {isOverload ? '(Vượt tải trọng)' : ''}</span>
-                  </div>
-
-                  {capacityStatus !== 'invalid' && (hasOtherGoods ? <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><b>Chưa yêu cầu thanh toán tiền cọc</b><p className="mt-1">Đơn đặt kho có hàng hóa “Khác” sẽ được giữ kho và chuyển cho nhân viên cơ sở duyệt. Dự toán và bước thanh toán chỉ mở sau khi hồ sơ được chấp thuận.</p></div> : <div className="space-y-2 border-t border-stone-200 pt-3"><p className="font-bold text-stone-900">Cách tính số tiền</p><div className="rounded-lg border border-stone-200 bg-white p-3 space-y-2"><div className="flex justify-between gap-4"><span>Tiền thuê gốc</span><b>{formatVnd(grossTermValue)}</b></div>{promotionDiscount > 0 && <div className="flex justify-between gap-4 text-emerald-700"><span>Ưu đãi thời hạn ({Math.round(discountRate * 100)}%)</span><b>{formatVnd(promotionDiscount)}</b></div>}{evaluatedPolicyBenefits.filter(b => b.isDiscount).map(b => <div key={b.policy.id} className="flex justify-between gap-4 text-emerald-700"><span className="flex items-center gap-1"><span>Ưu đãi cơ sở ({b.policy.name}): {b.policy.value}</span></span><b>{formatVnd(b.discountAmount)}</b></div>)}<div className="flex justify-between gap-4"><span>Tiền thuê sau giảm</span><b>{formatVnd(totalTermValue)}</b></div><div className="flex justify-between gap-4"><span>Phí giữ chỗ 20% (được trừ vào tiền thuê)</span><b>{formatVnd(reservationDeposit)}</b></div><div className="flex justify-between gap-4 text-amber-800"><span>Tiền cọc đảm bảo kho (bằng 1 tháng tiền thuê)</span><b>{formatVnd(conditionSecurityDeposit)}</b></div><div className="flex justify-between gap-4"><span>Thu tại nhận kho (tiền thuê còn lại + tiền cọc đảm bảo kho)</span><b>{formatVnd(dueAtCheckIn)}</b></div><div className="flex justify-between gap-4 border-t border-stone-200 pt-2 font-bold"><span>Tổng tiền thuê và tiền cọc đảm bảo kho</span><b>{formatVnd(initialObligation)}</b></div></div></div>)}
-
-                    <div className="rounded-lg bg-stone-100 p-3 text-[11px] text-black"><b>Cam kết minh bạch của StorageHub:</b><ul className="mt-1 list-disc space-y-0.5 pl-5 text-stone-600"><li>Mã OTP có hiệu lực 10 phút. Thời hạn thanh toán bắt đầu sau khi xác minh hoặc sau khi hồ sơ hàng “Khác” được duyệt.</li><li>{hasOtherGoods ? 'Hàng hóa “Khác” được xét duyệt trong tối đa 6 giờ. Sau khi duyệt có 15 phút để thanh toán.' : 'Sau khi xác minh email, bạn có 15 phút để thanh toán cọc 20% theo báo giá.'}</li><li>Quản lý cơ sở có tối đa 6 giờ để phân kho. Khách hàng chọn lịch nhận kho trong thời hạn 7 ngày từ thời điểm kho có thể sẵn sàng.</li></ul></div>
-                </div>
-              )
-            })()}
-
-            {validationViolation && (
-              <div className="rounded-xl border-2 border-red-700 bg-red-700 p-4 text-xs text-white space-y-3 fade-in">
-                <div className="flex items-center gap-2 text-white font-bold text-sm"><span></span><span>Cỡ kho này không phù hợp</span></div>
-                <p className="text-white leading-relaxed font-medium">
-                  {validationViolation.reason}
-                </p>
-
-                {validationViolation.suggestedUnitTypeId && (
-                  <div className="rounded-lg border border-amber-700 bg-amber-700 p-3 space-y-2 text-white">
-                    <p className="font-bold flex items-center gap-1.5">
-                      <span></span>
-                      <span>{'Hệ thống đề xuất nâng cấp loại gian kho phù hợp:'}</span>
-                    </p>
-                    <p className="text-[11px] leading-relaxed">
-                      {`Kiện hàng của bạn cần thể tích kho lớn hơn hoặc chiều dài rộng hơn. Hãy chuyển sang gian kho `}
-                      <b className="text-white font-bold">{validationViolation.suggestedUnitTypeName} (~{validationViolation.suggestedVolumeM3} m³)</b>.
-                    </p>
-                    <div className="pt-1">
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          const upgradeType = validationViolation.suggestedUnitTypeId
-                            ? unitTypes.find(ut => ut.id === validationViolation.suggestedUnitTypeId)
-                            : undefined
-                          if (upgradeType && selectedTarget) {
-                            handleStartReservation(selectedTarget.facility, upgradeType, undefined, 2, true)
-                            setValidationViolation(null)
-                            showToast(`Đã chuyển sang cỡ kho ${upgradeType.name}!`)
-                          } else {
-                            showToast('Không tìm thấy cỡ kho nâng cấp phù hợp.')
-                          }
-                        }}
-                      >
-                         {`Chuyển ngay sang ${validationViolation.suggestedUnitTypeName}`}
-                      </Button>
-                    </div>
-                  </div>
-                )}
+            {(recommendationLoading || (!handledWarehouseOutcome && selectedPalletCheck) || (!recommendationLoading && !selectedPalletCheck && !recommendationError)) &&
+              <CustomerPalletCheck check={selectedPalletCheck} loading={recommendationLoading}
+                goodsItems={apiGoodsItems} unitTypeName={selectedTarget?.unitType.name} noAlternativeReason={noAlternativeReason} />}
+            {showAlternativeOutcome && warehouseSuggestion && recommendedUnitType && selectedTarget && selectedPalletCheck &&
+              <CustomerWarehouseSuggestion
+                currentName={unitTypeLabel(selectedTarget.unitType.name)}
+                suggestedName={unitTypeLabel(recommendedUnitType.name)}
+                currentCheck={selectedPalletCheck}
+                suggestedCheck={warehouseSuggestion.check}
+                plan={warehouseSuggestion.plan}
+                goodsItems={apiGoodsItems}
+                priceComparison={currentPricing && suggestedPricing && serverRecommendation
+                  ? { rentalMonths: serverRecommendation.rentalMonths, current: currentPricing, suggested: suggestedPricing }
+                  : undefined}
+                actionLabel={smallerWarehouseRecommendation ? 'Chuyển sang kho nhỏ hơn' : largerWarehouseRecommendation ? 'Chuyển sang kho lớn hơn' : 'Chuyển sang kho được gợi ý'}
+                disabled={reservationSubmitting}
+                onChoose={() => {
+                  handleStartReservation(selectedTarget.facility, recommendedUnitType, undefined, 2, true, warehouseSuggestion.check.availableUnitCount)
+                  showToast(`Đã chuyển sang ${unitTypeLabel(recommendedUnitType.name)}.`)
+                }}
+              />}
+            {!handledWarehouseOutcome && !recommendationLoading && warehouseSuggestion && recommendedUnitType && selectedTarget
+              && recommendedUnitType.id !== selectedTarget.unitType.id && (
+              <CustomerWarehouseSuggestion
+                currentName={unitTypeLabel(selectedTarget.unitType.name)}
+                suggestedName={unitTypeLabel(recommendedUnitType.name)}
+                suggestedCheck={warehouseSuggestion.check}
+                plan={warehouseSuggestion.plan}
+                goodsItems={apiGoodsItems}
+                priceComparison={currentPricing && suggestedPricing && serverRecommendation
+                  ? { rentalMonths: serverRecommendation.rentalMonths, current: currentPricing, suggested: suggestedPricing }
+                  : undefined}
+                actionLabel={smallerWarehouseRecommendation ? 'Chuyển sang kho nhỏ hơn' : largerWarehouseRecommendation ? 'Chuyển sang kho lớn hơn' : 'Chuyển sang kho được gợi ý'}
+                disabled={reservationSubmitting}
+                onChoose={() => {
+                  handleStartReservation(selectedTarget.facility, recommendedUnitType, undefined, 2, true, warehouseSuggestion.check.availableUnitCount)
+                  showToast(`Đã chuyển sang ${unitTypeLabel(recommendedUnitType.name)}.`)
+                }}
+              />
+            )}
+            {showNoCompatibleOutcome && selectedPalletCheck && <CustomerNoCompatibleWarehouse
+              check={selectedPalletCheck}
+              goodsItems={apiGoodsItems}
+              maxSupportedStorageLimits={serverRecommendation?.maxSupportedStorageLimits}
+              onEditGoods={() => requestAnimationFrame(() => document.getElementById('customer-goods-declaration')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))}
+              onSupport={() => openSupportWidget()}
+            />}
+            {showNoVacantOutcome && selectedTarget && <CustomerNoVacantWarehouse
+              currentName={unitTypeLabel(selectedTarget.unitType.name)}
+              currentUnitTypeId={selectedTarget.unitType.id}
+              facilityId={selectedTarget.facility.id}
+              unitTypes={backendUnitTypes}
+              checksByUnitType={serverRecommendation?.checksByUnitType ?? {}}
+              labelForType={unitTypeLabel}
+              onChangeRental={() => requestAnimationFrame(() => document.getElementById('reservation-rental-package')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))}
+              onSupport={() => openSupportWidget()}
+            />}
+            {recommendationFormReady && !recommendationLoading && recommendationError && !selectedPalletCheck && (
+              <div role="alert" className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+                <p>{recommendationError}</p>
+                <Button type="button" size="sm" variant="outline" onClick={() => setRecommendationRetry(value => value + 1)}>Thử lại</Button>
               </div>
             )}
+            {hasOtherGoods && <p className="rounded-lg bg-blue-50 p-3 text-sm text-blue-950">Hàng thuộc nhóm “Khác” cần nhân viên thẩm định trước khi mở thanh toán cọc.</p>}
             </>}
             </div>
 
             {bookingStep === 3 && bookingReview && isApiAuthenticated() && serverQuote && <ReservationQuoteSummary quote={previewRentalPeriod ? { ...serverQuote, ...previewRentalPeriod } : serverQuote} needsReview={hasOtherGoods} />}
             {bookingStep === 3 && bookingReview && isApiAuthenticated() && serverQuote && <label className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><input type="checkbox" className="mt-1 h-4 w-4" checked={termsAccepted} onChange={event => setTermsAccepted(event.target.checked)} /><span>Tôi đã đọc và đồng ý với báo giá và ngày setup miễn phí nêu trên. Bản điều khoản này sẽ được lưu cùng hồ sơ trước khi thanh toán.</span></label>}
-            {bookingStep === 3 && bookingReview && !isApiAuthenticated() && (() => {
-              const totalValue = Math.max(0, currentQuote!.baseMonthlyPrice * rentalMonths - totalCombinedDiscount)
-              const deposit = Math.round((totalValue + (currentQuote!.depositAmount || currentQuote!.baseMonthlyPrice)) * 0.2 * 100) / 100
-              const securityDeposit = currentQuote!.depositAmount || currentQuote!.baseMonthlyPrice
-              const dueAtCheckIn = totalValue - deposit + securityDeposit
-              return (
-                <div className="space-y-6 rounded-2xl border-2 border-black bg-white p-6 text-sm text-black sm:p-8">
-                  <div className="flex items-start justify-between gap-6 border-b border-stone-200 pb-5">
-                    <div><p className="text-xs font-bold uppercase tracking-[.12em] text-stone-500">{'Bước cuối'}</p><h3 className="mt-1 text-lg font-bold">{'Xác nhận thông tin đặt kho'}</h3></div>
-                    <button className="text-xs font-bold underline" onClick={() => setBookingReview(false)}>{'Quay lại chỉnh sửa'}</button>
-                  </div>
-
-                  <div className={`rounded-lg border p-3 ${packagesFitSelectedUnit ? 'border-emerald-300 bg-emerald-50' : 'border-red-300 bg-red-50'}`}>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div><p className={`font-bold ${packagesFitSelectedUnit ? 'text-emerald-900' : 'text-red-900'}`}>Kiểm tra sức chứa theo khung</p><p className="mt-0.5 text-[11px] text-stone-600">Cần {totalFramesRequired} / {selectedRackCount} khung · gộp tổng thể tích ở mức sử dụng 80%, từng kiện được thử đủ 6 hướng xoay</p></div>
-                      <span className={`font-bold ${packagesFitSelectedUnit ? 'text-emerald-800' : 'text-red-800'}`}>{packagesFitSelectedUnit ? 'Kho chứa vừa' : 'Kho không chứa vừa'}</span>
-                    </div>
-                  </div>
-                  <div className="divide-y divide-stone-200 border-y border-stone-200">
-                    <section className="space-y-1 py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Người thuê</p><p><b>Họ và tên:</b> {user.name}</p><p><b>CCCD/Hộ chiếu:</b> {customerIdCard}</p><p><b>Số điện thoại:</b> {customerPhone}</p><p><b>Email:</b> {customerEmail}</p><p><b>Địa chỉ:</b> {customerAddress}</p></section>
-                    <section className="space-y-1 py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Kho đã chọn</p><p><b>Cỡ kho và cơ sở:</b> {selectedTarget?.unitType.name || selectedUnit.type} · {selectedUnit.facilityName}</p><p><b>Kích thước kho:</b> {selectedUnit.dimensions.lengthM} × {selectedUnit.dimensions.widthM} × {selectedUnit.dimensions.heightM} m</p><p><b>Khung chứa hàng:</b> {selectedRackCount} khung · {formatRackDimensions(selectedRackDimensions)} m/khung</p></section>
-                    <section className="py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Hàng hóa và sức chứa</p><ul className="list-disc space-y-1 pl-5">{packageCapacityResults.map((sample, index) => <li key={sample.id}><b>{sample.sourceLabel || `Hàng hóa ${index + 1}`}:</b> {sample.quantity} kiện · {sample.lengthCm} × {sample.widthCm} × {sample.heightCm} cm · {sample.weightKg} kg/kiện · tổng {(Number(sample.quantity) * Number(sample.weightKg)).toLocaleString('vi-VN')} kg{!sample.canFitFrame && ' · không thể xếp vừa khung'}</li>)}</ul><p className="mt-3"><b>Tổng số kiện:</b> {packageCountNumber}</p><p><b>Tổng thể tích:</b> {formatVolumeM3(serverCompatibility?.totalGoodsVolumeM3 ?? goodsVolumeM3)} m³</p><p><b>Sức chứa khung hữu dụng:</b> {formatVolumeM3(serverCompatibility?.usableVolumePerRackM3 ? serverCompatibility.usableVolumePerRackM3 * selectedRackCount : selectedUsableRackVolumeM3)} m³</p><p><b>Khung cần dùng:</b> {hasUnplaceablePackage ? 'Không xác định' : totalFramesRequired} khung / {selectedRackCount} khung</p><p className="text-xs text-stone-500">Mỗi kiện được tính theo kích thước thực tế, tổng thể tích = số lượng × dài × rộng × cao. Sức chứa khung đã trừ 20% khoảng trống.</p><p><b>Tổng cân nặng:</b> {goodsWeightNumber.toLocaleString('vi-VN')} / {selectedUnit.maxLoadKg.toLocaleString('vi-VN')} kg</p><p><b>Tình trạng đóng gói:</b> {goodsCondition}</p></section>
-                    <section className="space-y-1 py-5"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">Thời gian thuê</p><p><b>Lịch nhận kho:</b> {displayDateValue(moveInDate)} · {bookingAppointmentTime}</p><p><b>Ngày bắt đầu kỳ thuê dự kiến:</b> {displayDateValue(previewRentalPeriod?.startDate)}</p><p><b>Gói thuê đã chọn:</b> {selectedActivePackage?.name || `${rentalMonths} tháng`} · {formatVnd(selectedActivePackage?.packagePrice || totalValue)}</p><p className="pt-1 font-semibold text-red-700">Nếu đổi lịch, thời điểm mới vẫn phải nằm trong thời hạn nhận kho 7 ngày.</p></section>
-                  </div>
-                  {hasOtherGoods ? <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-center text-blue-950"><b>Xác minh email trước khi nhân viên duyệt · Chưa thu tiền cọc</b><p className="mt-1 text-xs">Kho chưa bị khóa khi chờ duyệt. Sau khi xác minh email, nhân viên có tối đa 6 giờ để xét duyệt.</p></div> : <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-stone-100 p-4 text-center sm:grid-cols-5">
-                    <div><p className="text-xs text-stone-500">Giảm giá {facilityPolicyDiscount > 0 ? '(Gồm ưu đãi cơ sở)' : `(${Math.round(discountRate * 100)}%)`}</p><p className="mt-1 font-bold text-emerald-700">{formatVnd(totalCombinedDiscount)}</p><p className="text-[10px] text-stone-500">Gốc {formatVnd(grossTermValue)}</p></div>
-                    <div><p className="text-xs text-stone-500">Tiền thuê sau giảm</p><p className="mt-1 font-bold">{formatVnd(totalValue)}</p></div>
-                    <div><p className="text-xs text-stone-500">{'Phí giữ chỗ 20%'}</p><p className="mt-1 font-bold">{formatVnd(deposit)}</p></div>
-                    <div><p className="text-xs text-stone-500">Tiền cọc đảm bảo kho</p><p className="mt-1 font-bold text-amber-800">{formatVnd(securityDeposit)}</p><p className="text-[10px] text-stone-500">Bằng 1 tháng tiền thuê</p></div>
-                    <div><p className="text-xs text-stone-500">{'Thu tại nhận kho'}</p><p className="mt-1 font-bold">{formatVnd(dueAtCheckIn)}</p></div>
-                  </div>}
-                  {evaluatedPolicyBenefits.some(b => b.isDiscount) && (
-                    <div className="mt-4 rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-xs text-emerald-950">
-                      <p className="font-bold flex items-center gap-1.5 text-emerald-900">
-
-                        <span>Chính sách ưu đãi cơ sở được áp dụng:</span>
-                      </p>
-                      <div className="mt-2 space-y-1 pl-4">
-                        {evaluatedPolicyBenefits.filter(b => b.isDiscount).map(b => (
-                          <div key={b.policy.id} className="flex flex-wrap items-center justify-between gap-2">
-                            <span>• <b>{b.policy.name}</b> ({b.policy.value}): {b.descriptionVi}</span>
-                            <span className="font-bold text-emerald-800">{formatVnd(b.discountAmount)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <p className="mt-4 text-xs leading-5 text-stone-600">{hasOtherGoods ? 'Sau khi nhân viên cơ sở chấp thuận, hệ thống mới mở bước thanh toán cọc 20%. Nếu bị từ chối, suất kho sẽ được giải phóng và lý do sẽ hiển thị trong thông báo.' : 'Phí giữ chỗ được trừ vào tiền thuê và không hoàn nếu khách hàng hủy trước nhận kho. Tiền cọc đảm bảo kho được thu riêng tại nhận kho để bảo đảm trách nhiệm về hư hại, vệ sinh và công nợ. Khoản còn lại được hoàn sau biên bản nghiệm thu trả kho.'}</p>
-                </div>
-              )
-            })()}
-
             {reservationSubmitError && <div role="alert" className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900">
               <p className="font-bold">Chưa thể xác nhận đặt kho</p>
               <p className="mt-1 leading-5">{reservationSubmitError}</p>
@@ -4035,7 +3662,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   }
                   onClick={() => void confirmReservation()}
                 >
-                  {reservationSubmitting ? 'Đang lập báo giá...' : 'Kiểm tra và lấy báo giá'}
+                  {reservationSubmitting ? 'Đang kiểm tra...' : selectedPalletCheck?.palletLayoutMissing ? 'Kiểm tra lại' : 'Kiểm tra và lấy báo giá'}
                 </Button>
               )}
               {bookingStep === 3 && <Button disabled={!termsAccepted} onClick={() => setBookingStep(4)}>Tiếp theo: Chọn lịch check-in</Button>}

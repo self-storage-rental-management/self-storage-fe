@@ -45,7 +45,7 @@ export default function ManagerMovesApiPanel({ facilityId }: { facilityId?: stri
       setCheckIns(checkInPage.data)
       setReturns(returnPage.data)
     } catch (reason) {
-      setError(userFacingError(reason, 'Không thể tải dữ liệu nhận/trả kho từ Backend.'))
+      setError(userFacingError(reason, 'Không thể tải dữ liệu nhận và trả kho từ hệ thống.'))
     } finally {
       setLoading(false)
     }
@@ -56,7 +56,7 @@ export default function ManagerMovesApiPanel({ facilityId }: { facilityId?: stri
   return <div className="space-y-5">
     <SectionHeader
       title="Nhận kho & Trả kho"
-      subtitle="Dữ liệu lấy trực tiếp từ Backend. Manager chỉ theo dõi và giám sát, Staff thực hiện nghiệp vụ tại hiện trường."
+      subtitle="Dữ liệu lấy trực tiếp từ hệ thống. Quản lý cơ sở chỉ theo dõi và giám sát, nhân viên thực hiện nghiệp vụ tại hiện trường."
       action={<Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>Làm mới</Button>}
     />
 
@@ -71,9 +71,9 @@ export default function ManagerMovesApiPanel({ facilityId }: { facilityId?: stri
     {tab === 'credentials' ? <ManagerAccessCredentialsPanel facilityId={facilityId} /> : tab === 'checkins' ? (
       <Card>
         <Table>
-          <Thead><Tr><Th>Khách hàng / Đơn</Th><Th>Gian kho</Th><Th>Trạng thái</Th><Th>Setup</Th><Th>Kiểm kê</Th><Th>Check-in</Th></Tr></Thead>
+          <Thead><Tr><Th>Khách hàng / Đơn</Th><Th>Gian kho</Th><Th>Trạng thái</Th><Th>Thiết lập</Th><Th>Kiểm kê</Th><Th>Nhận kho</Th></Tr></Thead>
           <Tbody>
-            {!loading && !checkIns.length && <Tr><Td colSpan={6} className="py-8 text-center text-stone-500">Chưa có hồ sơ nhận kho từ Backend.</Td></Tr>}
+            {!loading && !checkIns.length && <Tr><Td colSpan={6} className="py-8 text-center text-stone-500">Chưa có hồ sơ nhận kho từ hệ thống.</Td></Tr>}
             {checkIns.map(item => <Tr key={item.checkInId || item.reservationId}>
               <Td><b>{item.customerName}</b><p className="text-xs font-mono text-stone-500">{item.reservationCode}</p></Td>
               <Td><b className="font-mono">{item.storageUnitCode}</b><p className="text-xs text-stone-500">{item.facilityName}</p></Td>
@@ -90,7 +90,7 @@ export default function ManagerMovesApiPanel({ facilityId }: { facilityId?: stri
         <Table>
           <Thead><Tr><Th>Khách hàng / Hợp đồng</Th><Th>Gian kho</Th><Th>Ngày trả</Th><Th>Trạng thái</Th><Th>Quyết toán</Th><Th>Ghi nhận</Th></Tr></Thead>
           <Tbody>
-            {!loading && !returns.length && <Tr><Td colSpan={6} className="py-8 text-center text-stone-500">Chưa có hồ sơ trả kho từ Backend.</Td></Tr>}
+            {!loading && !returns.length && <Tr><Td colSpan={6} className="py-8 text-center text-stone-500">Chưa có hồ sơ trả kho từ hệ thống.</Td></Tr>}
             {returns.map(item => <Tr key={item.id}>
               <Td><b>{item.customerName}</b><p className="text-xs font-mono text-stone-500">{item.rentalId}</p></Td>
               <Td className="font-mono">{item.unitNumber}</Td>
