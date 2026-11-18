@@ -1136,7 +1136,7 @@ export default function BusinessApp({
     if (!item.backendPolicyIds || Object.keys(item.backendPolicyIds).length === 0) return
     try {
       await Promise.all(Object.values(item.backendPolicyIds).map(pid => inactiveBusinessPackagePolicy(pid)))
-      showToast(lang === 'vi' ? `Đã chuyển gói thuê "${item.title}" sang TẠM DỪNG (INACTIVE). Bây giờ bạn có thể chỉnh sửa!` : `Paused package "${item.title}". Edits allowed now!`)
+      showToast(lang === 'vi' ? `Đã chuyển gói thuê "${item.title}" sang Tạm dừng.` : `Paused package "${item.title}".`)
       await reloadPackagePolicies()
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Không thể tạm dừng gói thuê.')
@@ -1152,14 +1152,18 @@ export default function BusinessApp({
     try {
       if (isApiAuthenticated()) {
         await deleteAllBusinessPackagePolicies()
+        await reloadPackagePolicies()
+      } else {
+        const next = durationDiscounts.map(item => ({
+          ...item, status: 'inactive' as const, publicationStatus: 'INACTIVE' as const, runtimeStatus: 'INACTIVE' as const,
+        }))
+        setDurationDiscounts(next)
+        localStorage.setItem("storagehub:durationDiscounts", JSON.stringify(next))
       }
-      setDurationDiscounts([])
-      localStorage.removeItem("storagehub:durationDiscounts")
       setDeleteAllPackagesModal(false)
-      showToast(lang === 'vi' ? 'Đã xóa toàn bộ gói thuê hiện có!' : 'All rental packages have been deleted!')
-      await reloadPackagePolicies()
+      showToast(lang === 'vi' ? 'Đã ngừng áp dụng tất cả gói thuê.' : 'All rental packages have been deactivated.')
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Không thể xóa các gói thuê.')
+      showToast(error instanceof Error ? error.message : 'Không thể ngừng áp dụng các gói thuê.')
     } finally {
       setIsDeletingAllPackages(false)
     }
@@ -1299,8 +1303,8 @@ export default function BusinessApp({
   const handleOpenEditDuration = (item: DurationDiscountItem) => {
     if (item.publicationStatus === 'PUBLISHED') {
       showToast(lang === 'vi'
-        ? 'Chính sách đang ở trạng thái ĐÃ XUẤT BẢN (PUBLISHED). Theo quy định, cấu hình đã xuất bản không được chỉnh sửa trực tiếp. Vui lòng bấm [Tạm dừng] trước khi chỉnh sửa!'
-        : 'Published configuration cannot be edited directly. Pause (INACTIVE) first!')
+        ? 'Chính sách đang hoạt động. Hãy tạm dừng trước khi sửa.'
+        : 'This policy is published. Pause it before editing.')
       return
     }
     setPackageFormError(undefined)
@@ -1415,11 +1419,13 @@ export default function BusinessApp({
           return false
         }
       }
-      const next = durationDiscounts.filter((d) => d.id !== id)
+      const next = durationDiscounts.map(d => d.id === id ? {
+        ...d, status: 'inactive' as const, publicationStatus: 'INACTIVE' as const, runtimeStatus: 'INACTIVE' as const,
+      } : d)
       setDurationDiscounts(next)
       if (!isApiAuthenticated()) localStorage.setItem("storagehub:durationDiscounts", JSON.stringify(next))
       if (selectedDurationItem?.id === id) setEditDurationModal(false)
-      showToast(lang === 'vi' ? `Đã xóa gói "${item.title}"!` : `Package deleted!`)
+      showToast(lang === 'vi' ? `Đã ngừng áp dụng gói "${item.title}".` : 'Package deactivated.')
     }
   }
 
@@ -1917,7 +1923,7 @@ export default function BusinessApp({
       setPricingCatalogVersion(version => version + 1)
       showToast(
         lang === "vi"
-          ? `Đã cập nhật biểu giá cho cơ sở "${editingPriceFacility.name}"! Nếu cơ sở đang ở trạng thái Thiết lập, bạn có thể bấm [🚀 Công bố cơ sở] để xuất bản ngay lên Cổng khách hàng.`
+          ? `Đã cập nhật biểu giá cho cơ sở "${editingPriceFacility.name}". Nếu cơ sở đang ở trạng thái Thiết lập, bạn có thể chọn “Công bố cơ sở” để hiển thị trên cổng khách hàng.`
           : `Updated pricing for "${editingPriceFacility.name}"!`
       )
       return
@@ -2305,6 +2311,7 @@ export default function BusinessApp({
   const [editFacilityModal, setEditFacilityModal] = useState<boolean>(false)
 
   const [deleteFacilityModal, setDeleteFacilityModal] = useState<boolean>(false)
+  const [confirmFacilityArchive, setConfirmFacilityArchive] = useState(false)
   const [deleteFacilityBusy, setDeleteFacilityBusy] = useState<boolean>(false)
   const [deleteFacilityError, setDeleteFacilityError] = useState<string | null>(null)
   const [facilityLifecycleSummary, setFacilityLifecycleSummary] = useState<FacilityLifecycleSummary | null>(null)
@@ -3182,7 +3189,6 @@ export default function BusinessApp({
       f.accessHours || (isApiAuthenticated() ? "" : "08:00 - 17:00"),
     )
 
-    setFormFacStatus(f.status)
     setEditValidationErrors([])
     setHighlightSpecCode(null)
     setFacilityEditError(undefined)
@@ -3202,7 +3208,7 @@ export default function BusinessApp({
           name: formFacName.trim(), address: formFacAddress.trim(), city: formFacCity.trim(),
           phone: formFacPhone.trim() || null, accessHours: formFacAccessHours.trim() || null,
           imageUrl: formFacImage || null, climateControlled: formFacClimate,
-          securityDescription: formFacSecurity.trim() || null, status: formFacStatus,
+          securityDescription: formFacSecurity.trim() || null,
         })
         updateFacility(selectedFacility.id, {
           name: saved.name, address: saved.address, city: saved.city, phone: saved.phone || '',
@@ -3386,7 +3392,6 @@ export default function BusinessApp({
           imageUrl: formFacImage || null,
           climateControlled: formFacClimate,
           securityDescription: formFacSecurity.trim() || null,
-          status: formFacStatus,
         })
       } catch (error) {
         showToast(error instanceof Error ? error.message : 'Không thể cập nhật cơ sở trên backend.')
@@ -3439,7 +3444,6 @@ export default function BusinessApp({
 
         accessHours: formFacAccessHours,
 
-        status: formFacStatus,
       },
       user,
     )
@@ -3525,6 +3529,7 @@ export default function BusinessApp({
 
   const handleOpenFacilityLifecycle = async (facility: Facility) => {
     setSelectedFacility(facility)
+    setConfirmFacilityArchive(false)
     setDeleteFacilityError(null)
     setDeleteFacilityBusy(false)
     setFacilityLifecycleSummary(null)
@@ -3602,15 +3607,17 @@ export default function BusinessApp({
   }
 
   const handleArchiveFacility = async () => {
-    if (!selectedFacility) return
+    if (!selectedFacility || deleteFacilityBusy) return
     setDeleteFacilityBusy(true)
     setDeleteFacilityError(null)
+    let facilityId: string | undefined
     try {
       if (isApiAuthenticated()) {
         const persisted = (await listAllFacilitiesApi()).find(
           f => f.id === selectedFacility.id || (f.code && f.code.toUpperCase() === (selectedFacility.code || '').toUpperCase())
         )
         if (!persisted) throw new Error('Không tìm thấy cơ sở trên hệ thống. Vui lòng tải lại trang.')
+        facilityId = persisted.id
         await archiveBusinessFacility(persisted.id)
       }
       updateFacility(selectedFacility.id, { status: 'inactive' }, user)
@@ -3618,7 +3625,15 @@ export default function BusinessApp({
       setDeleteFacilityModal(false)
       showToast(lang === 'vi' ? `Đã lưu trữ cơ sở "${selectedFacility.name}".` : `Facility "${selectedFacility.name}" archived.`)
     } catch (error) {
+      setConfirmFacilityArchive(false)
       setDeleteFacilityError(error instanceof Error ? error.message : 'Không thể lưu trữ cơ sở.')
+      if (facilityId) {
+        try {
+          setFacilityLifecycleSummary(await getBusinessFacilityLifecycleSummary(facilityId))
+        } catch {
+          setFacilityLifecycleSummary(null)
+        }
+      }
     } finally {
       setDeleteFacilityBusy(false)
     }
@@ -4014,7 +4029,7 @@ export default function BusinessApp({
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs text-slate-600">
                           <div>{cleanF.address} · <b>{cleanF.city}</b></div>
                           <div>Quản lý: <b>{cleanF.manager}</b></div>
-                          <div>Hotline: <b>{cleanF.phone || "Chưa cập nhật"}</b></div>
+                          <div>Số điện thoại liên hệ: <b>{cleanF.phone || "Chưa cập nhật"}</b></div>
                           <div>Khung giờ mở cửa: <b>{cleanF.accessHours || (isApiAuthenticated() ? "Chưa cập nhật" : "08:00 - 17:00")}</b></div>
                         </div>
                         {/* Cơ cấu gian kho */}
@@ -4140,7 +4155,7 @@ export default function BusinessApp({
                     <svg className="w-4 h-4 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
-                    <span>{lang === "vi" ? "Xóa Tất Cả Gói Thuê" : "Delete All Packages"}</span>
+                    <span>{lang === "vi" ? "Ngừng áp dụng tất cả gói thuê" : "Deactivate all packages"}</span>
                   </Button>
                 )}
                 <Button
@@ -4163,9 +4178,6 @@ export default function BusinessApp({
                   {lang === "vi" ? "Danh Sách Gói Thuê & Mức Chiết Khấu" : "Rental Packages & Discount Schedule"}
                 </h3>
               </div>
-              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Tỷ lệ giảm giá (%) được tự động áp dụng vào đơn giá khi khách hàng đặt kho hoặc gia hạn theo các mốc thời gian dưới đây.
-              </p>
             </div>
 
             {/* Cards Tóm Tắt Nhanh Các Gói */}
@@ -4182,7 +4194,7 @@ export default function BusinessApp({
                 </select>
               </label>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5 my-4">
+            <div className="grid w-full grid-cols-1 gap-4 my-4 sm:grid-cols-2 lg:grid-cols-4">
               {[...durationDiscounts].filter(item => packageStatusFilter === 'all' ||
                 (packageStatusFilter === 'active' ? item.status === 'active' : item.status !== 'active')).length === 0 ? (
                 <div className="col-span-full py-8 text-center text-sm text-stone-500">
@@ -4208,7 +4220,7 @@ export default function BusinessApp({
                 return (
                   <div
                     key={item.id}
-                    className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between ${
+                    className={`flex min-w-0 flex-col justify-between rounded-xl border p-3.5 transition-all ${
                       isActive
                         ? hasDiscount || hasRenewal
                           ? "border-emerald-200 bg-emerald-50/40 hover:border-emerald-300 shadow-2xs"
@@ -4221,34 +4233,29 @@ export default function BusinessApp({
                         <span className="font-bold text-slate-900 text-sm truncate" title={item.title}>
                           {item.label}
                         </span>
-                        <div className="flex flex-col items-end gap-0.5">
-                          <Badge
-                            variant={
-                              item.runtimeStatus === 'ACTIVE'
-                                ? "success"
-                                : item.runtimeStatus === 'SCHEDULED'
-                                  ? "info"
-                                  : item.runtimeStatus === 'EXPIRED'
-                                    ? "error"
-                                    : item.runtimeStatus === 'INACTIVE'
-                                      ? "warning"
-                                      : "muted"
-                            }
-                          >
-                            {item.runtimeStatus === 'ACTIVE'
-                              ? "Đang hiệu lực"
+                        <span
+                          className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-semibold ${
+                            item.runtimeStatus === 'ACTIVE'
+                              ? "bg-emerald-100 text-emerald-900"
                               : item.runtimeStatus === 'SCHEDULED'
-                                ? "Lên lịch"
+                                ? "bg-sky-100 text-sky-900"
                                 : item.runtimeStatus === 'EXPIRED'
-                                  ? "Hết hạn"
+                                  ? "bg-red-100 text-red-900"
                                   : item.runtimeStatus === 'INACTIVE'
-                                    ? "Tạm dừng"
-                                    : "Bản nháp"}
-                          </Badge>
-                          <span className="text-[9px] text-stone-400 font-mono">
-                            [{item.publicationStatus || (isActive ? 'PUBLISHED' : 'INACTIVE')}]
-                          </span>
-                        </div>
+                                    ? "bg-amber-100 text-amber-900"
+                                    : "bg-stone-200 text-stone-800"
+                          }`}
+                        >
+                          {item.runtimeStatus === 'ACTIVE'
+                            ? "Đang hiệu lực"
+                            : item.runtimeStatus === 'SCHEDULED'
+                              ? "Lên lịch"
+                              : item.runtimeStatus === 'EXPIRED'
+                                ? "Hết hạn"
+                                : item.runtimeStatus === 'INACTIVE'
+                                  ? "Tạm dừng"
+                                  : "Bản nháp"}
+                        </span>
                       </div>
 
                       {/* Huy hiệu phạm vi cơ sở áp dụng */}
@@ -4285,7 +4292,7 @@ export default function BusinessApp({
                           </span>
                         </div>
                         <div className="flex items-center justify-between border-t border-stone-100 pt-1.5">
-                          <span className="text-[11px] text-slate-600 font-medium">Setup miễn phí:</span>
+                          <span className="text-[11px] text-slate-600 font-medium">Chuẩn bị miễn phí:</span>
                           <span className="font-mono font-bold text-blue-800">
                             {item.freeSetupDays == null ? 'Theo kỳ hạn' : `${item.freeSetupDays} ngày`}
                           </span>
@@ -4297,17 +4304,14 @@ export default function BusinessApp({
                       </p>
                     </div>
 
-                    <div className="mt-3 pt-2.5 border-t border-stone-200/60 flex items-center justify-between">
-                      <span className="text-[10px] text-slate-500 font-medium truncate max-w-[80px]" title={item.appliesTo}>
-                        {item.appliesTo}
-                      </span>
-                      <div className="flex items-center gap-1.5">
+                    <div className="mt-3 pt-2.5 border-t border-stone-200/60">
+                      <div className="grid grid-cols-2 gap-2 [&>button]:min-w-0 [&>button]:rounded-md [&>button]:border [&>button]:px-2 [&>button]:py-1.5 [&>button]:text-xs! [&>button]:leading-4! [&>button]:font-semibold!">
                         {item.publicationStatus === 'PUBLISHED' ? (
                           <button
                             type="button"
                             onClick={() => handleInactiveDurationDiscount(item)}
-                            title="Chuyển về INACTIVE để có thể chỉnh sửa"
-                            className="text-[11px] font-bold text-amber-800 hover:text-amber-950 underline cursor-pointer"
+                            title="Tạm dừng gói để có thể chỉnh sửa"
+                            className="border-orange-200 bg-orange-50 text-orange-900 hover:bg-orange-100"
                           >
                             Tạm dừng
                           </button>
@@ -4316,7 +4320,7 @@ export default function BusinessApp({
                             type="button"
                             onClick={() => handlePublishDurationDiscount(item)}
                             title="Xuất bản chính sách này"
-                            className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 underline cursor-pointer"
+                            className="border-orange-200 bg-orange-50 text-orange-900 hover:bg-orange-100"
                           >
                             Xuất bản
                           </button>
@@ -4325,21 +4329,17 @@ export default function BusinessApp({
                           type="button"
                           onClick={() => handleOpenEditDuration(item)}
                           disabled={item.publicationStatus === 'PUBLISHED'}
-                          title={item.publicationStatus === 'PUBLISHED' ? "Chính sách đang PUBLISHED. Vui lòng bấm [Tạm dừng] trước khi sửa!" : "Chỉnh sửa gói thuê"}
-                          className={`text-[11px] font-bold underline ${
-                            item.publicationStatus === 'PUBLISHED'
-                              ? "opacity-40 cursor-not-allowed text-stone-400"
-                              : "text-blue-700 hover:text-blue-900 cursor-pointer"
-                          }`}
+                          title={item.publicationStatus === 'PUBLISHED' ? "Chính sách đang hoạt động. Hãy tạm dừng trước khi sửa." : "Chỉnh sửa gói thuê"}
+                          className="border-orange-200 bg-orange-50 text-orange-900 enabled:hover:bg-orange-100 disabled:cursor-not-allowed disabled:border-stone-200 disabled:bg-stone-50 disabled:text-stone-500"
                         >
                           Sửa
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleDeleteDurationDiscount(item.id)}
-                          className="text-[11px] font-medium text-red-600 hover:text-red-800 underline cursor-pointer"
+                          onClick={() => void handleDeleteDurationDiscount(item.id)}
+                          className="col-span-2 border-orange-300 bg-orange-100 text-orange-950 hover:bg-orange-200"
                         >
-                          Xóa
+                          {lang === 'vi' ? 'Ngừng áp dụng' : 'Deactivate'}
                         </button>
                       </div>
                     </div>
@@ -5207,7 +5207,7 @@ export default function BusinessApp({
         open={deleteAllPackagesModal}
         size="md"
         onClose={() => !isDeletingAllPackages && setDeleteAllPackagesModal(false)}
-        title={lang === "vi" ? "Xác nhận xóa tất cả gói thuê" : "Confirm Delete All Packages"}
+        title={lang === "vi" ? "Ngừng áp dụng tất cả gói thuê" : "Deactivate all packages"}
       >
         <div className="space-y-4">
           <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-900 text-sm leading-relaxed flex items-start gap-3">
@@ -5216,12 +5216,12 @@ export default function BusinessApp({
             </svg>
             <div>
               <p className="font-semibold text-red-950">
-                {lang === "vi" ? "Cảnh báo hành động xóa toàn bộ" : "Action Warning"}
+                {lang === "vi" ? "Tất cả cơ sở sẽ bị ảnh hưởng" : "This affects all facilities"}
               </p>
               <p className="mt-1 text-xs text-red-800">
                 {lang === "vi"
-                  ? `Bạn có chắc chắn muốn xóa toàn bộ ${durationDiscounts.length} gói thuê hiện có trên hệ thống? Hành động này sẽ xóa sạch cấu hình các gói thuê và không thể hoàn tác.`
-                  : `Are you sure you want to delete all ${durationDiscounts.length} existing rental packages? This action cannot be undone.`}
+                  ? "Các gói sẽ ngừng xuất hiện trong lựa chọn đặt kho và gia hạn mới. Hồ sơ đã tạo vẫn được lưu để tra cứu."
+                  : "These packages will no longer be offered for new bookings or renewals. Existing records remain available."}
               </p>
             </div>
           </div>
@@ -5248,10 +5248,10 @@ export default function BusinessApp({
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                   </svg>
-                  <span>{lang === "vi" ? "Đang xóa..." : "Deleting..."}</span>
+                  <span>{lang === "vi" ? "Đang xử lý..." : "Updating..."}</span>
                 </>
               ) : (
-                <span>{lang === "vi" ? "Xác nhận xóa tất cả" : "Confirm Delete All"}</span>
+                <span>{lang === "vi" ? "Xác nhận ngừng áp dụng" : "Confirm deactivation"}</span>
               )}
             </Button>
           </div>
@@ -5303,7 +5303,7 @@ export default function BusinessApp({
               onChange={(e) => setFormCreateDurationMonths(Number(e.target.value))}
             />
             <Input
-              label={lang === "vi" ? "Setup miễn phí (ngày)" : "Free setup (days)"}
+              label={lang === "vi" ? "Thời gian chuẩn bị miễn phí (ngày)" : "Free setup (days)"}
               type="number"
               min={0}
               max={365}
@@ -5548,7 +5548,7 @@ export default function BusinessApp({
 
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <Input
-                label="Setup miễn phí (ngày)"
+                label="Thời gian chuẩn bị miễn phí (ngày)"
                 type="number"
                 min={0}
                 max={365}
@@ -5746,7 +5746,7 @@ export default function BusinessApp({
                 className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 text-xs font-semibold"
                 onClick={() => handleDeleteDurationDiscount(selectedDurationItem.id)}
               >
-                Xóa Gói Này
+                {lang === 'vi' ? 'Ngừng áp dụng gói' : 'Deactivate package'}
               </Button>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setEditDurationModal(false)}>
@@ -5817,7 +5817,6 @@ export default function BusinessApp({
           if (formFacCity.trim() !== (orig.city || "").trim()) return true
           if (formFacPhone.trim() !== (orig.phone || "").trim()) return true
           if (formFacAccessHours.trim() !== (orig.accessHours || "").trim()) return true
-          if (formFacStatus !== orig.status) return true
           if (formFacImage !== (orig.image || "")) return true
 
           if (formFacUnitSpecs.length !== editInitialSpecs.length) return true
@@ -6029,21 +6028,14 @@ export default function BusinessApp({
                       <FacilityOperations
                         accessHours={formFacAccessHours}
                         onChangeAccessHours={setFormFacAccessHours}
-                        status={formFacStatus}
-                        onChangeStatus={setFormFacStatus}
-                        statusReadOnly={false}
-                        initialStatus={selectedFacility.status}
+                        status={selectedFacility.status}
                         lang={lang}
                       />
 
                       {/* Sticky footer */}
                       <div className="sticky -bottom-6 -mx-6 -mb-6 bg-white/95 backdrop-blur-xs px-6 py-3 border-t border-stone-200 flex flex-col sm:flex-row items-center justify-between gap-2.5 z-10">
                         <div className="text-xs text-stone-500">
-                          {!isEditDirty ? (
-                            <span className="text-stone-400 italic">
-                              Chưa có thay đổi nào so với dữ liệu gốc
-                            </span>
-                          ) : (
+                          {isEditDirty && (
                             <span className="text-amber-800 font-semibold">
                               Có thay đổi chưa lưu
                             </span>
@@ -6162,7 +6154,6 @@ export default function BusinessApp({
           <div className="space-y-4">
             <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-700">
               Cơ sở <b>{selectedFacility.name}</b> · mã <span className="font-mono">{selectedFacility.code || selectedFacility.id}</span>
-              <p className="mt-1 text-xs text-stone-500">Chỉ dùng tạm ngưng nhận đơn mới hoặc lưu trữ cơ sở. Dữ liệu lịch sử vẫn được giữ nguyên.</p>
             </div>
 
             {facilityLifecycleSummary ? <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
@@ -6191,19 +6182,28 @@ export default function BusinessApp({
               <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{deleteFacilityError}</div>
             )}
 
+            {confirmFacilityArchive && (
+              <p className="text-sm text-stone-700">
+                {lang === 'vi' ? 'Sau khi lưu trữ, cơ sở sẽ ngừng nhận đơn mới. Hồ sơ và giao dịch cũ vẫn có thể tra cứu.' : 'Archiving stops new bookings. Existing records and transactions remain available.'}
+              </p>
+            )}
             <div className="flex flex-wrap items-center justify-end gap-2 pt-3 border-t border-slate-100">
               <Button
                 variant="outline"
                 disabled={deleteFacilityBusy}
                 onClick={() => {
+                  if (confirmFacilityArchive) {
+                    setConfirmFacilityArchive(false)
+                    return
+                  }
                   setDeleteFacilityModal(false)
                   setDeleteFacilityError(null)
                 }}
               >
-                Đóng
+                {confirmFacilityArchive ? 'Quay lại' : 'Đóng'}
               </Button>
 
-              {facilityLifecycleSummary?.status !== 'inactive' && (
+              {!confirmFacilityArchive && facilityLifecycleSummary?.status !== 'inactive' && (
                 <Button
                   variant="outline"
                   disabled={deleteFacilityBusy}
@@ -6222,15 +6222,23 @@ export default function BusinessApp({
                 >
                   {deleteFacilityBusy ? "Đang xử lý" : "Khôi phục hoạt động"}
                 </Button>
-              ) : facilityLifecycleSummary && facilityLifecycleSummary.pendingHoldCount === 0 && facilityLifecycleSummary.processingReservationCount === 0 && facilityLifecycleSummary.activeContractCount === 0 && facilityLifecycleSummary.outstandingPaymentCount === 0 && facilityLifecycleSummary.outstandingRefundCount === 0 ? <Button variant="primary" disabled={deleteFacilityBusy} onClick={handleArchiveFacility}>{deleteFacilityBusy ? "Đang xử lý" : "Lưu trữ cơ sở"}</Button> : null}
+              ) : facilityLifecycleSummary && facilityLifecycleSummary.pendingHoldCount === 0 && facilityLifecycleSummary.processingReservationCount === 0 && facilityLifecycleSummary.activeContractCount === 0 && facilityLifecycleSummary.outstandingPaymentCount === 0 && facilityLifecycleSummary.outstandingRefundCount === 0 ? (
+                <Button
+                  variant="primary"
+                  disabled={deleteFacilityBusy}
+                  onClick={confirmFacilityArchive ? handleArchiveFacility : () => setConfirmFacilityArchive(true)}
+                >
+                  {deleteFacilityBusy ? 'Đang xử lý' : confirmFacilityArchive ? 'Xác nhận lưu trữ' : 'Lưu trữ cơ sở'}
+                </Button>
+              ) : null}
             </div>
           </div>
         )}
       </Modal>
 
-      <Modal open={!!deleteConfirmation} onClose={() => { if (!deleteConfirmationBusy) setDeleteConfirmation(null) }} title={deleteConfirmation?.kind === 'package' ? 'Xóa gói thuê' : 'Xóa chính sách'}>
+      <Modal open={!!deleteConfirmation} onClose={() => { if (!deleteConfirmationBusy) setDeleteConfirmation(null) }} title={deleteConfirmation?.kind === 'package' ? 'Ngừng áp dụng gói thuê' : 'Xóa chính sách'}>
         <div className="space-y-4">
-          <p>Bạn có chắc muốn xóa <b>{deleteConfirmation?.title}</b>?</p>
+          <p>Bạn có chắc muốn {deleteConfirmation?.kind === 'package' ? 'ngừng áp dụng' : 'xóa'} <b>{deleteConfirmation?.title}</b>?</p>
           {deleteConfirmation?.kind === 'package' && <p className="text-sm text-stone-500">Gói sẽ ngừng áp dụng cho lượt thuê mới. Hồ sơ thuê và hóa đơn đã tạo vẫn được giữ nguyên.</p>}
           {deleteConfirmationError && <p role="alert" className="text-sm text-red-700">{deleteConfirmationError}</p>}
           <div className="flex justify-end gap-3">
@@ -6247,7 +6255,7 @@ export default function BusinessApp({
               } catch (error) {
                 setDeleteConfirmationError(error instanceof Error ? error.message : 'Không thể xóa. Vui lòng thử lại.')
               } finally { setDeleteConfirmationBusy(false) }
-            }}>{deleteConfirmationBusy ? 'Đang xử lý…' : 'Xác nhận xóa'}</Button>
+            }}>{deleteConfirmationBusy ? 'Đang xử lý…' : deleteConfirmation?.kind === 'package' ? 'Xác nhận ngừng áp dụng' : 'Xác nhận xóa'}</Button>
           </div>
         </div>
       </Modal>

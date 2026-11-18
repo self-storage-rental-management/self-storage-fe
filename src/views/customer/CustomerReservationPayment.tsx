@@ -208,7 +208,7 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
           </span>
         </label>
 
-        <p className="text-sm text-stone-600">Bạn sẽ được chuyển sang VNPay Sandbox. Sau khi thanh toán thành công, biên lai được lưu trong đơn và gửi qua email tài khoản; hệ thống tự thử lại nếu gửi email tạm thời gặp lỗi.</p>
+        <p className="text-sm text-stone-600">Bạn sẽ được chuyển sang VNPay thử nghiệm. Sau khi thanh toán thành công, bạn có thể xem biên lai trong đơn hoặc qua email.</p>
         <Button className="w-full" disabled={busy || countdown.expired || !acceptedNoRefund} onClick={() => pay()}>{busy ? 'Đang chuyển sang VNPay…' : `Thanh toán qua VNPay ${formatVnd(snapshot.reservationDepositAmount)}`}</Button>
       </div>
     </Modal>

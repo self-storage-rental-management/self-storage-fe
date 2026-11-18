@@ -55,11 +55,11 @@ export default function BusinessRefundRequestsPanel() {
   }
 
   return (
-    <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm" aria-label="Yêu cầu hoàn tiền chờ Business duyệt">
+    <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm" aria-label="Yêu cầu hoàn tiền chờ Ban điều hành duyệt">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-base font-bold text-amber-950">Yêu cầu hoàn tiền cần Business duyệt</h3>
-          <p className="mt-1 text-sm text-amber-900">Các khoản hoàn cần phê duyệt, gồm hồ sơ khiếu nại hoặc bồi hoàn vượt hạn mức Manager. Chỉ duyệt hồ sơ có thanh toán VNPay gốc thành công.</p>
+          <h3 className="text-base font-bold text-amber-950">Yêu cầu hoàn tiền cần Ban điều hành duyệt</h3>
+          <p className="mt-1 text-sm text-amber-900">Các khoản hoàn cần phê duyệt, gồm hồ sơ khiếu nại hoặc bồi hoàn vượt hạn mức của Quản lý cơ sở. Chỉ duyệt hồ sơ có thanh toán VNPay gốc thành công.</p>
         </div>
         <Button variant="outline" size="sm" disabled={loading} onClick={() => void load()}>{loading ? 'Đang tải…' : 'Làm mới'}</Button>
       </div>

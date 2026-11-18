@@ -275,7 +275,9 @@ function InventoryRead({
         />
       )}
       <Modal open={!!deletingType} onClose={() => { if (!actionBusy) setDeletingType(undefined) }} title="Lưu trữ loại kho">
-        <div className="space-y-4"><p>Chuyển loại kho <b>{deletingType?.name}</b> sang trạng thái lưu trữ? Dữ liệu lịch sử và các đơn đặt chỗ cũ vẫn được giữ nguyên.</p>
+        <div className="space-y-4">
+          <p>Chuyển loại kho <b>{deletingType?.name}</b> sang trạng thái lưu trữ? Dữ liệu lịch sử vẫn được giữ để tra cứu.</p>
+          <p className="text-sm text-stone-600">Hệ thống sẽ kiểm tra gian đang sử dụng và đơn đặt kho đang xử lý, kể cả đơn chưa được phân gian.</p>
           {actionError && <p role="alert" className="text-sm text-red-700">{actionError}</p>}
           <div className="flex justify-end gap-2"><Button variant="outline" disabled={actionBusy} onClick={() => setDeletingType(undefined)}>Hủy</Button><Button disabled={actionBusy} onClick={async () => {
             if (!deletingType) return

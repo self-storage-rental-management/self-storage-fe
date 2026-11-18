@@ -2033,10 +2033,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       }
 
       if (!serverQuote.setupEarlyExitPolicyVersion || serverQuote.setupEarlyExitFee == null) {
-        throw new Error('Báo giá chưa có điều khoản trả kho trong setup. Vui lòng lấy lại báo giá hoặc liên hệ cơ sở.')
+        throw new Error('Báo giá chưa có điều khoản trả kho trong thời gian chuẩn bị. Vui lòng lấy lại báo giá hoặc liên hệ cơ sở.')
       }
       if (acceptedSetupQuoteId !== serverQuote.quoteId) {
-        throw new Error('Vui lòng đọc và đồng ý điều khoản trả kho trong setup trước khi xác nhận đặt kho.')
+        throw new Error('Vui lòng đọc và đồng ý điều khoản trả kho trong thời gian chuẩn bị trước khi xác nhận đặt kho.')
       }
       const scheduledCompatibility = await checkCompatibility({ ...selection, startDate: moveInDate })
       if (scheduledCompatibility.result === 'INCOMPATIBLE' || scheduledCompatibility.availableUnitCount <= 0 || !scheduledCompatibility.palletPlan) {
@@ -3101,7 +3101,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                           </>
                         )}
                         {rental.status === 'setup' && (
-                          <Badge variant="warning">Đang setup miễn phí</Badge>
+                          <Badge variant="warning">Đang trong thời gian chuẩn bị miễn phí</Badge>
                         )}
                         {rental.status === 'return_requested' && (
                           <Badge variant="warning">{'Đã gửi yêu cầu trả kho'}</Badge>
@@ -3389,7 +3389,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 [1, 'Thông tin cá nhân'],
                 [2, 'Hàng hóa & số liệu'],
                 [3, 'Báo giá'],
-                [4, 'Lịch check-in'],
+                [4, 'Lịch nhận kho'],
               ].map(([step, label]) => {
                 const stepNumber = Number(step)
                 const active = bookingStep === stepNumber
@@ -3551,15 +3551,15 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 <div><Input label="Giờ nhận kho mong muốn" type="time" step="60" value={bookingAppointmentTime} onChange={e => { setBookingAppointmentTime(e.target.value); setSchedulePolicyMessage(null); setBookingErrors(current => { const next = { ...current }; delete next.appointmentTime; return next }) }} />{bookingErrors.appointmentTime && <p className="mt-1 text-xs text-red-700">{bookingErrors.appointmentTime}</p>}</div>
               </div>
               <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs leading-5 text-emerald-950">
-                <b>Ngày bắt đầu tính tiền dự kiến:</b> {displayDateValue(previewRentalPeriod?.startDate)}. Dự kiến bàn giao ngày {displayDateValue(moveInDate)}, sau đó có {previewSetupDays} ngày setup miễn phí. Kỳ thuê có tính tiền bắt đầu sau setup và sẽ được chốt theo ngày bàn giao thực tế. Thời hạn 7 ngày chỉ là thời hạn đến nhận kho.
+                <b>Ngày bắt đầu tính tiền dự kiến:</b> {displayDateValue(previewRentalPeriod?.startDate)}. Dự kiến bàn giao ngày {displayDateValue(moveInDate)}, sau đó có {previewSetupDays} ngày chuẩn bị miễn phí. Kỳ thuê có tính tiền bắt đầu sau thời gian chuẩn bị và sẽ được chốt theo ngày bàn giao thực tế. Thời hạn 7 ngày chỉ là thời hạn đến nhận kho.
               </div>
               {isApiAuthenticated() && serverQuote && <div className="space-y-2 text-xs leading-5 text-stone-600">
                 {serverQuote.setupEarlyExitPolicyVersion && serverQuote.setupEarlyExitFee != null ? <>
                   <label className="flex items-start gap-2 text-stone-700">
                     <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-amber-600" checked={acceptedSetupQuoteId === serverQuote.quoteId} disabled={reservationSubmitting} onChange={event => setAcceptedSetupQuoteId(event.target.checked ? serverQuote.quoteId : null)} />
-                    <span>Tôi đã đọc và đồng ý điều khoản trả kho trong setup của báo giá này.</span>
+                    <span>Tôi đã đọc và đồng ý điều khoản trả kho trong thời gian chuẩn bị của báo giá này.</span>
                   </label>
-                </> : <p role="status">Báo giá chưa có điều khoản trả kho trong setup. Vui lòng quay lại lấy báo giá mới hoặc liên hệ cơ sở.</p>}
+                </> : <p role="status">Báo giá chưa có điều khoản trả kho trong thời gian chuẩn bị. Vui lòng quay lại lấy báo giá mới hoặc liên hệ cơ sở.</p>}
               </div>}
             </div>}
 
@@ -3633,7 +3633,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             </div>
 
             {bookingStep === 3 && bookingReview && isApiAuthenticated() && serverQuote && <ReservationQuoteSummary quote={previewRentalPeriod ? { ...serverQuote, ...previewRentalPeriod } : serverQuote} needsReview={hasOtherGoods} />}
-            {bookingStep === 3 && bookingReview && isApiAuthenticated() && serverQuote && <label className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><input type="checkbox" className="mt-1 h-4 w-4" checked={termsAccepted} onChange={event => setTermsAccepted(event.target.checked)} /><span>Tôi đã đọc và đồng ý với báo giá và ngày setup miễn phí nêu trên. Bản điều khoản này sẽ được lưu cùng hồ sơ trước khi thanh toán.</span></label>}
+            {bookingStep === 3 && bookingReview && isApiAuthenticated() && serverQuote && <label className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><input type="checkbox" className="mt-1 h-4 w-4" checked={termsAccepted} onChange={event => setTermsAccepted(event.target.checked)} /><span>Tôi đã đọc và đồng ý với báo giá và thời gian chuẩn bị miễn phí nêu trên. Bản điều khoản này sẽ được lưu cùng hồ sơ trước khi thanh toán.</span></label>}
             {reservationSubmitError && <div role="alert" className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900">
               <p className="font-bold">Chưa thể xác nhận đặt kho</p>
               <p className="mt-1 leading-5">{reservationSubmitError}</p>
@@ -3665,7 +3665,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   {reservationSubmitting ? 'Đang kiểm tra...' : selectedPalletCheck?.palletLayoutMissing ? 'Kiểm tra lại' : 'Kiểm tra và lấy báo giá'}
                 </Button>
               )}
-              {bookingStep === 3 && <Button disabled={!termsAccepted} onClick={() => setBookingStep(4)}>Tiếp theo: Chọn lịch check-in</Button>}
+              {bookingStep === 3 && <Button disabled={!termsAccepted} onClick={() => setBookingStep(4)}>Tiếp theo: Chọn lịch nhận kho</Button>}
               {bookingStep === 4 && <Button disabled={reservationSubmitting || !termsAccepted} onClick={() => void confirmReservation()}>{reservationSubmitting ? 'Đang xử lý...' : hasOtherGoods ? 'Gửi yêu cầu nhân viên cơ sở duyệt' : 'Xác nhận đặt kho'}</Button>}
             </div>
           </div>

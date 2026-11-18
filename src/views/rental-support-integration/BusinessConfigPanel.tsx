@@ -271,7 +271,7 @@ export default function BusinessConfigPanel({ canWrite = true }: Props) {
                 onChange={(e) => setAutoProrate(e.target.checked)}
                 className="rounded accent-amber-600"
               />
-              <span>Tự động tính tiền theo số ngày thực tế khi bắt đầu giữa tháng (Prorate)</span>
+              <span>Tự động tính tiền theo số ngày thực tế khi bắt đầu giữa tháng</span>
             </label>
           </div>
         </div>

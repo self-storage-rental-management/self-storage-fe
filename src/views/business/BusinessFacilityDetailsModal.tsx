@@ -370,7 +370,7 @@ export default function BusinessFacilityDetailsModal({
                   ['Số gian đang sử dụng', numberValue(facilityOccupiedCount, 'gian')],
                   ...otherFacilityStatuses.map(([status, count]) => [`${unitStatusLabels[status] || status}`, numberValue(count, 'gian')] as [string, ReactNode]),
                   ['Người quản lý', valueOrMissing(facility.manager)],
-                  ['Hotline', valueOrMissing(facility.phone)],
+                  ['Số điện thoại liên hệ', valueOrMissing(facility.phone)],
                   ['Giờ mở cửa', valueOrMissing(facility.accessHours)],
                   ['Giá thuê từ', facilityPrice === MISSING ? MISSING : `${facilityPrice}/tháng`],
                   ['Tổng hạn mức khối lượng hàng', hasCargoLimit ? numberValue(totalCargoLimit, 'kg') : MISSING],

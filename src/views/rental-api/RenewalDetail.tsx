@@ -67,9 +67,9 @@ export default function RenewalDetail({
     (r.statusSummary?.transactions?.some((t) => t.status === "SUCCEEDED" && t.amount > 0) ?? false)
   const verification = r.systemVerification
   const workflowStatusLabel = r.statusSummary ? renewalWorkflowLabel(r) : paymentExpired ? "Đã hết hạn thanh toán, đang đối soát VNPay" : r.status === "accepted" && r.approvedPaymentDeadline
-    ? isCustomer ? "Đã mở thanh toán qua VNPay Sandbox" : hasDeposit ? "Đã mở thanh toán tiền thuê trả trước qua VNPay Sandbox" : "Đã mở thanh toán toàn kỳ qua VNPay Sandbox"
+    ? isCustomer ? "Đã mở thanh toán qua VNPay thử nghiệm" : hasDeposit ? "Đã mở thanh toán tiền thuê trả trước qua VNPay thử nghiệm" : "Đã mở thanh toán toàn kỳ qua VNPay thử nghiệm"
     : r.status === "accepted" && verification?.status === "VERIFIED"
-    ? "Đã xác nhận điều kiện, chờ kiểm tra readiness thanh toán"
+    ? "Đang kiểm tra điều kiện thanh toán"
     : copy(renewalLabels[r.status] || unknown)
 
   const renewalProgressSteps = isCustomer
@@ -270,13 +270,13 @@ export default function RenewalDetail({
             <div className="flex items-center gap-2">
               
               <div>
-                <p className="font-bold text-emerald-950 text-base">Thanh toán gia hạn trực tuyến qua VNPay Sandbox</p>
+                <p className="font-bold text-emerald-950 text-base">Thanh toán gia hạn trực tuyến qua VNPay thử nghiệm</p>
                 <p className="text-xs text-emerald-800">
                   Hỗ trợ quét mã VNPAY-QR hoặc thẻ ATM / Internet Banking nội địa. Sau khi thanh toán, vui lòng theo dõi lịch ký tại cơ sở.
                 </p>
               </div>
             </div>
-            <span className="rounded-full bg-emerald-200 px-3 py-1 text-xs font-bold text-emerald-900">VNPay Gateway</span>
+            <span className="rounded-full bg-emerald-200 px-3 py-1 text-xs font-bold text-emerald-900">Cổng VNPay</span>
           </div>
           <div className="pt-1">
             <Button
@@ -285,7 +285,7 @@ export default function RenewalDetail({
               disabled={operationsLocked || paymentBusy || paymentExpired}
               onClick={openRenewalPayment}
             >
-              {paymentBusy ? "Đang mở cổng VNPay..." : payment && ["PENDING", "PROCESSING", "NOT_RECEIVED"].includes(payment.paymentStatus) ? "Tiếp tục thanh toán qua VNPay" : "Thanh toán ngay qua VNPay Sandbox"}
+              {paymentBusy ? "Đang mở cổng VNPay..." : payment && ["PENDING", "PROCESSING", "NOT_RECEIVED"].includes(payment.paymentStatus) ? "Tiếp tục thanh toán qua VNPay" : "Thanh toán ngay qua VNPay thử nghiệm"}
             </Button>
           </div>
         </div>
