@@ -30,6 +30,7 @@ import {
   rentalDate,
   rentalMoney,
   rentalLabels,
+  rentalStatusLabel,
   rentalPeriodText,
   renewalLabels,
 } from "./presentation"
@@ -247,6 +248,9 @@ function WorkspaceData({
           return { ...first, data, pagination: { ...first.pagination, page: 0, totalPages: 1, totalItems: data.length } }
         })() }
         : { kind: "renewal" as const, page: await (async () => {
+          if (role === 'staff') {
+            return { data: [], pagination: { page: 0, pageSize: nq.size ?? 20, totalItems: 0, totalPages: 0, sort: '' } }
+          }
           if (role !== 'customer') return listRenewals(role, nq)
           const first = await listRenewals(role, { ...nq, page: 0, size: 100 })
           const rows = [...first.data]
@@ -285,6 +289,7 @@ function WorkspaceData({
       const end = parseVietnamDate(`${date}T00:00:00Z`)
       end.setUTCDate(end.getUTCDate() + 30)
       const scope = role === "manager" ? { facilityId: query.facilityId } : {}
+      const emptyRenewals = { data: [], pagination: { page: 0, pageSize: 1, totalItems: 0, totalPages: 0, sort: '' } }
       const result = await Promise.all([
         listRentals(role, { ...scope, size: 1 }),
         listRentals(role, { ...scope, size: 1, status: "active" }),
@@ -295,8 +300,12 @@ function WorkspaceData({
           endFrom: date,
           endTo: vietnamDateInput(end),
         }),
-        listRenewals(role, { ...scope, size: 1, status: "pending" }),
-        listRenewals(role, { ...scope, size: 1, status: "accepted" }),
+        role === "staff"
+          ? Promise.resolve(emptyRenewals)
+          : listRenewals(role, { ...scope, size: 1, status: "pending" }),
+        role === "staff"
+          ? Promise.resolve(emptyRenewals)
+          : listRenewals(role, { ...scope, size: 1, status: "accepted" }),
       ])
       return [
         result[0].pagination.totalItems,
@@ -353,17 +362,25 @@ function WorkspaceData({
       {counts.error ? (
         <ApiReadState {...counts} retry={counts.refresh} />
       ) : null}
-      <div className="grid grid-cols-2 gap-2 rounded-xl bg-white p-1.5">
+      <div className="grid grid-cols-2 gap-2 rounded-2xl border border-stone-200 bg-stone-100/90 p-1.5 shadow-sm">
         <Button
           variant={tab === "rental" ? "primary" : "outline"}
-          className="!border-0"
+          className={`h-11 rounded-xl text-sm font-semibold transition-all duration-150 ${
+            tab === "rental"
+              ? "!border-amber-600 !bg-amber-600 !text-white shadow-md font-bold"
+              : "!border !border-stone-300 !bg-white !text-stone-700 shadow-sm hover:!bg-stone-50 hover:!text-stone-950 hover:!border-stone-400"
+          }`}
           onClick={() => setTab("rental")}
         >
           Hồ sơ thuê
         </Button>
         <Button
           variant={tab === "renewal" ? "primary" : "outline"}
-          className="!border-0"
+          className={`h-11 rounded-xl text-sm font-semibold transition-all duration-150 ${
+            tab === "renewal"
+              ? "!border-amber-600 !bg-amber-600 !text-white shadow-md font-bold"
+              : "!border !border-stone-300 !bg-white !text-stone-700 shadow-sm hover:!bg-stone-50 hover:!text-stone-950 hover:!border-stone-400"
+          }`}
           onClick={() => setTab("renewal")}
         >
           Yêu cầu gia hạn
@@ -457,14 +474,17 @@ function WorkspaceData({
                     <div className="min-w-0 px-3"><p className="text-sm font-bold text-stone-900">{row.storageUnit.code}</p><h3 className="mt-0.5 text-xs font-medium text-stone-700">{row.facility.name}</h3><p className="mt-0.5 text-xs text-stone-500">{copy(row.unitType.name)}</p></div>
                     <div className="min-w-0 px-3"><span className="block max-w-[24ch] truncate font-mono text-xs leading-5 text-stone-500" title={row.id}>{row.id}</span></div>
                     <div className="flex flex-col items-center gap-1.5 px-3 [&_.ui-badge]:!flex [&_.ui-badge]:!min-h-8 [&_.ui-badge]:!w-[95%] [&_.ui-badge]:!items-center [&_.ui-badge]:!justify-center [&_.ui-badge]:!border-0 [&_.ui-badge]:!text-center">
-                      <Badge variant={recordStatusTone(row.status)}>{copy(rentalLabels[row.status])}</Badge>
+                      <Badge variant={recordStatusTone(row.status)}>{copy(rentalStatusLabel(row))}</Badge>
+                      {row.status === 'setup' && row.inventoryVerifiedAt && row.startDate && (
+                        <span className="text-center text-xs text-stone-600">Theo lịch: {rentalDate(row.startDate)}</span>
+                      )}
                       {row.status !== 'completed' && Number.isFinite(days) && days <= 7 && <span className={`inline-flex min-h-8 w-[95%] items-center justify-center rounded-full px-2 text-center text-xs font-semibold ${days <= -8 ? 'bg-red-100 text-red-800' : days < 0 ? 'bg-orange-100 text-orange-800' : 'bg-amber-100 text-amber-800'}`}>{days < 0 ? `Quá hạn ${-days} ngày` : days === 0 ? 'Hết hạn hôm nay' : `Còn ${days} ngày`}</span>}
                     </div>
                   <div className="px-3 text-xs font-medium text-stone-800"><p>{rentalDate(row.startDate)}</p><p className="text-xs font-normal text-stone-400">đến</p><p>{rentalDate(row.dateSemantics?.lastPermittedDate || row.contractEndDate)}</p></div>
                   <div className="px-3 text-xs font-bold text-stone-900">{row.monthlyPrice == null ? 'Chưa xác định' : rentalMoney(row.monthlyPrice, row.currency)}</div>
                   <div className="flex flex-nowrap items-center justify-end gap-2 whitespace-nowrap px-3 [&>button]:shrink-0">
-                    <Button size="sm" variant="outline" onClick={() => setDetail({ kind: 'rental', id: row.id })}>Chi tiết hồ sơ</Button>
-                    <Button size="sm" variant="outline" className="!border-emerald-600 !bg-emerald-600 !text-white hover:!bg-emerald-700" disabled={row.status !== 'active'} onClick={() => setAction({ kind: 'request', rentalId: row.id })}>Gia hạn</Button>
+                    <Button size="sm" variant="outline" onClick={() => setDetail({ kind: 'rental', id: row.id })}>{row.canConfirmRentalStart ? 'Xem & xác nhận' : 'Chi tiết hồ sơ'}</Button>
+                    <Button size="sm" variant="outline" className="!border-emerald-600 !bg-emerald-600 !text-white hover:!bg-emerald-700" disabled={row.status !== 'active'} title={row.status === 'active' ? undefined : 'Chỉ có thể gia hạn khi kỳ thuê đã bắt đầu.'} onClick={() => setAction({ kind: 'request', rentalId: row.id })}>Gia hạn</Button>
                     <Button size="sm" variant="primary" disabled={row.status === 'completed'} onClick={() => setReturnRental({ id: row.id, active: row.status === 'active' || row.status === 'setup' })}>Trả kho</Button>
                   </div>
                 </div>
@@ -516,7 +536,7 @@ function WorkspaceData({
                       </code>
                     </td>
                     <td className="px-4 py-2.5 align-middle">
-                      {role === 'customer' ? <Badge variant={recordStatusTone(row.status)}>{copy(("contractEndDate" in row ? rentalLabels : renewalLabels)[row.status] || row.status)}</Badge> : <p className="truncate font-medium text-stone-900" title={row.customer.fullName}>{row.customer.fullName}</p>}
+                      {role === 'customer' ? <Badge variant={recordStatusTone(row.status)}>{copy("contractEndDate" in row ? rentalStatusLabel(row) : renewalLabels[row.status] || row.status)}</Badge> : <p className="truncate font-medium text-stone-900" title={row.customer.fullName}>{row.customer.fullName}</p>}
                     </td>
                     <td className="px-4 py-2.5 align-middle">
                       <p className="truncate font-mono text-xs font-medium leading-5 text-stone-800" title={row.storageUnit.code}>{row.storageUnit.code}</p>
@@ -543,7 +563,7 @@ function WorkspaceData({
                         Chi tiết
                       </Button>
                       {role === 'customer' && 'contractEndDate' in row && <>
-                        <Button size="sm" variant="outline" className="!border-emerald-600 !bg-emerald-600 !text-white hover:!bg-emerald-700" disabled={row.status !== 'active'} onClick={() => setAction({ kind: 'request', rentalId: row.id })}>Gia hạn</Button>
+                        <Button size="sm" variant="outline" className="!border-emerald-600 !bg-emerald-600 !text-white hover:!bg-emerald-700" disabled={row.status !== 'active'} title={row.status === 'active' ? undefined : 'Chỉ có thể gia hạn khi kỳ thuê đã bắt đầu.'} onClick={() => setAction({ kind: 'request', rentalId: row.id })}>Gia hạn</Button>
                         <Button size="sm" variant="primary" disabled={!['setup', 'active', 'return_requested', 'return_inspection', 'closing'].includes(row.status)}
                           onClick={() => setReturnRental({ id: row.id, active: row.status === 'active' || row.status === 'setup' })}>Trả kho</Button>
                       </>}
@@ -613,9 +633,13 @@ function WorkspaceData({
             }
             refresh()
           }}
-          onNavigateToRenewals={() => {
+          onNavigateToRenewals={(renewalId?: string) => {
             setAction(undefined)
-            setDetail(undefined)
+            if (renewalId) {
+              setDetail({ kind: "renewal", id: renewalId })
+            } else {
+              setDetail(undefined)
+            }
             setTab("renewal")
           }}
         />
@@ -707,6 +731,7 @@ function DetailModal({
             rental={read.data.record as RentalApiDetail}
             role={role}
             showTechnicalWarnings={role === "manager"}
+            onRentalStartConfirmed={() => { read.refresh(); onChanged() }}
           />
         </div>
       ) : read.data?.kind === "renewal" ? (

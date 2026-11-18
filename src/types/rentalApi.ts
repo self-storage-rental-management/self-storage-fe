@@ -48,6 +48,8 @@ export interface RentalApiRecord {
     reason: string
   }[]
   inventoryPending?: boolean
+  inventoryVerifiedAt?: string | null
+  canConfirmRentalStart?: boolean
   inventoryDueAt?: string | null
   setupStartedAt?: string | null
   setupEndsAt?: string | null

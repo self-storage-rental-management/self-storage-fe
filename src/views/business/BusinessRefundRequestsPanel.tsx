@@ -59,7 +59,7 @@ export default function BusinessRefundRequestsPanel() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-base font-bold text-amber-950">Yêu cầu hoàn tiền cần Business duyệt</h3>
-          <p className="mt-1 text-sm text-amber-900">Các khoản hoàn cần phê duyệt, gồm hồ sơ vượt hạn mức Manager và hoàn cọc trước check-in. Chỉ duyệt hồ sơ có thanh toán VNPay gốc thành công.</p>
+          <p className="mt-1 text-sm text-amber-900">Các khoản hoàn cần phê duyệt, gồm hồ sơ khiếu nại hoặc bồi hoàn vượt hạn mức Manager. Chỉ duyệt hồ sơ có thanh toán VNPay gốc thành công.</p>
         </div>
         <Button variant="outline" size="sm" disabled={loading} onClick={() => void load()}>{loading ? 'Đang tải…' : 'Làm mới'}</Button>
       </div>
@@ -71,14 +71,14 @@ export default function BusinessRefundRequestsPanel() {
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="font-semibold text-stone-900">{formatVndAmount(row.amount)}</p>
-                <p className="mt-1 text-xs text-stone-500">Yêu cầu lúc {new Date(row.createdAt).toLocaleString('vi-VN')} · Payment {row.paymentId}</p>
+                <p className="mt-1 text-xs text-stone-500">Yêu cầu lúc {new Date(row.createdAt).toLocaleString('vi-VN')} · {row.paymentId ? `Payment ${row.paymentId}` : 'Chưa có Payment'}</p>
               </div>
               <Button size="sm" disabled={busyId !== null} onClick={() => void approve(row)}>
                 {busyId === row.id ? 'Đang xử lý…' : 'Duyệt hoàn qua VNPay'}
               </Button>
             </div>
             <p className="mt-2 whitespace-pre-wrap text-sm text-stone-700">{row.reason}</p>
-            <p className="mt-2 text-xs text-stone-500">Request {row.id} · Người tạo {row.requestedBy}</p>
+            <p className="mt-2 text-xs text-stone-500">Request {row.id} · Người tạo {row.requestedBy ?? 'Hệ thống'}</p>
           </article>
         ))}
       </div>

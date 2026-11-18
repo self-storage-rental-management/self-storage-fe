@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import type { User } from '../types'
 import BrandLogo from '../components/BrandLogo'
 import GoogleLoginButton from '../components/GoogleLoginButton'
+import RegistrationCaptcha, { type CaptchaProof } from '../components/RegistrationCaptcha'
 import {
   actorToUser,
   loginWithApi,
@@ -13,6 +14,7 @@ import {
   verifyEmailWithApi,
   type ApiActor
 } from '../services/authApi'
+import { clearAuthTokens } from '../services/apiClient'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } from '../utils/passwordPolicy'
 import { isVietnameseMobilePhone, VIETNAMESE_PHONE_HINT } from '../domain/vietnamesePhone'
 import StepIndicator from './auth/StepIndicator'
@@ -20,11 +22,12 @@ import PasswordStrength from './auth/PasswordStrength'
 import AuthSidePanel from './auth/AuthSidePanel'
 
 export const DEMO_LOGIN_ACCOUNTS = [
-  { role: 'customer', label: 'Khách hàng', email: 'customer@storagehub.demo', password: 'Customer@1234!', color: 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100', icon: '👤' },
-  { role: 'staff', label: 'Nhân viên', email: 'staff@storagehub.demo', password: 'Staff@1234!', color: 'bg-emerald-50 text-emerald-900 border-emerald-300 hover:bg-emerald-100', icon: '🛠️' },
-  { role: 'manager', label: 'Quản lý', email: 'manager@storagehub.demo', password: 'Manager@1234!', color: 'bg-blue-50 text-blue-900 border-blue-300 hover:bg-blue-100', icon: '🏢' },
-  { role: 'business', label: 'Ban điều hành', email: 'business@storagehub.demo', password: 'Business@1234!', color: 'bg-pink-50 text-pink-900 border-pink-300 hover:bg-pink-100', icon: '📊' },
-  { role: 'admin', label: 'Quản trị viên', email: 'admin@storagehub.demo', password: 'Admin@1234!', color: 'bg-red-50 text-red-900 border-red-300 hover:bg-red-100', icon: '🛡️' },
+  { role: 'customer', label: 'Khách hàng', email: 'customer@storagehub.demo', password: 'Customer@1234!', color: 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100', icon: '' },
+  { role: 'staff', label: 'Nhân viên', email: 'staff@storagehub.demo', password: 'Staff@1234!', color: 'bg-emerald-50 text-emerald-900 border-emerald-300 hover:bg-emerald-100', icon: '' },
+  { role: 'manager', label: 'Quản lý', email: 'manager@storagehub.demo', password: 'Manager@1234!', color: 'bg-blue-50 text-blue-900 border-blue-300 hover:bg-blue-100', icon: '' },
+  { role: 'business', label: 'Ban điều hành', email: 'business@storagehub.demo', password: 'Business@1234!', color: 'bg-pink-50 text-pink-900 border-pink-300 hover:bg-pink-100', icon: '' },
+  { role: 'admin', label: 'Quản trị viên', email: 'admin@storagehub.demo', password: 'Admin@1234!', color: 'bg-red-50 text-red-900 border-red-300 hover:bg-red-100', icon: '' },
+
 ] as const
 
 interface LoginProps {
@@ -175,6 +178,8 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
   // Register 2-step state
   const [registerStep, setRegisterStep] = useState<1 | 2>(1)
   const [googleActor, setGoogleActor] = useState<ApiActor | null>(null)
+  const [captcha, setCaptcha] = useState<CaptchaProof | null>(null)
+  const [captchaVersion, setCaptchaVersion] = useState(0)
 
   // Login & Shared State
   const [email, setEmail] = useState('')
@@ -315,12 +320,7 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
       }
       onLogin(actorToUser(actor))
     } catch (apiError) {
-      const matchedDemo = DEMO_LOGIN_ACCOUNTS.find(a => a.email.toLowerCase() === normalizedEmail)
-      if (matchedDemo && password !== matchedDemo.password) {
-        setError(`Mật khẩu không đúng cho tài khoản ${matchedDemo.label}. Mật khẩu chính xác là: ${matchedDemo.password}`)
-      } else {
-        setError(formatAuthError(apiError, 'Đăng nhập thất bại. Vui lòng kiểm tra email hoặc mật khẩu.'))
-      }
+      setError(formatAuthError(apiError, 'Đăng nhập thất bại. Vui lòng kiểm tra email hoặc mật khẩu.'))
     } finally {
       setIsSubmitting(false)
     }
@@ -328,6 +328,8 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
 
   // ── Handler: Google Credential ──────────────────────────────────
   const handleGoogleCredential = useCallback(async (idToken: string) => {
+    if (isSubmitting) return
+    if (tab === 'register' && !captcha) { setError('Vui lòng hoàn thành CAPTCHA trước khi đăng ký Google.'); return }
     setError('')
     setNotice('')
     setIsSubmitting(true)
@@ -335,7 +337,7 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
     // If on Register tab: skip Step 1 and proceed to Step 2
     if (tab === 'register') {
       try {
-        const actor = await loginWithGoogleApi(idToken)
+        const actor = await loginWithGoogleApi(idToken, captcha)
         setGoogleActor(actor)
         if (actor.fullName && !fullName) setFullName(actor.fullName)
         if (actor.email && !email) setEmail(actor.email)
@@ -355,6 +357,7 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
         setNotice('Tài khoản Google đã kết nối. Vui lòng bổ sung địa chỉ và thông tin liên hệ khẩn cấp để hoàn tất.')
       } catch (googleError) {
         setError(formatAuthError(googleError, 'Đăng ký Google thất bại.'))
+        setCaptcha(null); setCaptchaVersion(value => value + 1)
       } finally {
         setIsSubmitting(false)
       }
@@ -367,10 +370,15 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
       onLogin(actorToUser(actor))
     } catch (googleError) {
       setError(formatAuthError(googleError, 'Đăng nhập Google thất bại.'))
+      if (googleError && typeof googleError === 'object' && 'details' in googleError
+        && Object.keys((googleError as { details?: Record<string, unknown> }).details || {}).some(key => key.startsWith('captcha'))) {
+        setTab('register'); setRegisterStep(1)
+        setError('Tài khoản Google này chưa đăng ký. Vui lòng hoàn thành CAPTCHA rồi chọn Đăng ký Google.')
+      }
     } finally {
       setIsSubmitting(false)
     }
-  }, [tab, fullName, email, phone, permanentAddress, emergencyContactName, emergencyContactPhone, onLogin])
+  }, [tab, fullName, email, phone, permanentAddress, emergencyContactName, emergencyContactPhone, onLogin, captcha, isSubmitting])
 
   // ── Handler: Step 1 Continue ────────────────────────────────────
   function handleContinueStep1(event: React.FormEvent) {
@@ -474,12 +482,14 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
     }
 
     const normalizedEmail = email.trim().toLowerCase()
+    if (!captcha) { setError('Vui lòng hoàn thành CAPTCHA trước khi đăng ký.'); return }
     setError('')
     setNotice('')
     setIsSubmitting(true)
 
     try {
       const registration = await registerWithApi({
+        ...captcha,
         email: normalizedEmail,
         password,
         fullName: fullName.trim(),
@@ -498,8 +508,9 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
       setError('')
       setNotice(registration.debugCode
         ? 'Mã xác minh development đã được tạo. Nhập mã hiển thị bên dưới để tiếp tục.'
-        : `Mã xác minh đã được gửi đến ${normalizedEmail}. Hãy kiểm tra hộp thư đến hoặc thư rác.`)
+        : `Mã xác minh đang được gửi đến ${normalizedEmail}. Hãy kiểm tra hộp thư đến hoặc thư rác; có thể gửi lại sau thời gian chờ.`)
     } catch (registrationError) {
+      setCaptcha(null); setCaptchaVersion(value => value + 1)
       setNotice('')
       const formatted = formatAuthError(registrationError, 'Không thể tạo tài khoản Customer.')
       setError(formatted)
@@ -518,6 +529,10 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
   }
 
   function switchTab(next: AuthTab) {
+    if (googleActor) {
+      clearAuthTokens()
+      setGoogleActor(null)
+    }
     window.history.pushState({ tab: next }, '', next === 'login' ? '/login' : '/register')
     setTab(next)
     setRegisterStep(1)
@@ -884,10 +899,11 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
               {registerStep === 1 && (
                 <>
                   <div className="mb-4">
+                    <RegistrationCaptcha key={`google-${captchaVersion}`} onChange={setCaptcha} disabled={isSubmitting} />
                     <GoogleLoginButton
                       onCredential={handleGoogleCredential}
                       text="signup_with"
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || !captcha}
                     />
                   </div>
 
@@ -1150,10 +1166,17 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
                   <ErrorMessage message={error} />
                   <NoticeMessage message={notice} />
 
+                  {!googleActor && <RegistrationCaptcha key={`email-${captchaVersion}`} onChange={setCaptcha} disabled={isSubmitting} />}
                   <div className="flex items-center gap-3 pt-2">
                     <SecondaryButton
                       onClick={() => {
                         setError('')
+                        if (googleActor) {
+                          clearAuthTokens()
+                          setGoogleActor(null)
+                          switchTab('login')
+                          return
+                        }
                         setRegisterStep(1)
                       }}
                       disabled={isSubmitting}
@@ -1162,8 +1185,8 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
                     </SecondaryButton>
                     <PrimaryButton
                       type="submit"
-                      visualDisabled={!isStep2Valid}
-                      disabled={isSubmitting}
+                      visualDisabled={!isStep2Valid || (!googleActor && !captcha)}
+                      disabled={isSubmitting || (!googleActor && !captcha)}
                       loading={isSubmitting}
                       className="flex-1"
                     >
@@ -1477,13 +1500,13 @@ function RecoveryFlow({
   const copy = {
     identify: {
       title: 'Tìm tài khoản của bạn',
-      text: 'Nhập số điện thoại hoặc email liên kết với tài khoản StorageHub.'
+      text: 'Nhập email liên kết với tài khoản StorageHub.'
     },
     verify: {
       title: purpose === 'email-verification' ? 'Xác minh email để hoàn tất đăng ký' : 'Nhập mã khôi phục tài khoản',
       text: purpose === 'email-verification'
-        ? `Mã xác minh đã được gửi đến ${account || 'email của bạn'}. Nhập mã 6 chữ số bên dưới.`
-        : `Mã đặt lại mật khẩu đã được gửi đến ${account}. Nhập mã 6 chữ số để tiếp tục.`
+        ? `Kiểm tra hộp thư ${account || 'của bạn'} và nhập mã xác minh 6 chữ số.`
+        : `Nếu địa chỉ ${account} có tài khoản, hệ thống sẽ gửi mã đặt lại mật khẩu. Nhập mã 6 chữ số để tiếp tục.`
     },
     'new-password': {
       title: 'Tạo mật khẩu mới',
@@ -1511,13 +1534,14 @@ function RecoveryFlow({
 
       {step === 'identify' && (
         <form onSubmit={onFindAccount}>
-          <FormField id="recovery-account" label="Số điện thoại hoặc Email">
+          <FormField id="recovery-account" label="Email">
             <input
               id="recovery-account"
+              type="email"
               value={account}
               onChange={event => setAccount(event.target.value)}
               autoFocus
-              placeholder="Nhập SĐT hoặc email..."
+              placeholder="Nhập email..."
               className={getInputClassName(false, null, Boolean(account))}
             />
           </FormField>

@@ -16,7 +16,7 @@ describe('supportBotService', () => {
     name: 'Nguyen Van A',
     email: 'vana@storagehub.demo',
     role: 'customer',
-    facility: 'Kho Việt – Cơ sở Quận 1',
+    facility: 'Kho Việt - Cơ sở Quận 1',
     facilityId: 'fac-001'
   }
 
@@ -28,7 +28,7 @@ describe('supportBotService', () => {
       role: 'staff',
       email: 'mai.tran@storagehub.demo',
       phone: '+84 905 111 222',
-      facility: 'Kho Việt – Cơ sở Quận 1',
+      facility: 'Kho Việt - Cơ sở Quận 1',
       facilityId: 'fac-001',
       online: true
     },
@@ -39,7 +39,7 @@ describe('supportBotService', () => {
       role: 'staff',
       email: 'huy.le@storagehub.demo',
       phone: '+84 905 333 444',
-      facility: 'Kho Việt – Cơ sở Quận 1',
+      facility: 'Kho Việt - Cơ sở Quận 1',
       facilityId: 'fac-001',
       online: true
     },
@@ -50,7 +50,7 @@ describe('supportBotService', () => {
       role: 'manager',
       email: 'manager@storagehub.demo',
       phone: '+84 903 444 888',
-      facility: 'Kho Việt – Cơ sở Quận 1',
+      facility: 'Kho Việt - Cơ sở Quận 1',
       facilityId: 'fac-001',
       online: true
     }
@@ -77,7 +77,7 @@ describe('supportBotService', () => {
         id: 'RNT-001',
         customerEmail: 'vana@storagehub.demo',
         customerName: 'Nguyen Van A',
-        facilityName: 'Kho Việt – Cơ sở Quận 1',
+        facilityName: 'Kho Việt - Cơ sở Quận 1',
         facilityId: 'fac-001',
         unitId: 'HCM-Q1-F01-M-005',
         status: 'active'
@@ -85,7 +85,7 @@ describe('supportBotService', () => {
     ]
 
     const context = resolveCustomerStorageContext(dummyCustomer, rentals, [])
-    expect(context.facility).toBe('Kho Việt – Cơ sở Quận 1')
+    expect(context.facility).toBe('Kho Việt - Cơ sở Quận 1')
     expect(context.facilityId).toBe('fac-001')
     expect(context.unit).toBe('HCM-Q1-F01-M-005')
     expect(context.hasMultipleRentals).toBe(false)
@@ -96,7 +96,7 @@ describe('supportBotService', () => {
       {
         id: 'RNT-001',
         customerEmail: 'vana@storagehub.demo',
-        facilityName: 'Kho Việt – Cơ sở Quận 1',
+        facilityName: 'Kho Việt - Cơ sở Quận 1',
         facilityId: 'fac-001',
         unitId: 'HCM-Q1-F01-M-005',
         status: 'active'
@@ -104,7 +104,7 @@ describe('supportBotService', () => {
       {
         id: 'RNT-002',
         customerEmail: 'vana@storagehub.demo',
-        facilityName: 'Kho Việt – Cơ sở Bình Dương',
+        facilityName: 'Kho Việt - Cơ sở Bình Dương',
         facilityId: 'fac-002',
         unitId: 'BD-F01-S-010',
         status: 'active'
@@ -144,7 +144,7 @@ describe('supportBotService', () => {
         priority: 'medium',
         status: 'in-progress',
         created: 'now',
-        facility: 'Kho Việt – Cơ sở Quận 1',
+        facility: 'Kho Việt - Cơ sở Quận 1',
         facilityId: 'fac-001',
         unit: 'U1',
         assignedStaff: 'Mai Tran',
@@ -159,7 +159,7 @@ describe('supportBotService', () => {
         priority: 'medium',
         status: 'in-progress',
         created: 'now',
-        facility: 'Kho Việt – Cơ sở Quận 1',
+        facility: 'Kho Việt - Cơ sở Quận 1',
         facilityId: 'fac-001',
         unit: 'U2',
         assignedStaff: 'Mai Tran',

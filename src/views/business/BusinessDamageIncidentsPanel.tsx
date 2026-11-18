@@ -11,6 +11,7 @@ import {
   type IncidentSeverity,
   type IncidentStatus,
 } from '../../services/incidentApi'
+import { listFacilityStorageUnits, type MaintenanceStorageUnit } from '../../services/maintenanceApi'
 import type { User } from '../../types'
 import { notifyBell } from '../../services/notificationApi'
 
@@ -136,7 +137,24 @@ export default function BusinessDamageIncidentsPanel({ user, lang = 'vi', facili
   const [formDescription, setFormDescription] = useState<string>('')
   const [formOccurredAt, setFormOccurredAt] = useState<string>(() => new Date().toISOString().slice(0, 16))
   const [formEvidencePhoto, setFormEvidencePhoto] = useState<string>('')
+  const [facilityUnits, setFacilityUnits] = useState<MaintenanceStorageUnit[]>([])
   const [createSubmitting, setCreateSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (!createModalOpen || !formFacilityId || !isApiAuthenticated()) {
+      setFacilityUnits([])
+      return
+    }
+    let cancelled = false
+    void listFacilityStorageUnits(formFacilityId)
+      .then(res => {
+        if (!cancelled) setFacilityUnits(res.data)
+      })
+      .catch(() => {
+        if (!cancelled) setFacilityUnits([])
+      })
+    return () => { cancelled = true }
+  }, [createModalOpen, formFacilityId])
 
   const handleOpenCreate = () => {
     setFormFacilityId(allowedFacilityId || (displayFacilities[0]?.id ?? ''))
@@ -160,8 +178,25 @@ export default function BusinessDamageIncidentsPanel({ user, lang = 'vi', facili
     }
     setCreateSubmitting(true)
     try {
+      let resolvedUnitId: string | null = null
+      const cleanUnitCode = formStorageUnitCode.trim()
+      if (cleanUnitCode) {
+        let units = facilityUnits
+        if (!units.length) {
+          units = (await listFacilityStorageUnits(formFacilityId)).data
+          setFacilityUnits(units)
+        }
+        const matched = units.find(u => u.code.toLowerCase() === cleanUnitCode.toLowerCase() || u.id === cleanUnitCode)
+        if (!matched) {
+          showToast(isVi ? `Không tìm thấy gian kho "${cleanUnitCode}" thuộc cơ sở đã chọn.` : `Storage unit "${cleanUnitCode}" not found in selected facility.`)
+          setCreateSubmitting(false)
+          return
+        }
+        resolvedUnitId = matched.id
+      }
       await createDamageIncident({
         facilityId: formFacilityId,
+        storageUnitId: resolvedUnitId,
         cause: formCause,
         severity: formSeverity,
         description: formDescription.trim(),
@@ -219,7 +254,6 @@ export default function BusinessDamageIncidentsPanel({ user, lang = 'vi', facili
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-200 pb-4">
         <div>
           <h2 className="text-xl font-bold text-stone-900 flex items-center gap-2">
-            <span>🛡️</span>
             {isVi ? 'Quản Lý Sự Cố & Hư Hỏng Kho' : 'Damage Incidents Management'}
           </h2>
           <p className="text-xs text-stone-500 mt-1">
@@ -230,10 +264,10 @@ export default function BusinessDamageIncidentsPanel({ user, lang = 'vi', facili
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={fetchIncidents} disabled={loading}>
-            🔄 {isVi ? 'Làm mới' : 'Refresh'}
+            {isVi ? 'Làm mới' : 'Refresh'}
           </Button>
           <Button variant="primary" size="sm" onClick={handleOpenCreate}>
-            ➕ {isVi ? 'Báo Cáo Sự Cố Mới' : 'Report Incident'}
+            {isVi ? 'Báo Cáo Sự Cố Mới' : 'Report Incident'}
           </Button>
         </div>
       </div>
@@ -412,14 +446,14 @@ export default function BusinessDamageIncidentsPanel({ user, lang = 'vi', facili
                             setDetailModalOpen(true)
                           }}
                         >
-                          👁️ {isVi ? 'Chi tiết' : 'View'}
+                          {isVi ? 'Chi tiết' : 'View'}
                         </Button>
                         <Button
                           variant="primary"
                           size="sm"
                           onClick={() => handleOpenStatusModal(inc)}
                         >
-                          ⚡ {isVi ? 'Cập nhật' : 'Update'}
+                          {isVi ? 'Cập nhật' : 'Update'}
                         </Button>
                       </div>
                     </Td>
@@ -460,10 +494,16 @@ export default function BusinessDamageIncidentsPanel({ user, lang = 'vi', facili
                 {isVi ? 'Gian kho cụ thể (Tùy chọn)' : 'Storage Unit Code (Optional)'}
               </label>
               <Input
+                list="incident-facility-units"
                 placeholder={isVi ? 'Để trống nếu sự cố thuộc cơ sở hạ tầng chung...' : 'Leave empty for common infrastructure...'}
                 value={formStorageUnitCode}
                 onChange={e => setFormStorageUnitCode(e.target.value)}
               />
+              <datalist id="incident-facility-units">
+                {facilityUnits.map(unit => (
+                  <option key={unit.id} value={unit.code}>{unit.code} ({unit.status})</option>
+                ))}
+              </datalist>
               <span className="text-[10px] text-stone-400 mt-1 block">
                 {isVi ? 'Ghi chú: Nếu sự cố xảy ra tại hành lang, trần, hệ thống PCCC hoặc cửa chính, hãy để trống ô này.' : 'Leave empty if common facility infrastructure.'}
               </span>
@@ -554,7 +594,7 @@ export default function BusinessDamageIncidentsPanel({ user, lang = 'vi', facili
         <Modal
           open={statusModalOpen}
           onClose={() => setStatusModalOpen(false)}
-          title={`${isVi ? 'Cập Nhật Trạng Thái' : 'Update Status'} — ${activeIncident.incidentCode}`}
+          title={`${isVi ? 'Cập Nhật Trạng Thái' : 'Update Status'} - ${activeIncident.incidentCode}`}
         >
           <div className="space-y-4 text-xs">
             <div className="bg-stone-50 p-3 rounded-lg border border-stone-200 space-y-1">
@@ -626,7 +666,7 @@ export default function BusinessDamageIncidentsPanel({ user, lang = 'vi', facili
         <Modal
           open={detailModalOpen}
           onClose={() => setDetailModalOpen(false)}
-          title={`${isVi ? 'Chi Tiết Sự Cố' : 'Incident Details'} — ${activeIncident.incidentCode}`}
+          title={`${isVi ? 'Chi Tiết Sự Cố' : 'Incident Details'} - ${activeIncident.incidentCode}`}
         >
           <div className="space-y-3 text-xs">
             <div className="grid grid-cols-2 gap-2 bg-stone-50 p-3 rounded-lg border border-stone-200">
@@ -687,6 +727,58 @@ export default function BusinessDamageIncidentsPanel({ user, lang = 'vi', facili
                 </div>
               </div>
             )}
+
+            {activeIncident.evidencePhotosJson && (() => {
+              let photos: string[] = []
+              try {
+                const parsed = JSON.parse(activeIncident.evidencePhotosJson)
+                if (Array.isArray(parsed)) {
+                  photos = parsed.map((item) => String(item).trim()).filter(Boolean)
+                } else if (typeof parsed === 'string' && parsed.trim()) {
+                  photos = [parsed.trim()]
+                }
+              } catch {
+                photos = activeIncident.evidencePhotosJson
+                  .split(/[\n,]/)
+                  .map((item) => item.trim())
+                  .filter(Boolean)
+              }
+              if (photos.length === 0) return null
+              return (
+                <div>
+                  <span className="font-semibold text-stone-700 block mb-1.5">
+                    {isVi ? 'Ảnh / Bằng chứng hiện trường' : 'Evidence Photos'}:
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {photos.map((photo, idx) => {
+                      const isImageUrl = /^(https?:\/\/|data:image\/|\/)/i.test(photo)
+                      return (
+                        <div key={`${photo}-${idx}`} className="rounded-lg border border-stone-200 bg-white p-2 space-y-1.5">
+                          {isImageUrl ? (
+                            <a href={photo} target="_blank" rel="noopener noreferrer" className="block">
+                              <img
+                                src={photo}
+                                alt={`${activeIncident.incidentCode} evidence ${idx + 1}`}
+                                className="w-full h-32 object-cover rounded border border-stone-100"
+                              />
+                            </a>
+                          ) : null}
+                          <div className="text-[11px] font-mono text-stone-600 truncate" title={photo}>
+                            {isImageUrl ? (
+                              <a href={photo} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                                {photo}
+                              </a>
+                            ) : (
+                              photo
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })()}
 
             <div className="pt-3 border-t border-stone-200 flex justify-end">
               <Button variant="outline" size="sm" onClick={() => setDetailModalOpen(false)}>

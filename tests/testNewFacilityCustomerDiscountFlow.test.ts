@@ -20,11 +20,11 @@ describe('Flow Test: Tạo cơ sở mới -> Gắn ưu đãi -> Customer nhìn t
   })
 
   it('Kịch bản 1: BO tạo cơ sở mới (Hải Phòng), gắn ưu đãi gói 3 tháng (3%), Customer thấy và được trừ tiền tại bước thanh toán', () => {
-    // 1. BO tạo cơ sở mới "Kho Việt – Cơ sở Hải Phòng"
+    // 1. BO tạo cơ sở mới "Kho Việt - Cơ sở Hải Phòng"
     const newFacility = {
       id: 'fac-hp-01',
       code: 'HP-01',
-      name: 'Kho Việt – Cơ sở Hải Phòng',
+      name: 'Kho Việt - Cơ sở Hải Phòng',
       city: 'Hải Phòng',
       address: 'Số 8 Lê Hồng Phong, Ngô Quyền, Hải Phòng',
       unitDistribution: { S: 5, M: 5 }
@@ -101,7 +101,7 @@ describe('Flow Test: Tạo cơ sở mới -> Gắn ưu đãi -> Customer nhìn t
       id: 'pol-hp-promo',
       name: 'Ưu đãi khai trương cơ sở Hải Phòng',
       value: '10%',
-      scope: 'Kho Việt – Cơ sở Hải Phòng',
+      scope: 'Kho Việt - Cơ sở Hải Phòng',
       description: 'Giảm 10% tiền thuê cho khách hàng thuê tại cơ sở mới Hải Phòng',
       editable: true
     }
@@ -110,7 +110,7 @@ describe('Flow Test: Tạo cơ sở mới -> Gắn ưu đãi -> Customer nhìn t
     localStorage.setItem('storagehub:policies', JSON.stringify([facilitySpecificPolicy]))
 
     // 2. Customer xem gian kho tại cơ sở Hải Phòng
-    const facilityPolicies = getPoliciesForFacility('Kho Việt – Cơ sở Hải Phòng', 'HP-01')
+    const facilityPolicies = getPoliciesForFacility('Kho Việt - Cơ sở Hải Phòng', 'HP-01')
     expect(facilityPolicies).toHaveLength(1)
     expect(facilityPolicies[0].name).toBe('Ưu đãi khai trương cơ sở Hải Phòng')
 

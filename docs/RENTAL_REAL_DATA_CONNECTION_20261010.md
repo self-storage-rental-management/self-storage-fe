@@ -50,7 +50,7 @@ Manager cần VIEW_RENTALS, READ scope đúng cơ sở và VIEW_PAYMENTS để n
 
 ## Quy ước ngày, hồ sơ cũ và mới
 
-Theo phê duyệt người dùng, nguồn đọc D1–D4 áp dụng dùng hết ngày hết hạn cho cả hồ sơ cũ và mới khi quan hệ bàn giao/audit đủ xác minh. Không backfill date hoặc sửa audit lịch sử. Hồ sơ thiếu/không khớp quan hệ vẫn UNKNOWN, không biến dữ liệu hỏng thành xác thực.
+Theo phê duyệt người dùng, nguồn đọc D1-D4 áp dụng dùng hết ngày hết hạn cho cả hồ sơ cũ và mới khi quan hệ bàn giao/audit đủ xác minh. Không backfill date hoặc sửa audit lịch sử. Hồ sơ thiếu/không khớp quan hệ vẫn UNKNOWN, không biến dữ liệu hỏng thành xác thực.
 
 Flag mới `storagehub.integration.rental-period.inclusive-end` mặc định false, chỉ có tác dụng khi adapter rental-period được bật. `run-rental-support-dev.ps1` bật hai flag này cho local test. Runner `run-dev.ps1` gốc và cấu hình shared không bị sửa.
 

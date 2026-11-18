@@ -142,6 +142,7 @@ export default function AdminLoginHistoryApiPanel({
 
   // Main data states
   const [history, setHistory] = useState<AdminApiLoginHistory[]>([])
+  const [historyTotalItems, setHistoryTotalItems] = useState<number>(0)
   const [sessions, setSessions] = useState<AdminApiSession[]>([])
   const [users, setUsers] = useState<AdminApiUser[]>([])
   const [loading, setLoading] = useState(true)
@@ -201,11 +202,13 @@ export default function AdminLoginHistoryApiPanel({
     ])
       .then(([historyPage, sessionsPage, userPage]) => {
         setHistory(historyPage.data)
+        setHistoryTotalItems(historyPage.pagination.totalItems)
         setSessions(sessionsPage.data)
         if (!users.length && userPage.data) setUsers(userPage.data)
       })
       .catch(reason => {
         setHistory([])
+        setHistoryTotalItems(0)
         setSessions([])
         setError(reason instanceof Error ? reason.message : 'Không thể tải lịch sử đăng nhập từ cơ sở dữ liệu.')
       })
@@ -216,8 +219,9 @@ export default function AdminLoginHistoryApiPanel({
   }
 
   useEffect(() => {
-    load()
-  }, [userFilter, statusFilter, sessionUserFilter])
+    const timer = window.setTimeout(() => load(history.length > 0), search.trim() ? 250 : 0)
+    return () => window.clearTimeout(timer)
+  }, [userFilter, statusFilter, sessionUserFilter, search])
 
   // Filtered Login History List
   const filteredHistory = useMemo(() => {
@@ -313,19 +317,19 @@ export default function AdminLoginHistoryApiPanel({
 
   // High-level summary metrics
   const activeSessionsCount = useMemo(() => sessions.filter(s => s.active).length, [sessions])
-  const totalHistoryCount = history.length
-  const failedLoginsCount = useMemo(() => history.filter(h => !h.success).length, [history])
+  const totalHistoryCount = filteredHistory.length
+  const failedLoginsCount = useMemo(() => filteredHistory.filter(h => !h.success).length, [filteredHistory])
   const successRate = useMemo(() => {
-    if (!totalHistoryCount) return '—'
-    const successCount = history.filter(h => h.success).length
+    if (!totalHistoryCount) return '-'
+    const successCount = filteredHistory.filter(h => h.success).length
     return `${Math.round((successCount / totalHistoryCount) * 100)}%`
-  }, [history, totalHistoryCount])
+  }, [filteredHistory, totalHistoryCount])
   const highRiskIncidentsCount = useMemo(() => {
-    return history.filter(item => {
+    return filteredHistory.filter(item => {
       const risk = assessSecurityRisk(item, history)
       return risk.level === 'high' || risk.level === 'warning'
     }).length
-  }, [history])
+  }, [filteredHistory, history])
 
   // Revoke single session
   const handleRevokeSession = async (session: AdminApiSession) => {
@@ -445,7 +449,7 @@ export default function AdminLoginHistoryApiPanel({
         <StatCard
           title="Tổng lượt đăng nhập"
           value={totalHistoryCount}
-          delta="Toàn hệ thống"
+          delta={historyTotalItems > history.length ? `Hiển thị ${totalHistoryCount}/${historyTotalItems} bản ghi` : 'Theo bộ lọc hiện tại'}
           deltaPositive
           icon={
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-50 text-sky-600 ring-1 ring-sky-200">
@@ -773,8 +777,8 @@ export default function AdminLoginHistoryApiPanel({
                   className="h-10 rounded-lg border border-stone-300 bg-white px-3 text-sm text-stone-700 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#e9a12c]"
                 >
                   <option value="all">Tất cả trạng thái</option>
-                  <option value="success">✓ Thành công</option>
-                  <option value="failed">✕ Thất bại (Lỗi xác thực)</option>
+                  <option value="success">Thành công</option>
+                  <option value="failed">Thất bại (Lỗi xác thực)</option>
                 </select>
 
                 {/* Date Preset */}
@@ -977,7 +981,7 @@ export default function AdminLoginHistoryApiPanel({
                                 </span>
                               ))
                             ) : (
-                              <span className="text-xs text-stone-400">—</span>
+                              <span className="text-xs text-stone-400">-</span>
                             )}
                           </div>
                         </Td>
@@ -994,7 +998,7 @@ export default function AdminLoginHistoryApiPanel({
                               </p>
                               <p
                                 className="truncate text-[11px] text-stone-400 cursor-help"
-                                title={`User-Agent: ${item.userAgent || '—'}`}
+                                title={`User-Agent: ${item.userAgent || '-'}`}
                               >
                                 {ua.displayDevice}
                               </p>
@@ -1045,7 +1049,7 @@ export default function AdminLoginHistoryApiPanel({
                         {/* Status & Risk Alert Badge */}
                         <Td>
                           {item.success ? (
-                            <Badge variant="success">✓ Thành công</Badge>
+                            <Badge variant="success">Thành công</Badge>
                           ) : isHighRisk ? (
                             <span className="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-red-100 px-2.5 py-1 text-xs font-bold text-red-800">
                               <svg className="h-3.5 w-3.5 shrink-0 text-red-600 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1055,7 +1059,8 @@ export default function AdminLoginHistoryApiPanel({
                             </span>
                           ) : isWarning ? (
                             <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
-                              <span>⚠️</span>
+                              <span />
+
                               <span>{risk.badgeText}</span>
                             </span>
                           ) : (
@@ -1111,7 +1116,7 @@ export default function AdminLoginHistoryApiPanel({
                 <span className="font-semibold text-stone-800">
                   {filteredHistory.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}
                 </span>{' '}
-                –{' '}
+                -{' '}
                 <span className="font-semibold text-stone-800">
                   {Math.min(currentPage * pageSize, filteredHistory.length)}
                 </span>{' '}
@@ -1243,9 +1248,7 @@ export default function AdminLoginHistoryApiPanel({
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="text-lg">
-                      {risk.level === 'high' ? '🚨' : risk.level === 'warning' ? '⚠️' : '🛡️'}
-                    </span>
+
                     <h4 className="font-bold text-sm">{risk.title}</h4>
                   </div>
                   <span
@@ -1269,7 +1272,7 @@ export default function AdminLoginHistoryApiPanel({
 
                 {risk.recommendedAction && (
                   <p className="mt-2 text-xs font-semibold pt-2 border-t border-red-200/60">
-                    💡 Khuyến nghị xử lý: {risk.recommendedAction}
+                    Khuyến nghị xử lý: {risk.recommendedAction}
                   </p>
                 )}
               </div>
@@ -1344,11 +1347,11 @@ export default function AdminLoginHistoryApiPanel({
                     onClick={() => copyToClipboard(log.userAgent || '', 'User-Agent')}
                     className="text-xs font-semibold text-[#855306] hover:underline"
                   >
-                    {copiedText === 'User-Agent' ? '✓ Đã chép!' : 'Sao chép chuỗi UA'}
+                    {copiedText === 'User-Agent' ? 'Đã sao chép' : 'Sao chép chuỗi UA'}
                   </button>
                 </div>
                 <pre className="max-h-24 overflow-auto rounded-lg bg-[#1e1f1d] p-3 font-mono text-[11px] text-stone-300 leading-relaxed break-all whitespace-pre-wrap">
-                  {log.userAgent || '—'}
+                  {log.userAgent || '-'}
                 </pre>
               </div>
 
@@ -1396,7 +1399,7 @@ export default function AdminLoginHistoryApiPanel({
       >
         <div className="space-y-4">
           <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
-            <p className="font-bold">⚠️ Lưu ý quản trị an ninh:</p>
+            <p className="font-bold">Lưu ý quản trị an ninh:</p>
             <p className="mt-1">
               Hành động này sẽ buộc đăng xuất tất cả các tài khoản đang làm việc trên mọi thiết bị ngoại trừ phiên hiện tại của bạn.
             </p>

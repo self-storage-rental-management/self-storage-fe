@@ -18,7 +18,6 @@ import {
   Thead,
   Tr,
 } from '../../components/ui'
-import { clearAuthTokens } from '../../services/apiClient'
 import type { Role, User } from '../../types'
 import {
   createAdminUser,
@@ -27,6 +26,7 @@ import {
   listAdminLoginHistory,
   listAdminSessions,
   listAdminUsers,
+  unlockAdminUser,
   updateAdminUserFacilities,
   updateAdminUserRoles,
   updateAdminUserStatus,
@@ -77,7 +77,7 @@ const toUiStatus = (status: ApiUserStatus): AccountStatus =>
 
 function formatDate(value: string) {
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('vi-VN')
+  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleDateString('vi-VN')
 }
 
 function formatRelativeTime(dateStr: string | null | undefined): string {
@@ -209,8 +209,8 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
 
     Promise.all([
       listAdminUsers({
-        page,
-        size: pageSize,
+        page: audienceTab === 'Nhân sự nội bộ' && !computedRoleParam ? 0 : page,
+        size: audienceTab === 'Nhân sự nội bộ' && !computedRoleParam ? 200 : pageSize,
         search: search.trim() || undefined,
         role: computedRoleParam,
         status: statusParam,
@@ -222,14 +222,18 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
         if (cancelled) return
 
         let data = userPage.data
-        // If audienceTab is 'Nhân sự nội bộ' and no specific role is chosen, exclude CUSTOMER accounts
-        if (audienceTab === 'Nhân sự nội bộ') {
-          data = data.filter(acc => acc.roles.some(r => r !== 'CUSTOMER'))
+        // If audienceTab is 'Nhân sự nội bộ' and no specific role is chosen, exclude CUSTOMER accounts and paginate accurately
+        if (audienceTab === 'Nhân sự nội bộ' && !computedRoleParam) {
+          const internalUsers = data.filter(acc => acc.roles.some(r => r !== 'CUSTOMER'))
+          const start = page * pageSize
+          setAccounts(internalUsers.slice(start, start + pageSize))
+          setTotalItems(internalUsers.length)
+          setTotalPages(Math.max(1, Math.ceil(internalUsers.length / pageSize)))
+        } else {
+          setAccounts(data)
+          setTotalItems(userPage.pagination.totalItems)
+          setTotalPages(userPage.pagination.totalPages)
         }
-
-        setAccounts(data)
-        setTotalItems(userPage.pagination.totalItems)
-        setTotalPages(userPage.pagination.totalPages)
         if (facilityPage) setFacilities(facilityPage.data)
       })
       .catch(reason => {
@@ -415,8 +419,11 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
     }
     try {
       setStatusUpdating(true)
+      const isLocked = confirmStatusModal.status === 'LOCKED'
       const nextStatus = confirmStatusModal.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE'
-      const updated = await updateAdminUserStatus(confirmStatusModal.id, nextStatus)
+      const updated = isLocked
+        ? await unlockAdminUser(confirmStatusModal.id)
+        : await updateAdminUserStatus(confirmStatusModal.id, nextStatus)
       replaceAccount(updated)
       showToast(
         nextStatus === 'ACTIVE'
@@ -680,10 +687,7 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
       {error && (
         <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           <span>{error}</span>
-          <Button variant="outline" size="sm" onClick={() => {
-            clearAuthTokens()
-            setRefreshKey(v => v + 1)
-          }}>
+          <Button variant="outline" size="sm" onClick={() => setRefreshKey(v => v + 1)}>
             Thử lại
           </Button>
         </div>
@@ -854,7 +858,7 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
             <span className="font-semibold text-stone-800">
               {accounts.length === 0 ? 0 : page * pageSize + 1}
             </span>{' '}
-            –{' '}
+            -{' '}
             <span className="font-semibold text-stone-800">
               {Math.min((page + 1) * pageSize, totalItems)}
             </span>{' '}
@@ -904,7 +908,7 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
         onClose={() => setModalOpen(false)}
         title={
           selected
-            ? `Chỉnh Sửa Người Dùng – ${selected.fullName}`
+            ? `Chỉnh Sửa Người Dùng - ${selected.fullName}`
             : mode === 'customer-support'
               ? 'Tạo hộ tài khoản khách thuê kho'
               : 'Tạo tài khoản nội bộ'
@@ -1119,8 +1123,9 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
             >
               <p className="font-bold">
                 {confirmStatusModal.status === 'ACTIVE'
-                  ? '⚠️ Cảnh báo hành động tạm khóa tài khoản:'
-                  : '✓ Thông báo mở khóa tài khoản:'}
+                  ? 'Cảnh báo hành động tạm khóa tài khoản:'
+                  : 'Thông báo mở khóa tài khoản:'}
+
               </p>
               <p className="mt-1">
                 Bạn đang chuẩn bị {confirmStatusModal.status === 'ACTIVE' ? 'tạm khóa' : 'mở khóa'} tài khoản{' '}

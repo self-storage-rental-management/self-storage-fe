@@ -25,14 +25,15 @@ const activeStatusLabels: Partial<Record<ReservationStatus, string>> = {
   AWAITING_PAYMENT: "Chờ thanh toán cọc",
   PAYMENT_GRACE: "Chờ đối soát thanh toán",
   PAYMENT_REVIEW: "Đang duyệt khiếu nại thanh toán",
-  CONFIRMED: "Đã thanh toán · Chờ phân gian",
-  UNIT_RESERVED: "Đã phân gian kho",
+  CONFIRMED: "Đã thanh toán · Chờ phân kho",
+  UNIT_RESERVED: "Đã phân kho",
   READY_FOR_CHECKIN: "Sẵn sàng nhận kho",
   AWAITING_CUSTOMER_RECEIPT: "Chờ khách xác nhận bàn giao",
+  PREPARING: "Khách đang chuẩn bị hàng",
   COMPLETED: "Đã hoàn tất bàn giao",
 }
 
-const progressSteps = ["Xác minh email", "Duyệt hồ sơ", "Thanh toán cọc", "Phân gian", "Nhận kho", "Bàn giao"]
+const progressSteps = ["Xác minh email", "Duyệt hồ sơ", "Thanh toán cọc", "Phân kho", "Nhận kho", "Bàn giao"]
 
 function progressIndex(status: ReservationStatus) {
   if (status === "AWAITING_EMAIL") return 0
@@ -40,7 +41,7 @@ function progressIndex(status: ReservationStatus) {
   if (["AWAITING_PAYMENT", "PAYMENT_GRACE", "PAYMENT_REVIEW"].includes(status)) return 2
   if (status === "CONFIRMED") return 3
   if (["UNIT_RESERVED", "READY_FOR_CHECKIN"].includes(status)) return 4
-  if (status === "AWAITING_CUSTOMER_RECEIPT" || status === "COMPLETED") return 5
+  if (["AWAITING_CUSTOMER_RECEIPT", "PREPARING", "COMPLETED"].includes(status)) return 5
   return 0
 }
 
@@ -245,7 +246,7 @@ export default function StaffReservationReviews({
             </p>
           </div>
           <p className="text-sm">
-            <b>Tình trạng đóng gói:</b> {row.goodsCondition || "—"}
+            <b>Tình trạng đóng gói:</b> {row.goodsCondition || "-"}
           </p>
           {row.reservationNotes && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm"><b>Ghi chú của khách hàng:</b> {row.reservationNotes}</p>}
           {row.goodsItems.map((item) => (
@@ -374,7 +375,7 @@ export default function StaffReservationReviews({
           </div>
           <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
             {progressSteps.map((step, index) => <div key={step} className={`rounded-lg border p-2 text-[11px] ${index < current ? "border-emerald-300 bg-emerald-50 text-emerald-900" : index === current ? "border-amber-500 bg-amber-50 font-bold text-amber-950" : "border-stone-200 bg-stone-50 text-stone-400"}`}>
-              <span className="mr-1 font-bold">{index < current ? "✓" : index + 1}.</span>{step}
+              <span className="mr-1 font-bold">{index + 1}.</span>{step}
             </div>)}
           </div>
         </Card>

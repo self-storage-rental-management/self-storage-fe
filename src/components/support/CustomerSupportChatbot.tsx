@@ -329,10 +329,10 @@ export default function CustomerSupportChatbot({
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-100 hover:text-stone-900 transition"
+              className="px-2 py-1 text-xs font-semibold rounded-lg text-stone-500 hover:bg-stone-100 hover:text-stone-900 transition"
               aria-label="Đóng trợ lý"
             >
-              ✕
+              Đóng
             </button>
           </div>
 
@@ -359,7 +359,7 @@ export default function CustomerSupportChatbot({
               >
                 {storageContext.rentalsList.map(r => (
                   <option key={r.unitId} value={r.unitId}>
-                    {r.unitId} ({r.facilityName.split('–')[1] || r.facilityName})
+                    {r.unitId} ({r.facilityName.split('-')[1] || r.facilityName})
                   </option>
                 ))}
               </select>
