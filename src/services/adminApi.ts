@@ -295,6 +295,13 @@ export async function updateAdminUserStatus(id: string, status: ApiUserStatus) {
   return readData<AdminApiUser>(response)
 }
 
+export async function unlockAdminUser(id: string) {
+  const response = await apiRequest<ApiEnvelope<AdminApiUser>>(`/api/admin/users/${encodeURIComponent(id)}/unlock`, {
+    method: 'POST',
+  })
+  return readData<AdminApiUser>(response)
+}
+
 export async function resetAdminUserPassword(id: string, temporaryPassword: string) {
   const response = await apiRequest<ApiEnvelope<AdminApiUser>>(`/api/admin/users/${encodeURIComponent(id)}/password-reset`, {
     method: 'POST',

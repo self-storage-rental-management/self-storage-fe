@@ -2,7 +2,7 @@ import { formatCustomerDateTime } from '../../i18n/customerDate'
 import { userFacingError } from '../../presentation/userFacingError'
 import { useEffect, useState } from "react"
 import { Button, Card, Modal, SectionHeader, Table, Thead, Tbody, Th, Td, Tr } from "../../components/ui"
-import { formatVndAmount as formatVnd } from "../../i18n/currency"
+import { formatVndAmount } from "../../i18n/currency"
 import {
   loadCustomerPaymentHistory,
   paymentCategories,
@@ -36,7 +36,7 @@ function ShortCode({ value }: { value: string }) {
 }
 
 const historyAmount = (amount: number | null) =>
-  amount === null ? "Chưa có thông tin số tiền" : formatVnd(amount)
+  amount === null ? "Chưa có thông tin số tiền" : formatVndAmount(amount)
 
 const reservationHistoryWarning = "Chưa tải được đầy đủ lịch sử thanh toán đơn giữ kho."
 
@@ -200,8 +200,8 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
         contentClassName={receipt?.returnSettlement ? 'min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-5' : undefined}
         customHeader={receipt?.returnSettlement ? <div className="flex shrink-0 items-center justify-between gap-3 border-b border-stone-200 bg-white px-4 py-3 sm:px-5">
           <h2 id="modal-title" className="text-base font-semibold text-stone-900">Chi tiết giao dịch</h2>
-          <button type="button" aria-label="Đóng chi tiết giao dịch" onClick={() => setReceiptId(null)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-800 focus-visible:outline-2 focus-visible:outline-amber-600">
-            <svg aria-hidden="true" className="show-icon h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="m6 6 12 12M18 6 6 18" /></svg>
+          <button type="button" aria-label="Đóng chi tiết giao dịch" onClick={() => setReceiptId(null)} className="px-2.5 py-1 text-xs font-semibold rounded-lg text-stone-500 hover:bg-stone-100 hover:text-stone-800 focus-visible:outline-2 focus-visible:outline-amber-600">
+            Đóng
           </button>
         </div> : undefined}
       >

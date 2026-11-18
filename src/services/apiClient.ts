@@ -68,7 +68,19 @@ export function clearAuthTokens() {
   try {
     sessionStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY)
     sessionStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY)
+    sessionStorage.removeItem('storagehub:current_actor')
+    sessionStorage.removeItem('storagehub_customer_booking_draft')
   } catch {}
+}
+
+function notifyAuthExpired() {
+  const hadSession = Boolean(accessToken || refreshToken || (() => {
+    try { return Boolean(sessionStorage.getItem('storagehub:current_actor')) } catch { return false }
+  })())
+  clearAuthTokens()
+  if (hadSession && typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('storagehub:auth-expired'))
+  }
 }
 
 export function hasAccessToken() {
@@ -112,6 +124,14 @@ async function refreshAccessToken(): Promise<boolean> {
       }
       setAccessToken(data.accessToken)
       setRefreshToken(data.refreshToken)
+      if (isRecord(data.actor)) {
+        try {
+          sessionStorage.setItem('storagehub:current_actor', JSON.stringify(data.actor))
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('storagehub:actor-updated'))
+          }
+        } catch {}
+      }
       return true
     } catch {
       return false
@@ -150,8 +170,11 @@ export async function apiRequest<T>(path: string, options: RequestInit & { skipA
   }
 
   const payload = await readPayload(response)
-  if (response.status === 401 && !skipAuth && path !== '/api/auth/refresh' && await refreshAccessToken()) {
-    return apiRequest<T>(path, options)
+  if (response.status === 401 && !skipAuth && path !== '/api/auth/refresh') {
+    if (await refreshAccessToken()) {
+      return apiRequest<T>(path, options)
+    }
+    notifyAuthExpired()
   }
   if (!response.ok) {
     const error = isRecord(payload) && isRecord(payload.error) ? payload.error : {}
@@ -182,6 +205,9 @@ function downloadFileName(response: Response) {
 }
 
 export async function apiDownload(path: string, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, method: "GET" | "HEAD" = "GET"): Promise<ApiDownload> {
+  if (!accessToken && refreshToken) {
+    await refreshAccessToken()
+  }
   const headers = new Headers()
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
   const controller = new AbortController()
@@ -198,7 +224,10 @@ export async function apiDownload(path: string, timeoutMs = DEFAULT_REQUEST_TIME
     globalThis.clearTimeout(timeoutId)
   }
 
-  if (response.status === 401 && await refreshAccessToken()) return apiDownload(path, timeoutMs, method)
+  if (response.status === 401) {
+    if (await refreshAccessToken()) return apiDownload(path, timeoutMs, method)
+    notifyAuthExpired()
+  }
   if (!response.ok) {
     const payload = await readPayload(response)
     const error = isRecord(payload) && isRecord(payload.error) ? payload.error : {}

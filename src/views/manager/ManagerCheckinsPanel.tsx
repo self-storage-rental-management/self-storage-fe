@@ -352,7 +352,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
               </p>
               <div className="grid grid-cols-1 gap-2 text-xs">
                 <div className="flex items-center justify-between p-2 rounded-lg bg-stone-50 border border-stone-200/70">
-                  <span className="font-medium text-stone-700">1. {'Đối chiếu CCCD/Hộ chiếu người nhận kho'}</span>
+                  <span className="font-medium text-stone-700">1. {'Đối chiếu CCCD/CMND người nhận kho'}</span>
                   <Badge variant={selectedCheckin.checklist.identityVerified ? 'success' : 'muted'}>
                     {selectedCheckin.checklist.identityVerified ? ('Đã đối chiếu') : ('Chưa duyệt')}
                   </Badge>
@@ -364,7 +364,7 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
                   </Badge>
                 </div>
                 <div className="flex items-center justify-between p-2 rounded-lg bg-stone-50 border border-stone-200/70">
-                  <span className="font-medium text-stone-700">3. {'Xác nhận thu đủ cước thuê & tiền cọc đảm bảo kho'}</span>
+                  <span className="font-medium text-stone-700">3. {'Xác nhận thu đủ cước thuê & tiền cọc đảm bảo thuê'}</span>
                   <Badge variant={selectedCheckin.checklist.paymentConfirmed ? 'success' : 'muted'}>
                     {selectedCheckin.checklist.paymentConfirmed ? ('Đã thanh toán đủ') : ('Còn thiếu')}
                   </Badge>

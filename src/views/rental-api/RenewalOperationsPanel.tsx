@@ -282,7 +282,7 @@ export function RenewalOperationsSummary({ state: s, role, cashRecorded = false 
             const current = index === progressIndex && progressIndex < progressSteps.length
             return <div key={step.label} aria-current={current ? "step" : undefined} className={`rounded-lg border p-3 ${completed ? "border-emerald-200 bg-emerald-50 text-emerald-950" : current ? "border-amber-400 bg-amber-500 text-white" : "border-stone-200 bg-white text-stone-400"}`}>
               <div className="mb-2 flex items-center justify-between gap-1">
-                <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${completed ? "bg-emerald-600 text-white" : current ? "bg-white text-amber-700" : "bg-stone-100 text-stone-500"}`}>{completed ? "✓" : index + 1}</span>
+                <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${completed ? "bg-emerald-600 text-white" : current ? "bg-white text-amber-700" : "bg-stone-100 text-stone-500"}`}>{index + 1}</span>
                 <span className="text-[10px] font-semibold">{completed ? "Đã xong" : current ? "Hiện tại" : "Sắp tới"}</span>
               </div>
               <p className="text-xs font-bold">{step.label}</p>
@@ -864,7 +864,7 @@ function OperationForm({
           {customerIdentity.data && <>
             <dl className="grid gap-3 text-sm sm:grid-cols-2">
               <div><dt className="text-xs text-stone-600">Khách hàng</dt><dd className="mt-1 font-semibold text-stone-900">{customerIdentity.data.fullName || 'Chưa có tên khách'}</dd></div>
-              <div><dt className="text-xs text-stone-600">Số CCCD / Hộ chiếu đã lưu</dt><dd className="mt-1 break-all font-semibold tabular-nums text-stone-900">{customerIdentity.data.identityDocumentNumber || 'Chưa có CCCD / Hộ chiếu trong hồ sơ gốc'}</dd></div>
+              <div><dt className="text-xs text-stone-600">Số CCCD/CMND đã lưu</dt><dd className="mt-1 break-all font-semibold tabular-nums text-stone-900">{customerIdentity.data.identityDocumentNumber || 'Chưa có CCCD/CMND trong hồ sơ gốc'}</dd></div>
             </dl>
           </>}
         </section>}
@@ -1039,7 +1039,7 @@ function OperationForm({
         {action === "completion" && (
           <>
             <ApiReadState {...cash} retry={cash.refresh} />
-            {cash.data?.effectiveStartDate && <p className="text-sm text-stone-700">Kỳ có hiệu lực khi hoàn tất hôm nay: <b>{rentalDate(cash.data.effectiveStartDate)} → {rentalDate(cash.data.effectiveEndDate)}</b>. Kiểm tra hợp đồng đã ký khớp kỳ này. Không cộng ngày setup.</p>}
+            {cash.data?.effectiveStartDate && <p className="text-sm text-stone-700">Kỳ có hiệu lực khi hoàn tất hôm nay: <b>{rentalDate(cash.data.effectiveStartDate)} → {rentalDate(cash.data.effectiveEndDate)}</b>. Kiểm tra hợp đồng đã ký khớp kỳ này. Không cộng thêm ngày chuẩn bị.</p>}
             <EvidenceUpload
                 entityType="DUONG_RENEWAL_SIGNED_CONTRACT"
                 entityId={s.renewalId}

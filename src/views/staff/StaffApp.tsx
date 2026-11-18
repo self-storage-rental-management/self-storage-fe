@@ -34,8 +34,10 @@ import StaffSupportPanel from "./StaffSupportPanel"
 import { SupportApiRoute } from "../support-api/SupportApiEntry"
 
 import StaffCheckInOperationsPanel from "./StaffCheckInOperationsPanel"
+import StaffCredentialReissuePanel from "./StaffCredentialReissuePanel"
 import StaffMaintenanceOperationsPanel from "./StaffMaintenanceOperationsPanel"
 import StaffRenewalOperationsApiPanel from "./StaffRenewalOperationsApiPanel"
+import StaffUnitReleasePanel from "./StaffUnitReleasePanel"
 import StaffDailyTaskQueue from "./StaffDailyTaskQueue"
 import RecoveryTaskDetail from "../rental-api/RecoveryTaskDetail"
 import ReturnApiPanel from "../return-api/ReturnApiPanel"
@@ -82,7 +84,7 @@ import {
 
 import StaffFileUpload from "./StaffFileUpload"
 
-import { formatVnd } from "../../i18n/currency"
+import { formatVndAmount } from "../../i18n/currency"
 
 import { useStorageHub } from "../../store/StorageHubContext"
 
@@ -185,7 +187,7 @@ const formatTime = (value?: string) => {
     : value
 }
 
-const formatMoney = formatVnd
+const formatMoney = formatVndAmount
 
 const addDays = (dateLabel: string, days: number) => {
   const date = new Date(dateLabel)
@@ -335,7 +337,7 @@ const mapSharedReservation = (
 
     facility: reservation.facilityName,
 
-    facilityAddress: facility?.address || "—",
+    facilityAddress: facility?.address || "-",
 
     size: assignedUnit?.areaM2 || matchingTypeUnit?.areaM2 || 0,
 
@@ -418,11 +420,11 @@ const mapSharedCheckin = (
 
     customer: record.customerName,
 
-    email: reservation?.customerEmail || "—",
+    email: reservation?.customerEmail || "-",
 
-    phone: reservation?.customerPhone || "—",
+    phone: reservation?.customerPhone || "-",
 
-    identityId: reservation?.identityId || "—",
+    identityId: reservation?.identityId || "-",
 
     unit: unit?.code || record.unitId,
 
@@ -439,7 +441,7 @@ const mapSharedCheckin = (
       record.goodsHandover?.category ||
       "Hàng hóa đã khai báo",
 
-    material: reservation?.goods.material || "—",
+    material: reservation?.goods.material || "-",
 
     packageCount:
       reservation?.goods.packageCount ||
@@ -856,6 +858,10 @@ export default function StaffApp({
     },
 
     ...(isApiAuthenticated() ? [{ id: "renewal-signing", label: "Ký gia hạn", icon: Icon.policy, group: "Vận hành", permission: "renewals:operate" as const }] : []),
+    ...(isApiAuthenticated() ? [
+      { id: "unit-release", label: "Giải phóng kho hủy", icon: Icon.box, group: "Vận hành", permission: "checkins:read" as const },
+      { id: "credentials", label: "Cấp lại quyền truy cập", icon: Icon.key, group: "Vận hành", permission: "checkins:read" as const },
+    ] : []),
 
     {
       id: "support",
@@ -2196,8 +2202,9 @@ export default function StaffApp({
     if (type === "RETURN") return "return"
     if (type === "RENEWAL") return "renewal-signing"
     if (type === "OVERDUE") return "dashboard"
-    if (type === "PAYMENT") return "payments"
+    if (type === "PAYMENT") return "checkin"
     if (type === "RESERVATION") return "reservations"
+    if (type === "SYSTEM") return "tasks"
     return "dashboard"
   }
 
@@ -2252,6 +2259,9 @@ export default function StaffApp({
           }
           if (notification.page === "reservations") {
             window.setTimeout(() => window.dispatchEvent(new Event("storagehub:staff-reservations-refresh")), 0)
+          }
+          if (notification.page === "tasks" && notification.targetId) {
+            setSelectedMaintenanceTaskId(notification.targetId)
           }
           return
         }
@@ -2319,7 +2329,7 @@ export default function StaffApp({
                               }
                             }}
                           >
-                            ✓ Duyệt gia hạn
+                            Duyệt gia hạn
                           </Button>
                           <Button
                             size="sm"
@@ -2337,7 +2347,7 @@ export default function StaffApp({
                               }
                             }}
                           >
-                            ✕ Từ chối
+                            Từ chối
                           </Button>
                         </div>
                       </div>
@@ -2583,7 +2593,7 @@ export default function StaffApp({
                       ? (/^\d{4}-\d{2}-\d{2}$/.test(task.time) ? formatDate(task.time) : formatExactDateTime(task.time))
                       : task.time}</Td>
                     <Td className="text-xs font-semibold text-amber-700">
-                      {kind === "assigned" ? task.notes || "—" : task.sla}
+                      {kind === "assigned" ? task.notes || "-" : task.sla}
                     </Td>
                     <Td>
                       {s(task.priority, {
@@ -2599,7 +2609,7 @@ export default function StaffApp({
                       {kind === "assigned" ? (
                         task.status === "open" ? <Button size="sm" onClick={() => updateAssignedTaskStatus(task, "in_progress")}>Nhận việc</Button>
                         : task.status === "in_progress" ? <Button size="sm" onClick={() => { setTaskCompletionTarget(task); setTaskResultReport(task.resultReport || ""); setTaskEvidenceText((task.evidence || []).join("\n")) }}>Hoàn thành</Button>
-                        : <span className="text-xs text-stone-500">—</span>
+                        : <span className="text-xs text-stone-500">-</span>
                       ) : <Button size="sm" variant="outline" onClick={() => task.id.startsWith("maintenance-") ? setSelectedMaintenanceTaskId(task.id.replace("maintenance-", "")) : openOperationalTask(task)}>Mở hồ sơ</Button>}
                     </Td>
                   </Tr>
@@ -2747,7 +2757,7 @@ export default function StaffApp({
               >
                 <option value="deadline-asc">{"Sắp đến hạn trước"}</option>
                 <option value="deadline-desc">{"Hạn xa nhất trước"}</option>
-                <option value="name-asc">{"Tên khách hàng A–Z"}</option>
+                <option value="name-asc">{"Tên khách hàng A-Z"}</option>
               </Select>
             </div>
             <p className="mt-2 text-xs text-stone-500">
@@ -2912,6 +2922,8 @@ export default function StaffApp({
 
       {/* ── CHECK-IN / HANDOVER ───────────────────────────────── */}
       {page === "checkin" && <StaffCheckInOperationsPanel showToast={showToast} />}
+      {page === "unit-release" && isApiAuthenticated() && <StaffUnitReleasePanel showToast={showToast} />}
+      {page === "credentials" && isApiAuthenticated() && <StaffCredentialReissuePanel showToast={showToast} />}
 
       {/* ── RETURN INSPECTION ────────────────────────────────── */}
 
@@ -2934,7 +2946,7 @@ export default function StaffApp({
             eyebrow={"CỔNG NHÂN VIÊN · KIỂM KÊ & BẰNG CHỨNG"}
             title={"Nghiệm thu trả kho"}
             subtitle={
-              "Đối chiếu hiện trạng trước–sau, kiểm kê hàng hóa, phân loại và lưu bằng chứng"
+              "Đối chiếu hiện trạng trước-sau, kiểm kê hàng hóa, phân loại và lưu bằng chứng"
             }
           />
           <Card className="mb-4 p-4">
@@ -2973,7 +2985,7 @@ export default function StaffApp({
               >
                 <option value="deadline-asc">{"Sắp đến hạn trước"}</option>
                 <option value="deadline-desc">{"Hạn xa nhất trước"}</option>
-                <option value="name-asc">{"Tên khách hàng A–Z"}</option>
+                <option value="name-asc">{"Tên khách hàng A-Z"}</option>
               </Select>
             </div>
             <p className="mt-2 text-xs text-stone-500">
@@ -3210,7 +3222,7 @@ export default function StaffApp({
                           setSettlementModalOpen(true)
                         }}
                       >
-                        {"🧾 Quyết toán"}
+                        {"Quyết toán"}
                       </Button>
                     </Td>
                   </Tr>
@@ -3235,7 +3247,7 @@ export default function StaffApp({
                     <Td>
                       <Badge variant="warning">Chờ thu hồi quyền truy cập</Badge>
                     </Td>
-                    <Td>—</Td>
+                    <Td>-</Td>
                     <Td>Chờ xử lý</Td>
                     <Td>
                       <Button
@@ -3335,8 +3347,8 @@ export default function StaffApp({
                 <b>{selectedReservation.email}</b>
                 <p className="text-xs">
                   {selectedReservation.emailVerified
-                    ? "✓ Đã xác nhận"
-                    : "⚠ Chưa xác nhận"}
+                    ? "Đã xác nhận"
+                    : "Chưa xác nhận"}
                 </p>
               </div>
               <div className="rounded-lg bg-slate-50 p-3">
@@ -3503,7 +3515,7 @@ export default function StaffApp({
                   key={item}
                   className="mb-1 rounded bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
                 >
-                  ✓ {item}
+                  {item}
                 </p>
               ))}
             </div>
@@ -3606,7 +3618,7 @@ export default function StaffApp({
             )}
             <div className="rounded-lg border border-slate-200 p-3 text-sm">
               <p className="mb-2 font-semibold">
-                Đối chiếu giao dịch trước – sau
+                Đối chiếu giao dịch trước - sau
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -3707,7 +3719,7 @@ export default function StaffApp({
             <div className="rounded-xl border border-stone-200 bg-stone-50/70 p-3.5 space-y-3">
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                  {"Kiểm tra kết cấu cơ sở (Trần — Vách — Sàn)"}
+                  {"Kiểm tra kết cấu cơ sở (Trần - Vách - Sàn)"}
                 </h4>
                 <span className="text-[11px] px-2 py-0.5 rounded font-semibold bg-stone-200 text-stone-700">
                   {"Căn cứ pháp lý đối chứng"}
@@ -3724,9 +3736,10 @@ export default function StaffApp({
                     onChange={(e) => setReturnCeilingStatus(e.target.value as any)}
                     className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs bg-white"
                   >
-                    <option value="dry_intact">{"🟢 Khô ráo, kín gió, nguyên vẹn"}</option>
-                    <option value="stained">{"🟡 Có vết loang ố nước cũ / ẩm"}</option>
-                    <option value="leaking">{"🔴 Dột nước / thấm dột mái (Lỗi cơ sở)"}</option>
+                    <option value="dry_intact">Khô ráo, kín gió, nguyên vẹn</option>
+                    <option value="stained">Có vết loang ố nước cũ / ẩm</option>
+                    <option value="leaking">Dột nước / thấm dột mái (Lỗi cơ sở)</option>
+
                   </select>
                 </div>
                 <div>
@@ -3739,9 +3752,10 @@ export default function StaffApp({
                     onChange={(e) => setReturnWallStatus(e.target.value as any)}
                     className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs bg-white"
                   >
-                    <option value="dry_intact">{"🟢 Khô ráo, sạch sẽ"}</option>
-                    <option value="damp_seepage">{"🔴 Thấm ẩm tường ngoài (Lỗi cơ sở)"}</option>
-                    <option value="cracked">{"🟠 Móp méo / nứt vỡ vách"}</option>
+                    <option value="dry_intact">Khô ráo, sạch sẽ</option>
+                    <option value="damp_seepage">Thấm ẩm tường ngoài (Lỗi cơ sở)</option>
+                    <option value="cracked">Móp méo / nứt vỡ vách</option>
+
                   </select>
                 </div>
                 <div>
@@ -3754,9 +3768,10 @@ export default function StaffApp({
                     onChange={(e) => setReturnFloorStatus(e.target.value as any)}
                     className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs bg-white"
                   >
-                    <option value="dry_intact">{"🟢 Khô ráo, chịu lực tốt"}</option>
-                    <option value="cracked">{"🔴 Nứt vỡ sàn / bong gạch lát"}</option>
-                    <option value="water_pooling">{"🔴 Có đọng vũng nước / ngấm sàn"}</option>
+                    <option value="dry_intact">Khô ráo, chịu lực tốt</option>
+                    <option value="cracked">Nứt vỡ sàn / bong gạch lát</option>
+                    <option value="water_pooling">Có đọng vũng nước / ngấm sàn</option>
+
                   </select>
                 </div>
               </div>
@@ -3797,16 +3812,17 @@ export default function StaffApp({
                   }}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs bg-white"
                 >
-                  <option value="none">{"🟢 Không phát sinh ẩm mốc / Hàng hóa & kho bình thường"}</option>
-                  <option value="facility_fault">{"🔴 Do lỗi cơ sở kho (Thấm dột trần/vách hoặc sự cố điều hòa/hút ẩm)"}</option>
-                  <option value="customer_fault">{"🟠 Do lỗi khách hàng (Đóng gói còn ẩm, nông sản lên men, hàng cấm)"}</option>
-                  <option value="climate_standard_uncontrolled">{"🟡 Kho tiêu chuẩn — Độ ẩm tự nhiên mùa nồm (không áp dụng cam kết thời gian xử lý)"}</option>
+                  <option value="none">Không phát sinh ẩm mốc / Hàng hóa & kho bình thường</option>
+                  <option value="facility_fault">Do lỗi cơ sở kho (Thấm dột trần/vách hoặc sự cố điều hòa/hút ẩm)</option>
+                  <option value="customer_fault">Do lỗi khách hàng (Đóng gói còn ẩm, nông sản lên men, hàng cấm)</option>
+                  <option value="climate_standard_uncontrolled">Kho tiêu chuẩn - Độ ẩm tự nhiên mùa nồm (không áp dụng cam kết thời gian xử lý)</option>
+
                 </select>
               </div>
 
               {returnMoistureOrigin === 'facility_fault' && (
                 <div className="rounded-lg border border-rose-200 bg-rose-100/80 p-2.5 text-xs text-rose-900 space-y-1">
-                  <p className="font-bold">{"✓ Trách nhiệm của cơ sở kho:"}</p>
+                  <p className="font-bold">{"Trách nhiệm của cơ sở kho:"}</p>
                   <p>{"Hệ thống tự động miễn trừ toàn bộ phí hư hại và vệ sinh đối với khách hàng. Hệ thống hoàn 100% tiền cọc và kích hoạt phiếu sửa chữa bảo trì khẩn cấp (P1) cho Đội Kỹ thuật."}</p>
                 </div>
               )}
@@ -3949,7 +3965,7 @@ export default function StaffApp({
                   </dd>
                 </div>
                 <div className="flex justify-between gap-3 border-t border-stone-200 pt-2">
-                  <dt>Tiền cọc hoàn lại = tiền cọc − khấu trừ (tối thiểu 0)</dt>
+                  <dt>Tiền cọc hoàn lại = tiền cọc - khấu trừ (tối thiểu 0)</dt>
                   <dd className="font-bold text-emerald-700">
                     {formatMoney(returnRefund)}
                   </dd>
@@ -3984,14 +4000,14 @@ export default function StaffApp({
 
             {selectedSharedReturn?.status === "disputed" ? (
               <div className="rounded-lg border border-red-300 bg-red-50 p-3.5 text-sm text-red-900">
-                <p className="font-bold">⚠️ Đang khiếu nại - Cần BO giải quyết</p>
+                <p className="font-bold">Đang khiếu nại - Cần BO giải quyết</p>
                 <p className="mt-1 text-xs leading-relaxed text-red-800">
                   Khách hàng đã gửi khiếu nại về các khoản phí quyết toán ({selectedSharedReturn?.customerDecisionNote || "Cần xem xét lại"}). Quản lý cơ sở hoặc Ban Điều Hành (BO) là người xem xét thẩm định. Nhân viên không đóng hồ sơ hoặc hoàn cọc tại bước này để tránh xung đột dữ liệu (lỗi 409 Conflict).
                 </p>
               </div>
             ) : selectedSharedReturn?.status === "awaiting_customer_confirmation" ? (
               <div className="rounded-lg border border-amber-300 bg-amber-50 p-3.5 text-sm text-amber-900">
-                <p className="font-bold">⏳ Chờ khách hàng phản hồi duyệt quyết toán</p>
+                <p className="font-bold">Chờ khách hàng phản hồi duyệt quyết toán</p>
                 <p className="mt-1 text-xs leading-relaxed text-amber-800">
                   Biên bản nghiệm thu đã lập và đang chờ khách hàng duyệt. Nhân viên không đóng hồ sơ hoặc hoàn cọc thay khách hàng để tránh xung đột hệ thống (lỗi 409 Conflict).
                 </p>
@@ -4060,7 +4076,7 @@ export default function StaffApp({
                     setSettlementModalOpen(true)
                   }}
                 >
-                  🧾 Xem hóa đơn & biên lai
+                  Xem hóa đơn & biên lai
                 </Button>
               )}
               <Button variant="outline" onClick={() => setInspectModal(false)}>
@@ -4333,7 +4349,7 @@ export default function StaffApp({
                     {"Tải trọng tối đa"}: {fitEvaluation.spec.maxWeight} kg
                   </span>
                   <span>
-                    {"Kích thước kiện lớn nhất"}: {actualDimensions || "—"} cm
+                    {"Kích thước kiện lớn nhất"}: {actualDimensions || "-"} cm
                   </span>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -4414,7 +4430,7 @@ export default function StaffApp({
             </div>
             <div className="space-y-2 rounded-lg border border-blue-200 bg-blue-50/50 p-3">
               {([
-                ["identity", "Đã đối chiếu CCCD/Hộ chiếu gốc"],
+                ["identity", "Đã đối chiếu CCCD/CMND gốc"],
 
                 [
                   "reservation",
@@ -4670,12 +4686,10 @@ export default function StaffApp({
             <button
               type="button"
               aria-label="Đóng"
-              className="text-[#767268] hover:text-[#191b20] hover:bg-[#f4f1ea] p-1.5 rounded-lg transition flex items-center justify-center cursor-pointer"
+              className="text-[#767268] hover:text-[#191b20] hover:bg-[#f4f1ea] px-2.5 py-1 text-xs font-semibold rounded-lg transition cursor-pointer"
               onClick={() => setRespondModal(false)}
             >
-              <svg className="w-5 h-5 show-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              Đóng
             </button>
           </div>
         }
