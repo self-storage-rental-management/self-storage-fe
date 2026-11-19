@@ -186,10 +186,10 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
             
             <div className="space-y-1.5 text-xs">
               <p className="font-bold uppercase tracking-wider text-rose-900">
-                Thông báo quan trọng: Quy định không hoàn phí giữ chỗ
+                Quy định không hoàn tiền đặt cọc giữ chỗ
               </p>
               <p className="leading-relaxed text-rose-900 font-medium">
-                Khoản thanh toán ngay <b>{formatVnd(snapshot.reservationDepositAmount)}</b> là cọc giữ chỗ, được trừ vào tổng nghĩa vụ phải thanh toán. Theo điều khoản đã chấp nhận, khoản này <b>không hoàn khi khách tự ý hủy hoặc không nhận kho đúng hạn</b>.
+                Khoản thanh toán ngay <b>{formatVnd(snapshot.reservationDepositAmount)}</b> là phí đặt cọc giữ chỗ (5%), là khoản bảo đảm việc giữ loại kho đã chọn và <b>không được hoàn lại trong trường hợp khách hàng tự ý hủy đơn hoặc bỏ lịch nhận kho</b>.
               </p>
               <p className="text-[11px] leading-relaxed text-rose-800">
                 Toàn bộ số tiền này sẽ được <b>khấu trừ 100%</b> vào tổng nghĩa vụ tài chính khi quý khách đến cơ sở làm thủ tục nhận kho đúng hẹn.
@@ -207,14 +207,14 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
             onChange={(e) => setAcceptedNoRefund(e.target.checked)}
           />
           <span className="leading-tight">
-            Tôi xác nhận đã đọc, hiểu rõ và đồng ý rằng <b>khoản phí giữ chỗ sẽ không được hoàn lại</b> nếu tôi tự ý hủy đơn hoặc không đến nhận kho đúng hạn.
+            Tôi xác nhận đã đọc, hiểu rõ và đồng ý: <b>Phí đặt cọc giữ chỗ (5%) là khoản bảo đảm việc giữ loại kho đã chọn và không được hoàn lại trong trường hợp khách hàng tự ý hủy đơn hoặc bỏ lịch nhận kho.</b>
           </span>
         </label>
 
         <p className="text-sm text-stone-600">Bạn sẽ được chuyển sang VNPay Sandbox. Sau khi thanh toán thành công, biên lai được lưu trong đơn và gửi qua email tài khoản; hệ thống tự thử lại nếu gửi email tạm thời gặp lỗi.</p>
         <div className="flex items-center gap-2 rounded-lg border-2 border-amber-500 bg-amber-50 p-3 text-xs font-semibold text-amber-950 shadow-xs">
           <span className="text-base text-amber-600">⚠️</span>
-          <span><b>Cảnh báo quan trọng:</b> Khoản cọc giữ chỗ không được hoàn lại nếu tự ý huỷ đơn trước khi nhận kho.</span>
+          <span><b>Quy định không hoàn tiền:</b> Phí đặt cọc giữ chỗ (5%) là khoản bảo đảm việc giữ loại kho đã chọn và không được hoàn lại trong trường hợp khách hàng tự ý hủy đơn hoặc bỏ lịch nhận kho.</span>
         </div>
         <Button className="w-full" disabled={busy || countdown.expired || !acceptedNoRefund} onClick={() => pay()}>{busy ? 'Đang chuyển sang VNPay…' : `Thanh toán qua VNPay ${formatVnd(snapshot.reservationDepositAmount)}`}</Button>
       </div>
