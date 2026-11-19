@@ -299,6 +299,7 @@ export function Modal({
   open,
   onClose,
   title,
+  titleAdornment,
   children,
   size = 'md',
   closeLabel = 'Close dialog',
@@ -310,6 +311,7 @@ export function Modal({
   open: boolean
   onClose: () => void
   title?: string
+  titleAdornment?: ReactNode
   children: ReactNode
   size?: 'md' | 'lg' | 'xl' | '2xl' | '3xl' | 'full'
   closeLabel?: string
@@ -352,7 +354,14 @@ export function Modal({
           <>
             {title && (
               <div className="flex items-center justify-between mb-4 sm:mb-5 gap-2">
-                <h2 id="modal-title" className="text-base sm:text-lg font-bold text-stone-900 truncate">{title}</h2>
+                {titleAdornment ? (
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
+                    <h2 id="modal-title" className="text-base sm:text-lg font-bold text-stone-900">{title}</h2>
+                    {titleAdornment}
+                  </div>
+                ) : (
+                  <h2 id="modal-title" className="text-base sm:text-lg font-bold text-stone-900 truncate">{title}</h2>
+                )}
                 <button
                   aria-label={closeLabel}
                   className="text-stone-400 hover:text-stone-700 hover:bg-stone-100 p-1.5 rounded-lg transition flex items-center justify-center cursor-pointer shrink-0"

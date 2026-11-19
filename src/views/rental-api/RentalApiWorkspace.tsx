@@ -112,13 +112,21 @@ function Pager({
   )
 }
 
-export default function RentalApiWorkspace({ role, focusStorageUnitId, initialRentalId }: { role: RentalApiRole; focusStorageUnitId?: string; initialRentalId?: string }) {
-  const actor = getAuthenticatedActor()
-  const identity = `${actor?.id}:${role}:${JSON.stringify(actor?.facilityScopes)}:${JSON.stringify(actor?.permissions)}`
-  return <WorkspaceSession key={`${identity}:${initialRentalId ?? ''}`} role={role} focusStorageUnitId={focusStorageUnitId} initialRentalId={initialRentalId} />
+type WorkspaceProps = {
+  role: RentalApiRole
+  focusStorageUnitId?: string
+  initialRentalId?: string
+  onRequestSupport?: (id: string, unitCode: string) => void
 }
 
-function WorkspaceSession({ role, focusStorageUnitId, initialRentalId }: { role: RentalApiRole; focusStorageUnitId?: string; initialRentalId?: string }) {
+export default function RentalApiWorkspace(props: WorkspaceProps) {
+  const { role, initialRentalId } = props
+  const actor = getAuthenticatedActor()
+  const identity = `${actor?.id}:${role}:${JSON.stringify(actor?.facilityScopes)}:${JSON.stringify(actor?.permissions)}`
+  return <WorkspaceSession key={`${identity}:${initialRentalId ?? ''}`} {...props} />
+}
+
+function WorkspaceSession({ role, focusStorageUnitId, initialRentalId, onRequestSupport }: WorkspaceProps) {
   const actor = getAuthenticatedActor()
   const facilityId = role === "manager" ? singleManagerFacility(actor) : undefined
   const identity = `${actor?.id}:${role}:${JSON.stringify(actor?.facilityScopes)}:${JSON.stringify(actor?.permissions)}`
@@ -165,6 +173,7 @@ function WorkspaceSession({ role, focusStorageUnitId, initialRentalId }: { role:
   return (
     <WorkspaceData
       focusStorageUnitId={focusStorageUnitId}
+      onRequestSupport={onRequestSupport}
       key={identity}
       role={role}
       identity={identity}
@@ -193,6 +202,7 @@ function WorkspaceSession({ role, focusStorageUnitId, initialRentalId }: { role:
 
 function WorkspaceData({
   focusStorageUnitId,
+  onRequestSupport,
   role,
   identity,
   tab,
@@ -209,6 +219,7 @@ function WorkspaceData({
   setAction,
 }: {
   focusStorageUnitId?: string
+  onRequestSupport?: WorkspaceProps['onRequestSupport']
   role: RentalApiRole
   identity: string
   tab: "rental" | "renewal"
@@ -482,10 +493,11 @@ function WorkspaceData({
                     </div>
                   <div className="px-3 text-xs font-medium text-stone-800"><p>{rentalDate(row.startDate)}</p><p className="text-xs font-normal text-stone-400">đến</p><p>{rentalDate(row.dateSemantics?.lastPermittedDate || row.contractEndDate)}</p></div>
                   <div className="px-3 text-xs font-bold text-stone-900">{row.monthlyPrice == null ? 'Chưa xác định' : rentalMoney(row.monthlyPrice, row.currency)}</div>
-                  <div className="flex flex-nowrap items-center justify-end gap-2 whitespace-nowrap px-3 [&>button]:shrink-0">
+                  <div className="flex flex-wrap items-center justify-end gap-2 whitespace-nowrap px-3 [&>button]:shrink-0">
                     <Button size="sm" variant="outline" onClick={() => setDetail({ kind: 'rental', id: row.id })}>{row.canConfirmRentalStart ? 'Xem & xác nhận' : 'Chi tiết hồ sơ'}</Button>
                     <Button size="sm" variant="outline" className="!border-emerald-600 !bg-emerald-600 !text-white hover:!bg-emerald-700" disabled={row.status !== 'active'} title={row.status === 'active' ? undefined : 'Chỉ có thể gia hạn khi kỳ thuê đã bắt đầu.'} onClick={() => setAction({ kind: 'request', rentalId: row.id })}>Gia hạn</Button>
                     <Button size="sm" variant="primary" disabled={row.status === 'completed'} onClick={() => setReturnRental({ id: row.id, active: row.status === 'active' || row.status === 'setup' })}>Trả kho</Button>
+                    {onRequestSupport && <Button size="sm" variant="outline" onClick={() => onRequestSupport(row.id, row.storageUnit.code)}>Hỗ trợ hồ sơ</Button>}
                   </div>
                 </div>
                 {rentalDeadlineState(row) && <div className="px-4 pb-4"><RentalDeadlineBanner rental={row} role={role} /></div>}

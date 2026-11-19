@@ -37,7 +37,7 @@ import { LEGACY_RENEWAL_NOTICE, LEGACY_RENEWAL_HISTORY_NOTICE, legacyRenewalMone
 import LegacyRenewalPaymentRecord from '../rental-api/LegacyRenewalPaymentRecord'
 import { firstBookableCheckInMinute, firstCheckInMinute, submissionCheckInWindow, formatPolicyDateTime, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyTimeInput, PAYMENT_WINDOW_MINUTES, MANAGER_ASSIGNMENT_HOURS, CHECK_IN_WINDOW_DAYS } from '../../domain/reservationCheckInPolicy'
 import CustomerSupportChatbot from '../../components/support/CustomerSupportChatbot'
-import CustomerSupportWidget from '../../components/support/CustomerSupportWidget'
+import CustomerSupportWidget, { type ChatOpenRequest } from '../../components/support/CustomerSupportWidget'
 import { paymentCurrencyLabel, paymentMethodLabel } from './paymentLabels'
 import { storageSizeCode, unitTypeMatches } from '../../domain/facilityRules'
 import { customerFacilityImage, customerUnitAmenities } from './customerPresentation'
@@ -51,7 +51,7 @@ import {
 import CustomerPalletCheck, { customerRackIssue } from './CustomerPalletCheck'
 import CustomerWarehouseSuggestion from './CustomerWarehouseSuggestion'
 import { CustomerNoCompatibleWarehouse, CustomerNoVacantWarehouse } from './CustomerWarehouseOutcome'
-import { resolveWarehouseRecommendation } from './customerWarehouseRecommendation'
+import { bookingAvailabilityIssue, resolveWarehouseRecommendation } from './customerWarehouseRecommendation'
 import {
   listCustomerFacilities,
   listCustomerUnitTypes,
@@ -1031,11 +1031,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   // Support
   const [supportChatbotOpen, setSupportChatbotOpen] = useState(false)
-  const [supportWidgetRequest, setSupportWidgetRequest] = useState<{ request: number; ticketId?: string } | undefined>(() =>
+  const [supportWidgetRequest, setSupportWidgetRequest] = useState<ChatOpenRequest | undefined>(() =>
     isApiAuthenticated() && new URLSearchParams(window.location.search).get('page') === 'support' ? { request: 1 } : undefined)
   const openSupportWidget = (ticketId?: string) => {
     if (isApiAuthenticated()) setSupportWidgetRequest(previous => ({ request: (previous?.request ?? 0) + 1, ticketId }))
     else setSupportChatbotOpen(true)
+  }
+  const openRecordSupport = (target: NonNullable<ChatOpenRequest['target']>) => {
+    setSupportWidgetRequest(previous => ({ request: (previous?.request ?? 0) + 1, target }))
   }
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get('page') !== 'support') return
@@ -1653,11 +1656,13 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     const unitTypeId = selectedTarget.unitType.id
     const timer = window.setTimeout(async () => {
       let recommendation: ReservationRecommendation | null = null
+      let recommendationIssue: string | undefined
       try {
         recommendation = await recommendReservationUnitType(recommendationInput)
         if (!cancelled) setServerRecommendation({ input: recommendationInput, response: recommendation })
       } catch (error) {
-        if (!cancelled) setRecommendationError(userFacingError(error, 'Không thể kiểm tra loại kho thay thế lúc này.'))
+        recommendationIssue = bookingAvailabilityIssue(error)
+        if (!cancelled) setRecommendationError(recommendationIssue ?? userFacingError(error, 'Không thể kiểm tra loại kho thay thế lúc này.'))
       }
       if (cancelled) return
       if (!recommendation?.checksByUnitType?.[unitTypeId]) {
@@ -1666,7 +1671,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           const check = await checkCompatibility({ facilityId, unitTypeId, startDate, endDate, goodsCondition, goodsItems })
           if (!cancelled) setBookingFit({ input: recommendationInput, check })
         } catch (error) {
-          if (!cancelled) setRecommendationError(userFacingError(error, 'Không thể kiểm tra sức chứa của kho lúc này.'))
+          if (!cancelled) setRecommendationError(bookingAvailabilityIssue(error)
+            ?? recommendationIssue ?? userFacingError(error, 'Không thể kiểm tra sức chứa của kho lúc này.'))
         }
       }
       if (!cancelled) setRecommendationLoading(false)
@@ -2100,7 +2106,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       }
       showToast(`${reservation.reservationCode} đã được tạo. Hãy xác minh OTP để tiếp tục.`)
     } catch (error) {
-      const backendMessage = error instanceof Error ? error.message : ''
       const validationDetails = error instanceof ApiClientError && error.details && typeof error.details === 'object' && !Array.isArray(error.details)
         ? error.details as Record<string, unknown>
         : null
@@ -2127,17 +2132,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               : validationLabels[field] || `Thông tin ${field} chưa hợp lệ.`
           }).join(' ')
         : ''
-      const message = backendMessage.includes('Rental package was not found')
-        ? 'Gói thuê đã chọn không còn khả dụng. Vui lòng chọn lại gói thuê và lấy báo giá mới.'
-        : backendMessage.includes('Rental package is not effective')
-          ? 'Gói thuê không còn hiệu lực vào ngày nhận kho đã chọn. Vui lòng chọn gói hoặc ngày nhận kho khác.'
-          : error instanceof ApiClientError && error.status === 409
-        ? backendMessage.includes('No storage unit is available')
-          ? 'Loại kho này vừa hết chỗ trong kỳ thuê đã chọn. Vui lòng chọn kỳ thuê hoặc loại kho khác.'
-          : userFacingError(error)
-        : error instanceof ApiClientError && error.code === 'VALIDATION_ERROR'
+      const message = bookingAvailabilityIssue(error) ?? (
+        error instanceof ApiClientError && error.code === 'VALIDATION_ERROR'
           ? validationMessage || userFacingError(error, 'Thông tin đặt kho chưa hợp lệ. Vui lòng kiểm tra lại các trường đã nhập.')
-        : userFacingError(error, 'Không thể tạo đơn đặt kho.')
+          : userFacingError(error, 'Không thể tạo đơn đặt kho.')
+      )
       setReservationSubmitError(message)
       showToast(message)
     } finally {
@@ -2605,8 +2604,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 {group.rows.map(reservation => <div key={reservation.id}><CustomerReservationCard
                 reservation={reservation}
                 visualTone={group.id as 'active' | 'expired' | 'completed'}
-                facilityName={reservation.facilitySnapshot?.name || facilities.find(item => item.id === reservation.facilityId)?.name || reservation.facilityId}
-                unitTypeName={reservation.unitTypeSnapshot?.name || reservation.unitTypeName || unitTypes.find(item => item.id === reservation.unitTypeId)?.name || reservation.unitTypeId}
+                facilityName={reservation.facilitySnapshot?.name || facilities.find(item => item.id === reservation.facilityId)?.name || 'Chưa cập nhật cơ sở'}
+                unitTypeName={reservation.unitTypeSnapshot?.name || reservation.unitTypeName || unitTypes.find(item => item.id === reservation.unitTypeId)?.name || 'Chưa cập nhật loại kho'}
+                onRequestSupport={() => openRecordSupport({
+                  linkedRecord: { type: 'RESERVATION', id: reservation.id },
+                  label: `đơn đặt kho ${reservation.reservationCode}`,
+                })}
                 facilityDetails={reservation.facilitySnapshot ? {
                   address: reservation.facilitySnapshot.address || 'Chưa cập nhật',
                   city: reservation.facilitySnapshot.city || '',
@@ -2919,7 +2922,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       )}
 
       {/* ── MY RENTALS (HỒ SƠ THUÊ CỦA TÔI) ───────────────────── */}
-      {page === 'rental-records' && isApiAuthenticated() && <CustomerRentalsApiPanel key={`${user.id}:${rentalMenuVisit}`} focusStorageUnitId={receiptRentalTarget} />}
+      {page === 'rental-records' && isApiAuthenticated() && <CustomerRentalsApiPanel key={`${user.id}:${rentalMenuVisit}`}
+        focusStorageUnitId={receiptRentalTarget}
+        onRequestSupport={(id, unitCode) => openRecordSupport({ linkedRecord: { type: 'RENTAL', id }, label: `hồ sơ thuê gian ${unitCode}` })} />}
       {page === 'rental-records' && !isApiAuthenticated() && (
         <div className="fade-in space-y-4">
           <section className="space-y-4">
