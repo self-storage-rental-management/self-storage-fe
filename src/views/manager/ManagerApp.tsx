@@ -1,5 +1,5 @@
 import { useBackendNotifications } from '../../hooks/useBackendNotifications'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { ManagerPresentationProvider } from './managerPresentation'
 import './managerTypography.css'
 import Layout, { getInitialPage, Icon, type LayoutNotification, type NavItem } from '../../components/Layout'
@@ -27,9 +27,36 @@ import { canApiActor, getAuthenticatedActor, isApiAuthenticated } from '../../se
 import { isFacilityTaskOverdue, isManagerFacilityVisible } from '../../domain/managerRules'
 import { managerStatusLabel } from './managerI18n'
 import { listNotifications, markNotificationRead, notifyBell, type ApiNotification } from '../../services/notificationApi'
+import { listManagerPaymentComplaints } from '../../services/managerPaymentComplaintApi'
 
 export default function ManagerApp({ user, onLogout }: { user: User; onLogout: () => void }) {
-    const hub = useStorageHub()
+  const hub = useStorageHub()
+  const [complaintCount, setComplaintCount] = useState<number>(0)
+
+  const refreshComplaintCount = useCallback(async () => {
+    if (!isApiAuthenticated()) return
+    try {
+      const res = await listManagerPaymentComplaints(0, 100)
+      const count = res.data?.filter(item => item.status === 'PENDING' || item.status === 'REVIEW_OVERDUE').length ?? 0
+      setComplaintCount(count)
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  useEffect(() => {
+    void refreshComplaintCount()
+    const timer = setInterval(() => void refreshComplaintCount(), 8000)
+    const handleUpdate = () => void refreshComplaintCount()
+    window.addEventListener('storagehub:complaints-updated', handleUpdate)
+    window.addEventListener('storagehub:notifications-refresh', handleUpdate)
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('storagehub:complaints-updated', handleUpdate)
+      window.removeEventListener('storagehub:notifications-refresh', handleUpdate)
+    }
+  }, [refreshComplaintCount])
+
   const nav: NavItem[] = [
     { id: 'dashboard', label: 'Tổng quan', icon: Icon.home, group: 'Tổng quan', permission: 'dashboard:read' },
     { id: 'inventory', label: 'Thông tin kho', icon: Icon.box, group: 'Vận hành', permission: 'inventory:update' },
@@ -38,7 +65,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     { id: 'returns', label: 'Trả kho & Quyết toán', icon: Icon.clipboard, group: 'Vận hành', permission: 'returns:read' as const },
     { id: 'payments', label: isApiAuthenticated() ? 'Lịch sử thanh toán' : 'Lịch sử thanh toán & Công nợ', icon: Icon.dollar, group: 'Tài chính', permission: isApiAuthenticated() ? 'payments:read' : 'payments:collect' },
     ...(isApiAuthenticated() ? [{ id: 'overdue-cases', label: 'Theo dõi quá hạn', icon: Icon.alert, group: 'Tài chính', permission: 'rentals:read' as const }] : []),
-    ...(isApiAuthenticated() ? [{ id: 'payment-complaints', label: 'Khiếu nại thanh toán', icon: Icon.alert, group: 'Tài chính', permission: 'payments:confirm' as const }] : []),
+    ...(isApiAuthenticated() ? [{ id: 'payment-complaints', label: 'Khiếu nại thanh toán', icon: Icon.alert, group: 'Tài chính', permission: 'payments:confirm' as const, badgeCount: complaintCount }] : []),
     { id: 'staff-tasks', label: 'Nhân viên & Nhiệm vụ', icon: Icon.users, group: 'Điều phối', permission: 'staff_tasks:update' },
     ...(isApiAuthenticated() ? [{ id: 'support', label: 'Yêu cầu hỗ trợ', icon: Icon.support, group: 'Điều phối', permission: 'support:read' as const }] : []),
   ]
