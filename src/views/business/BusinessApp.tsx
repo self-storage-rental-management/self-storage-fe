@@ -79,6 +79,7 @@ import {
   FacilityGeneralInfo,
   FacilityOperations,
   FacilityImageManager,
+  FacilityStatusTag,
 } from "./facility/FacilityFormFields"
 import { DEMO_DATA_ENABLED } from "../../config/runtime"
 import { createFacilityApi, listAllFacilitiesApi, priceBusinessUnitTypeApi, updateBusinessFacilityApi, publishBusinessFacilityApi } from "../../services/facilityApi"
@@ -2319,6 +2320,9 @@ export default function BusinessApp({
   const [viewFacilityModal, setViewFacilityModal] = useState<boolean>(false)
 
   const [selectedFacility, setSelectedFacility] = useState<any | null>(null)
+  const selectedFacilityLifecycle = facilityLifecycleSummary?.facilityId === selectedFacility?.id ? facilityLifecycleSummary : null
+  const currentFacilityStatus: Facility['status'] | undefined = selectedFacilityLifecycle?.status ?? selectedFacility?.status
+  const canPauseFacility = !!selectedFacilityLifecycle && currentFacilityStatus !== 'maintenance' && currentFacilityStatus !== 'inactive'
 
   const [downloadingExcel, setDownloadingExcel] = useState<boolean>(false)
 
@@ -3554,7 +3558,7 @@ export default function BusinessApp({
   }
 
   const handleDeactivateFacility = async () => {
-    if (!selectedFacility) return
+    if (!selectedFacility || deleteFacilityBusy || !canPauseFacility) return
     setDeleteFacilityBusy(true)
     setDeleteFacilityError(null)
 
@@ -3640,7 +3644,8 @@ export default function BusinessApp({
   }
 
   const handleRestoreFacility = async () => {
-    if (!selectedFacility) return
+    if (!selectedFacility || deleteFacilityBusy || !selectedFacilityLifecycle) return
+    const reopeningBookings = selectedFacilityLifecycle.status === 'maintenance'
     setDeleteFacilityBusy(true)
     setDeleteFacilityError(null)
     try {
@@ -3653,12 +3658,12 @@ export default function BusinessApp({
         updateFacility(selectedFacility.id, { status: restored.status }, user)
         setFacilityLifecycleSummary(summary => summary ? { ...summary, status: restored.status } : summary)
         showToast(restored.status === 'active'
-          ? `Đã khôi phục cơ sở "${selectedFacility.name}".`
+          ? reopeningBookings ? `Cơ sở "${selectedFacility.name}" đã mở lại nhận đơn.` : `Đã khôi phục cơ sở "${selectedFacility.name}".`
           : `Đã khôi phục cấu hình cơ sở "${selectedFacility.name}". Cần hoàn tất định giá trước khi công bố lại.`)
       } else {
         updateFacility(selectedFacility.id, { status: 'active' }, user)
         setFacilityLifecycleSummary(summary => summary ? { ...summary, status: 'active' } : summary)
-        showToast(`Đã khôi phục cơ sở "${selectedFacility.name}".`)
+        showToast(reopeningBookings ? `Cơ sở "${selectedFacility.name}" đã mở lại nhận đơn.` : `Đã khôi phục cơ sở "${selectedFacility.name}".`)
       }
       setDeleteFacilityModal(false)
     } catch (error) {
@@ -3992,37 +3997,13 @@ export default function BusinessApp({
                       <div className="flex-1 min-w-0 space-y-3">
                         {/* Hàng 1: Mã cơ sở + Tên + Badge trạng thái */}
                         <div className="flex flex-wrap items-center gap-3">
-                          <span className="font-mono text-xs font-bold px-2.5 py-1 rounded bg-amber-100/80 text-amber-900 border border-amber-300">
+                          <span className="rounded-full border border-amber-300 bg-amber-100/80 px-3 py-1 font-mono text-xs font-bold text-amber-900">
                             {facCode}
                           </span>
                           <h3 className="font-bold text-slate-900 text-lg leading-snug">
                             {cleanF.name}
                           </h3>
-                          <Badge
-                            variant={
-                              cleanF.status === "active"
-                                ? "success"
-                                : cleanF.status === "inactive"
-                                  ? "muted"
-                                  : "warning"
-                            }
-                          >
-                            {cleanF.status === "active"
-                              ? lang === "vi"
-                                ? "Đang hoạt động"
-                                : "Active"
-                              : cleanF.status === "inactive"
-                                ? lang === "vi"
-                                  ? "Đã ngừng hoạt động"
-                                  : "Inactive"
-                                : cleanF.status === "maintenance"
-                                  ? lang === "vi"
-                                    ? "Đang bảo trì"
-                                    : "Maintenance"
-                                  : lang === "vi"
-                                    ? "Đang thiết lập"
-                                    : "Setting up"}
-                          </Badge>
+                          <FacilityStatusTag status={cleanF.status} lang={lang} />
                         </div>
 
                         {/* Thông tin cơ sở */}
@@ -4039,7 +4020,7 @@ export default function BusinessApp({
                               (u.facilityId === f.id || u.facilityId === f.code) &&
                               ((u as any).sizeCode || (u as any).size || ({ Small: "S", Medium: "M", Large: "L", "Extra Large": "XL" } as Record<string, string>)[String(u.type)]) === size
                             ).length
-                            return count > 0 ? <span key={size} className="rounded border border-stone-200 bg-stone-50 px-2 py-1">{size}: {count} kho</span> : null
+                            return count > 0 ? <span key={size} className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 font-bold">{size}: {count} kho</span> : null
                           })}
                         </div>
 
@@ -4061,7 +4042,7 @@ export default function BusinessApp({
                                 onClick={() => {
                                   setPage("policies")
                                 }}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-900 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 transition cursor-pointer"
+                                className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-900 transition cursor-pointer hover:border-emerald-300 hover:bg-emerald-100"
                                 title={lang === "vi" ? "Xem và quản lý các gói thuê của cơ sở này" : "View and manage packages for this facility"}
                               >
                                 <span>
@@ -6149,33 +6130,38 @@ export default function BusinessApp({
           }
         }}
         title={lang === "vi" ? "Trạng thái hoạt động cơ sở" : "Facility status"}
+        titleAdornment={currentFacilityStatus && <FacilityStatusTag status={currentFacilityStatus} lang={lang} />}
       >
         {selectedFacility && (
           <div className="space-y-4">
             <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-700">
-              Cơ sở <b>{selectedFacility.name}</b> · mã <span className="font-mono">{selectedFacility.code || selectedFacility.id}</span>
+              <p>Cơ sở <b>{selectedFacility.name}</b> · mã <span className="font-mono">{selectedFacility.code || selectedFacility.id}</span></p>
             </div>
 
-            {facilityLifecycleSummary ? <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+            {selectedFacilityLifecycle ? <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
               {[
-                ['Đơn giữ kho chờ', facilityLifecycleSummary.pendingHoldCount],
-                ['Đơn đặt kho xử lý', facilityLifecycleSummary.processingReservationCount],
-                ['Hợp đồng hiệu lực', facilityLifecycleSummary.activeContractCount],
-                ['Thanh toán tồn đọng', facilityLifecycleSummary.outstandingPaymentCount],
-                ['Hoàn tiền tồn đọng', facilityLifecycleSummary.outstandingRefundCount],
+                ['Đơn giữ kho chờ', selectedFacilityLifecycle.pendingHoldCount],
+                ['Đơn đặt kho xử lý', selectedFacilityLifecycle.processingReservationCount],
+                ['Hợp đồng hiệu lực', selectedFacilityLifecycle.activeContractCount],
+                ['Thanh toán tồn đọng', selectedFacilityLifecycle.outstandingPaymentCount],
+                ['Hoàn tiền tồn đọng', selectedFacilityLifecycle.outstandingRefundCount],
               ].map(([label, value]) => <div key={String(label)} className="rounded-lg border border-stone-200 bg-white p-3">
                 <p className="text-xs text-stone-500">{label}</p>
                 <p className="mt-1 text-lg font-bold text-stone-900">{Number(value).toLocaleString('vi-VN')}</p>
               </div>)}
             </div> : <p className="text-sm text-stone-500">Đang kiểm tra số liệu giao dịch...</p>}
 
-            {facilityLifecycleSummary && facilityLifecycleSummary.status !== 'inactive' && !(
-              facilityLifecycleSummary.pendingHoldCount === 0 &&
-              facilityLifecycleSummary.processingReservationCount === 0 &&
-              facilityLifecycleSummary.activeContractCount === 0 &&
-              facilityLifecycleSummary.outstandingPaymentCount === 0 &&
-              facilityLifecycleSummary.outstandingRefundCount === 0
-            ) && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Cơ sở còn giao dịch đang xử lý. Chỉ được tạm ngưng nhận đơn mới, chưa được lưu trữ.</p>}
+            {selectedFacilityLifecycle && currentFacilityStatus !== 'inactive' && !(
+              selectedFacilityLifecycle.pendingHoldCount === 0 &&
+              selectedFacilityLifecycle.processingReservationCount === 0 &&
+              selectedFacilityLifecycle.activeContractCount === 0 &&
+              selectedFacilityLifecycle.outstandingPaymentCount === 0 &&
+              selectedFacilityLifecycle.outstandingRefundCount === 0
+            ) && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              {currentFacilityStatus === 'maintenance'
+                ? 'Cơ sở còn giao dịch đang xử lý. Vui lòng xử lý xong trước khi lưu trữ.'
+                : 'Cơ sở còn giao dịch đang xử lý. Chỉ được tạm ngưng nhận đơn mới, chưa được lưu trữ.'}
+            </p>}
 
             {/* Thông báo lỗi inline nếu có */}
             {deleteFacilityError && (
@@ -6203,18 +6189,18 @@ export default function BusinessApp({
                 {confirmFacilityArchive ? 'Quay lại' : 'Đóng'}
               </Button>
 
-              {!confirmFacilityArchive && facilityLifecycleSummary?.status !== 'inactive' && (
+              {!confirmFacilityArchive && currentFacilityStatus !== 'inactive' && (
                 <Button
-                  variant="outline"
-                  disabled={deleteFacilityBusy}
-                  className="border-amber-300 text-amber-800"
-                  onClick={handleDeactivateFacility}
+                  variant={currentFacilityStatus === 'maintenance' ? 'primary' : 'outline'}
+                  disabled={deleteFacilityBusy || (currentFacilityStatus === 'maintenance' ? !selectedFacilityLifecycle : !canPauseFacility)}
+                  className={currentFacilityStatus === 'maintenance' ? undefined : 'border-amber-300 text-amber-800 disabled:opacity-50'}
+                  onClick={currentFacilityStatus === 'maintenance' ? handleRestoreFacility : handleDeactivateFacility}
                 >
-                  {deleteFacilityBusy ? "Đang xử lý" : "Tạm ngưng nhận đơn mới"}
+                  {deleteFacilityBusy ? 'Đang xử lý' : currentFacilityStatus === 'maintenance' ? 'Hoạt động lại' : 'Tạm ngưng nhận đơn mới'}
                 </Button>
               )}
 
-              {facilityLifecycleSummary?.status === 'inactive' ? (
+              {selectedFacilityLifecycle?.status === 'inactive' ? (
                 <Button
                   variant="primary"
                   disabled={deleteFacilityBusy}
@@ -6222,7 +6208,7 @@ export default function BusinessApp({
                 >
                   {deleteFacilityBusy ? "Đang xử lý" : "Khôi phục hoạt động"}
                 </Button>
-              ) : facilityLifecycleSummary && facilityLifecycleSummary.pendingHoldCount === 0 && facilityLifecycleSummary.processingReservationCount === 0 && facilityLifecycleSummary.activeContractCount === 0 && facilityLifecycleSummary.outstandingPaymentCount === 0 && facilityLifecycleSummary.outstandingRefundCount === 0 ? (
+              ) : selectedFacilityLifecycle && selectedFacilityLifecycle.pendingHoldCount === 0 && selectedFacilityLifecycle.processingReservationCount === 0 && selectedFacilityLifecycle.activeContractCount === 0 && selectedFacilityLifecycle.outstandingPaymentCount === 0 && selectedFacilityLifecycle.outstandingRefundCount === 0 ? (
                 <Button
                   variant="primary"
                   disabled={deleteFacilityBusy}

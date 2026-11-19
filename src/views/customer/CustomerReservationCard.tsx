@@ -53,6 +53,7 @@ interface Props {
   unitTypeName: string
   facilityDetails?: Pick<CustomerFacility, 'address' | 'city' | 'phone' | 'accessHours'> | null
   unitTypeDetails?: Pick<CustomerUnitType, 'lengthM' | 'widthM' | 'heightM' | 'volumeM3' | 'rackCount' | 'rackLengthM' | 'rackWidthM' | 'rackHeightM' | 'maxLoadKg'> | null
+  onRequestSupport?: () => void
   facility?: Facility
   unitType?: UnitType
   onVerify: () => void
@@ -63,7 +64,7 @@ interface Props {
   visualTone?: 'active' | 'expired' | 'completed'
 }
 
-export default function CustomerReservationCard({ reservation: r, facilityName, unitTypeName, facilityDetails, unitTypeDetails, facility, unitType, onVerify, onCancel, onDelete, onRefresh, onReceiptConfirmed, visualTone = 'active' }: Props) {
+export default function CustomerReservationCard({ reservation: r, facilityName, unitTypeName, facilityDetails, unitTypeDetails, facility, unitType, onVerify, onCancel, onDelete, onRefresh, onReceiptConfirmed, onRequestSupport, visualTone = 'active' }: Props) {
   const [activeSection, setActiveSection] = useState<'information' | 'quote'>('information')
   const [detail, setDetail] = useState<CustomerReservationDetail | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -111,6 +112,10 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const calculatedGoodsWeightKg = goodsItems.reduce((total, item) => total + item.quantity * item.weightPerItemKg, 0)
   const formatMeasurement = formatGoodsVolume
   const savedQuote = savedReservationQuote(detail?.reservation ?? r)
+  const displayedFacility = r.facilitySnapshot || detail?.currentFacility || facilityDetails
+  const displayedUnitType = r.unitTypeSnapshot || detail?.currentUnitType || unitTypeDetails
+  const displayedFacilityName = r.facilitySnapshot?.name || detail?.currentFacility?.name || facilityName
+  const displayedUnitTypeName = r.unitTypeSnapshot?.name || detail?.currentUnitType?.name || unitTypeName
   const beginSetupGoodsEdit = () => {
     setSetupGoodsDraft(goodsItems.map(item => ({
       catalogCategoryId: item.catalogCategoryId,
@@ -330,7 +335,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
           <span className="text-xs font-bold text-amber-700">{r.reservationCode}</span>
           <span className={`rounded px-2.5 py-1 text-xs font-bold ${progress !== null && progress >= 3 ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{reservationStatusLabels[r.status]}</span>
         </div>
-        <h2 className="mt-1 text-lg font-bold text-stone-900">{unitTypeName} · {facilityName}</h2>
+        <h2 className="mt-1 text-lg font-bold text-stone-900">{displayedUnitTypeName} · {displayedFacilityName}</h2>
         <div className="mt-3 space-y-2">
           <p className="text-xs leading-5 text-stone-600">{savedQuote?.rentalPeriodConfirmed ? 'Lịch thuê đã chốt:' : 'Lịch thuê dự kiến sau thời gian chuẩn bị:'} <b className="text-stone-900">{formatDisplayDate(savedQuote?.startDate || r.startDate)} đến {formatDisplayDate(savedQuote?.endDate || r.endDate)}</b></p>
           <p className="text-xs leading-5 text-blue-800">Lịch nhận kho khách đặt: <b>{savedAppointmentAt ? formatCustomerDateTime(new Date(savedAppointmentAt)) : 'Chưa đặt lịch'}</b></p>
@@ -340,10 +345,11 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         <div className="text-right"><p className="text-xs text-stone-500">Tổng thu cả kỳ (gồm tiền cọc đảm bảo kho)</p><p className="text-xl font-bold text-stone-900">{(r.totalInitialObligation == null ? "Chưa xác định" : formatVnd(r.totalInitialObligation))}</p><p className="text-xs text-amber-800">Trả lúc giữ chỗ: {(r.reservationDepositAmount == null ? "Chưa xác định" : formatVnd(r.reservationDepositAmount))}</p></div>
         {r.status === 'AWAITING_EMAIL' && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-right text-xs text-amber-950"><p className="font-bold">Cần xác minh email</p><p className="mt-1">Thời gian giữ đơn còn lại</p><p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{countdown.text}</p><Button className="mt-2" size="sm" disabled={countdown.expired} onClick={onVerify}>Xác minh email</Button></div>}
         {r.status === 'AWAITING_REVIEW' && <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950"><p className="font-bold">Đang chờ nhân viên cơ sở duyệt hàng hóa</p><p className="mt-1">Thời gian giữ hồ sơ còn lại</p><p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{countdown.text}</p><p className="mt-1">Tối đa 24 giờ từ khi xác minh email.</p></div>}
-        <CustomerReservationPayment reservation={r} facilityName={facilityName} unitTypeName={unitTypeName} paymentExpiresAt={detail?.paymentExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />
+        <CustomerReservationPayment reservation={r} facilityName={displayedFacilityName} unitTypeName={displayedUnitTypeName} paymentExpiresAt={detail?.paymentExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />
         {r.status === 'AWAITING_CUSTOMER_RECEIPT' && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-right text-xs text-amber-950"><p className="font-bold">Nhân viên đã hoàn tất bàn giao</p><p className="mt-1">Vui lòng xác nhận bạn đã nhận kho và mã ra vào.</p><Button type="button" className="mt-2" size="sm" disabled={confirmingReceipt} onClick={() => void confirmReceipt()}>{confirmingReceipt ? 'Đang xác nhận…' : 'Xác nhận đã nhận kho'}</Button></div>}
         {documentAvailable && <Button variant="outline" size="sm" className="reservation-action reservation-action-document min-h-10 w-full justify-center" disabled={busy} onClick={() => void prepareBookingDocument()}>{busy ? 'Đang chuẩn bị…' : 'Xem phiếu giữ kho'}</Button>}
         {handoverDocumentsAvailable && <Button variant="outline" size="sm" className="min-h-10 w-full justify-center" disabled={busy} onClick={() => void loadHandoverDocuments()}>{busy ? 'Đang tải…' : 'Xem hợp đồng đã ký'}</Button>}
+        {onRequestSupport && <Button type="button" variant="outline" size="sm" className="min-h-10 w-full justify-center" onClick={onRequestSupport}>Hỗ trợ đơn này</Button>}
         {['PAYMENT_GRACE', 'PAYMENT_REVIEW'].includes(r.status) && <CustomerPaymentComplaint reservation={r} complaintExpiresAt={detail?.complaintExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />}
         {APPOINTMENT_EDITABLE_STATUSES.some(status => status === r.status) && <Button variant="ghost" size="sm" className="reservation-action reservation-action-cancel" onClick={() => setCancelConfirmOpen(true)}>Hủy giữ kho</Button>}
         {['EXPIRED', 'COMPLETED'].includes(r.status) && onDelete && <Button variant="danger" size="sm" className="min-h-10 w-full justify-center" onClick={() => setDeleteConfirmOpen(true)}>Xóa đơn đặt giữ kho</Button>}
@@ -357,7 +363,18 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
           </section>
           <section>
             <h3 className="font-bold text-stone-900">Thông tin kho</h3>
-            <div className="mt-2 space-y-1"><p><b>Địa chỉ:</b> {facilityDetails ? `${facilityDetails.address}, ${facilityDetails.city}` : 'Chưa cập nhật'}</p><p><b>Liên hệ:</b> {facilityDetails?.phone || 'Chưa cập nhật'}</p><p><b>Giờ hoạt động:</b> {facilityDetails?.accessHours || 'Chưa cập nhật'}</p>{unitTypeDetails && <><p><b>Kích thước kho:</b> {unitTypeDetails.lengthM} × {unitTypeDetails.widthM} × {unitTypeDetails.heightM} m · {unitTypeDetails.volumeM3} m³</p><p><b>Khung:</b> {unitTypeDetails.rackCount} khung · {unitTypeDetails.rackLengthM} × {unitTypeDetails.rackWidthM} × {unitTypeDetails.rackHeightM} m/khung</p><p><b>Tải trọng:</b> {unitTypeDetails.maxLoadKg.toLocaleString('vi-VN')} kg</p></>}{r.assignedUnitCode && <p><b>Gian kho đã phân:</b> {r.assignedUnitCode}{r.assignedUnitStatus ? ` (${r.assignedUnitStatus})` : ''}</p>}</div>
+            <div className="mt-2 space-y-1">
+              <p><b>Địa chỉ:</b> {[displayedFacility?.address, displayedFacility?.city].filter(Boolean).join(', ') || 'Chưa cập nhật'}</p>
+              <p><b>Liên hệ:</b> {displayedFacility?.phone || 'Chưa cập nhật'}</p>
+              <p><b>Giờ hoạt động:</b> {displayedFacility?.accessHours || 'Chưa cập nhật'}</p>
+              {displayedUnitType && <>
+                <p><b>Kích thước kho:</b> {displayedUnitType.lengthM} × {displayedUnitType.widthM} × {displayedUnitType.heightM} m · {displayedUnitType.volumeM3} m³</p>
+                {displayedUnitType.rackCount != null && <p><b>Khung:</b> {displayedUnitType.rackCount} khung{displayedUnitType.rackLengthM != null && displayedUnitType.rackWidthM != null && displayedUnitType.rackHeightM != null
+                  ? ` · ${displayedUnitType.rackLengthM} × ${displayedUnitType.rackWidthM} × ${displayedUnitType.rackHeightM} m/khung` : ''}</p>}
+                {displayedUnitType.maxLoadKg != null && <p><b>Tải trọng:</b> {displayedUnitType.maxLoadKg.toLocaleString('vi-VN')} kg</p>}
+              </>}
+              {r.assignedUnitCode && <p><b>Gian kho đã phân:</b> {r.assignedUnitCode}{r.assignedUnitStatus ? ` (${r.assignedUnitStatus})` : ''}</p>}
+            </div>
           </section>
         </div>
         <div className="mt-3 space-y-4">

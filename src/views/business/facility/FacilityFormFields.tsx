@@ -419,11 +419,20 @@ const facilityStatusLabels = {
   inactive: { vi: 'Ngừng hoạt động', en: 'Inactive' },
 }
 
-const facilityStatusHighlight = {
-  setup: 'border-sky-200 bg-sky-50 text-sky-900',
-  active: 'border-emerald-200 bg-emerald-50 text-emerald-900',
-  maintenance: 'border-amber-200 bg-amber-50 text-amber-900',
-  inactive: 'border-stone-300 bg-stone-100 text-stone-800',
+const facilityStatusPillColors = {
+  setup: 'bg-sky-200 text-sky-950',
+  active: 'bg-emerald-200 text-emerald-950',
+  maintenance: 'bg-amber-200 text-amber-950',
+  inactive: 'bg-stone-200 text-stone-900',
+}
+
+export function FacilityStatusTag({ status, lang }: {
+  status: FacilityOperationsProps['status']
+  lang: 'vi' | 'en'
+}) {
+  return <span className={`inline-flex max-w-full rounded-full px-3 py-1 text-xs font-bold ${facilityStatusPillColors[status]}`}>
+    {facilityStatusLabels[status][lang]}
+  </span>
 }
 
 const parseHours = (raw: string) => {
@@ -564,9 +573,7 @@ export const FacilityOperations: React.FC<FacilityOperationsProps> = ({
             <dt className="text-[11px] font-medium text-stone-500">
               {lang === 'vi' ? 'Trạng thái hoạt động' : 'Operating status'}
             </dt>
-            <dd className={`inline-flex max-w-full rounded-md border px-2.5 py-1 text-sm font-semibold ${facilityStatusHighlight[status]}`}>
-              {facilityStatusLabels[status][lang]}
-            </dd>
+            <dd><FacilityStatusTag status={status} lang={lang} /></dd>
           </dl>
         )}
       </div>
