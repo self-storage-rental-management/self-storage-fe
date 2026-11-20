@@ -20,9 +20,10 @@ describe('authoritative backend pricing', () => {
     expect(html).not.toContain('40%')
     expect(html).not.toContain('166.452.000.000')
   })
-  it('requires verified email and staff approval for OTHER without opening payment early', () => {
+  it('requires staff approval for OTHER without opening payment early', () => {
     const html = renderToStaticMarkup(<ReservationQuoteSummary quote={quote} needsReview />)
-    expect(html).toContain('tài khoản đã xác minh email')
+    expect(html).toContain('Hàng hóa “Khác” được chuyển hồ sơ trực tiếp cho nhân viên cơ sở duyệt')
+    expect(html).not.toContain('tài khoản đã xác minh email')
     expect(html).not.toContain('xác minh OTP')
     expect(html).toContain('nhân viên cơ sở duyệt')
     expect(html).toContain('Chưa thu cọc')
