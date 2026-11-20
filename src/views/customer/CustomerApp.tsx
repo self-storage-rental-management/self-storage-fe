@@ -504,7 +504,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         growth: 0,
         manager: '',
         status: facility.status === 'maintenance' ? 'maintenance' : 'active',
-        accessHours: facility.accessHours || 'Chưa cập nhật',
+        accessHours: '24/7',
         timezone: 'Asia/Ho_Chi_Minh',
       }))
     : isApiAuthenticated() ? [] : sharedFacilities, [backendFacilities, backendUnitTypes, availabilityByUnitType, sharedFacilities])
@@ -2602,7 +2602,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   address: reservation.facilitySnapshot.address || 'Chưa cập nhật',
                   city: reservation.facilitySnapshot.city || '',
                   phone: reservation.facilitySnapshot.phone || null,
-                  accessHours: reservation.facilitySnapshot.accessHours || null,
+                  accessHours: "24/7",
                 } : backendFacilities.find(item => item.id === reservation.facilityId) || null}
                 unitTypeDetails={reservation.unitTypeSnapshot ? {
                   lengthM: reservation.unitTypeSnapshot.lengthM,
