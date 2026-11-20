@@ -608,69 +608,8 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
         const projectedRefund = Math.max(0, deposit - totalFees)
         const projectedDue = Math.max(0, totalFees - deposit)
 
-        const handleQuickStandardPass = () => {
-          setFees({ damageFee: 0, cleaningFee: 0, lostItemFee: 0, overdueFee: 0, outstandingFee: 0 })
-          setInventory('match')
-          setDamage('no_damage')
-          setReturned({ returnedKey: true, returnedCard: true, returnedLock: true })
-          setUnit('available')
-          if (record.setupExitRequested) setVacatedReturnId(id)
-          const standardNote = 'Gian kho sạch sẽ, nguyên vẹn. Đã thu hồi đủ chìa khóa, thẻ từ và ổ khóa. Kho đạt chuẩn hoàn cọc 100%.'
-          setNote(standardNote)
-          void run(async () => {
-            return inspectReturn(id, {
-              damageFee: 0,
-              cleaningFee: 0,
-              lostItemFee: 0,
-              overdueFee: 0,
-              outstandingFee: 0,
-              inventoryMatch: 'match',
-              damageClassification: 'no_damage',
-              staffNotes: standardNote,
-              evidencePhotos: [],
-              returnedKey: true,
-              returnedCard: true,
-              returnedLock: true,
-              proposedUnitStatus: 'available',
-              unitVacated: true,
-            })
-          })
-        }
-
         return (
           <div className="space-y-4">
-            {/* 1-Click Fast Pass Banner for Staff */}
-            {canInspect && !recovery && (
-              <div className="rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 via-teal-50 to-white p-4 shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white text-lg shadow-sm">
-                      
-                    </span>
-                    <div>
-                      <h4 className="font-bold text-stone-900 text-sm">Nghiệm thu đạt chuẩn (Kho nguyên vẹn)</h4>
-                      <p className="text-xs text-stone-600">
-                        Nếu gian kho sạch đẹp, khách bàn giao đủ chìa/thẻ và không có hư hại, bạn có thể duyệt hoàn cọc 100% với 1 chạm.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="primary"
-                      size="sm"
-                      disabled={busy}
-                      onClick={handleQuickStandardPass}
-                      className="!bg-emerald-600 hover:!bg-emerald-700 text-white font-bold px-4 py-2 shadow-sm flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-                    >
-                      Nghiệm thu đạt chuẩn & Hoàn cọc 100%
-                    </Button>
-
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Form Nghiệm Thu 2 Cột */}
             <form onSubmit={(event) => {
               event.preventDefault()
@@ -1012,28 +951,6 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
           </div>
         )
       })()}
-      {role === 'staff' && !recovery && record.status === 'awaiting_customer_confirmation' && (
-        <div className="rounded-xl border border-amber-300 bg-amber-50/80 p-3.5 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-amber-900">Đang chờ khách hàng xác nhận quyết toán</span>
-            <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800 border border-emerald-300">Có thể duyệt hoàn tất ngay</span>
-          </div>
-          <p className="text-xs text-amber-800">
-            Biên bản nghiệm thu đã lập. Bạn có thể xác nhận cho phép trả kho và hoàn tất hồ sơ ngay mà không cần đợi thêm.
-          </p>
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant="primary"
-              disabled={busy}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer"
-              onClick={() => void run(() => confirmReturn(id, 'accepted', note.trim() || 'Nhân viên hỗ trợ xác nhận quyết toán trực tiếp tại quầy', role))}
-            >
-              Xác nhận hoàn tất trả kho ngay
-            </Button>
-          </div>
-        </div>
-      )}
       {write && !recovery && role === 'staff' && ['payment_due', 'refund_pending'].includes(record.status) && (
         <RecoveryReturnSettlement
           role={role}
@@ -1052,7 +969,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       {role === 'customer' && record.status === 'awaiting_customer_confirmation' && (
         <div className="space-y-2">
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900">
-            <b>Thời hạn phản hồi (SLA 72 giờ):</b> Quý khách vui lòng kiểm tra biên bản và phản hồi trong vòng 72 giờ. Sau thời gian này, hệ thống sẽ tự động chốt quyết toán theo biên bản nghiệm thu.
+            <b>Thời hạn phản hồi:</b> Quý khách vui lòng kiểm tra biên bản và phản hồi trong vòng 72 giờ. Sau thời gian này, hệ thống sẽ tự động chốt quyết toán theo biên bản nghiệm thu.
           </div>
           <div className="flex gap-2">
             <Button disabled={busy || !note.trim()} onClick={() => void run(() => confirmReturn(id, 'disputed', note))}>Yêu cầu xem xét lại</Button>
@@ -1062,7 +979,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       )}
       {record.customerDecisionNote && record.customerDecisionNote.includes('Auto-Settlement SLA') && (
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-2.5 text-xs text-blue-800">
-          Quyết toán này đã được hệ thống <b>tự động xác nhận (Auto-Settlement SLA 72h)</b> do quá hạn phản hồi của khách hàng.
+          Quyết toán này đã được hệ thống <b>tự động xác nhận</b> do quá hạn phản hồi của khách hàng.
         </div>
       )}
     </section>
