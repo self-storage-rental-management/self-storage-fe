@@ -466,7 +466,7 @@ export default function StaffCheckInOperationsPanel({
       normalizeIdentityDocument(declaredIdentityDocument) !==
         normalizeIdentityDocument(identityDocumentNumber),
   )
-  const identityVerificationBlocked = !normalizeIdentityDocument(identityDocumentNumber) || identityMismatch
+  const identityVerificationBlocked = !normalizeIdentityDocument(identityDocumentNumber)
 
   const refresh = () => setRefreshKey((value) => value + 1)
 
@@ -609,10 +609,9 @@ export default function StaffCheckInOperationsPanel({
       identityVerificationBlocked
     ) return
 
-    const declaredIdentity = normalizeIdentityDocument(handoverTarget.identityDocumentNumber)
     const providedIdentity = normalizeIdentityDocument(identityDocumentNumber)
-    if (!providedIdentity || (declaredIdentity && declaredIdentity !== providedIdentity)) {
-      setError("CCCD/CMND không khớp thông tin đơn đặt kho. Chưa thể tiếp tục bàn giao.")
+    if (!providedIdentity) {
+      setError("CCCD/CMND không được để trống.")
       return
     }
 
@@ -1297,10 +1296,31 @@ export default function StaffCheckInOperationsPanel({
               <div className="space-y-4">
                 <div className="grid gap-3 rounded-lg border border-stone-200 p-4 text-sm md:grid-cols-3">
                   <div><span className="text-stone-500">Khách hàng</span><p className="font-semibold">{handoverTarget.customerName}</p></div>
-                  <div><span className="text-stone-500">CCCD/CMND đã khai báo</span><p className="font-semibold">{declaredIdentityDocument || "Chưa có dữ liệu"}</p></div>
+                  <div>
+                    <span className="text-stone-500">CCCD/CMND đã khai báo</span>
+                    <p className="font-semibold">{declaredIdentityDocument || "Chưa có dữ liệu"}</p>
+                    {identityMismatch && !isReviewingCompletedStep && (
+                      <button
+                        type="button"
+                        onClick={() => setIdentityDocumentNumber(declaredIdentityDocument)}
+                        className="mt-1 text-xs text-amber-700 hover:text-amber-800 underline"
+                      >
+                        Khôi phục số đã khai báo
+                      </button>
+                    )}
+                  </div>
                   <Input label="CCCD/CMND trên giấy tờ gốc *" value={identityDocumentNumber} disabled={isReviewingCompletedStep} onChange={(event) => setIdentityDocumentNumber(event.target.value)} />
                 </div>
-                {identityMismatch && <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">Số giấy tờ không khớp với đơn đặt kho. Vui lòng kiểm tra lại trước khi chuyển sang bước ký hợp đồng.</p>}
+                {identityMismatch && (
+                  <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+                    <p className="font-semibold flex items-center gap-1.5">
+                      <span>⚠️</span> Số giấy tờ gốc khác với thông tin đã khai báo ban đầu ({declaredIdentityDocument || "chưa khai báo"}).
+                    </p>
+                    <p className="mt-1 text-xs text-amber-900 leading-relaxed">
+                      Nhân viên đã đối chiếu giấy tờ gốc thực tế. Khi bấm <b>Xác nhận và tiếp tục</b>, hệ thống sẽ tự động cập nhật số CCCD/CMND mới ({identityDocumentNumber.trim()}) vào hồ sơ đơn hàng và lưu lịch sử xác minh.
+                    </p>
+                  </div>
+                )}
                 <div className="grid gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm sm:grid-cols-2">
                   <label className="flex items-center gap-2"><input type="checkbox" disabled={isReviewingCompletedStep} checked={checklist.identityVerified && checklist.reservationMatched} onChange={(event) => setChecklist((value) => ({ ...value, identityVerified: event.target.checked, reservationMatched: event.target.checked }))} />Đã kiểm tra giấy tờ gốc và đối chiếu khách hàng với đơn đặt kho *</label>
                 </div>
