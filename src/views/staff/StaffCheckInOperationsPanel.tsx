@@ -35,6 +35,7 @@ import {
 } from "../../components/ui"
 
 import {
+  extractStaffFieldErrors,
   formatStaffDateTime,
   staffCheckInStatusLabel,
   staffErrorMessage,
@@ -236,6 +237,16 @@ export default function StaffCheckInOperationsPanel({
   const [handoverStep, setHandoverStep] = useState(1)
 
   const [checklist, setChecklist] = useState<CheckInChecklist>(emptyChecklist)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+
+  const clearFieldError = (fieldName: string) => {
+    setFieldErrors((prev) => {
+      if (!prev[fieldName]) return prev
+      const next = { ...prev }
+      delete next[fieldName]
+      return next
+    })
+  }
 
   const [identityDocumentNumber, setIdentityDocumentNumber] = useState("")
 
@@ -536,6 +547,7 @@ export default function StaffCheckInOperationsPanel({
   const closeHandover = () => {
     if (submitting) return
     setError(null)
+    setFieldErrors({})
     setCustomerWaitTarget(null)
     setShowCustomerReadyModal(false)
     setHandoverTarget(null)
@@ -590,30 +602,79 @@ export default function StaffCheckInOperationsPanel({
   }
 
   const fail = (reason: unknown, fallback: string) => {
+    const fields = extractStaffFieldErrors(reason)
+    if (Object.keys(fields).length > 0) {
+      setFieldErrors(fields)
+    }
     const message = staffErrorMessage(reason, fallback)
     setError(message)
     showToast(message)
   }
 
   const submitHandover = async () => {
-    const hasKeyLock = Boolean(keyLockReference.trim())
-    if (
-      !handoverTarget?.checkInId ||
-      !allChecksComplete ||
-      !hasKeyLock ||
-      !Number.isFinite(Number(lengthCm)) ||
-      !Number.isFinite(Number(widthCm)) ||
-      !Number.isFinite(Number(heightCm)) ||
-      !Number.isFinite(Number(weightKg)) ||
-      !Number.isFinite(Number(volumeM3)) ||
-      identityVerificationBlocked
-    ) return
+    setFieldErrors({})
+    setError(null)
+
+    const errors: Record<string, string> = {}
+    const parsedLength = Number(lengthCm)
+    const parsedWidth = Number(widthCm)
+    const parsedHeight = Number(heightCm)
+    const parsedWeight = Number(weightKg)
+    const parsedPackages = Number(packageCount)
+
+    if (!lengthCm.trim() || !Number.isFinite(parsedLength) || parsedLength <= 0) {
+      errors.lengthCm = "Chiều dài thực tế phải là số lớn hơn 0"
+    }
+    if (!widthCm.trim() || !Number.isFinite(parsedWidth) || parsedWidth <= 0) {
+      errors.widthCm = "Chiều rộng thực tế phải là số lớn hơn 0"
+    }
+    if (!heightCm.trim() || !Number.isFinite(parsedHeight) || parsedHeight <= 0) {
+      errors.heightCm = "Chiều cao thực tế phải là số lớn hơn 0"
+    }
+    if (!weightKg.trim() || !Number.isFinite(parsedWeight) || parsedWeight <= 0) {
+      errors.weightKg = "Khối lượng thực tế phải là số lớn hơn 0"
+    }
+    if (!packageCount.trim() || !Number.isFinite(parsedPackages) || parsedPackages < 1) {
+      errors.packageCount = "Số kiện phải từ 1 trở lên"
+    }
+    if (!goodsCategory.trim()) {
+      errors.goodsCategory = "Vui lòng nhập loại hàng"
+    }
+    if (!goodsCondition.trim()) {
+      errors.goodsCondition = "Vui lòng nhập tình trạng hàng hóa"
+    }
+    if (!checklist.conditionRecorded) {
+      errors.conditionRecorded = "Vui lòng đánh dấu đã ghi nhận tình trạng hàng hóa"
+    }
+    if (!Object.values(measurementChecks).every(Boolean)) {
+      errors.measurementChecks = "Vui lòng tích xác nhận đã đối chiếu đủ số kiện, khối lượng, thể tích và kích thước"
+    }
+    if (measurementVariance) {
+      if (!varianceAccepted) {
+        errors.varianceAccepted = "Cần trao đổi với khách và đánh dấu chấp nhận chênh lệch"
+      }
+      if (!varianceReason.trim()) {
+        errors.varianceReason = "Vui lòng nhập lý do chênh lệch khi hàng hóa khác đơn đặt"
+      }
+    }
+    if (!evidenceFiles.length && !evidenceReferences.length) {
+      errors.evidenceFiles = "Cần tải lên ít nhất 1 ảnh hoặc tệp PDF bằng chứng kiểm kê"
+    }
 
     const providedIdentity = normalizeIdentityDocument(identityDocumentNumber)
     if (!providedIdentity) {
-      setError("CCCD/CMND không được để trống.")
+      errors.identityDocumentNumber = "Số CCCD/CMND không được để trống"
+    } else if (!/^(?:\d{9}|\d{12})$/.test(providedIdentity)) {
+      errors.identityDocumentNumber = "CCCD/CMND phải gồm đúng 9 hoặc 12 chữ số"
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors)
+      setError("Một số trường thông tin chưa hợp lệ. Vui lòng kiểm tra các trường được đánh dấu đỏ bên dưới.")
       return
     }
+
+    if (!handoverTarget?.checkInId) return
 
     setSubmitting(true)
 
@@ -710,9 +771,17 @@ export default function StaffCheckInOperationsPanel({
     if (!handoverTarget?.checkInId) return
     setSubmitting(true)
     setError(null)
+    setFieldErrors({})
     try {
       let updated: CheckInCase | null = null
       if (handoverStep === 1) {
+        const normalized = normalizeIdentityDocument(identityDocumentNumber)
+        if (!normalized || !/^(?:\d{9}|\d{12})$/.test(normalized)) {
+          setFieldErrors({ identityDocumentNumber: "CCCD/CMND phải gồm đúng 9 hoặc 12 chữ số." })
+          setError("Số CCCD/CMND trên giấy tờ gốc không hợp lệ. Vui lòng nhập đúng 9 hoặc 12 chữ số.")
+          setSubmitting(false)
+          return
+        }
         updated = await verifyCheckInIdentity(handoverTarget.checkInId, {
           identityDocumentNumber: identityDocumentNumber.trim(),
           note: verificationNotes.trim() || undefined,
@@ -885,6 +954,7 @@ export default function StaffCheckInOperationsPanel({
 
   const openHandover = (item: CheckInCase) => {
     setError(null)
+    setFieldErrors({})
     setHandoverTarget(item)
     setCustomerWaitTarget(
       item.checkInStatus === "handover_pending_receipt"
@@ -1260,10 +1330,20 @@ export default function StaffCheckInOperationsPanel({
                 <div className="flex-1">
                   <b className="font-semibold text-red-900">Không thể thực hiện thao tác:</b>
                   <p className="mt-0.5 whitespace-pre-wrap">{error}</p>
+                  {Object.keys(fieldErrors).length > 0 && (
+                    <div className="mt-2.5 rounded-lg border border-red-200 bg-white/70 p-2.5">
+                      <p className="text-xs font-semibold text-red-900 mb-1">Chi tiết các trường cần kiểm tra lại:</p>
+                      <ul className="list-disc list-inside space-y-0.5 text-xs text-red-700">
+                        {Object.entries(fieldErrors).map(([key, msg]) => (
+                          <li key={key}>{msg}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
                 <button
                   type="button"
-                  onClick={() => setError(null)}
+                  onClick={() => { setError(null); setFieldErrors({}) }}
                   className="rounded px-1.5 py-0.5 text-xs font-bold text-red-500 hover:bg-red-100 hover:text-red-700"
                   aria-label="Đóng lỗi"
                 >
@@ -1302,14 +1382,26 @@ export default function StaffCheckInOperationsPanel({
                     {identityMismatch && !isReviewingCompletedStep && (
                       <button
                         type="button"
-                        onClick={() => setIdentityDocumentNumber(declaredIdentityDocument)}
+                        onClick={() => {
+                          clearFieldError("identityDocumentNumber")
+                          setIdentityDocumentNumber(declaredIdentityDocument)
+                        }}
                         className="mt-1 text-xs text-amber-700 hover:text-amber-800 underline"
                       >
                         Khôi phục số đã khai báo
                       </button>
                     )}
                   </div>
-                  <Input label="CCCD/CMND trên giấy tờ gốc *" value={identityDocumentNumber} disabled={isReviewingCompletedStep} onChange={(event) => setIdentityDocumentNumber(event.target.value)} />
+                  <Input
+                    label="CCCD/CMND trên giấy tờ gốc *"
+                    error={fieldErrors.identityDocumentNumber}
+                    value={identityDocumentNumber}
+                    disabled={isReviewingCompletedStep}
+                    onChange={(event) => {
+                      clearFieldError("identityDocumentNumber")
+                      setIdentityDocumentNumber(event.target.value)
+                    }}
+                  />
                 </div>
                 {identityMismatch && (
                   <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
@@ -1414,16 +1506,26 @@ export default function StaffCheckInOperationsPanel({
                     <div className="grid gap-3 sm:grid-cols-2">
                       <Input
                         label="Mã ổ khóa / Chìa khóa *"
+                        error={fieldErrors.keyLockReference || fieldErrors.lockReference}
                         value={keyLockReference}
                         disabled={isReviewingCompletedStep}
-                        onChange={(event) => setKeyLockReference(event.target.value)}
+                        onChange={(event) => {
+                          clearFieldError("keyLockReference")
+                          clearFieldError("lockReference")
+                          setKeyLockReference(event.target.value)
+                        }}
                         placeholder="Ví dụ: LOCK-018 hoặc KEY-A04"
                       />
                       <Input
                         label="Hiện trạng kho trống bàn giao *"
+                        error={fieldErrors.initialCondition || fieldErrors.initialUnitCondition}
                         value={initialCondition}
                         disabled={isReviewingCompletedStep}
-                        onChange={(event) => setInitialCondition(event.target.value)}
+                        onChange={(event) => {
+                          clearFieldError("initialCondition")
+                          clearFieldError("initialUnitCondition")
+                          setInitialCondition(event.target.value)
+                        }}
                         placeholder="Ghi nhận trần, sàn, vách, đèn..."
                       />
                     </div>
@@ -1576,12 +1678,78 @@ export default function StaffCheckInOperationsPanel({
               <div className="space-y-4">
                 <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-950"><b>Kiểm kê hàng hóa</b><p className="mt-1 text-xs">Chỉ đối chiếu số kiện, khối lượng, thể tích, kích thước và tình trạng hàng hóa sau khi khách đã sắp xếp xong. Hiện trạng kho trống đã được ghi nhận ở bước bàn giao.</p>{handoverTarget.inventoryDueAt && <p className="mt-1 text-xs">Hạn kiểm kê: <b>{formatStaffDateTime(handoverTarget.inventoryDueAt)}</b></p>}</div>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  <Input label="Dài thực tế (cm) *" disabled={isReviewingCompletedStep} type="number" min="0.01" value={lengthCm} onChange={(event) => { const next = event.target.value; setLengthCm(next); setVolumeM3(volumeFromDimensions(next, widthCm, heightCm)) }} />
-                  <Input label="Rộng thực tế (cm) *" disabled={isReviewingCompletedStep} type="number" min="0.01" value={widthCm} onChange={(event) => { const next = event.target.value; setWidthCm(next); setVolumeM3(volumeFromDimensions(lengthCm, next, heightCm)) }} />
-                  <Input label="Cao thực tế (cm) *" disabled={isReviewingCompletedStep} type="number" min="0.01" value={heightCm} onChange={(event) => { const next = event.target.value; setHeightCm(next); setVolumeM3(volumeFromDimensions(lengthCm, widthCm, next)) }} />
-                  <Input label="Khối lượng (kg) *" disabled={isReviewingCompletedStep} type="number" min="0.01" value={weightKg} onChange={(event) => setWeightKg(event.target.value)} />
-                  <Input label="Thể tích (m³) *" value={volumeM3} readOnly />
-                  <Input label="Số kiện *" disabled={isReviewingCompletedStep} type="number" min="1" value={packageCount} onChange={(event) => setPackageCount(event.target.value)} />
+                  <Input
+                    label="Dài thực tế (cm) *"
+                    error={fieldErrors.lengthCm}
+                    disabled={isReviewingCompletedStep}
+                    type="number"
+                    min="0.01"
+                    value={lengthCm}
+                    onChange={(event) => {
+                      clearFieldError("lengthCm")
+                      const next = event.target.value
+                      setLengthCm(next)
+                      setVolumeM3(volumeFromDimensions(next, widthCm, heightCm))
+                    }}
+                  />
+                  <Input
+                    label="Rộng thực tế (cm) *"
+                    error={fieldErrors.widthCm}
+                    disabled={isReviewingCompletedStep}
+                    type="number"
+                    min="0.01"
+                    value={widthCm}
+                    onChange={(event) => {
+                      clearFieldError("widthCm")
+                      const next = event.target.value
+                      setWidthCm(next)
+                      setVolumeM3(volumeFromDimensions(lengthCm, next, heightCm))
+                    }}
+                  />
+                  <Input
+                    label="Cao thực tế (cm) *"
+                    error={fieldErrors.heightCm}
+                    disabled={isReviewingCompletedStep}
+                    type="number"
+                    min="0.01"
+                    value={heightCm}
+                    onChange={(event) => {
+                      clearFieldError("heightCm")
+                      const next = event.target.value
+                      setHeightCm(next)
+                      setVolumeM3(volumeFromDimensions(lengthCm, widthCm, next))
+                    }}
+                  />
+                  <Input
+                    label="Khối lượng (kg) *"
+                    error={fieldErrors.weightKg}
+                    disabled={isReviewingCompletedStep}
+                    type="number"
+                    min="0.01"
+                    value={weightKg}
+                    onChange={(event) => {
+                      clearFieldError("weightKg")
+                      setWeightKg(event.target.value)
+                    }}
+                  />
+                  <Input
+                    label="Thể tích (m³) *"
+                    error={fieldErrors.volumeM3}
+                    value={volumeM3}
+                    readOnly
+                  />
+                  <Input
+                    label="Số kiện *"
+                    error={fieldErrors.packageCount}
+                    disabled={isReviewingCompletedStep}
+                    type="number"
+                    min="1"
+                    value={packageCount}
+                    onChange={(event) => {
+                      clearFieldError("packageCount")
+                      setPackageCount(event.target.value)
+                    }}
+                  />
                 </div>
                 {checkInComparison && <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                   {([
@@ -1590,20 +1758,150 @@ export default function StaffCheckInOperationsPanel({
                     ['volume', 'Thể tích', checkInComparison.volumeMatches],
                     ['dimensions', 'Kích thước', checkInComparison.dimensionMatches],
                   ] as Array<[MeasurementComparisonKey, string, boolean | null]>).map(([key, label, matches]) => <div key={key} className="rounded-lg border border-stone-200 p-3 text-sm"><div className="mb-2 flex items-center justify-between gap-2"><b>{label}</b><ComparisonBadge matches={matches} /></div></div>)}
-                  <label className="flex items-center gap-2 rounded-lg border border-stone-200 p-3 text-sm sm:col-span-2"><input type="checkbox" disabled={isReviewingCompletedStep} checked={Object.values(measurementChecks).every(Boolean)} onChange={(event) => setMeasurementChecks({ packageCount: event.target.checked, weight: event.target.checked, volume: event.target.checked, dimensions: event.target.checked })} />Đã đối chiếu đủ số kiện, khối lượng, thể tích và kích thước *</label>
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="flex items-center gap-2 rounded-lg border border-stone-200 p-3 text-sm cursor-pointer hover:bg-stone-50 transition">
+                      <input
+                        type="checkbox"
+                        disabled={isReviewingCompletedStep}
+                        checked={Object.values(measurementChecks).every(Boolean)}
+                        onChange={(event) => {
+                          clearFieldError("measurementChecks")
+                          setMeasurementChecks({
+                            packageCount: event.target.checked,
+                            weight: event.target.checked,
+                            volume: event.target.checked,
+                            dimensions: event.target.checked,
+                          })
+                        }}
+                      />
+                      Đã đối chiếu đủ số kiện, khối lượng, thể tích và kích thước *
+                    </label>
+                    {fieldErrors.measurementChecks && (
+                      <p className="text-xs text-red-600 font-medium pl-2">{fieldErrors.measurementChecks}</p>
+                    )}
+                  </div>
                 </div>}
-                {measurementVariance && <div className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm"><label className="flex gap-2"><input type="checkbox" disabled={isReviewingCompletedStep} checked={varianceAccepted} onChange={(event) => setVarianceAccepted(event.target.checked)} />Đã trao đổi với khách và chấp nhận chênh lệch *</label><Input label="Lý do chênh lệch *" disabled={isReviewingCompletedStep} value={varianceReason} onChange={(event) => setVarianceReason(event.target.value)} /></div>}
-                <div className="grid gap-3 sm:grid-cols-2"><Input label="Loại hàng *" disabled={isReviewingCompletedStep} value={goodsCategory} onChange={(event) => setGoodsCategory(event.target.value)} /><div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm"><span className="text-stone-500">Tình trạng kho trống đã ghi nhận</span><b className="mt-1 block">{initialCondition || 'Chưa ghi nhận'}</b></div><Input label="Tình trạng hàng hóa *" disabled={isReviewingCompletedStep} value={goodsCondition} onChange={(event) => setGoodsCondition(event.target.value)} /><Input label="Ghi chú kiểm kê" disabled={isReviewingCompletedStep} value={handoverNotes} onChange={(event) => setHandoverNotes(event.target.value)} /></div>
-                <label className="flex items-center gap-2 text-sm"><input type="checkbox" disabled={isReviewingCompletedStep} checked={checklist.conditionRecorded} onChange={(event) => setChecklist((value) => ({ ...value, conditionRecorded: event.target.checked }))} />Đã ghi nhận tình trạng hàng hóa *</label>
-                {!isReviewingCompletedStep && <><label className="block text-sm font-medium">Ảnh/PDF bằng chứng kiểm kê hàng hóa (tối đa 25MB/tệp) *<input className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2" type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => {
-                    const selected = Array.from(event.target.files || [])
-                    const tooBig = selected.find(f => !validateUploadFile(f, 'kiểm kê', setError))
-                    if (tooBig) {
-                      event.target.value = ""
-                      return
-                    }
-                    setEvidenceFiles(selected)
-                  }} /></label><FilePreviewList files={evidenceFiles} onRemove={(index) => setEvidenceFiles((files) => files.filter((_, current) => current !== index))} disabled={submitting} /></>}
+                {measurementVariance && (
+                  <div className={`space-y-3 rounded-lg border ${fieldErrors.varianceAccepted || fieldErrors.varianceReason ? 'border-red-300 bg-red-50/50' : 'border-amber-300 bg-amber-50'} p-3 text-sm`}>
+                    <div>
+                      <label className="flex gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          disabled={isReviewingCompletedStep}
+                          checked={varianceAccepted}
+                          onChange={(event) => {
+                            clearFieldError("varianceAccepted")
+                            setVarianceAccepted(event.target.checked)
+                          }}
+                        />
+                        Đã trao đổi với khách và chấp nhận chênh lệch *
+                      </label>
+                      {fieldErrors.varianceAccepted && (
+                        <p className="text-xs text-red-600 font-medium mt-1 pl-6">{fieldErrors.varianceAccepted}</p>
+                      )}
+                    </div>
+                    <Input
+                      label="Lý do chênh lệch *"
+                      error={fieldErrors.varianceReason}
+                      disabled={isReviewingCompletedStep}
+                      value={varianceReason}
+                      onChange={(event) => {
+                        clearFieldError("varianceReason")
+                        setVarianceReason(event.target.value)
+                      }}
+                    />
+                  </div>
+                )}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Input
+                    label="Loại hàng *"
+                    error={fieldErrors.goodsCategory}
+                    disabled={isReviewingCompletedStep}
+                    value={goodsCategory}
+                    onChange={(event) => {
+                      clearFieldError("goodsCategory")
+                      setGoodsCategory(event.target.value)
+                    }}
+                  />
+                  <div className={`rounded-lg border ${fieldErrors.initialCondition || fieldErrors.initialUnitCondition ? 'border-red-400 bg-red-50/30' : 'border-stone-200 bg-stone-50'} px-3 py-2 text-sm`}>
+                    <span className="text-stone-500">Tình trạng kho trống đã ghi nhận</span>
+                    <b className="mt-1 block">{initialCondition || 'Chưa ghi nhận'}</b>
+                    {(fieldErrors.initialCondition || fieldErrors.initialUnitCondition) && (
+                      <p className="text-xs text-red-600 font-medium mt-1">{fieldErrors.initialCondition || fieldErrors.initialUnitCondition}</p>
+                    )}
+                  </div>
+                  <Input
+                    label="Tình trạng hàng hóa *"
+                    error={fieldErrors.goodsCondition}
+                    disabled={isReviewingCompletedStep}
+                    value={goodsCondition}
+                    onChange={(event) => {
+                      clearFieldError("goodsCondition")
+                      setGoodsCondition(event.target.value)
+                    }}
+                  />
+                  <Input
+                    label="Ghi chú kiểm kê"
+                    error={fieldErrors.notes}
+                    disabled={isReviewingCompletedStep}
+                    value={handoverNotes}
+                    onChange={(event) => {
+                      clearFieldError("notes")
+                      setHandoverNotes(event.target.value)
+                    }}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      disabled={isReviewingCompletedStep}
+                      checked={checklist.conditionRecorded}
+                      onChange={(event) => {
+                        clearFieldError("conditionRecorded")
+                        setChecklist((value) => ({ ...value, conditionRecorded: event.target.checked }))
+                      }}
+                    />
+                    Đã ghi nhận tình trạng hàng hóa *
+                  </label>
+                  {fieldErrors.conditionRecorded && (
+                    <p className="text-xs text-red-600 font-medium pl-6">{fieldErrors.conditionRecorded}</p>
+                  )}
+                </div>
+                {!isReviewingCompletedStep && (
+                  <div className="space-y-1">
+                    <label className="block text-sm font-medium">
+                      Ảnh/PDF bằng chứng kiểm kê hàng hóa (tối đa 25MB/tệp) *
+                      <input
+                        className={`mt-1 block w-full rounded-lg border ${fieldErrors.evidenceFiles || fieldErrors.evidenceReferences ? 'border-red-500 bg-red-50/20' : 'border-stone-300'} bg-white px-3 py-2 text-sm`}
+                        type="file"
+                        multiple
+                        accept="image/jpeg,image/png,image/webp,application/pdf"
+                        onChange={(event) => {
+                          clearFieldError("evidenceFiles")
+                          clearFieldError("evidenceReferences")
+                          const selected = Array.from(event.target.files || [])
+                          const tooBig = selected.find((f) => !validateUploadFile(f, 'kiểm kê', setError))
+                          if (tooBig) {
+                            event.target.value = ""
+                            return
+                          }
+                          setEvidenceFiles(selected)
+                        }}
+                      />
+                    </label>
+                    {(fieldErrors.evidenceFiles || fieldErrors.evidenceReferences) && (
+                      <p className="text-xs text-red-600 font-medium">{fieldErrors.evidenceFiles || fieldErrors.evidenceReferences}</p>
+                    )}
+                    <FilePreviewList
+                      files={evidenceFiles}
+                      onRemove={(index) => {
+                        setEvidenceFiles((files) => files.filter((_, current) => current !== index))
+                      }}
+                      disabled={submitting}
+                    />
+                  </div>
+                )}
                 {isReviewingCompletedStep && handoverTarget.handover?.evidenceReferences.length ? <p className="text-xs text-stone-600">Đã lưu {handoverTarget.handover.evidenceReferences.length} tệp bằng chứng kiểm kê trong biên bản.</p> : null}
               </div>
             )}
@@ -1613,10 +1911,19 @@ export default function StaffCheckInOperationsPanel({
                 <svg className="h-5 w-5 text-red-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <span className="flex-1 font-medium">{error}</span>
+                <div className="flex-1 font-medium">
+                  <span>{error}</span>
+                  {Object.keys(fieldErrors).length > 0 && (
+                    <ul className="mt-1 list-disc list-inside space-y-0.5 text-xs text-red-700">
+                      {Object.entries(fieldErrors).map(([key, msg]) => (
+                        <li key={key}>{msg}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
                 <button
                   type="button"
-                  onClick={() => setError(null)}
+                  onClick={() => { setError(null); setFieldErrors({}) }}
                   className="rounded px-1 text-xs font-bold text-red-500 hover:bg-red-100 hover:text-red-700"
                   aria-label="Đóng lỗi"
                 >
@@ -1707,7 +2014,7 @@ export default function StaffCheckInOperationsPanel({
                       Quay lại
                     </Button>
                   )}
-                  <Button disabled={submitting || !allChecksComplete || !evidenceFiles.length || !initialCondition.trim() || !goodsCondition.trim() || !goodsCategory.trim() || (measurementVariance && (!varianceAccepted || !varianceReason.trim()))} onClick={() => submitHandover()}>{submitting ? "Đang hoàn tất…" : "Hoàn tất kiểm kê"}</Button>
+                  <Button disabled={submitting} onClick={() => submitHandover()}>{submitting ? "Đang hoàn tất…" : "Hoàn tất kiểm kê"}</Button>
                 </div>
               )}
             </div>
