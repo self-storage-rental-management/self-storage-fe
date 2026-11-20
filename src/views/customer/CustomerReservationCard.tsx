@@ -5,9 +5,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Button, Card, Modal } from '../../components/ui'
 import VietnameseDateInput from '../../components/VietnameseDateInput'
 import { formatVndAmount as formatVnd } from '../../i18n/currency'
-import { confirmCustomerReceipt, downloadBookingDocument, downloadCustomerCheckInDocument, downloadCustomerReservationGoodsImage, generateBookingDocument, getBookingDocument, getCustomerCheckInDocuments, getCustomerReservation, markCustomerPreparationComplete, setCustomerCheckInAppointment, updateSetupGoods, type BookingDocument, type CheckInDocument, type CustomerFacility, type CustomerReservation, type CustomerReservationDetail, type CustomerUnitType, type GoodsItemInput, type ReservationPaymentResult } from '../../services/customerReservationApi'
+import { confirmCustomerReceipt, downloadBookingDocument, downloadCustomerCheckInDocument, downloadCustomerReservationGoodsImage, generateBookingDocument, getCustomerCheckInDocuments, getCustomerReservation, markCustomerPreparationComplete, setCustomerCheckInAppointment, updateSetupGoods, type BookingDocument, type CheckInDocument, type CustomerFacility, type CustomerReservation, type CustomerReservationDetail, type CustomerUnitType, type GoodsItemInput, type ReservationPaymentResult } from '../../services/customerReservationApi'
 import { paymentCountdown, reservationProgress, reservationStatusLabels } from './reservationPresentation'
-import { ApiClientError } from '../../services/apiClient'
 import CustomerPaymentComplaint from './CustomerPaymentComplaint'
 import CustomerReservationPayment from './CustomerReservationPayment'
 import ReservationReceipt from './ReservationReceipt'
@@ -166,13 +165,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     if (busy) return
     setBusy(true); setMessage(null)
     try {
-      let result: BookingDocument
-      try {
-        result = await getBookingDocument(r.id)
-      } catch (error) {
-        if (!(error instanceof ApiClientError) || error.status !== 404) throw error
-        result = await generateBookingDocument(r.id)
-      }
+      const result: BookingDocument = await generateBookingDocument(r.id)
       setBookingDocument(result)
       setBookingDocumentOpen(true)
     } catch (error) { setMessage(userFacingError(error, 'Không thể tạo phiếu xác nhận giữ kho.')) }
