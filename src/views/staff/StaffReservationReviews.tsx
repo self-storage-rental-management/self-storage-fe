@@ -20,7 +20,7 @@ import {
 } from "./staffPresentation"
 
 const activeStatusLabels: Partial<Record<ReservationStatus, string>> = {
-  AWAITING_EMAIL: "Chờ xác minh email",
+  AWAITING_EMAIL: "Đang xử lý hồ sơ",
   AWAITING_REVIEW: "Chờ duyệt hàng hóa",
   AWAITING_PAYMENT: "Chờ thanh toán cọc",
   PAYMENT_GRACE: "Chờ đối soát thanh toán",
@@ -33,15 +33,14 @@ const activeStatusLabels: Partial<Record<ReservationStatus, string>> = {
   COMPLETED: "Đã hoàn tất bàn giao",
 }
 
-const progressSteps = ["Xác minh email", "Duyệt hồ sơ", "Thanh toán cọc", "Phân kho", "Nhận kho", "Bàn giao"]
+const progressSteps = ["Duyệt hồ sơ", "Thanh toán cọc", "Phân kho", "Nhận kho", "Bàn giao"]
 
 function progressIndex(status: ReservationStatus) {
-  if (status === "AWAITING_EMAIL") return 0
-  if (status === "AWAITING_REVIEW") return 1
-  if (["AWAITING_PAYMENT", "PAYMENT_GRACE", "PAYMENT_REVIEW"].includes(status)) return 2
-  if (status === "CONFIRMED") return 3
-  if (["UNIT_RESERVED", "READY_FOR_CHECKIN"].includes(status)) return 4
-  if (["AWAITING_CUSTOMER_RECEIPT", "PREPARING", "COMPLETED"].includes(status)) return 5
+  if (status === "AWAITING_REVIEW" || status === "AWAITING_EMAIL") return 0
+  if (["AWAITING_PAYMENT", "PAYMENT_GRACE", "PAYMENT_REVIEW"].includes(status)) return 1
+  if (status === "CONFIRMED") return 2
+  if (["UNIT_RESERVED", "READY_FOR_CHECKIN"].includes(status)) return 3
+  if (["AWAITING_CUSTOMER_RECEIPT", "PREPARING", "COMPLETED"].includes(status)) return 4
   return 0
 }
 
@@ -195,7 +194,7 @@ export default function StaffReservationReviews({
     <div className="fade-in space-y-4">
       <SectionHeader
         title="Đơn đặt giữ kho"
-        subtitle={`Hồ sơ hàng hóa đã xác minh thư điện tử tại: ${Object.values(facilityNames).join(", ") || "cơ sở được phân quyền"}.`}
+        subtitle={`Hồ sơ hàng hóa chờ duyệt tại: ${Object.values(facilityNames).join(", ") || "cơ sở được phân quyền"}.`}
         action={
           <Button
             variant="outline"
@@ -217,8 +216,7 @@ export default function StaffReservationReviews({
       {loading && <p className="text-sm text-stone-500">Đang tải hồ sơ…</p>}
       {!loading && !rows.length && (
         <Card className="p-8 text-center text-stone-500">
-          Chưa có hồ sơ chờ duyệt tại cơ sở của bạn. Khách hàng cần xác minh thư
-          điện tử trước khi hồ sơ xuất hiện.
+          Chưa có hồ sơ chờ duyệt tại cơ sở của bạn.
         </Card>
       )}
       {rows.map((row) => (
