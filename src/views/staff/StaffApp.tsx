@@ -866,7 +866,6 @@ export default function StaffApp({
     ...(isApiAuthenticated() ? [{ id: "renewal-signing", label: "Ký gia hạn", icon: Icon.policy, group: "Vận hành", permission: "renewals:operate" as const }] : []),
     ...(isApiAuthenticated() ? [
       { id: "unit-release", label: "Giải phóng kho hủy", icon: Icon.box, group: "Vận hành", permission: "checkins:read" as const },
-      { id: "credentials", label: "Cấp lại quyền truy cập", icon: Icon.key, group: "Vận hành", permission: "checkins:read" as const },
     ] : []),
 
     {
