@@ -7,7 +7,6 @@ export function customerRackIssue(error: unknown, fallback: string) {
   return userFacingError(error, fallback)
     .replace(/\bpallet\b/gi, word => word.startsWith('P') ? 'Tấm kê' : 'tấm kê')
 }
-
 type PalletAllocation = NonNullable<PalletPlan['items'][number]['allocations']>[number]
 
 type CompartmentDistributionRow = {
@@ -18,6 +17,13 @@ type CompartmentDistributionRow = {
   layerPieces: Array<number | null>
   cargoWeight: number
   cargoLimit: number
+}
+
+type StorageConditionGroup = {
+  key: string
+  capacity: PalletAllocation['capacity']
+  cargoHeightCm?: number
+  actualLayers: number
 }
 
 function progressPercent(value: number, maximum: number) {
@@ -135,33 +141,85 @@ function distributionRows(plan: PalletPlan, goodsItems: GoodsItemInput[]): Compa
   return Array.from(rows.values())
 }
 
+function conditionNumber(value: number | undefined | null) {
+  return value == null || !Number.isFinite(value) ? '—' : String(Math.round(value * 1000) / 1000)
+}
+
+function storageConditionKey(capacity: PalletAllocation['capacity'], cargoHeightCm?: number) {
+  // piecesPerLayer and usableLayers used to be serialized as the amount that
+  // happened to be placed on one pallet. Do not use those runtime values as a
+  // grouping key: the last partial pallet would otherwise create a duplicate
+  // explanation table for the same storage conditions.
+  return [
+    capacity.placementLengthCm,
+    capacity.placementWidthCm,
+    capacity.placementHeightCm,
+    capacity.maxPiecesByDimensions,
+    capacity.maxPiecesByWeight,
+    capacity.maxPieces,
+    cargoHeightCm,
+  ].map(conditionNumber).join('|')
+}
+
+function piecesPerLayer(capacity: PalletAllocation['capacity']) {
+  const reported = Number.isFinite(capacity.piecesPerLayer) ? Math.max(1, capacity.piecesPerLayer) : 1
+  const dimensions = Number.isFinite(capacity.maxPiecesByDimensions)
+    ? Math.max(0, capacity.maxPiecesByDimensions)
+    : 0
+  const layers = Number.isFinite(capacity.usableLayers) ? Math.max(1, capacity.usableLayers) : 1
+  // Support responses produced before the BE fix, where piecesPerLayer was
+  // reduced to the amount on the current (possibly partial) pallet.
+  const inferred = dimensions > 0 ? Math.ceil(dimensions / layers) : 1
+  return Math.max(reported, inferred)
+}
+
+function maximumLayers(capacity: PalletAllocation['capacity'], goods: GoodsItemInput | undefined, cargoHeightCm?: number) {
+  if (goods?.fragile || goods?.stackable === false) return 1
+  const placementHeightCm = capacity.placementHeightCm ?? goods?.heightCm
+  const heightLayers = cargoHeightCm != null && placementHeightCm != null && placementHeightCm > 0
+    ? Math.max(1, Math.floor(cargoHeightCm / placementHeightCm + 1e-9))
+    : Math.max(1, capacity.usableLayers)
+  if (goods?.stackable === true) return Math.max(1, heightLayers, capacity.usableLayers)
+  return Math.max(1, capacity.usableLayers)
+}
+
+function maximumPiecesByDimensions(capacity: PalletAllocation['capacity'], layerCapacity: number, maxLayers: number) {
+  // Older BE responses used the current pallet's piece count for this field.
+  // Rebuild the geometric ceiling from the displayed layer capacity so the
+  // explanation remains correct while those responses are still in flight.
+  return Math.max(capacity.maxPiecesByDimensions, layerCapacity * maxLayers)
+}
+
+function storageConditionGroups(item: PalletPlan['items'][number], plan: PalletPlan): StorageConditionGroup[] {
+  const groups = new Map<string, StorageConditionGroup>()
+  for (const allocation of item.allocations ?? []) {
+    const rack = plan.racks.find(value => value.code === allocation.rackCode)
+    const cargoHeightCm = rack?.maxCargoHeightCm
+    const key = storageConditionKey(allocation.capacity, cargoHeightCm)
+    const piecesPerPallet = Math.max(0, allocation.piecesPerPallet)
+    const actualLayers = Math.max(1, Math.ceil(piecesPerPallet / piecesPerLayer(allocation.capacity)))
+    const previous = groups.get(key)
+    groups.set(key, {
+      key,
+      capacity: previous?.capacity ?? allocation.capacity,
+      cargoHeightCm: previous?.cargoHeightCm ?? cargoHeightCm,
+      actualLayers: Math.max(previous?.actualLayers ?? 1, actualLayers),
+    })
+  }
+  return Array.from(groups.values())
+}
+
 function StorageConditions({ plan, goodsItems, compartmentCount }: { plan: PalletPlan; goodsItems: GoodsItemInput[]; compartmentCount: number }) {
   return <section className="space-y-2">
     <h5 className="font-semibold">Tại sao cần {n(compartmentCount)} khoang?</h5>
     <p className="font-semibold">Điều kiện lưu trữ</p>
     {plan.items.map(item => {
-      const limits = new Map<string, { capacity: PalletAllocation['capacity']; cargoHeightCm?: number; pieces: number }>()
-      for (const allocation of item.allocations ?? []) {
-        const rack = plan.racks.find(value => value.code === allocation.rackCode)
-        const key = JSON.stringify(allocation.capacity)
-        const previous = limits.get(key)
-        limits.set(key, {
-          capacity: allocation.capacity,
-          cargoHeightCm: rack?.maxCargoHeightCm,
-          pieces: (previous?.pieces ?? 0) + allocation.piecesPerPallet,
-        })
-      }
-      return Array.from(limits, ([key, { capacity, cargoHeightCm, pieces }]) => {
-        const actualLayers = Math.min(
-          capacity.usableLayers,
-          Math.max(1, Math.ceil(pieces / Math.max(1, capacity.piecesPerLayer))),
-        )
-        const goods = goodsItems[item.itemNumber - 1]
-        const stackRule = goods?.fragile || goods?.stackable === false
-          ? '1 lớp'
-          : goods?.stackable === true
-            ? 'Tự tính theo chiều cao khoang'
-            : `${item.allowedStackLayers} lớp`
+      const goods = goodsItems[item.itemNumber - 1]
+      return storageConditionGroups(item, plan).map(({ key, capacity, cargoHeightCm, actualLayers: plannedLayers }) => {
+        const layerCapacity = piecesPerLayer(capacity)
+        const maxLayers = maximumLayers(capacity, goods, cargoHeightCm)
+        const displayMaxPiecesByDimensions = maximumPiecesByDimensions(capacity, layerCapacity, maxLayers)
+        const actualLayers = Math.min(maxLayers, plannedLayers)
         const placementLengthCm = goods ? capacity.placementLengthCm ?? goods.lengthCm : null
         const placementWidthCm = goods ? capacity.placementWidthCm ?? goods.widthCm : null
         const placementHeightCm = goods ? capacity.placementHeightCm ?? goods.heightCm : null
@@ -169,30 +227,24 @@ function StorageConditions({ plan, goodsItems, compartmentCount }: { plan: Palle
           && placementHeightCm != null
           && (placementLengthCm !== goods.lengthCm || placementWidthCm !== goods.widthCm
             || placementHeightCm !== goods.heightCm))
-        const laidFlat = Boolean(goods && placementHeightCm != null && placementHeightCm < goods.heightCm)
-        const actualStackHeight = placementHeightCm == null ? null : actualLayers * placementHeightCm
-        const limiting = capacity.maxPiecesByDimensions <= capacity.maxPiecesByWeight ? 'kích thước hàng hóa' : 'khối lượng hàng hóa'
+        const maxPiecesPerPallet = Math.min(displayMaxPiecesByDimensions, capacity.maxPiecesByWeight)
         return <div key={`${item.itemNumber}-${key}`} className="space-y-2">
           {plan.items.length > 1 && <p className="text-xs font-semibold">Hàng {item.itemNumber}</p>}
           <div className="overflow-x-auto rounded-lg border border-stone-200 bg-white">
             <table className="w-full min-w-[32rem] text-left text-xs">
               <thead className="bg-stone-50"><tr><th className="px-3 py-2 font-semibold">Điều kiện lưu trữ</th><th className="px-3 py-2 text-right font-semibold">Kết quả</th></tr></thead>
               <tbody>
+                <tr className="border-t border-stone-200"><td className="px-3 py-2">Kích thước tấm kê (D × R × C)</td><td className="px-3 py-2 text-right">{n(plan.palletLengthCm)} × {n(plan.palletWidthCm)} × {n(plan.palletHeightCm)} cm</td></tr>
+                <tr className="border-t border-stone-200"><td className="px-3 py-2">Khối lượng tấm kê rỗng</td><td className="px-3 py-2 text-right">{n(plan.emptyPalletKg)} kg/tấm kê</td></tr>
                 {goods && placementChanged && <tr className="border-t border-stone-200"><td className="px-3 py-2">Kích thước sau khi đặt</td><td className="px-3 py-2 text-right">{n(placementLengthCm!)} × {n(placementWidthCm!)} × {n(placementHeightCm!)} cm</td></tr>}
-                <tr className="border-t border-stone-200"><td className="px-3 py-2">Số kiện xếp vừa mỗi lớp</td><td className="px-3 py-2 text-right">{n(capacity.piecesPerLayer)} kiện</td></tr>
-                <tr className="border-t border-stone-200"><td className="px-3 py-2">Quy tắc xếp chồng</td><td className="px-3 py-2 text-right">{stackRule}</td></tr>
-                <tr className="border-t border-stone-200"><td className="px-3 py-2">Số lớp thực tế xếp vừa</td><td className="px-3 py-2 text-right">{n(actualLayers)} lớp</td></tr>
-                <tr className="border-t border-stone-200"><td className="px-3 py-2">Số kiện tối đa theo kích thước</td><td className="px-3 py-2 text-right">{n(capacity.maxPiecesByDimensions)} kiện</td></tr>
-                <tr className="border-t border-stone-200"><td className="px-3 py-2">Số kiện tối đa theo khối lượng</td><td className="px-3 py-2 text-right">{n(capacity.maxPiecesByWeight)} kiện</td></tr>
-                <tr className="border-t border-stone-200 font-semibold"><td className="px-3 py-2">Số kiện tối đa mỗi tấm kê</td><td className="px-3 py-2 text-right">{n(capacity.maxPieces)} kiện</td></tr>
+                <tr className="border-t border-stone-200"><td className="px-3 py-2">Số kiện xếp vừa mỗi lớp</td><td className="px-3 py-2 text-right">{n(layerCapacity)} kiện</td></tr>
+                <tr className="border-t border-stone-200"><td className="px-3 py-2">Số lớp cần dùng theo phương án</td><td className="px-3 py-2 text-right">{n(actualLayers)} lớp</td></tr>
+                <tr className="border-t border-stone-200 font-semibold"><td className="px-3 py-2">Số kiện có thể xếp theo số lớp và tải trọng</td><td className="px-3 py-2 text-right">{n(maxPiecesPerPallet)} kiện/tấm kê</td></tr>
+                <tr className="border-t border-stone-200"><td className="px-3 py-2">Tải tổng tối đa tại vị trí xếp (tấm kê + hàng)</td><td className="px-3 py-2 text-right">{n(capacity.maxLoadedKg)} kg</td></tr>
+                <tr className="border-t border-stone-200"><td className="px-3 py-2">Giới hạn hàng sau khi trừ tấm kê</td><td className="px-3 py-2 text-right">{n(capacity.cargoWeightLimitKg)} kg hàng</td></tr>
               </tbody>
             </table>
           </div>
-          {goods && placementChanged && <p className="text-xs leading-5">Phương án lưu trữ: {laidFlat ? 'xoay kiện hàng và đặt nằm ngang' : 'xoay kiện hàng trên mặt tấm kê'} ({n(placementLengthCm!)} × {n(placementWidthCm!)} × {n(placementHeightCm!)} cm).</p>}
-          {goods && cargoHeightCm != null && goods.stackable === true && actualLayers < capacity.usableLayers
-            ? <p className="text-xs leading-5">Hệ thống tự tính theo chiều cao dành cho hàng {n(cargoHeightCm)} cm. Với {n(pieces)} kiện ở phương án này, chỉ cần {n(actualLayers)} lớp ({n(actualStackHeight ?? 0)} cm).</p>
-            : goods && cargoHeightCm != null && <p className="text-xs leading-5">Chiều cao dành cho hàng là {n(cargoHeightCm)} cm, kiện cao {n(placementHeightCm ?? goods.heightCm)} cm nên xếp vừa {n(actualLayers)} lớp.</p>}
-          <p className="text-xs leading-5">Giới hạn quyết định trong trường hợp này là <strong>{limiting}</strong>.</p>
         </div>
       })
     })}
@@ -209,13 +261,13 @@ function DistributionTable({ plan, goodsItems }: { plan: PalletPlan; goodsItems:
         <thead className="bg-stone-50"><tr>
           <th className="px-3 py-2 font-semibold">Khoang</th>
           {layerColumns.map(index => <th key={index} className="px-3 py-2 text-center font-semibold">Lớp {index + 1}</th>)}
-          <th className="px-3 py-2 font-semibold">Tải hàng</th>
+          <th className="px-3 py-2 font-semibold">Hàng / giới hạn hàng của khoang</th>
         </tr></thead>
         <tbody>
           {rows.map(row => <tr key={row.key} className="border-t border-stone-200">
             <td className="px-3 py-2">{row.label}<span className="block text-[11px] text-stone-500">{row.palletCount} tấm kê</span>{plan.items.length > 1 && <span className="block text-[11px] text-stone-500">Hàng {row.itemNumbers.join(', ')}</span>}</td>
             {layerColumns.map(index => <td key={index} className="px-3 py-2 text-center">{row.layerPieces[index] == null ? '—' : `${n(row.layerPieces[index]!)} kiện`}</td>)}
-            <td className="px-3 py-2"><div className="flex items-center justify-between gap-3"><span>{n(row.cargoWeight)}/{n(row.cargoLimit)} kg</span><span className="min-w-24 flex-1"><ProgressBar value={row.cargoWeight} maximum={row.cargoLimit} /></span></div></td>
+            <td className="px-3 py-2"><div className="flex items-center justify-between gap-3"><span>{n(row.cargoWeight)}/{n(row.cargoLimit)} kg</span><span className="min-w-24 flex-1"><ProgressBar value={row.cargoWeight} maximum={row.cargoLimit} /></span></div><span className="block text-[11px] text-stone-500">khối lượng hàng / giới hạn hàng của khoang; khối lượng tấm kê hiển thị riêng</span></td>
           </tr>)}
           <tr className="border-t border-stone-200 font-semibold">
             <td className="px-3 py-2">Tổng cộng</td>

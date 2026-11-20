@@ -21,11 +21,6 @@ export default function ReservationReceipt({ payment, reservationCode }: { payme
   const accepted = bookingDepositAccepted(payment)
   const isRemainingRental = payment.purpose === 'RENTAL_BALANCE'
   const gatewayPaidAt = formatGatewayPayDate(payment.gatewayPayDate)
-  const paymentMethod = isRemainingRental
-    ? payment.paymentMethod || 'Chưa có thông tin'
-    : payment.paymentMethod && payment.paymentMethod !== 'VNPAY'
-      ? `VNPay (${payment.paymentMethod})`
-      : 'VNPay'
   return <PaymentReceiptCard
     title={isRemainingRental ? 'Biên lai thanh toán phần còn lại khi nhận kho' : accepted ? 'Biên lai đặt cọc giữ chỗ' : 'Chi tiết giao dịch cần đối soát'}
     reference={reservationCode} confirmed={accepted || isRemainingRental}
@@ -35,7 +30,7 @@ export default function ReservationReceipt({ payment, reservationCode }: { payme
       [isRemainingRental ? 'Mã phiếu thu hoặc giao dịch' : 'Mã giao dịch VNPay', payment.gatewayTransactionNo || '-'], ['Đơn giữ kho', reservationCode],
       [isRemainingRental ? 'Thời điểm ghi nhận tại quầy' : 'Thời điểm VNPay ghi nhận', gatewayPaidAt || (payment.paidAt ? formatCustomerDateTime(new Date(payment.paidAt)) : '-')],
       ['Thời điểm StorageHub xử lý', payment.processedAt ? formatCustomerDateTime(new Date(payment.processedAt)) : '-'],
-      ['Phương thức thanh toán', paymentMethodLabel(payment.paymentMethod)],
+      ['Phương thức thanh toán', paymentMethodLabel(payment.paymentMethod, !isRemainingRental)],
       ['Người ghi nhận', payment.initiatedByName || '-'],
       ['Nội dung', isRemainingRental ? 'Thanh toán phần còn lại khi nhận kho' : accepted ? 'Đặt cọc giữ chỗ đã được đơn xác nhận' : 'Giao dịch đặt cọc giữ chỗ cần đối soát'], ['Số tiền', formatVnd(payment.amount)], ['Tiền tệ', paymentCurrencyLabel(payment.currency)],
       ['Số hóa đơn', payment.invoiceNumber || '-'], ['Trạng thái hóa đơn', payment.invoiceStatus || 'DRAFT'],

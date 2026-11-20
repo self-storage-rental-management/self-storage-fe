@@ -171,6 +171,8 @@ export function staffErrorMessage(error: unknown, fallback: string) {
       return "Gian kho không còn ở trạng thái giữ chỗ cho hồ sơ này. Vui lòng tải lại để kiểm tra."
     if (message.includes("Customer setup must be completed"))
       return "Khách chưa được ghi nhận đã chuẩn bị xong nên chưa thể kiểm kê."
+    if (message.includes("Chỉ khách hàng được xác nhận đã chuẩn bị xong"))
+      return "Chỉ khách hàng được phép xác nhận đã chuẩn bị xong trước khi kiểm kê."
     if (message.includes("Evidence can only be uploaded"))
       return "Chỉ được tải bằng chứng khi đang thực hiện quy trình nhận kho. Vui lòng mở lại hồ sơ và tiếp tục từ bước hiện tại."
     if (message.includes("lock reference"))

@@ -216,6 +216,7 @@ export interface PalletPlan {
   palletWidthCm: number
   palletHeightCm: number
   emptyPalletKg: number
+  palletMaxPayloadKg?: number | null
   requiredPallets: number
   availableSlots: number
   totalLoadedWeightKg: number
