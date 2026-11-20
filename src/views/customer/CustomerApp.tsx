@@ -3430,10 +3430,18 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               </div>
             )}
             {bookingStep === 1 && <section className="space-y-4 rounded-xl border border-stone-200 bg-stone-50 p-4">
-              <div><p className="font-bold text-stone-900">Thông tin cá nhân</p><p className="mt-1 text-xs text-stone-500">Thông tin dùng để lập hồ sơ và đối chiếu khi nhận kho.</p></div>
+              <div>
+                <p className="font-bold text-stone-900">Thông tin cá nhân</p>
+                <p id="booking-identity-warning" className="mt-1 text-xs leading-5 text-amber-900">
+                  Nhập số CCCD hoặc hộ chiếu của <strong>người trực tiếp đến nhận kho</strong> và mang bản gốc để đối chiếu.
+                </p>
+              </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Input label={'Họ và tên người thuê'} value={user.name} disabled />
-              <Input label={'Số CCCD / Hộ chiếu * (Đối chiếu lúc nhận kho)'} value={customerIdCard} onChange={e => setCustomerIdCard(e.target.value)} />
+              <div className="space-y-1">
+                <label htmlFor="booking-identity-number" className="block text-sm font-medium leading-tight text-stone-700">Số CCCD / Hộ chiếu *</label>
+                <Input id="booking-identity-number" value={customerIdCard} aria-describedby="booking-identity-warning" onChange={e => setCustomerIdCard(e.target.value)} />
+              </div>
               <Input label={'Số điện thoại liên hệ *'} value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} />
               {bookingErrors.phone && <p className="text-xs leading-5 text-red-700 sm:col-span-2">{bookingErrors.phone}</p>}
               <Input label="Email" value={customerEmail} disabled />

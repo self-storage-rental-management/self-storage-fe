@@ -285,9 +285,9 @@ export interface ReturnSettlementReceipt {
   confirmed: boolean
 }
 export function validateReturnSettlementReceipt(body: ReturnSettlementReceipt) {
-  if (!money(body.amount) || body.amount <= 0 || !['CASH', 'BANK_TRANSFER'].includes(body.paymentMethod) || !body.transactionReference.trim()
+  if (!money(body.amount) || body.amount <= 0 || !['CASH', 'BANK_TRANSFER'].includes(body.paymentMethod) || (body.paymentMethod === 'BANK_TRANSFER' && !body.transactionReference.trim())
     || body.transactionReference.length > 120 || !isUuid(body.receiptFileId) || body.confirmed !== true)
-    throw new Error('Chọn phương thức, nhập mã giao dịch, tải biên lai và xác nhận đã thực thu hoặc thực hoàn tiền.')
+    throw new Error('Kiểm tra phương thức, tải biên lai và xác nhận đã thực thu hoặc thực hoàn tiền. Với chuyển khoản, nhập mã giao dịch.')
 }
 export async function recordReturnSettlement(id: string, body: ReturnSettlementReceipt, key: string, role: ReturnRole = 'staff') {
   const a = actor(role, true)
