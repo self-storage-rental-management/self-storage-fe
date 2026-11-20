@@ -76,6 +76,11 @@ export default function RenewalAppointmentPicker({
               setDate(e.target.value); setTime(""); onChange(""); onReadyChange(false)
             }} />
         </div>
+        {earliest && latest && (
+          <p className="text-[11px] text-stone-500 leading-tight">
+            Khung hẹn khả dụng: <b>{earliest.slice(0, 10).split("-").reverse().join("/")}</b> đến <b>{latest.slice(0, 10).split("-").reverse().join("/")}</b> (tối đa 5 ngày theo thời hạn giữ chỗ gia hạn).
+          </p>
+        )}
       </div>
       <div className="space-y-1.5">
         <label htmlFor={`${inputId}-time`} className="block text-sm font-semibold text-stone-600">Khung giờ</label>
@@ -106,9 +111,9 @@ export default function RenewalAppointmentPicker({
       <div><p className="font-semibold">Không có lịch trống ngày {displayDate}</p><p className="mt-1 text-sm text-stone-500">Hãy chọn ngày khác hoặc liên hệ cơ sở để được hỗ trợ.</p></div>
     </div>}
     {currentVersion && !!time && !!window.slots.length && !available && <p role="alert" className="text-sm text-red-700">Khung giờ đã chọn không còn khả dụng, vui lòng chọn lại.</p>}
-    <p className="flex items-start gap-2 text-sm text-stone-500">
-      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="show-icon mt-0.5 h-4 w-4 shrink-0"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01" strokeLinecap="round"/></svg>
-      Bạn cần lưu lịch ký hợp lệ trước khi tiếp tục thanh toán khoản trả trước.
+    <p className="flex items-start gap-2 text-xs text-stone-500">
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="show-icon mt-0.5 h-4 w-4 shrink-0 text-amber-600"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01" strokeLinecap="round"/></svg>
+      Vui lòng chọn ngày, khung giờ và bấm <b>"Lưu lịch ký"</b> trước khi thực hiện thanh toán khoản trả trước 20%.
     </p>
   </section>
 }

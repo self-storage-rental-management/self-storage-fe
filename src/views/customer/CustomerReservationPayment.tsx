@@ -143,7 +143,10 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
       <p className="font-bold">Thời gian thanh toán đặt cọc giữ chỗ còn lại</p>
       <p role="timer" className="mt-1 text-2xl font-extrabold tabular-nums">{countdown.text}</p>
       <p className="mt-1">{countdown.expired ? 'Đã hết thời hạn. Đang chờ cập nhật trạng thái đơn.' : 'Vui lòng hoàn tất thanh toán trước khi hết thời hạn.'}</p>
-<Button className="mt-2" size="sm" disabled={busy || countdown.expired} onClick={() => { setAcceptedNoRefund(false); setPayOpen(true) }}>Thanh toán đặt cọc giữ chỗ</Button>
+      <div className="mt-2 rounded border border-amber-300/40 bg-amber-500/20 px-2 py-1.5 text-center text-[11px] font-semibold text-amber-100">
+        ⚠️ Khoản cọc giữ chỗ không được hoàn lại nếu tự ý huỷ đơn trước khi nhận kho.
+      </div>
+      <Button className="mt-2" size="sm" disabled={busy || countdown.expired} onClick={() => { setAcceptedNoRefund(false); setPayOpen(true) }}>Thanh toán đặt cọc giữ chỗ</Button>
     </div>}
     {payment?.paymentStatus === 'PAID' && <Button variant="outline" size="sm" className="reservation-action reservation-action-receipt min-h-10 w-full justify-center" onClick={() => setReceiptOpen(true)}>{bookingDepositAccepted(payment) ? 'Xem biên lai thanh toán' : 'Xem giao dịch cần đối soát'}</Button>}
     <Modal size="2xl" open={payOpen} onClose={() => { if (!busy) { setPayOpen(false); setAcceptedNoRefund(false) } }} title="Thanh toán đặt cọc giữ chỗ">
@@ -183,10 +186,10 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
             
             <div className="space-y-1.5 text-xs">
               <p className="font-bold uppercase tracking-wider text-rose-900">
-                Thông báo quan trọng: Quy định không hoàn phí giữ chỗ
+                Quy định không hoàn tiền đặt cọc giữ chỗ
               </p>
               <p className="leading-relaxed text-rose-900 font-medium">
-                Khoản thanh toán ngay <b>{formatVnd(snapshot.reservationDepositAmount)}</b> là cọc giữ chỗ, được trừ vào tổng nghĩa vụ phải thanh toán. Theo điều khoản đã chấp nhận, khoản này <b>không hoàn khi khách tự ý hủy hoặc không nhận kho đúng hạn</b>.
+                Khoản thanh toán ngay <b>{formatVnd(snapshot.reservationDepositAmount)}</b> là phí đặt cọc giữ chỗ, là khoản bảo đảm việc giữ loại kho đã chọn và <b>không được hoàn lại trong trường hợp khách hàng tự ý hủy đơn hoặc bỏ lịch nhận kho</b>.
               </p>
               <p className="text-[11px] leading-relaxed text-rose-800">
                 Toàn bộ số tiền này sẽ được <b>khấu trừ 100%</b> vào tổng nghĩa vụ tài chính khi quý khách đến cơ sở làm thủ tục nhận kho đúng hẹn.
@@ -204,7 +207,7 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
             onChange={(e) => setAcceptedNoRefund(e.target.checked)}
           />
           <span className="leading-tight">
-            Tôi xác nhận đã đọc, hiểu rõ và đồng ý rằng <b>khoản phí giữ chỗ sẽ không được hoàn lại</b> nếu tôi tự ý hủy đơn hoặc không đến nhận kho đúng hạn.
+            Tôi xác nhận đã đọc, hiểu rõ và đồng ý: <b>Phí đặt cọc giữ chỗ là khoản bảo đảm việc giữ loại kho đã chọn và không được hoàn lại trong trường hợp khách hàng tự ý hủy đơn hoặc bỏ lịch nhận kho.</b>
           </span>
         </label>
 

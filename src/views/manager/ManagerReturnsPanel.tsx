@@ -761,52 +761,6 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                           </Button>
                         )}
 
-                        {ret.status === 'awaiting_customer_confirmation' && (
-                          <Button
-                            size="sm"
-                            variant="primary"
-                            title="Duyệt hoàn tất và đóng hồ sơ trả kho ngay"
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium whitespace-nowrap cursor-pointer"
-                            onClick={() => openCompleteModal(ret)}
-                          >
-                            {'Duyệt trả kho ngay'}
-                          </Button>
-                        )}
-
-                        {ret.status === 'inspected' && (
-                          <Button
-                            size="sm"
-                            variant="primary"
-                            title="Hoàn tất trả kho ngay"
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium whitespace-nowrap cursor-pointer"
-                            onClick={() => openCompleteModal(ret)}
-                          >
-                            {'Hoàn tất trả kho'}
-                          </Button>
-                        )}
-
-                        {ret.status === 'payment_due' && (
-                          <Button
-                            size="sm"
-                            variant="primary"
-                            title="Xác nhận thu phí & hoàn tất trả kho"
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium whitespace-nowrap cursor-pointer"
-                            onClick={() => openCompleteModal(ret)}
-                          >
-                            {'Hoàn tất trả kho'}
-                          </Button>
-                        )}
-
-                        {ret.status === 'refund_pending' && (
-                          <Button
-                            size="sm"
-                            variant="primary"
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium whitespace-nowrap cursor-pointer"
-                            onClick={() => openCompleteModal(ret)}
-                          >
-                            {'Hoàn tất'}
-                          </Button>
-                        )}
 
                         {ret.status === 'disputed' && (
                           <Button
@@ -1085,7 +1039,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                   Lập phiếu bảo trì
                 </Button>
               )}
-              {['inspected', 'awaiting_customer_confirmation', 'refund_pending', 'payment_due'].includes(selectedReturn.status) && (
+              {['inspected', 'awaiting_customer_confirmation', 'payment_due'].includes(selectedReturn.status) && (
                 <Button
                   variant="primary"
                   className="bg-emerald-600 hover:bg-emerald-700 text-white"
