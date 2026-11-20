@@ -7,7 +7,6 @@ import BusinessRefundRequestsPanel from "./BusinessRefundRequestsPanel"
 import BusinessDamageIncidentsPanel from "./BusinessDamageIncidentsPanel"
 import BusinessRentalRegulationsPanel from "./BusinessRentalRegulationsPanel"
 import BusinessDashboardPanel from "./BusinessDashboardPanel"
-import BusinessDiscountCodesPanel from "./BusinessDiscountCodesPanel"
 
 import {
   XAxis,
@@ -623,26 +622,19 @@ export default function BusinessApp({
       permission: "facilities:read",
     },
 
-    // ── GIÁ & KHUYẾN MÃI ──
+    // ── BẢNG GIÁ & GÓI THUÊ ──
     {
       id: "pricing",
       label: "Bảng Giá Loại Kho",
       icon: Icon.dollar,
-      group: "Giá & Khuyến Mãi",
+      group: "Bảng Giá & Gói Thuê",
       permission: "policies:read",
     },
     {
       id: "policies",
       label: "Gói Thuê",
       icon: Icon.calendar,
-      group: "Giá & Khuyến Mãi",
-      permission: "policies:read",
-    },
-    {
-      id: "discounts",
-      label: "Mã Giảm Giá (Voucher)",
-      icon: Icon.tag,
-      group: "Giá & Khuyến Mãi",
+      group: "Bảng Giá & Gói Thuê",
       permission: "policies:read",
     },
     // ── QUY ĐỊNH & PHÁP LÝ ──
@@ -4664,14 +4656,6 @@ export default function BusinessApp({
       })()}
 
 
-      {/* ── DISCOUNT VOUCHERS ── */}
-      {page === "discounts" && (
-        <BusinessDiscountCodesPanel
-          lang={lang}
-          facilitiesList={facilitiesList}
-          showToast={showToast}
-        />
-      )}
 
       {/* ── DAMAGE INCIDENTS (NHÓM 3) ── */}
       {page === "damage-incidents" && (
