@@ -504,7 +504,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         growth: 0,
         manager: '',
         status: facility.status === 'maintenance' ? 'maintenance' : 'active',
-        accessHours: facility.accessHours || 'Chưa cập nhật',
+        accessHours: '24/7',
         timezone: 'Asia/Ho_Chi_Minh',
       }))
     : isApiAuthenticated() ? [] : sharedFacilities, [backendFacilities, backendUnitTypes, availabilityByUnitType, sharedFacilities])
@@ -2602,7 +2602,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   address: reservation.facilitySnapshot.address || 'Chưa cập nhật',
                   city: reservation.facilitySnapshot.city || '',
                   phone: reservation.facilitySnapshot.phone || null,
-                  accessHours: reservation.facilitySnapshot.accessHours || null,
+                  accessHours: "24/7",
                 } : backendFacilities.find(item => item.id === reservation.facilityId) || null}
                 unitTypeDetails={reservation.unitTypeSnapshot ? {
                   lengthM: reservation.unitTypeSnapshot.lengthM,
@@ -3646,9 +3646,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               <p className="mt-1 leading-5">{reservationSubmitError}</p>
             </div>}
 
-            <div className="h-10 shrink-0" aria-hidden="true" />
-
-            <div className="sticky bottom-0 z-20 -mx-4 -mb-4 sm:-mx-6 sm:-mb-6 bg-white/95 backdrop-blur-sm p-4 sm:px-6 border-t border-stone-200 flex flex-wrap justify-between gap-2 shadow-xs">
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 pt-4">
               <div>
                 {bookingStep === 1
                   ? <Button variant="outline" onClick={() => { resetReservationDraft(); resetBookingForm(); setBookOpen(false); showToast('Đã hủy thao tác đặt kho.'); }}>Hủy đặt kho</Button>

@@ -511,7 +511,7 @@ export default function BusinessApp({
                 address: cleanBf.address,
                 city: cleanBf.city,
                 phone: cleanBf.phone || '',
-                accessHours: cleanBf.accessHours || '',
+                accessHours: "24/7",
                 image: cleanBf.imageUrl || '',
                 climate: Boolean(cleanBf.climateControlled),
                 security: cleanBf.securityDescription || '',
@@ -536,7 +536,7 @@ export default function BusinessApp({
               address: cleanBf.address,
               city: cleanBf.city,
               phone: cleanBf.phone || '',
-              accessHours: cleanBf.accessHours || '',
+              accessHours: "24/7",
               image: cleanBf.imageUrl || '',
               climate: Boolean(cleanBf.climateControlled),
               security: cleanBf.securityDescription || '',
@@ -2399,7 +2399,7 @@ export default function BusinessApp({
   )
 
   const [formFacAccessHours, setFormFacAccessHours] = useState<string>(
-    "08:00 - 17:00",
+    "24/7",
   )
 
   const [formFacStatus, setFormFacStatus] = useState<Facility['status']>(
@@ -2661,7 +2661,7 @@ export default function BusinessApp({
 
     setFormFacSecurity(apiMode ? "" : "Khóa riêng tự quản, Bảo vệ cổng")
 
-    setFormFacAccessHours(apiMode ? "" : "08:00 - 17:00")
+    setFormFacAccessHours(apiMode ? "" : "24/7")
 
     setFormFacStatus(apiMode ? "setup" : "active")
 
@@ -2790,7 +2790,7 @@ export default function BusinessApp({
         address: formFacAddress.trim(),
         city: formFacCity.trim(),
         phone: formFacPhone.trim() || null,
-        accessHours: formFacAccessHours.trim() || null,
+        accessHours: "24/7",
         imageUrl: formFacImage || null,
         climateControlled: formFacClimate,
         securityDescription: formFacSecurity.trim() || null,
@@ -2855,7 +2855,7 @@ export default function BusinessApp({
 
         security: formFacSecurity,
 
-        accessHours: formFacAccessHours,
+        accessHours: "24/7",
 
         status: backendFacilityStatus || (isApiAuthenticated() ? "setup" : formFacStatus),
 
@@ -3193,7 +3193,7 @@ export default function BusinessApp({
     setFormFacSecurity(f.security || (apiMode ? "" : "Khóa riêng tự quản, Bảo vệ cổng"))
 
     setFormFacAccessHours(
-      f.accessHours || (isApiAuthenticated() ? "" : "08:00 - 17:00"),
+      f.accessHours || (isApiAuthenticated() ? "" : "24/7"),
     )
 
     setEditValidationErrors([])
@@ -3213,13 +3213,13 @@ export default function BusinessApp({
         if (!persisted) throw new Error('Không tìm thấy cơ sở trên hệ thống. Vui lòng tải lại trang.')
         const saved = await updateBusinessFacilityApi(persisted.id, {
           name: formFacName.trim(), address: formFacAddress.trim(), city: formFacCity.trim(),
-          phone: formFacPhone.trim() || null, accessHours: formFacAccessHours.trim() || null,
+          phone: formFacPhone.trim() || null, accessHours: "24/7",
           imageUrl: formFacImage || null, climateControlled: formFacClimate,
           securityDescription: formFacSecurity.trim() || null,
         })
         updateFacility(selectedFacility.id, {
           name: saved.name, address: saved.address, city: saved.city, phone: saved.phone || '',
-          accessHours: saved.accessHours || '', image: saved.imageUrl || '', status: saved.status,
+          accessHours: "24/7", image: saved.imageUrl || '', status: saved.status,
           climate: Boolean(saved.climateControlled), security: saved.securityDescription || '',
         })
         setEditFacilityModal(false)
@@ -3395,7 +3395,7 @@ export default function BusinessApp({
           address: formFacAddress.trim(),
           city: formFacCity.trim(),
           phone: formFacPhone.trim() || null,
-          accessHours: formFacAccessHours.trim() || null,
+          accessHours: "24/7",
           imageUrl: formFacImage || null,
           climateControlled: formFacClimate,
           securityDescription: formFacSecurity.trim() || null,
@@ -3449,7 +3449,7 @@ export default function BusinessApp({
 
         security: formFacSecurity,
 
-        accessHours: formFacAccessHours,
+        accessHours: "24/7",
 
       },
       user,
@@ -3576,7 +3576,7 @@ export default function BusinessApp({
             address: persisted.address,
             city: persisted.city,
             phone: persisted.phone || null,
-            accessHours: persisted.accessHours || null,
+            accessHours: "24/7",
             imageUrl: persisted.imageUrl || null,
             climateControlled: persisted.climateControlled,
             securityDescription: persisted.securityDescription || null,
@@ -4014,7 +4014,7 @@ export default function BusinessApp({
                           <div>{cleanF.address} · <b>{cleanF.city}</b></div>
                           <div>Quản lý: <b>{cleanF.manager}</b></div>
                           <div>Số điện thoại liên hệ: <b>{cleanF.phone || "Chưa cập nhật"}</b></div>
-                          <div>Khung giờ mở cửa: <b>{cleanF.accessHours || (isApiAuthenticated() ? "Chưa cập nhật" : "08:00 - 17:00")}</b></div>
+                          <div>Khung giờ mở cửa: <b>{"24/24 mỗi ngày"}</b></div>
                         </div>
                         {/* Cơ cấu gian kho */}
                         <div className="flex flex-wrap gap-2 text-xs">
