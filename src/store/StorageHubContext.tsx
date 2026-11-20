@@ -241,7 +241,7 @@ const INITIAL_FACILITIES: Facility[] = FACILITIES.map(f => ({
   growth: f.growth,
   manager: f.manager,
   status: 'active',
-  accessHours: '08:00 - 17:00',
+  accessHours: '24/7',
   timezone: 'Asia/Ho_Chi_Minh',
   unitDistribution: f.unitDistribution
 }))
@@ -4207,7 +4207,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       manager: data.manager?.trim() || 'Quản lý cơ sở',
       phone: data.phone?.trim() || '1900 6868',
       status: data.status || 'active',
-      accessHours: data.accessHours || '08:00 - 17:00',
+      accessHours: '24/7',
       timezone: data.timezone || 'Asia/Ho_Chi_Minh',
       unitDistribution,
       unitPrices: data.unitPrices,

@@ -369,7 +369,7 @@ export default function BusinessFacilityDetailsModal({
                     {[
                       ['Người quản lý', valueOrMissing(facility.manager)],
                       ['Số điện thoại liên hệ', valueOrMissing(facility.phone)],
-                      ['Giờ mở cửa', valueOrMissing(facility.accessHours)],
+                      ['Giờ hoạt động', '24/24 mỗi ngày'],
                       ['Giá thuê từ', facilityPrice === MISSING ? MISSING : `${facilityPrice}/tháng`],
                     ].map(([label, value]) => <div key={label} className="min-w-0">
                       <dt className="text-sm text-stone-600">{label}</dt>
