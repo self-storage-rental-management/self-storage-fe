@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Badge, Button, Card, Input, Modal, SectionHeader, Select, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import { getAuthenticatedActor } from '../../services/authApi'
 import { ApiClientError } from '../../services/apiClient'
-import { managerDisplayError } from './managerPresentation'
+import { managerDisplayError, managerDisplayText } from './managerPresentation'
+import { managerStatusLabel } from './managerI18n'
 import ManagerActionNotice from './ManagerActionNotice'
 import { listAllRecoveryTasks, type RecoveryTask } from '../../services/recoveryTasksApi'
 import RecoveryTaskDetail, { recoveryStatusLabels } from '../rental-api/RecoveryTaskDetail'
@@ -268,7 +269,7 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
             {!loading && recoveryDisabled && <tr><td colSpan={7} className="px-4 py-3 text-center text-sm text-stone-500">Chức năng nhiệm vụ thu hồi kho chưa được bật.</td></tr>}
             {!loading && !taskError && !recoveryError && !tasks.length && !recoveryTasks.length && <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-stone-500">{recoveryDisabled ? 'Chưa có nhiệm vụ bảo trì tại cơ sở này.' : 'Chưa có nhiệm vụ tại cơ sở này.'}</td></tr>}
             {!loading && recoveryTasks.map(task => <Tr key={`recovery-${task.id}`}>
-              <Td><p className="font-semibold text-stone-900">Thu hồi kho - {task.customerName}</p><p className="mt-1 text-xs text-stone-500">{task.reason === 'AUTO_OVERDUE_DAY_8' ? 'Hợp đồng quá hạn, chưa hoàn tất gia hạn.' : task.reason}</p></Td>
+              <Td><p className="font-semibold text-stone-900">Thu hồi kho - {task.customerName}</p><p className="mt-1 text-xs text-stone-500">{task.reason === 'AUTO_OVERDUE_DAY_8' ? 'Hợp đồng quá hạn, chưa hoàn tất gia hạn.' : managerDisplayText(task.reason)}</p></Td>
               <Td><Badge variant="warning">Thu hồi kho</Badge></Td>
               <Td>{task.storageUnitCode}</Td>
               <Td><span className="text-sm text-stone-500">Cơ sở tiếp nhận</span></Td>
@@ -284,7 +285,7 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
                 <Td>
                   {task.status === 'completed' || task.status === 'cancelled'
                     ? (task.assignedStaffName || 'Chưa phân công')
-                    : <Select label="" value={task.assignedStaffId || ''} onChange={event => void reassign(task.id, event.target.value)}><option value="" disabled>Chọn Staff</option>{staff.map(member => <option key={member.id} value={member.id}>{member.fullName}</option>)}</Select>}
+                    : <Select label="" value={task.assignedStaffId || ''} onChange={event => void reassign(task.id, event.target.value)}><option value="" disabled>Chọn nhân viên</option>{staff.map(member => <option key={member.id} value={member.id}>{member.fullName}</option>)}</Select>}
                 </Td>
                 <Td>{task.dueAt || 'Chưa đặt hạn'}</Td>
                 <Td><Badge variant={statusVariant(task.status)}>{taskStatusLabel[task.status]}</Badge></Td>
@@ -317,8 +318,8 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
         <div className="space-y-4">
           <Input label="Tiêu đề" value={title} onChange={event => setTitle(event.target.value)} maxLength={255} />
           <Input label="Lý do / nội dung xử lý" value={reason} onChange={event => setReason(event.target.value)} maxLength={2000} />
-          <Select label="Gian kho" value={storageUnitId} onChange={event => setStorageUnitId(event.target.value)}><option value="">Chọn gian kho</option>{units.map(unit => <option key={unit.id} value={unit.id}>{unit.code} · {unit.status}</option>)}</Select>
-          <Select label="Nhân viên phụ trách" value={assignedStaffId} onChange={event => setAssignedStaffId(event.target.value)}><option value="">Chọn Staff</option>{staff.map(member => <option key={member.id} value={member.id}>{member.fullName}</option>)}</Select>
+          <Select label="Gian kho" value={storageUnitId} onChange={event => setStorageUnitId(event.target.value)}><option value="">Chọn gian kho</option>{units.map(unit => <option key={unit.id} value={unit.id}>{unit.code} · {managerStatusLabel(unit.status, 'vi')}</option>)}</Select>
+          <Select label="Nhân viên phụ trách" value={assignedStaffId} onChange={event => setAssignedStaffId(event.target.value)}><option value="">Chọn nhân viên</option>{staff.map(member => <option key={member.id} value={member.id}>{member.fullName}</option>)}</Select>
           <div className="grid gap-3 sm:grid-cols-2"><Select label="Mức ưu tiên" value={priority} onChange={event => setPriority(event.target.value as MaintenanceTaskPriority)}><option value="low">Thấp</option><option value="medium">Trung bình</option><option value="high">Cao</option></Select><Input label="Hạn xử lý" type="date" value={dueAt} onChange={event => setDueAt(event.target.value)} /></div>
           <div className="flex justify-end gap-2"><Button variant="outline" disabled={saving} onClick={() => setModalOpen(false)}>Đóng</Button><Button disabled={saving || !title.trim() || !reason.trim() || !storageUnitId || !assignedStaffId || !dueAt} onClick={() => void createTask()}>{saving ? 'Đang tạo…' : 'Tạo & giao nhiệm vụ'}</Button></div>
         </div>

@@ -2,9 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react'
 import type { FacilityCustomUnitSpec, RentalPackage } from '../../../types/storageHub'
 import { getUnitTypeVehicleStandard } from '../../../domain/facilityRules'
 import {
-  generateDefaultRentalPackages,
   calculatePackagePrice,
   calculateDiscountPercent,
+  isGeneratedDefaultRentalPackageList,
 } from '../../../domain/packageRules'
 
 export interface UnitAllocationTableProps {
@@ -172,10 +172,11 @@ export const UnitAllocationTable: React.FC<UnitAllocationTableProps> = ({
     onChangeSpecs(
       specs.map((s) => {
         if (s.sizeCode !== sizeCode) return s
-        const currentPackages =
-          s.rentalPackages && s.rentalPackages.length > 0
-            ? s.rentalPackages
-            : generateDefaultRentalPackages('', s.sizeCode, s.monthlyPrice)
+        const currentPackages = isGeneratedDefaultRentalPackageList(
+          s.rentalPackages,
+          s.rentalPackages?.[0]?.facilityId,
+          s.sizeCode,
+        ) ? [] : (s.rentalPackages || [])
 
         const nextPackages = currentPackages.map((pkg) => {
           if (pkg.id !== packageId) return pkg
@@ -199,10 +200,11 @@ export const UnitAllocationTable: React.FC<UnitAllocationTableProps> = ({
     onChangeSpecs(
       specs.map((s) => {
         if (s.sizeCode !== sizeCode) return s
-        const currentPackages =
-          s.rentalPackages && s.rentalPackages.length > 0
-            ? s.rentalPackages
-            : generateDefaultRentalPackages('', s.sizeCode, s.monthlyPrice)
+        const currentPackages = isGeneratedDefaultRentalPackageList(
+          s.rentalPackages,
+          s.rentalPackages?.[0]?.facilityId,
+          s.sizeCode,
+        ) ? [] : (s.rentalPackages || [])
 
         const existingMonths = new Set(currentPackages.map((p) => p.months))
         const candidates = [2, 9, 18, 24, 36]
@@ -231,10 +233,11 @@ export const UnitAllocationTable: React.FC<UnitAllocationTableProps> = ({
     onChangeSpecs(
       specs.map((s) => {
         if (s.sizeCode !== sizeCode) return s
-        const currentPackages =
-          s.rentalPackages && s.rentalPackages.length > 0
-            ? s.rentalPackages
-            : generateDefaultRentalPackages('', s.sizeCode, s.monthlyPrice)
+        const currentPackages = isGeneratedDefaultRentalPackageList(
+          s.rentalPackages,
+          s.rentalPackages?.[0]?.facilityId,
+          s.sizeCode,
+        ) ? [] : (s.rentalPackages || [])
         return {
           ...s,
           rentalPackages: currentPackages.filter((p) => p.id !== packageId),
@@ -247,10 +250,11 @@ export const UnitAllocationTable: React.FC<UnitAllocationTableProps> = ({
     const sourceSpec = specs.find((s) => s.sizeCode === sourceSizeCode)
     if (!sourceSpec) return
 
-    const sourcePackages =
-      sourceSpec.rentalPackages && sourceSpec.rentalPackages.length > 0
-        ? sourceSpec.rentalPackages
-        : generateDefaultRentalPackages('', sourceSpec.sizeCode, sourceSpec.monthlyPrice)
+    const sourcePackages = isGeneratedDefaultRentalPackageList(
+      sourceSpec.rentalPackages,
+      sourceSpec.rentalPackages?.[0]?.facilityId,
+      sourceSpec.sizeCode,
+    ) ? [] : (sourceSpec.rentalPackages || [])
 
     const otherSpecs = specs.filter((s) => s.sizeCode !== sourceSizeCode)
     if (otherSpecs.length === 0) return
@@ -1017,10 +1021,11 @@ export const UnitAllocationTable: React.FC<UnitAllocationTableProps> = ({
 
                               {/* Nhóm 3: Thiết lập Gói thuê & Ưu đãi kỳ hạn */}
                               {(() => {
-                                const rowPackages =
-                                  spec.rentalPackages && spec.rentalPackages.length > 0
-                                    ? spec.rentalPackages
-                                    : generateDefaultRentalPackages('', spec.sizeCode, spec.monthlyPrice)
+                                const rowPackages = isGeneratedDefaultRentalPackageList(
+                                  spec.rentalPackages,
+                                  spec.rentalPackages?.[0]?.facilityId,
+                                  spec.sizeCode,
+                                ) ? [] : (spec.rentalPackages || [])
 
                                 return (
                                   <div className="bg-white p-3 rounded-xl border border-stone-200 shadow-2xs space-y-2.5">
@@ -1086,6 +1091,12 @@ export const UnitAllocationTable: React.FC<UnitAllocationTableProps> = ({
 
                                         <span>{appliedMessage}</span>
                                       </div>
+                                    )}
+
+                                    {rowPackages.length === 0 && (
+                                      <p className="rounded-lg border border-dashed border-stone-300 bg-stone-50 px-3 py-2 text-xs text-stone-600">
+                                        Chưa có gói thuê được cấu hình.
+                                      </p>
                                     )}
 
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">

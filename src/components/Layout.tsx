@@ -6,6 +6,7 @@ import { isApiAuthenticated } from '../services/authApi'
 import { markAllNotificationsRead } from '../services/notificationApi'
 import { userFacingError } from '../presentation/userFacingError'
 import { useDisplayPunctuation } from '../presentation/useDisplayPunctuation'
+import { managerDisplayText } from '../views/manager/managerPresentation'
 
 export interface NavItem {
   id: string
@@ -98,7 +99,7 @@ interface LayoutProps {
   onLoadMoreNotifications?: () => void
   onRetryNotifications?: () => void
   additionalNotifications?: LayoutNotification[]
-  onNotificationClick?: (notification: LayoutNotification) => void | Promise<unknown>
+  onNotificationClick?: (notification: LayoutNotification) => void
   canAccess?: (permission: PermissionKey) => boolean
 }
 
@@ -122,16 +123,6 @@ export default function Layout({
   const [notificationActionError, setNotificationActionError] = useState('')
   const notificationAreaRef = useRef<HTMLDivElement>(null)
   const contentScrollRef = useRef<HTMLElement>(null)
-  useEffect(() => {
-    const originalHtmlOverflow = document.documentElement.style.overflow
-    const originalBodyOverflow = document.body.style.overflow
-    document.documentElement.style.overflow = 'hidden'
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.documentElement.style.overflow = originalHtmlOverflow
-      document.body.style.overflow = originalBodyOverflow
-    }
-  }, [])
   useEffect(() => {
     if (!notificationsOpen) return
     const closeOutside = (event: PointerEvent) => {
@@ -382,23 +373,17 @@ export default function Layout({
   }
 
   const openNotificationDetail = (notification: LayoutNotification) => {
-    const commitLocalRead = () => {
-      const nextReadIds = Array.from(new Set([...readNotificationIds, notification.id]))
-      setReadNotificationIds(nextReadIds)
-      localStorage.setItem(notificationReadKey, JSON.stringify(nextReadIds))
-      setBellActionNotifications(prev => {
-        const updated = prev.map(item => item.id === notification.id ? { ...item, isRead: true } : item)
-        try { localStorage.setItem(bellActionStorageKey, JSON.stringify(updated)) } catch {}
-        return updated
-      })
-    }
+    const nextReadIds = Array.from(new Set([...readNotificationIds, notification.id]))
+    setReadNotificationIds(nextReadIds)
+    localStorage.setItem(notificationReadKey, JSON.stringify(nextReadIds))
+    setBellActionNotifications(prev => {
+      const updated = prev.map(item => item.id === notification.id ? { ...item, isRead: true } : item)
+      try { localStorage.setItem(bellActionStorageKey, JSON.stringify(updated)) } catch {}
+      return updated
+    })
     setNotificationsOpen(false)
-    if (onNotificationClick) {
-      Promise.resolve(onNotificationClick(notification)).then(commitLocalRead).catch(() => undefined)
-    } else {
-      commitLocalRead()
-      navigate(notification.page, false)
-    }
+    if (onNotificationClick) onNotificationClick(notification)
+    else navigate(notification.page, false)
   }
 
   const markAllAsRead = async () => {
@@ -424,7 +409,7 @@ export default function Layout({
   }
 
   return (
-    <div className={`flex h-screen min-h-screen max-h-screen min-h-0 w-full min-w-0 max-w-full overflow-hidden bg-[#f3f2eb] ${user.role === 'customer' ? 'customer-role-layout' : ''}`}>
+    <div className={`flex min-h-dvh h-dvh min-h-0 w-full min-w-0 max-w-full overflow-hidden bg-[#f3f2eb] ${user.role === 'customer' ? 'customer-role-layout' : ''}`}>
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -436,7 +421,7 @@ export default function Layout({
       {/* Sidebar */}
       <aside
         style={{ borderTopColor: taskbarColor }}
-        className={`fixed lg:static inset-y-0 left-0 z-30 h-full min-h-0 w-64 shrink-0 border-t-2 bg-[#292a27] border-r border-white/10 text-white flex flex-col overflow-hidden transition-transform duration-200
+        className={`fixed lg:static inset-y-0 left-0 z-30 min-h-0 w-64 shrink-0 border-t-2 bg-[#292a27] border-r border-white/10 text-white flex flex-col overflow-hidden transition-transform duration-200
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
       >
         {/* Logo */}
@@ -468,7 +453,7 @@ export default function Layout({
         </div>
 
         {/* Nav */}
-        <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2" aria-label={user.role === 'staff' ? 'Điều hướng nhân viên' : `${roleLabel} navigation`}>
+        <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2" aria-label={user.role === 'staff' ? 'Điều hướng nhân viên' : 'Điều hướng quản lý cơ sở'}>
           {visibleNavItems.map((item, index) => {
             const groupText = getNavGroup(item.group)
             const prevGroupText = getNavGroup(visibleNavItems[index - 1]?.group)
@@ -507,7 +492,7 @@ export default function Layout({
                 ? 'bg-white/10'
                 : 'hover:bg-white/5'
               }`}
-            title={user.role === 'staff' ? 'Xem hồ sơ và cài đặt' : 'View Profile & Settings'}
+            title="Xem hồ sơ và cài đặt"
           >
             <Avatar name={user.name} size="sm" imageUrl={user.avatar} />
             <div className="min-w-0 flex-1">
@@ -544,13 +529,13 @@ export default function Layout({
       </aside>
 
       {/* Main */}
-      <div className={`flex-1 flex flex-col h-full min-h-0 min-w-0 overflow-hidden ${user.role === 'customer' ? 'basis-0 w-0' : ''}`}>
+      <div className={`flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden ${user.role === 'customer' ? 'basis-0 w-0' : ''}`}>
         {/* Top bar */}
         <header className="bg-white border-b border-[#deddd2] h-16 flex items-center px-4 lg:px-7 gap-3 lg:gap-4 flex-shrink-0">
           <button
             className="lg:hidden text-slate-500 hover:text-slate-700 p-1"
             onClick={() => setSidebarOpen(true)}
-            aria-label={user.role === 'staff' ? 'Mở trình đơn điều hướng' : 'Open navigation menu'}
+            aria-label="Mở trình đơn điều hướng"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -631,12 +616,16 @@ export default function Layout({
                     >
                       <span className="flex items-start gap-2">
                         {!isNotificationRead(item) && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-amber-500 ring-2 ring-amber-200" />}
-                        <span className={`block text-sm ${!isNotificationRead(item) ? 'font-semibold text-stone-900' : 'font-medium text-stone-700'}`}>{item.title}</span>
+                        <span className={`block text-sm ${!isNotificationRead(item) ? 'font-semibold text-stone-900' : 'font-medium text-stone-700'}`}>{user.role === 'manager' ? managerDisplayText(item.title) : item.title}</span>
                       </span>
                       {item.message && <span className="mt-1 block whitespace-pre-line text-xs text-stone-600 line-clamp-3">{
-                        item.title === 'BO từ chối thay đổi loại kho' && !item.message.includes('Lý do:')
-                          ? item.message.replace(/^([^·]+ · [^·]+) · /, '$1\nLý do: ')
-                          : item.message
+                        user.role === 'manager'
+                          ? managerDisplayText(item.title === 'BO từ chối thay đổi loại kho' && !item.message.includes('Lý do:')
+                            ? item.message.replace(/^([^·]+ · [^·]+) · /, '$1\nLý do: ')
+                            : item.message)
+                          : item.title === 'BO từ chối thay đổi loại kho' && !item.message.includes('Lý do:')
+                            ? item.message.replace(/^([^·]+ · [^·]+) · /, '$1\nLý do: ')
+                            : item.message
                       }</span>}
                       {item.date && <span className="mt-1.5 block text-[10px] text-stone-400 font-mono">{formatNotificationDate(item.date)}</span>}
                     </button>

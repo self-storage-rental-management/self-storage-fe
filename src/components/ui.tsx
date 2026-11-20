@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent, type MouseEvent, type ReactNode, type HTMLAttributes, type InputHTMLAttributes, type TdHTMLAttributes } from 'react'
+import { useState, type ChangeEvent, type ReactNode, type HTMLAttributes, type ButtonHTMLAttributes, type InputHTMLAttributes, type TdHTMLAttributes } from 'react'
 import LocalizedDateInput from './LocalizedDateInput'
 
 // ─── Badge ───────────────────────────────────────────────────────────────────
@@ -39,37 +39,18 @@ const btnSizes: Record<BtnSize, string> = {
   lg: 'text-sm px-5 py-2.5',
 }
 
-interface ButtonProps extends Omit<HTMLAttributes<HTMLButtonElement>, 'onClick'> {
-  onClick?: (event: MouseEvent<HTMLButtonElement>) => unknown
+interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: BtnVariant
   size?: BtnSize
   disabled?: boolean
   type?: 'button' | 'submit' | 'reset'
 }
 
-export function Button({ variant = 'primary', size = 'md', className = '', children, disabled, onClick, ...rest }: ButtonProps) {
-  const clickLock = useRef(false)
-  const [pending, setPending] = useState(false)
-  const handleClick = async (event: MouseEvent<HTMLButtonElement>) => {
-    if (disabled || clickLock.current) { event.preventDefault(); return }
-    clickLock.current = true
-    try {
-      const result = onClick?.(event)
-      if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
-        setPending(true)
-        await result
-      }
-    } finally {
-      clickLock.current = false
-      setPending(false)
-    }
-  }
+export function Button({ variant = 'primary', size = 'md', className = '', children, disabled, ...rest }: ButtonProps) {
   return (
     <button
-      className={`${btnBase} ${btnVariants[variant]} ${btnSizes[size]} ${disabled || pending ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
-      disabled={disabled || pending}
-      aria-busy={pending || undefined}
-      onClick={handleClick}
+      className={`${btnBase} ${btnVariants[variant]} ${btnSizes[size]} ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
+      disabled={disabled}
       {...rest}
     >
       {children}
@@ -258,18 +239,20 @@ function PasswordVisibilityIcon({ visible }: { visible: boolean }) {
   )
 }
 
-export function Select({ label, children, className = '', value, onChange, disabled = false }: {
+export function Select({ label, children, className = '', value, onChange, disabled = false, 'aria-label': accessibleLabel }: {
   label?: string
   children?: ReactNode
   className?: string
   value?: string
   onChange?: (e: React.ChangeEvent<HTMLSelectElement>) => void
   disabled?: boolean
+  'aria-label'?: string
 }) {
   return (
     <div className="space-y-1">
       {label && <label className="block text-sm font-medium text-stone-700 leading-tight">{label}</label>}
       <select
+        aria-label={accessibleLabel}
         className={`w-full border border-stone-300 rounded-lg px-3 py-2 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition bg-white ${className}`}
         value={value}
         onChange={onChange}

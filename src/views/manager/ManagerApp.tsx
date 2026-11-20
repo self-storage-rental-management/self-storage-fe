@@ -60,7 +60,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
   const nav: NavItem[] = [
     { id: 'dashboard', label: 'Tổng quan', icon: Icon.home, group: 'Tổng quan', permission: 'dashboard:read' },
     { id: 'inventory', label: 'Thông tin kho', icon: Icon.box, group: 'Vận hành', permission: 'inventory:update' },
-    ...(isApiAuthenticated() ? [{ id: 'unit-assignment', label: 'Phân kho', icon: Icon.policy, group: 'Vận hành', permission: 'storage_units:assign' as const }] : []),
+    ...(isApiAuthenticated() ? [{ id: 'unit-assignment', label: 'Phân gian', icon: Icon.policy, group: 'Vận hành', permission: 'storage_units:assign' as const }] : []),
     { id: 'rentals', label: 'Hồ sơ thuê & Gia hạn', icon: Icon.policy, group: 'Vận hành', permission: isApiAuthenticated() ? 'rentals:read' : 'rentals:update' },
     { id: 'returns', label: 'Trả kho & Quyết toán', icon: Icon.clipboard, group: 'Vận hành', permission: 'returns:read' as const },
     { id: 'payments', label: isApiAuthenticated() ? 'Lịch sử thanh toán' : 'Lịch sử thanh toán & Công nợ', icon: Icon.dollar, group: 'Tài chính', permission: isApiAuthenticated() ? 'payments:read' : 'payments:collect' },
@@ -85,7 +85,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     const pageTitles: Record<string, string> = {
       dashboard: 'Tổng quan cơ sở',
       inventory: 'Thông tin kho',
-      'unit-assignment': 'Phân kho',
+      'unit-assignment': 'Phân gian',
       rentals: 'Hồ sơ thuê & Gia hạn',
       returns: 'Trả kho & Quyết toán',
       payments: 'Lịch sử thanh toán',

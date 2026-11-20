@@ -20,10 +20,10 @@ export default function ManagerAccessCredentialsPanel({ facilityId }: { facility
     return () => { active = false }
   }, [facilityId, query, status])
 
-  const typeLabel: Record<AccessCredential['type'], string> = { PIN: 'PIN / access code', CARD: 'Thẻ', KEY: 'Chìa khóa', LOCK: 'Khóa' }
+  const typeLabel: Record<AccessCredential['type'], string> = { PIN: 'Mã PIN / mã truy cập', CARD: 'Thẻ', KEY: 'Chìa khóa', LOCK: 'Khóa' }
 
   return <div className="space-y-5">
-    <SectionHeader title="Lịch sử quyền truy cập" subtitle="Manager chỉ theo dõi lịch sử cấp/thu hồi, Staff là actor duy nhất được thao tác credential." />
+    <SectionHeader title="Lịch sử quyền truy cập" subtitle="Quản lý cơ sở chỉ theo dõi lịch sử cấp và thu hồi, nhân viên là người duy nhất được thao tác quyền truy cập." />
     <Card className="p-4">
       <div className="grid gap-3 md:grid-cols-[minmax(260px,1fr)_220px]">
         <Input label="Tìm kiếm" placeholder="Đơn đặt kho, khách hàng, gian kho, số seri" value={query} onChange={event => setQuery(event.target.value)} />
@@ -35,9 +35,9 @@ export default function ManagerAccessCredentialsPanel({ facilityId }: { facility
     {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div>}
     <Card>
       <Table>
-        <Thead><Tr><Th>Đơn / khách hàng</Th><Th>Credential</Th><Th>Gian kho</Th><Th>Cấp lúc</Th><Th>Thu hồi lúc</Th><Th>Trạng thái</Th><Th>Người cấp</Th></Tr></Thead>
+        <Thead><Tr><Th>Đơn / khách hàng</Th><Th>Quyền truy cập</Th><Th>Gian kho</Th><Th>Cấp lúc</Th><Th>Thu hồi lúc</Th><Th>Trạng thái</Th><Th>Người cấp</Th></Tr></Thead>
         <Tbody>
-          {!loading && !items.length && <Tr><Td colSpan={7} className="py-8 text-center text-stone-500">Chưa có lịch sử credential.</Td></Tr>}
+          {!loading && !items.length && <Tr><Td colSpan={7} className="py-8 text-center text-stone-500">Chưa có lịch sử quyền truy cập.</Td></Tr>}
           {items.map(item => <Tr key={item.id}>
             <Td><b className="font-mono">{item.reservationCode}</b><p className="text-xs text-stone-500">{item.customerName}</p></Td>
             <Td><b>{typeLabel[item.type]}</b><p className="text-xs font-mono text-stone-500">{item.reference}</p></Td>
