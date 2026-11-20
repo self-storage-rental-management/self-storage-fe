@@ -5,6 +5,7 @@ import VietnameseDateInput from '../../components/VietnameseDateInput'
 import { getAuthenticatedActor } from '../../services/authApi'
 import { useRentalApiResource } from '../../hooks/useRentalApiResource'
 import { rentalDate, rentalMoney } from '../rental-api/presentation'
+import { vietnamDateInput } from '../../utils/vietnamTime'
 import RecoveryReturnSettlement from './RecoveryReturnSettlement'
 import RecoveryTaskLink from '../rental-api/RecoveryTaskLink'
 import {
@@ -181,6 +182,7 @@ function ReturnWorkspace({
   const [date, setDate] = useState('')
   const [notes, setNotes] = useState('')
   const [editing, setEditing] = useState<string | null>(null)
+  const today = vietnamDateInput()
 
   async function run(work: () => Promise<ApiReturn>) {
     if (lock.current || recoveryLock.current) return
@@ -288,11 +290,23 @@ function ReturnWorkspace({
         )
       )}
       {role === 'customer' && rentalId && read.data && ((rentalActive && !rows.some(record => record.status !== 'completed' || (record.sourceType === 'RECOVERY' && record.recoveryTaskStatus !== 'CLOSED'))) || editing) && (
-        <form onSubmit={(event) => { event.preventDefault(); void run(() => editing ? updateReturnRequest(editing, date, notes) : requestReturn(rentalId, date, notes)) }} className="space-y-4 rounded-xl border border-stone-200 bg-stone-50 p-4">
-          <VietnameseDateInput label="Ngày trả kho" value={date} onChange={setDate} />
+        <form onSubmit={(event) => {
+          event.preventDefault()
+          if (date && date < today) {
+            setFeedback('Ngày trả kho không được ở quá khứ.')
+            return
+          }
+          void run(() => editing ? updateReturnRequest(editing, date, notes) : requestReturn(rentalId, date, notes))
+        }} className="space-y-4 rounded-xl border border-stone-200 bg-stone-50 p-4">
+          <div>
+            <VietnameseDateInput label="Ngày trả kho" value={date} min={today} onChange={setDate} />
+            {date && date < today && (
+              <p className="mt-1 text-xs font-semibold text-rose-600">Ngày trả kho không được ở quá khứ.</p>
+            )}
+          </div>
           <label className="block text-sm font-medium text-stone-700">Lý do<textarea required rows={3} placeholder="Nhập lý do trả kho…" value={notes} maxLength={2000} disabled={busy} onChange={(event) => setNotes(event.target.value)} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white p-3 font-normal" /></label>
           <div className="flex flex-wrap gap-3">
-            <Button type="submit" disabled={busy || !date || !notes.trim() || read.loading}>{editing ? 'Lưu chỉnh sửa' : 'Gửi yêu cầu trả kho'}</Button>
+            <Button type="submit" disabled={busy || !date || date < today || !notes.trim() || read.loading}>{editing ? 'Lưu chỉnh sửa' : 'Gửi yêu cầu trả kho'}</Button>
             {editing && <Button type="button" variant="outline" disabled={busy} onClick={() => setEditing(null)}>Hủy chỉnh sửa</Button>}
           </div>
         </form>
