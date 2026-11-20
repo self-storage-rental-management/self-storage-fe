@@ -211,7 +211,7 @@ function InventoryRead({
             <div className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-100 p-4">
               <div><div className="flex flex-wrap items-center gap-2"><h4 className="text-base font-bold">{type.name}</h4>{detail ? <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ${facilityCatalogTypeStatusClass(detail)}`}>{facilityCatalogTypeStatusLabel(detail)}</span> : <Badge variant="muted">Đang tải</Badge>}</div><p className="mt-1 text-xs text-stone-500">Mã {type.code} · Tổng <b>{totalUnitsForType}</b> gian ({availableUnitsForType} khả dụng{inactiveUnitsForType > 0 ? `, ${inactiveUnitsForType} tạm ngưng` : ''}{occupiedUnitsForType > 0 ? `, ${occupiedUnitsForType} đang dùng` : ''}) · Tầng {unit?.floor || '—'} · {unit?.zone || 'Chưa có khu vực'}</p></div>
               <div className="flex flex-wrap gap-2">
-            <Button variant="outline" disabled={actionBusy} onClick={async () => {
+            <Button variant="outline" onClick={async () => {
               setActionBusy(true); setActionError(undefined)
               try {
                 const loaded = detail || (await listAccessibleUnitTypes(facilityId, 0, 100)).data.find(item => item.id === type.id)

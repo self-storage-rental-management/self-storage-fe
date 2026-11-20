@@ -690,6 +690,8 @@ export default function BusinessApp({
   const [integrationLocked, setIntegrationLocked] = useState(false)
 
   const [pricingModal, setPricingModal] = useState(false)
+  const [pricingCollapsedMap, setPricingCollapsedMap] = useState<Record<string, boolean>>({})
+  const [feeScheduleCollapsed, setFeeScheduleCollapsed] = useState(false)
 
   const [policiesList, setPoliciesList] = useState<PolicyItem[]>(() =>
     isApiAuthenticated() ? [] : loadInitialPolicies(),
