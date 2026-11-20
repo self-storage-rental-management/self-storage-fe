@@ -534,6 +534,7 @@ export default function StaffCheckInOperationsPanel({
 
   const closeHandover = () => {
     if (submitting) return
+    setError(null)
     setCustomerWaitTarget(null)
     setHandoverTarget(null)
   }
@@ -586,8 +587,11 @@ export default function StaffCheckInOperationsPanel({
     refresh()
   }
 
-  const fail = (reason: unknown, fallback: string) =>
-    setError(staffErrorMessage(reason, fallback))
+  const fail = (reason: unknown, fallback: string) => {
+    const message = staffErrorMessage(reason, fallback)
+    setError(message)
+    showToast(message)
+  }
 
   const submitHandover = async () => {
     const hasKeyLock = Boolean(keyLockReference.trim())
@@ -1062,7 +1066,7 @@ export default function StaffCheckInOperationsPanel({
           </div>
         </div>
       </Card>
-      {error && (
+      {error && !handoverTarget && !rejectTarget && !noShowTarget && !detailTarget && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
           {error}
         </div>
@@ -1247,6 +1251,25 @@ export default function StaffCheckInOperationsPanel({
               ].map(([label, value]) => <div key={label}><dt className="text-xs text-stone-500">{label}</dt><dd className="mt-1 break-words font-semibold text-stone-900">{value || 'Chưa cập nhật'}</dd></div>)}
             </dl>
             <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">Hoàn tất bàn giao kho trống sẽ chuyển sang chờ khách hàng xác nhận nhận kho. Thời gian chuẩn bị chỉ bắt đầu sau xác nhận của khách; kiểm kê thực hiện khi khách báo đã chuẩn bị xong.</p>
+            {error && (
+              <div role="alert" className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800 flex items-start gap-3 shadow-sm">
+                <svg className="h-5 w-5 text-red-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div className="flex-1">
+                  <b className="font-semibold text-red-900">Không thể thực hiện thao tác:</b>
+                  <p className="mt-0.5 whitespace-pre-wrap">{error}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setError(null)}
+                  className="rounded px-1.5 py-0.5 text-xs font-bold text-red-500 hover:bg-red-100 hover:text-red-700"
+                  aria-label="Đóng lỗi"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
             <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-6" aria-label="Tiến độ nhận kho">
               {workflowStepLabels.map((label, index) => {
                 const step = index + 1
@@ -1255,7 +1278,10 @@ export default function StaffCheckInOperationsPanel({
                     key={label}
                     type="button"
                     disabled={submitting || step > workflowCurrentStep}
-                    onClick={() => setHandoverStep(step)}
+                    onClick={() => {
+                      setError(null)
+                      setHandoverStep(step)
+                    }}
                     aria-current={handoverStep === step ? "step" : undefined}
                     className={`rounded-lg border px-3 py-2 text-left text-xs transition ${
                     handoverStep === step
@@ -1495,9 +1521,7 @@ export default function StaffCheckInOperationsPanel({
                       <p className="font-bold text-base text-violet-950">Khách hàng đang trong thời gian chuẩn bị</p>
                       <p className="text-xs text-violet-800 mt-0.5">Khách hàng đang chủ động đưa hàng hóa vào gian kho và sắp xếp kiện hàng.</p>
                     </div>
-                    <span className="rounded-full bg-violet-100 border border-violet-300 px-3 py-1 text-xs font-bold text-violet-900">
-                      Bước 5/6
-                    </span>
+                    <span className="rounded-full bg-violet-100 border border-violet-300 px-3 py-1 text-xs font-bold text-violet-900">Bước 5/6</span>
                   </div>
 
                   <div className="mt-3 grid gap-3 sm:grid-cols-3 text-xs">
@@ -1514,7 +1538,7 @@ export default function StaffCheckInOperationsPanel({
                       <p className="font-bold text-stone-900 mt-0.5">{handoverTarget.paidRentalStartsOn || `Bàn giao + ${handoverTarget.freeSetupDays} ngày`}</p>
                     </div>
                   </div>
-                </div>
+                  </div>
 
                 <div className="rounded-xl border border-stone-200 bg-white p-4 text-sm text-stone-700 space-y-2">
                   <p className="font-bold text-stone-900">Quy trình tiếp theo</p>
@@ -1564,6 +1588,23 @@ export default function StaffCheckInOperationsPanel({
                     setEvidenceFiles(selected)
                   }} /></label><FilePreviewList files={evidenceFiles} onRemove={(index) => setEvidenceFiles((files) => files.filter((_, current) => current !== index))} disabled={submitting} /></>}
                 {isReviewingCompletedStep && handoverTarget.handover?.evidenceReferences.length ? <p className="text-xs text-stone-600">Đã lưu {handoverTarget.handover.evidenceReferences.length} tệp bằng chứng kiểm kê trong biên bản.</p> : null}
+              </div>
+            )}
+
+            {error && (
+              <div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800 flex items-start gap-2 shadow-sm">
+                <svg className="h-5 w-5 text-red-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="flex-1 font-medium">{error}</span>
+                <button
+                  type="button"
+                  onClick={() => setError(null)}
+                  className="rounded px-1 text-xs font-bold text-red-500 hover:bg-red-100 hover:text-red-700"
+                  aria-label="Đóng lỗi"
+                >
+                  ✕
+                </button>
               </div>
             )}
 
@@ -1630,7 +1671,10 @@ export default function StaffCheckInOperationsPanel({
       <Modal
         open={Boolean(noShowTarget)}
         onClose={() => {
-          if (!submitting) setNoShowTarget(null)
+          if (!submitting) {
+            setError(null)
+            setNoShowTarget(null)
+          }
         }}
         title="Đánh dấu khách không đến"
       >
@@ -1646,8 +1690,13 @@ export default function StaffCheckInOperationsPanel({
               maxLength={1000}
               onChange={(event) => setNoShowReason(event.target.value)}
             />
+            {error && (
+              <div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+                {error}
+              </div>
+            )}
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setNoShowTarget(null)}>
+              <Button variant="outline" onClick={() => { setError(null); setNoShowTarget(null); }}>
                 Đóng
               </Button>
               <Button
@@ -1665,7 +1714,10 @@ export default function StaffCheckInOperationsPanel({
       <Modal
         open={Boolean(rejectTarget)}
         onClose={() => {
-          if (!submitting) setRejectTarget(null)
+          if (!submitting) {
+            setError(null)
+            setRejectTarget(null)
+          }
         }}
         title="Từ chối nhận kho"
       >
@@ -1713,8 +1765,13 @@ export default function StaffCheckInOperationsPanel({
               kho cần kiểm tra, vệ sinh hoặc sửa chữa. Hệ thống sẽ không trả
               gian kho về trạng thái sẵn sàng.
             </div>
+            {error && (
+              <div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+                {error}
+              </div>
+            )}
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setRejectTarget(null)}>
+              <Button variant="outline" onClick={() => { setError(null); setRejectTarget(null); }}>
                 Đóng
               </Button>
               <Button
