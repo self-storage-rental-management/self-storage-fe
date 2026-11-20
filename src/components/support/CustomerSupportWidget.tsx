@@ -7,14 +7,14 @@ import type { SupportCreate } from '../../types/supportApi'
 import { canReadSupport } from '../../views/support-api/presentation'
 import CustomerSupportAssistant from './CustomerSupportAssistant'
 import SupportChannelInfo from './SupportChannelInfo'
-import SupportStaffHandoff from './SupportStaffHandoff'
+import SupportStaffHandoff, { type SupportRecordTarget } from './SupportStaffHandoff'
 import { loadCustomerChatSession, type CustomerChatSession } from '../../services/customerChatSessionApi'
 import { useCustomerChatPersistence } from '../../hooks/useCustomerChatPersistence'
 import { ApiClientError } from '../../services/apiClient'
 import { getSupportTicket } from '../../services/supportApi'
 import { useSupportUnread } from '../../hooks/useSupportMessageReads'
 
-type ChatOpenRequest = { request: number; ticketId?: string }
+export type ChatOpenRequest = { request: number; ticketId?: string; target?: SupportRecordTarget }
 
 function ChatIcon({ className = 'h-5 w-5' }: { className?: string }) {
   return <svg aria-hidden="true" className={`show-icon ${className}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
@@ -41,7 +41,7 @@ function ChatSessionBoundary({ actorId, openRequest }: { actorId: string; openRe
 function WidgetSession({ actorId, initialSession, onReload, openRequest }: { actorId: string; initialSession: CustomerChatSession; onReload: () => void; openRequest?: ChatOpenRequest }) {
   const [open, setOpen] = useState(false)
   const [started, setStarted] = useState(false)
-  const [handoff, setHandoff] = useState<{ question: string; history: NonNullable<SupportCreate['handoffMessages']> }>()
+  const [handoff, setHandoff] = useState<{ question: string; history: NonNullable<SupportCreate['handoffMessages']>; target?: SupportRecordTarget }>()
   const [liveStatus, setLiveStatus] = useState('Đang chờ nhân viên')
   const [handoffTicketId, setHandoffTicketId] = useState<string | undefined>(initialSession.snapshot.ticketId ?? undefined)
   const [handedOff, setHandedOff] = useState(!!initialSession.snapshot.ticketId && initialSession.snapshot.autoReturn)
@@ -64,6 +64,11 @@ function WidgetSession({ actorId, initialSession, onReload, openRequest }: { act
     if (!openRequest || consumedRequest.current === openRequest.request || staffLocked) return
     consumedRequest.current = openRequest.request
     setOpen(true); setStarted(true); setOpenError(undefined)
+    if (openRequest.target) {
+      setResolutionNotice(false)
+      setHandoff({ question: '', history: [], target: openRequest.target })
+      return
+    }
     if (!openRequest.ticketId || !isUuid(openRequest.ticketId)) return
     let current = true
     void getSupportTicket('customer', openRequest.ticketId).then(ticket => {
@@ -118,11 +123,11 @@ function WidgetSession({ actorId, initialSession, onReload, openRequest }: { act
       </div>}
       <div className="flex min-h-0 flex-1 flex-col bg-stone-50/70">
         {resolutionNotice && !handedOff && <p role="status" className="border-b border-stone-100 bg-orange-50 px-4 py-2.5 text-xs leading-5 text-stone-700">Nhân viên đã xử lý yêu cầu. Bạn có thể tiếp tục với trợ lý hoặc nhấn Gặp nhân viên để yêu cầu hỗ trợ lại.</p>}
-        <CustomerSupportAssistant key={assistantSession} actorId={actorId} initialMessages={aiMessages} onMessagesChange={setAiMessages} active={open} staffActive={handedOff} staffTicketId={handoffTicketId} onStaffStatus={setLiveStatus} onStaffLocked={setStaffLocked}
-          onStaffResolved={autoReturn ? () => { setHandedOff(false); setHandoff(undefined); setAutoReturn(false); setStaffLocked(false); setResolutionNotice(true); setAiMessages([]); setAssistantSession(value => value + 1) } : undefined}
-          onStaffRequestAgain={() => { setHandedOff(false); setAutoReturn(false); setResolutionNotice(false); setHandoff({ question: '', history: [] }) }}
+        <CustomerSupportAssistant key={assistantSession} actorId={actorId} initialMessages={aiMessages} onMessagesChange={setAiMessages} active={open} staffActive={handedOff && !handoff?.target} staffTicketId={handoffTicketId} onStaffStatus={setLiveStatus} onStaffLocked={setStaffLocked}
+          onStaffResolved={autoReturn && !handoff?.target ? () => { setHandedOff(false); setHandoff(undefined); setAutoReturn(false); setStaffLocked(false); setResolutionNotice(true); setAiMessages([]); setAssistantSession(value => value + 1) } : undefined}
+          onStaffRequestAgain={handoff?.target ? undefined : () => { setHandedOff(false); setAutoReturn(false); setResolutionNotice(false); setHandoff({ question: '', history: [] }) }}
           onMeetStaff={handedOff ? undefined : (question, history) => { setResolutionNotice(false); setHandoff({ question, history }) }}
-          staffRequest={handoff && <SupportStaffHandoff actorId={actorId} question={handoff.question} history={handoff.history} onLocked={setStaffLocked} onCancel={() => setHandoff(undefined)} onCreated={id => {
+          staffRequest={handoff && <SupportStaffHandoff key={handoff.target?.linkedRecord.id} actorId={actorId} question={handoff.question} history={handoff.history} target={handoff.target} onLocked={setStaffLocked} onCancel={() => setHandoff(undefined)} onCreated={id => {
             setHandoffTicketId(id); setHandedOff(true); setHandoff(undefined); setAutoReturn(true); setResolutionNotice(false); setAiMessages([]); setAssistantSession(value => value + 1)
           }} />} />
       </div>

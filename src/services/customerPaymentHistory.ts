@@ -216,7 +216,10 @@ export async function loadCustomerPaymentHistory(): Promise<{
     updatedAt: payment.processedAt || payment.createdAt || null,
     status: payment.purpose === 'RENEWAL' ? 'UNKNOWN' : payment.paymentStatus,
     receiptAvailable: payment.purpose === 'RENEWAL' ? false : undefined,
-    method: payment.paymentMethod || null, reservationPayment: payment,
+    method: payment.paymentMethod || null,
+    unitCode: payment.assignedUnitCode || payment.unitTypeName || undefined,
+    facilityName: payment.facilityName || undefined,
+    reservationPayment: payment,
   }))
   const originalPayments = new Map(reservationEntries.map(entry => [entry.id, entry]))
   const supplemental = await Promise.allSettled([

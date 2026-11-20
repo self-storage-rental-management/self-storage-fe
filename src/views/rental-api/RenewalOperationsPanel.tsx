@@ -50,7 +50,7 @@ export const operationsInputClass =
   "mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
 const eventLabels: Record<string, string> = {
   DEPOSIT: "Thanh toán tiền thuê gia hạn trả trước",
-  FULL_RENT_PAYMENT: "Thanh toán toàn kỳ bằng VNPay Sandbox",
+  FULL_RENT_PAYMENT: "Thanh toán toàn kỳ bằng VNPay thử nghiệm",
   CASH: "Ghi nhận tiền thuê còn lại",
   INCIDENT: "Sự cố cơ sở",
   FAULT_REVIEW: "Kết quả xác minh lỗi cơ sở",
@@ -156,7 +156,7 @@ export function OperationEventCard({
       {e.kind === "FAULT_REVIEW" && typeof d.facilityFault === "boolean" && (
         <p>{d.facilityFault ? "Xác nhận lỗi từ cơ sở" : "Không xác nhận lỗi từ cơ sở"}</p>
       )}
-      {e.kind === "REFUND_EXECUTION" && <p>{d.environment === "SANDBOX" ? "Đã ghi nhận hoàn tiền thuê trả trước Sandbox theo chứng từ." : "Đã ghi nhận khoản hoàn theo chứng từ tại cơ sở."}</p>}
+      {e.kind === "REFUND_EXECUTION" && <p>{d.environment === "SANDBOX" ? "Đã ghi nhận chứng từ hoàn khoản trả trước qua VNPay thử nghiệm." : "Đã ghi nhận khoản hoàn theo chứng từ tại cơ sở."}</p>}
       {e.kind !== 'ARRIVAL' && <p className="break-all">
         Mã sự kiện: {e.id}
       </p>}

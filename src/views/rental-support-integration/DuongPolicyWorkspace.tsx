@@ -24,7 +24,6 @@ import {
 import { listBusinessPackagePolicies } from "../../services/businessPolicyApi"
 import { isUuid } from "../../services/renewalOperationsApi"
 import { policyPendingKey, readPendingPolicy, retainPendingPolicy, clearPendingPolicy } from "./pendingPolicyPublication"
-import LedgerPanel from "./LedgerPanel"
 import BusinessConfigPanel from "./BusinessConfigPanel"
 
 type Draft = Record<string, string>
@@ -1197,12 +1196,10 @@ export default function DuongPolicyWorkspace({
     actor.status === "ACTIVE" &&
     actor.roles.includes("BUSINESS") &&
     actor.permissions.includes("policies:read")
-  const [facility, setFacility] = useState(""),
-    [rentalInput, setRentalInput] = useState("")
-  const [rental, setRental] = useState("")
+  const [facility, setFacility] = useState("")
   const [locked, setLocked] = useState(false)
   const [applyAllFacilities, setApplyAllFacilities] = useState(false)
-  const [activeMainTab, setActiveMainTab] = useState<"renewal" | "communication" | "business-config" | "ledger">("renewal")
+  const [activeMainTab, setActiveMainTab] = useState<"renewal" | "communication" | "business-config">("renewal")
 
   useEffect(() => {
     onLocked?.(locked)
@@ -1282,17 +1279,6 @@ export default function DuongPolicyWorkspace({
             }`}
           >
             Cấu hình vận hành
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveMainTab("ledger")}
-            className={`px-3 py-1.5 rounded-lg text-xs md:text-sm font-semibold transition cursor-pointer ${
-              activeMainTab === "ledger"
-                ? "bg-white text-stone-900 shadow-xs border border-stone-200"
-                : "text-stone-500 hover:text-stone-900"
-            }`}
-          >
-            Tra cứu tài chính
           </button>
         </div>
       </header>
@@ -1403,51 +1389,8 @@ export default function DuongPolicyWorkspace({
           )}
         </>
       )}
-
       {activeMainTab === "business-config" && (
         <BusinessConfigPanel canWrite={allowed} />
-      )}
-
-      {activeMainTab === "ledger" && (
-        <Card className="space-y-4 rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
-          <div>
-            <div className="flex items-center gap-2">
-              
-              <div>
-                <h3 className="font-semibold text-stone-900 text-base">
-                  Tra cứu các khoản tài chính của hồ sơ thuê
-                </h3>
-                <p className="mt-0.5 text-xs text-stone-500">Tra cứu chi tiết các bút toán ghi nợ, lịch sử thanh toán gia hạn và tiền gửi bằng mã hồ sơ thuê.</p>
-              </div>
-            </div>
-          </div>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault()
-              if (isUuid(rentalInput.trim())) setRental(rentalInput.trim())
-            }}
-          >
-            <label className="block text-sm font-medium text-stone-700">
-              Mã hồ sơ thuê (UUID)
-              <input
-                className="mt-2 block w-full rounded-xl border border-stone-300 px-3.5 py-2.5 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
-                placeholder="Ví dụ: e4b2d3c1-..."
-                value={rentalInput}
-                onChange={(e) => setRentalInput(e.target.value)}
-              />
-            </label>
-            <Button className="mt-3.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold" type="submit" disabled={!isUuid(rentalInput.trim())}>
-              Tra cứu hồ sơ
-            </Button>
-          </form>
-          {rental && (
-            <LedgerPanel
-              key={`${actor!.id}:${rental}`}
-              role="business"
-              id={rental}
-            />
-          )}
-        </Card>
       )}
     </div>
   )

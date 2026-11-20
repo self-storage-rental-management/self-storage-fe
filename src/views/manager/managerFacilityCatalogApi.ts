@@ -13,7 +13,7 @@ export interface FacilityCatalogType {
   volumeM3: number | null
   maxLoadKg: number | null
   monthlyPrice: number | null
-  status: 'draft' | 'awaiting_pricing' | 'active' | 'inactive'
+  status: 'draft' | 'awaiting_pricing' | 'active' | 'inactive' | 'archived'
 }
 
 const unitStatuses = ['available', 'reserved', 'occupied', 'maintenance', 'held', 'assigned', 'inactive', 'archived'] as const
@@ -22,6 +22,31 @@ interface CatalogUnit { id: string; facilityId: string; unitTypeId: string; stat
 export interface FacilityCatalogRow extends FacilityCatalogType {
   total: number
   counts: Record<UnitStatus, number>
+}
+
+type FacilityCatalogTypePresentation = Pick<FacilityCatalogType, 'status' | 'monthlyPrice'>
+
+export function facilityCatalogTypeHasPrice(type: FacilityCatalogTypePresentation) {
+  return type.monthlyPrice !== null && Number(type.monthlyPrice) > 0
+}
+
+export function facilityCatalogTypeStatusLabel(type: FacilityCatalogTypePresentation) {
+  if (type.status === 'awaiting_pricing' && facilityCatalogTypeHasPrice(type)) return 'Đã định giá, chờ công bố'
+  return {
+    draft: 'Đang thiết lập',
+    awaiting_pricing: 'Chờ định giá',
+    active: 'Đang khai thác',
+    inactive: 'Tạm ngưng',
+    archived: 'Đã lưu trữ',
+  }[type.status]
+}
+
+export function facilityCatalogTypeStatusClass(type: FacilityCatalogTypePresentation) {
+  if (type.status === 'active') return 'bg-green-100 text-green-700'
+  if (type.status === 'awaiting_pricing' && facilityCatalogTypeHasPrice(type)) return 'bg-blue-50 text-blue-700'
+  if (type.status === 'awaiting_pricing' || type.status === 'draft') return 'bg-amber-50 text-amber-800'
+  if (type.status === 'archived') return 'bg-stone-200 text-stone-600'
+  return 'bg-stone-100 text-stone-700'
 }
 
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object'
@@ -77,7 +102,7 @@ export async function loadManagerFacilityCatalog(facilityId: string): Promise<Fa
 
 export function isFacilityCatalogType(value: unknown, facilityId: string): value is FacilityCatalogType {
   return record(value) && text(value.id) && value.facilityId === facilityId && text(value.code) && text(value.name)
-    && ['draft', 'awaiting_pricing', 'active', 'inactive'].includes(String(value.status))
+    && ['draft', 'awaiting_pricing', 'active', 'inactive', 'archived'].includes(String(value.status))
     && ['lengthM', 'widthM', 'heightM', 'areaM2', 'volumeM3', 'maxLoadKg', 'monthlyPrice'].every(field => measure(value[field]))
 }
 

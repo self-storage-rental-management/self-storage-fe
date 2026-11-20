@@ -197,7 +197,7 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
     if (targetUnit) {
       try {
         updateUnitStatus(targetUnit.id, 'available', user, `Nghiệm thu bảo trì hoàn tất từ nhiệm vụ ${task.id} (${task.title})`)
-        showToast(`Đã nghiệm thu bảo trì thành công! Gian kho ${targetUnit.code || targetUnit.id} đã trở về trạng thái Sẵn sàng cho thuê (Available).`)
+        showToast(`Đã nghiệm thu bảo trì thành công! Gian kho ${targetUnit.code || targetUnit.id} đã trở về trạng thái sẵn sàng cho thuê.`)
       } catch (err) {
         showToast(managerDisplayError(err))
       }
@@ -283,7 +283,7 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
     {overdueTasks.length > 0 && <ManagerActionNotice tone="warning">Có {overdueTasks.length} nhiệm vụ quá hạn cần theo dõi hoặc giao lại.</ManagerActionNotice>}
     {hiddenTaskCount > 0 && <ManagerActionNotice tone="info"><div className="flex items-center justify-between gap-3"><span>{hiddenTaskCount} nhiệm vụ lịch sử đã được ẩn khỏi danh sách quản lý cơ sở. Dữ liệu nhiệm vụ và nhật ký vẫn giữ nguyên.</span><Button size="sm" variant="outline" onClick={() => taskHistory.restoreAll()}>Khôi phục tất cả</Button></div></ManagerActionNotice>}
 
-    <div className="grid gap-4 lg:grid-cols-3">{staff.map(member => <Card key={member.id} className="p-4"><div className="flex items-start gap-3"><Avatar name={member.name} size="lg" /><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="truncate font-bold text-stone-900">{member.name}</p><Badge variant={member.status === 'on-duty' ? 'success' : 'muted'}>{managerStatusLabel(member.status, 'vi')}</Badge></div><p className="text-xs text-stone-500">nhân viên, {'shift' in member && typeof member.shift === 'string' ? member.shift : "-"}</p><p className="mt-2 text-xs text-stone-600">{member.email}, {member.phone || 'Chưa có SĐT'}</p><p className="mt-2 font-semibold text-amber-800">{facilityTasks.filter(task => task.assignedStaffId === member.id && ['open', 'in_progress'].includes(task.status)).length} nhiệm vụ đang mở</p></div></div></Card>)}</div>
+    <div className="grid gap-4 lg:grid-cols-3">{staff.map(member => <Card key={member.id} className="p-4"><div className="flex items-start gap-3"><Avatar name={member.name} size="lg" /><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="truncate font-bold text-stone-900">{member.name}</p><Badge variant={member.status === 'on-duty' ? 'success' : 'muted'}>{managerStatusLabel(member.status, 'vi')}</Badge></div><p className="text-xs text-stone-500">nhân viên, {'shiftVi' in member && typeof member.shiftVi === 'string' ? member.shiftVi : 'Chưa có thông tin ca'}</p><p className="mt-2 text-xs text-stone-600">{member.email}, {member.phone || 'Chưa có SĐT'}</p><p className="mt-2 font-semibold text-amber-800">{facilityTasks.filter(task => task.assignedStaffId === member.id && ['open', 'in_progress'].includes(task.status)).length} nhiệm vụ đang mở</p></div></div></Card>)}</div>
 
     <div className="flex flex-wrap items-center gap-2">
       {[

@@ -164,7 +164,7 @@ function ManagerReportsSession({ actor, facilityId, overview }: { actor: ApiActo
       <SectionHeader
         eyebrow="Quản lý cơ sở"
         title="Báo cáo cơ sở"
-        subtitle={summary ? `${summary.facilityName} · Số liệu từ hệ thống vận hành` : 'Số liệu lấy trực tiếp từ API cơ sở.'}
+        subtitle={summary ? `${summary.facilityName} · Số liệu từ hệ thống vận hành` : 'Số liệu lấy trực tiếp từ hệ thống cơ sở.'}
         action={
           summary ? (
             <Button variant="outline" onClick={handleExportExcel}>

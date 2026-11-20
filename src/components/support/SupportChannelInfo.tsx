@@ -17,7 +17,7 @@ export default function SupportChannelInfo({ channel }: { channel: 'assistant' |
       <div className="rounded-xl border border-stone-200 bg-white p-3 text-xs leading-5 text-stone-600 shadow-lg shadow-stone-900/10">
         <p className="mb-1 font-semibold text-stone-800">{assistant ? 'Lưu ý về trợ lý AI' : 'Trao đổi với nhân viên'}</p>
         <p>{assistant
-          ? 'Câu hỏi phổ biến được trả lời từ hướng dẫn có sẵn. Câu hỏi khác và lịch sử gần đây được gửi tới Gemini. Không gửi mật khẩu, mã truy cập, OTP hay thông tin thẻ.'
+          ? 'Gemini có thể nhận câu hỏi hiện tại và phần tóm tắt ngắn về chủ đề để trả lời dựa trên hướng dẫn StorageHub. Không gửi mật khẩu, mã truy cập, OTP hay thông tin thẻ.'
           : 'Cuộc trò chuyện chuyển từ AI, gồm nội dung trợ lý trước đó, được lưu và tự xóa sau 10 ngày kể từ tin nhắn cuối cùng. Tin nhắn mới từ khách hoặc nhân viên sẽ tính lại thời hạn. AI ngừng trả lời khi chuyển sang nhân viên. Không gửi mật khẩu, mã truy cập hoặc OTP.'}</p>
       </div>
     </div>}
