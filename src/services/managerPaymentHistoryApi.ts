@@ -41,6 +41,8 @@ function isPaymentHistoryItem(value: unknown): value is ManagerPaymentHistoryIte
     && (row.invoiceNumber == null || typeof row.invoiceNumber === "string")
     && (row.invoiceStatus == null || ["DRAFT", "PAID", "VOID", "REFUNDED"].includes(row.invoiceStatus as string))
     && (row.invoiceIssuedAt == null || (typeof row.invoiceIssuedAt === "string" && Number.isFinite(Date.parse(row.invoiceIssuedAt))))
+    && (row.reservationCode == null || typeof row.reservationCode === "string")
+    && (row.gatewayTransactionNo == null || typeof row.gatewayTransactionNo === "string")
 }
 
 export async function listManagerPaymentHistory(
