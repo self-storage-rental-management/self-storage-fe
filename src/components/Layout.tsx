@@ -242,7 +242,7 @@ export default function Layout({
       'support': 'Hỗ Trợ Khách Hàng',
       'tasks': 'Nhiệm Vụ Hàng Ngày',
       'checkin': 'Bàn Giao & Nhận Kho',
-      'return': 'Nghiệm Thu Trả Kho',
+      'return': 'Trả Kho & Nghiệm Thu',
       'dashboard': 'Bảng Điều Khiển',
       'reports': 'Báo Cáo Cơ Sở',
       'units': 'Quản Lý Kho',

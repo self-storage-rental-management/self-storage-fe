@@ -867,7 +867,7 @@ export default function StaffApp({
     {
       id: "return",
 
-      label: "Nghiệm thu trả kho",
+      label: "Trả kho & nghiệm thu",
 
       icon: Icon.clipboard,
 
@@ -879,7 +879,6 @@ export default function StaffApp({
     ...(isApiAuthenticated() ? [{ id: "renewal-signing", label: "Ký gia hạn", icon: Icon.policy, group: "Vận hành", permission: "renewals:operate" as const }] : []),
     ...(isApiAuthenticated() ? [
       { id: "unit-release", label: "Giải phóng kho hủy", icon: Icon.box, group: "Vận hành", permission: "checkins:read" as const },
-      { id: "credentials", label: "Cấp lại quyền truy cập", icon: Icon.key, group: "Vận hành", permission: "checkins:read" as const },
     ] : []),
 
     {
@@ -2432,47 +2431,77 @@ export default function StaffApp({
             subtitle={`${user.facility ?? "Chưa được gán cơ sở"} · ${new Date().toLocaleDateString("vi-VN")}`}
           />
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-            <StatCard
-              title={"Đơn đã cọc · Chờ nhận kho"}
-              value={isApiAuthenticated()
-                ? apiOverviewLoading ? "…" : apiOverviewCounts.depositWaiting
-                : reservations.filter((r) => r.status === "CONFIRMED").length}
-              icon={Icon.alert}
-              iconBg="bg-amber-50"
-            />
-            <StatCard
-              title={"Nhận kho sắp tới"}
-              value={isApiAuthenticated()
-                ? apiOverviewLoading ? "…" : apiOverviewCounts.upcomingCheckins
-                : eligibleCheckins.filter(
-                    (c) => c.status !== "completed" && c.status !== "no-show",
-                  ).length}
-              icon={Icon.truck}
-              iconBg="bg-blue-50"
-            />
-            <StatCard
-              title={"Trả kho cần xử lý"}
-              value={isApiAuthenticated()
-                ? apiOverviewLoading ? "…" : apiOverviewCounts.returnsToProcess
-                : returns.filter((r) => r.status !== "refunded").length}
-              icon={Icon.clipboard}
-              iconBg="bg-purple-50"
-            />
-            <StatCard
-              title={"Hỗ trợ đang mở"}
-              value={
-                facilityTickets.filter((ticket) => ticket.status !== "resolved")
-                  .length
-              }
-              icon={Icon.support}
-              iconBg="bg-red-50"
-            />
-            <StatCard
-              title={"Quản lý giao · Chưa xong"}
-              value={openAssignedFacilityTasks.length}
-              icon={Icon.tasks}
-              iconBg="bg-red-50"
-            />
+            <button
+              type="button"
+              onClick={() => setPage("reservations")}
+              className="text-left w-full cursor-pointer hover:opacity-90 transition-opacity focus:outline-none"
+            >
+              <StatCard
+                title={"Đơn đã cọc · Chờ nhận kho"}
+                value={isApiAuthenticated()
+                  ? apiOverviewLoading ? "…" : apiOverviewCounts.depositWaiting
+                  : reservations.filter((r) => r.status === "CONFIRMED").length}
+                icon={Icon.alert}
+                iconBg="bg-amber-50"
+              />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage("checkin")}
+              className="text-left w-full cursor-pointer hover:opacity-90 transition-opacity focus:outline-none"
+            >
+              <StatCard
+                title={"Nhận kho sắp tới"}
+                value={isApiAuthenticated()
+                  ? apiOverviewLoading ? "…" : apiOverviewCounts.upcomingCheckins
+                  : eligibleCheckins.filter(
+                      (c) => c.status !== "completed" && c.status !== "no-show",
+                    ).length}
+                icon={Icon.truck}
+                iconBg="bg-blue-50"
+              />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage("return")}
+              className="text-left w-full cursor-pointer hover:opacity-90 transition-opacity focus:outline-none"
+            >
+              <StatCard
+                title={"Trả kho cần xử lý"}
+                value={isApiAuthenticated()
+                  ? apiOverviewLoading ? "…" : apiOverviewCounts.returnsToProcess
+                  : returns.filter((r) => r.status !== "refunded").length}
+                icon={Icon.clipboard}
+                iconBg="bg-purple-50"
+              />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage("support")}
+              className="text-left w-full cursor-pointer hover:opacity-90 transition-opacity focus:outline-none"
+            >
+              <StatCard
+                title={"Hỗ trợ đang mở"}
+                value={
+                  facilityTickets.filter((ticket) => ticket.status !== "resolved")
+                    .length
+                }
+                icon={Icon.support}
+                iconBg="bg-red-50"
+              />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage("tasks")}
+              className="text-left w-full cursor-pointer hover:opacity-90 transition-opacity focus:outline-none"
+            >
+              <StatCard
+                title={"Quản lý giao · Chưa xong"}
+                value={openAssignedFacilityTasks.length}
+                icon={Icon.tasks}
+                iconBg="bg-red-50"
+              />
+            </button>
           </div>
           <StaffDailyTaskQueue
             assignedTasks={assignedFacilityTasks}
@@ -2957,7 +2986,7 @@ export default function StaffApp({
             <div className="fade-in space-y-4">
               <SectionHeader
                 eyebrow="CỔNG NHÂN VIÊN · KIỂM KÊ & BẰNG CHỨNG"
-                title="Nghiệm thu trả kho"
+                title="Trả kho & nghiệm thu"
                 subtitle="Đối chiếu hiện trạng, ghi nhận quyết toán và hoàn cọc trên dữ liệu máy chủ"
               />
               <ReturnApiPanel role="staff" onChanged={refreshCredentialAlerts} />
@@ -2968,7 +2997,7 @@ export default function StaffApp({
             <div className="fade-in">
           <SectionHeader
             eyebrow={"CỔNG NHÂN VIÊN · KIỂM KÊ & BẰNG CHỨNG"}
-            title={"Nghiệm thu trả kho"}
+            title={"Trả kho & nghiệm thu"}
             subtitle={
               "Đối chiếu hiện trạng trước-sau, kiểm kê hàng hóa, phân loại và lưu bằng chứng"
             }
