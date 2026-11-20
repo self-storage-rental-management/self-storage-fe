@@ -45,7 +45,7 @@ export default function CustomerReservationOtpModal({
       {developmentCode && (
         <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
           <div>
-            <span>Mã OTP thử nghiệm (Dev): </span>
+            <span>Mã OTP thử nghiệm: </span>
             <strong className="font-mono text-sm font-bold tracking-widest">{developmentCode}</strong>
           </div>
           <button

@@ -37,7 +37,7 @@ import { LEGACY_RENEWAL_NOTICE, LEGACY_RENEWAL_HISTORY_NOTICE, legacyRenewalMone
 import LegacyRenewalPaymentRecord from '../rental-api/LegacyRenewalPaymentRecord'
 import { firstBookableCheckInMinute, firstCheckInMinute, submissionCheckInWindow, formatPolicyDateTime, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyTimeInput, PAYMENT_WINDOW_MINUTES, MANAGER_ASSIGNMENT_HOURS, CHECK_IN_WINDOW_DAYS } from '../../domain/reservationCheckInPolicy'
 import CustomerSupportChatbot from '../../components/support/CustomerSupportChatbot'
-import CustomerSupportWidget from '../../components/support/CustomerSupportWidget'
+import CustomerSupportWidget, { type ChatOpenRequest } from '../../components/support/CustomerSupportWidget'
 import { paymentCurrencyLabel, paymentMethodLabel } from './paymentLabels'
 import { storageSizeCode, unitTypeMatches } from '../../domain/facilityRules'
 import { customerFacilityImage, customerUnitAmenities } from './customerPresentation'
@@ -51,7 +51,7 @@ import {
 import CustomerPalletCheck, { customerRackIssue } from './CustomerPalletCheck'
 import CustomerWarehouseSuggestion from './CustomerWarehouseSuggestion'
 import { CustomerNoCompatibleWarehouse, CustomerNoVacantWarehouse } from './CustomerWarehouseOutcome'
-import { resolveWarehouseRecommendation } from './customerWarehouseRecommendation'
+import { bookingAvailabilityIssue, resolveWarehouseRecommendation } from './customerWarehouseRecommendation'
 import {
   listCustomerFacilities,
   listCustomerUnitTypes,
@@ -1031,11 +1031,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   // Support
   const [supportChatbotOpen, setSupportChatbotOpen] = useState(false)
-  const [supportWidgetRequest, setSupportWidgetRequest] = useState<{ request: number; ticketId?: string } | undefined>(() =>
+  const [supportWidgetRequest, setSupportWidgetRequest] = useState<ChatOpenRequest | undefined>(() =>
     isApiAuthenticated() && new URLSearchParams(window.location.search).get('page') === 'support' ? { request: 1 } : undefined)
   const openSupportWidget = (ticketId?: string) => {
     if (isApiAuthenticated()) setSupportWidgetRequest(previous => ({ request: (previous?.request ?? 0) + 1, ticketId }))
     else setSupportChatbotOpen(true)
+  }
+  const openRecordSupport = (target: NonNullable<ChatOpenRequest['target']>) => {
+    setSupportWidgetRequest(previous => ({ request: (previous?.request ?? 0) + 1, target }))
   }
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get('page') !== 'support') return
@@ -1652,11 +1655,13 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     const unitTypeId = selectedTarget.unitType.id
     const timer = window.setTimeout(async () => {
       let recommendation: ReservationRecommendation | null = null
+      let recommendationIssue: string | undefined
       try {
         recommendation = await recommendReservationUnitType(recommendationInput)
         if (!cancelled) setServerRecommendation({ input: recommendationInput, response: recommendation })
       } catch (error) {
-        if (!cancelled) setRecommendationError(userFacingError(error, 'Không thể kiểm tra loại kho thay thế lúc này.'))
+        recommendationIssue = bookingAvailabilityIssue(error)
+        if (!cancelled) setRecommendationError(recommendationIssue ?? userFacingError(error, 'Không thể kiểm tra loại kho thay thế lúc này.'))
       }
       if (cancelled) return
       if (!recommendation?.checksByUnitType?.[unitTypeId]) {
@@ -1665,7 +1670,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           const check = await checkCompatibility({ facilityId, unitTypeId, startDate, endDate, goodsCondition, goodsItems })
           if (!cancelled) setBookingFit({ input: recommendationInput, check })
         } catch (error) {
-          if (!cancelled) setRecommendationError(userFacingError(error, 'Không thể kiểm tra sức chứa của kho lúc này.'))
+          if (!cancelled) setRecommendationError(bookingAvailabilityIssue(error)
+            ?? recommendationIssue ?? userFacingError(error, 'Không thể kiểm tra sức chứa của kho lúc này.'))
         }
       }
       if (!cancelled) setRecommendationLoading(false)
@@ -2032,10 +2038,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       }
 
       if (!serverQuote.setupEarlyExitPolicyVersion || serverQuote.setupEarlyExitFee == null) {
-        throw new Error('Báo giá chưa có điều khoản trả kho trong setup. Vui lòng lấy lại báo giá hoặc liên hệ cơ sở.')
+        throw new Error('Báo giá chưa có điều khoản trả kho trong thời gian chuẩn bị. Vui lòng lấy lại báo giá hoặc liên hệ cơ sở.')
       }
       if (acceptedSetupQuoteId !== serverQuote.quoteId) {
-        throw new Error('Vui lòng đọc và đồng ý điều khoản trả kho trong setup trước khi xác nhận đặt kho.')
+        throw new Error('Vui lòng đọc và đồng ý điều khoản trả kho trong thời gian chuẩn bị trước khi xác nhận đặt kho.')
       }
       const scheduledCompatibility = await checkCompatibility({ ...selection, startDate: moveInDate })
       if (scheduledCompatibility.result === 'INCOMPATIBLE' || scheduledCompatibility.availableUnitCount <= 0 || !scheduledCompatibility.palletPlan) {
@@ -2099,7 +2105,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       }
       showToast(`${reservation.reservationCode} đã được tạo. Hãy xác minh OTP để tiếp tục.`)
     } catch (error) {
-      const backendMessage = error instanceof Error ? error.message : ''
       const validationDetails = error instanceof ApiClientError && error.details && typeof error.details === 'object' && !Array.isArray(error.details)
         ? error.details as Record<string, unknown>
         : null
@@ -2126,17 +2131,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               : validationLabels[field] || `Thông tin ${field} chưa hợp lệ.`
           }).join(' ')
         : ''
-      const message = backendMessage.includes('Rental package was not found')
-        ? 'Gói thuê đã chọn không còn khả dụng. Vui lòng chọn lại gói thuê và lấy báo giá mới.'
-        : backendMessage.includes('Rental package is not effective')
-          ? 'Gói thuê không còn hiệu lực vào ngày nhận kho đã chọn. Vui lòng chọn gói hoặc ngày nhận kho khác.'
-          : error instanceof ApiClientError && error.status === 409
-        ? backendMessage.includes('No storage unit is available')
-          ? 'Loại kho này vừa hết chỗ trong kỳ thuê đã chọn. Vui lòng chọn kỳ thuê hoặc loại kho khác.'
-          : userFacingError(error)
-        : error instanceof ApiClientError && error.code === 'VALIDATION_ERROR'
+      const message = bookingAvailabilityIssue(error) ?? (
+        error instanceof ApiClientError && error.code === 'VALIDATION_ERROR'
           ? validationMessage || userFacingError(error, 'Thông tin đặt kho chưa hợp lệ. Vui lòng kiểm tra lại các trường đã nhập.')
-        : userFacingError(error, 'Không thể tạo đơn đặt kho.')
+          : userFacingError(error, 'Không thể tạo đơn đặt kho.')
+      )
       setReservationSubmitError(message)
       showToast(message)
     } finally {
@@ -2604,8 +2603,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 {group.rows.map(reservation => <div key={reservation.id}><CustomerReservationCard
                 reservation={reservation}
                 visualTone={group.id as 'active' | 'expired' | 'completed'}
-                facilityName={reservation.facilitySnapshot?.name || facilities.find(item => item.id === reservation.facilityId)?.name || reservation.facilityId}
-                unitTypeName={reservation.unitTypeSnapshot?.name || reservation.unitTypeName || unitTypes.find(item => item.id === reservation.unitTypeId)?.name || reservation.unitTypeId}
+                facilityName={reservation.facilitySnapshot?.name || facilities.find(item => item.id === reservation.facilityId)?.name || 'Chưa cập nhật cơ sở'}
+                unitTypeName={reservation.unitTypeSnapshot?.name || reservation.unitTypeName || unitTypes.find(item => item.id === reservation.unitTypeId)?.name || 'Chưa cập nhật loại kho'}
+                onRequestSupport={() => openRecordSupport({
+                  linkedRecord: { type: 'RESERVATION', id: reservation.id },
+                  label: `đơn đặt kho ${reservation.reservationCode}`,
+                })}
                 facilityDetails={reservation.facilitySnapshot ? {
                   address: reservation.facilitySnapshot.address || 'Chưa cập nhật',
                   city: reservation.facilitySnapshot.city || '',
@@ -2921,7 +2924,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       )}
 
       {/* ── MY RENTALS (HỒ SƠ THUÊ CỦA TÔI) ───────────────────── */}
-      {page === 'rental-records' && isApiAuthenticated() && <CustomerRentalsApiPanel key={`${user.id}:${rentalMenuVisit}`} focusStorageUnitId={receiptRentalTarget} />}
+      {page === 'rental-records' && isApiAuthenticated() && <CustomerRentalsApiPanel key={`${user.id}:${rentalMenuVisit}`}
+        focusStorageUnitId={receiptRentalTarget}
+        onRequestSupport={(id, unitCode) => openRecordSupport({ linkedRecord: { type: 'RENTAL', id }, label: `hồ sơ thuê gian ${unitCode}` })} />}
       {page === 'rental-records' && !isApiAuthenticated() && (
         <div className="fade-in space-y-4">
           <section className="space-y-4">
@@ -3103,7 +3108,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                           </>
                         )}
                         {rental.status === 'setup' && (
-                          <Badge variant="warning">Đang setup miễn phí</Badge>
+                          <Badge variant="warning">Đang trong thời gian chuẩn bị miễn phí</Badge>
                         )}
                         {rental.status === 'return_requested' && (
                           <Badge variant="warning">{'Đã gửi yêu cầu trả kho'}</Badge>
@@ -3391,7 +3396,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 [1, 'Thông tin cá nhân'],
                 [2, 'Hàng hóa & số liệu'],
                 [3, 'Báo giá'],
-                [4, 'Lịch check-in'],
+                [4, 'Lịch nhận kho'],
               ].map(([step, label]) => {
                 const stepNumber = Number(step)
                 const active = bookingStep === stepNumber
@@ -3554,15 +3559,15 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 <div><Input label="Giờ nhận kho mong muốn" type="time" step="60" value={bookingAppointmentTime} onChange={e => { setBookingAppointmentTime(e.target.value); setSchedulePolicyMessage(null); setBookingErrors(current => { const next = { ...current }; delete next.appointmentTime; return next }) }} />{bookingErrors.appointmentTime && <p className="mt-1 text-xs text-red-700">{bookingErrors.appointmentTime}</p>}</div>
               </div>
               <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs leading-5 text-emerald-950">
-                <b>Ngày bắt đầu tính tiền dự kiến:</b> {displayDateValue(previewRentalPeriod?.startDate)}. Dự kiến bàn giao ngày {displayDateValue(moveInDate)}, sau đó có {previewSetupDays} ngày setup miễn phí. Kỳ thuê có tính tiền bắt đầu sau setup và sẽ được chốt theo ngày bàn giao thực tế. Thời hạn 7 ngày chỉ là thời hạn đến nhận kho.
+                <b>Ngày bắt đầu tính tiền dự kiến:</b> {displayDateValue(previewRentalPeriod?.startDate)}. Dự kiến bàn giao ngày {displayDateValue(moveInDate)}, sau đó có {previewSetupDays} ngày chuẩn bị miễn phí. Kỳ thuê có tính tiền bắt đầu sau thời gian chuẩn bị và sẽ được chốt theo ngày bàn giao thực tế. Thời hạn 7 ngày chỉ là thời hạn đến nhận kho.
               </div>
               {isApiAuthenticated() && serverQuote && <div className="space-y-2 text-xs leading-5 text-stone-600">
                 {serverQuote.setupEarlyExitPolicyVersion && serverQuote.setupEarlyExitFee != null ? <>
                   <label className="flex items-start gap-2 text-stone-700">
                     <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-amber-600" checked={acceptedSetupQuoteId === serverQuote.quoteId} disabled={reservationSubmitting} onChange={event => setAcceptedSetupQuoteId(event.target.checked ? serverQuote.quoteId : null)} />
-                    <span>Tôi đã đọc và đồng ý điều khoản trả kho trong setup của báo giá này.</span>
+                    <span>Tôi đã đọc và đồng ý điều khoản trả kho trong thời gian chuẩn bị của báo giá này.</span>
                   </label>
-                </> : <p role="status">Báo giá chưa có điều khoản trả kho trong setup. Vui lòng quay lại lấy báo giá mới hoặc liên hệ cơ sở.</p>}
+                </> : <p role="status">Báo giá chưa có điều khoản trả kho trong thời gian chuẩn bị. Vui lòng quay lại lấy báo giá mới hoặc liên hệ cơ sở.</p>}
               </div>}
             </div>}
 
@@ -3636,7 +3641,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             </div>
 
             {bookingStep === 3 && bookingReview && isApiAuthenticated() && serverQuote && <ReservationQuoteSummary quote={previewRentalPeriod ? { ...serverQuote, ...previewRentalPeriod } : serverQuote} needsReview={hasOtherGoods} />}
-            {bookingStep === 3 && bookingReview && isApiAuthenticated() && serverQuote && <label className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><input type="checkbox" className="mt-1 h-4 w-4" checked={termsAccepted} onChange={event => setTermsAccepted(event.target.checked)} /><span>Tôi đã đọc và đồng ý với báo giá và ngày setup miễn phí nêu trên. Bản điều khoản này sẽ được lưu cùng hồ sơ trước khi thanh toán.</span></label>}
+            {bookingStep === 3 && bookingReview && isApiAuthenticated() && serverQuote && <label className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><input type="checkbox" className="mt-1 h-4 w-4" checked={termsAccepted} onChange={event => setTermsAccepted(event.target.checked)} /><span>Tôi đã đọc và đồng ý với báo giá và thời gian chuẩn bị miễn phí nêu trên. Bản điều khoản này sẽ được lưu cùng hồ sơ trước khi thanh toán.</span></label>}
             {reservationSubmitError && <div role="alert" className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900">
               <p className="font-bold">Chưa thể xác nhận đặt kho</p>
               <p className="mt-1 leading-5">{reservationSubmitError}</p>
@@ -3670,7 +3675,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   {reservationSubmitting ? 'Đang kiểm tra...' : selectedPalletCheck?.palletLayoutMissing ? 'Kiểm tra lại' : 'Kiểm tra và lấy báo giá'}
                 </Button>
               )}
-              {bookingStep === 3 && <Button disabled={!termsAccepted} onClick={() => setBookingStep(4)}>Tiếp theo: Chọn lịch check-in</Button>}
+              {bookingStep === 3 && <Button disabled={!termsAccepted} onClick={() => setBookingStep(4)}>Tiếp theo: Chọn lịch nhận kho</Button>}
               {bookingStep === 4 && <Button disabled={reservationSubmitting || !termsAccepted} onClick={() => void confirmReservation()}>{reservationSubmitting ? 'Đang xử lý...' : hasOtherGoods ? 'Gửi yêu cầu nhân viên cơ sở duyệt' : 'Xác nhận đặt kho'}</Button>}
             </div>
           </div>

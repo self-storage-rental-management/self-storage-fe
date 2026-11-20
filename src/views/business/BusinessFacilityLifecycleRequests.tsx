@@ -27,6 +27,7 @@ export default function BusinessFacilityLifecycleRequests() {
   const [busyId, setBusyId] = useState<string>()
   const [review, setReview] = useState<{ item: FacilityLifecycleChangeRequest; approved: boolean }>()
   const [reason, setReason] = useState('')
+  const [reviewError, setReviewError] = useState('')
 
   const load = async () => {
     setLoading(true)
@@ -47,7 +48,7 @@ export default function BusinessFacilityLifecycleRequests() {
   const submit = async () => {
     if (!review) return
     setBusyId(review.item.id)
-    setError('')
+    setReviewError('')
     try {
       const updated = await reviewBusinessFacilityLifecycleRequest(review.item.id, review.approved, reason)
       setRequests(current => current.map(item => item.id === updated.id ? updated : item))
@@ -55,7 +56,8 @@ export default function BusinessFacilityLifecycleRequests() {
       setReview(undefined)
       setReason('')
     } catch (cause) {
-      setError(formatError(cause))
+      setReviewError(formatError(cause))
+      await load()
     } finally {
       setBusyId(undefined)
     }
@@ -94,8 +96,8 @@ export default function BusinessFacilityLifecycleRequests() {
           </div>)}
         </div>
         {item.status === 'PENDING' && <div className="mt-3 flex flex-wrap justify-end gap-2">
-          <Button size="sm" variant="outline" disabled={busyId === item.id} onClick={() => { setReview({ item, approved: false }); setReason('') }}>Từ chối</Button>
-          <Button size="sm" disabled={busyId === item.id} onClick={() => { setReview({ item, approved: true }); setReason('') }}>Duyệt</Button>
+          <Button size="sm" variant="outline" disabled={busyId === item.id} onClick={() => { setReview({ item, approved: false }); setReason(''); setReviewError('') }}>Từ chối</Button>
+          <Button size="sm" disabled={busyId === item.id} onClick={() => { setReview({ item, approved: true }); setReason(''); setReviewError('') }}>Duyệt</Button>
         </div>}
         {item.rejectionReason && <p className="mt-3 text-xs text-red-700">Lý do từ chối: {item.rejectionReason}</p>}
       </div>)}
@@ -103,7 +105,8 @@ export default function BusinessFacilityLifecycleRequests() {
 
     <Modal open={Boolean(review)} onClose={() => busyId ? undefined : setReview(undefined)} title={review?.approved ? 'Duyệt yêu cầu' : 'Từ chối yêu cầu'}>
       {review && <div className="space-y-4">
-        <p className="text-sm text-stone-700">{review.approved ? 'Hệ thống sẽ kiểm tra lại toàn bộ số liệu trước khi cập nhật trạng thái cơ sở.' : 'Nhập lý do để Manager biết nội dung cần điều chỉnh.'}</p>
+        <p className="text-sm text-stone-700">{review.approved ? 'Hệ thống sẽ kiểm tra lại toàn bộ số liệu trước khi cập nhật trạng thái cơ sở.' : 'Nhập lý do để Quản lý cơ sở biết nội dung cần điều chỉnh.'}</p>
+        {reviewError && <p role="alert" className="text-sm text-red-700">{reviewError}</p>}
         <textarea value={reason} onChange={event => setReason(event.target.value)} maxLength={1000} rows={3} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" placeholder={review.approved ? 'Ghi chú duyệt nếu cần' : 'Lý do từ chối'} />
         <div className="flex justify-end gap-2">
           <Button variant="outline" disabled={Boolean(busyId)} onClick={() => setReview(undefined)}>Hủy</Button>

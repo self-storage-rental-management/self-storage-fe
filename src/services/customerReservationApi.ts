@@ -493,6 +493,10 @@ export interface ReservationGoodsItem extends GoodsItemInput {
 }
 
 export interface CustomerReservationDetail {
+  currentFacility?: Pick<NonNullable<CustomerReservation['facilitySnapshot']>, 'name' | 'address' | 'city' | 'phone' | 'accessHours'> | null
+  currentUnitType?: { name: string } & {
+    [Field in Exclude<keyof NonNullable<CustomerReservation['unitTypeSnapshot']>, 'name' | 'areaM2'>]: number | null
+  } | null
   reservation: CustomerReservation
   goodsCondition: string | null
   notes: string | null
