@@ -6,7 +6,14 @@ import { formatVndAmount } from '../../i18n/currency'
 import { ApiClientError } from '../../services/apiClient'
 import { managerDisplayError } from './managerPresentation'
 import { singleManagerFacility, managerFacilityNotice } from './managerFacilityUi'
-import { facilityCatalogTypeName, loadManagerFacilityCatalog, type FacilityCatalogRow } from './managerFacilityCatalogApi'
+import {
+  facilityCatalogTypeHasPrice,
+  facilityCatalogTypeName,
+  facilityCatalogTypeStatusClass,
+  facilityCatalogTypeStatusLabel,
+  loadManagerFacilityCatalog,
+  type FacilityCatalogRow,
+} from './managerFacilityCatalogApi'
 
 const number = (value: number | null) => value === null ? 'Chưa có thông tin' : value.toLocaleString('vi-VN')
 const quantity = (value: number | null, suffix: string) => value === null ? 'Chưa có thông tin' : `${number(value)} ${suffix}`
@@ -15,12 +22,12 @@ export function FacilityCatalogTable({ rows }: { rows: FacilityCatalogRow[] }) {
   return <Table>
     <Thead><tr><Th>Loại gian kho</Th><Th>Dài × rộng × cao</Th><Th>Diện tích / thể tích</Th><Th>Tải trọng tối đa</Th><Th>Giá niêm yết</Th><Th>Số gian tại cơ sở</Th></tr></Thead>
     <Tbody>{rows.map(row => <Tr key={row.id}>
-      <Td><b>{facilityCatalogTypeName(row.name, row.code)}</b><p className="mt-1 text-xs text-stone-500">{{ draft: 'Bản nháp', awaiting_pricing: 'Chờ BO định giá', active: 'Đang áp dụng', inactive: 'Ngừng áp dụng' }[row.status]}</p></Td>
+      <Td><b>{facilityCatalogTypeName(row.name, row.code)}</b><p className="mt-1"><span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ${facilityCatalogTypeStatusClass(row)}`}>{facilityCatalogTypeStatusLabel(row)}</span></p></Td>
       <Td>{[row.lengthM, row.widthM, row.heightM].some(value => value === null) ? 'Chưa có thông tin' : `${number(row.lengthM)} × ${number(row.widthM)} × ${number(row.heightM)} m`}</Td>
       <Td>{quantity(row.areaM2, 'm²')}<br />{quantity(row.volumeM3, 'm³')}</Td>
       <Td>{quantity(row.maxLoadKg, 'kg')}</Td>
-      <Td>{row.monthlyPrice == null || row.monthlyPrice <= 0 ? 'Chưa định giá' : <b>{formatVndAmount(row.monthlyPrice)}/tháng</b>}</Td>
-      <Td><b>{row.total.toLocaleString('vi-VN')} gian</b><p className="mt-1 text-xs text-stone-500">{row.counts.available} trống, {row.counts.occupied} đang sử dụng, {row.counts.maintenance} bảo trì</p><p className="mt-1 text-xs text-stone-500">{row.counts.reserved} đã giữ cho khách, {row.counts.held} giữ tạm, {row.counts.assigned} đã phân kho</p></Td>
+      <Td>{!facilityCatalogTypeHasPrice(row) ? 'Chưa định giá' : <b>{formatVndAmount(row.monthlyPrice!)}/tháng</b>}</Td>
+      <Td><b>{row.total.toLocaleString('vi-VN')} gian</b><p className="mt-1 text-xs text-stone-500">{row.counts.available} trống, {row.counts.occupied} đang sử dụng, {row.counts.maintenance} bảo trì</p><p className="mt-1 text-xs text-stone-500">{row.counts.reserved} đã giữ cho khách, {row.counts.held} giữ tạm, {row.counts.assigned} đã phân gian</p></Td>
     </Tr>)}{!rows.length && <tr><td colSpan={6} className="p-6 text-center text-sm text-stone-500">Cơ sở này chưa có loại gian kho.</td></tr>}</Tbody>
   </Table>
 }

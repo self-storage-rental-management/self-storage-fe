@@ -6,6 +6,8 @@ import BusinessReturnsPanel from "./BusinessReturnsPanel"
 import BusinessRefundRequestsPanel from "./BusinessRefundRequestsPanel"
 import BusinessDamageIncidentsPanel from "./BusinessDamageIncidentsPanel"
 import BusinessRentalRegulationsPanel from "./BusinessRentalRegulationsPanel"
+import BusinessFacilityLifecycleRequests from "./BusinessFacilityLifecycleRequests"
+import BusinessFacilityDetailsModal from "./BusinessFacilityDetailsModal"
 import BusinessDashboardPanel from "./BusinessDashboardPanel"
 
 import {
@@ -23,6 +25,7 @@ import {
 import Layout, {
   getInitialPage,
   Icon,
+  type LayoutNotification,
 } from "../../components/Layout"
 import type { NavItem } from "../../components/Layout"
 
@@ -72,20 +75,22 @@ import {
   getUnitTypeVehicleStandard,
   validateVehicleLaneWidth,
 } from "../../domain/facilityRules"
-import { generateDefaultRentalPackages } from "../../domain/packageRules"
 import { resolveBusinessFacilityIds } from "../../domain/businessFacilityIds"
 import {
   FacilityGeneralInfo,
   FacilityOperations,
   FacilityImageManager,
-  isFacilityPhoneValid,
-  isFacilityAccessHoursValid,
+  FacilityStatusTag,
 } from "./facility/FacilityFormFields"
 import { DEMO_DATA_ENABLED } from "../../config/runtime"
-import { createFacilityApi, listAllFacilitiesApi, priceBusinessUnitTypeApi, updateBusinessFacilityApi, deleteBusinessFacilityApi, publishBusinessFacilityApi } from "../../services/facilityApi"
+import { createFacilityApi, listAllFacilitiesApi, priceBusinessUnitTypeApi, updateBusinessFacilityApi, publishBusinessFacilityApi } from "../../services/facilityApi"
+import { archiveBusinessFacility, getBusinessFacilityLifecycleSummary, restoreBusinessFacility, type FacilityLifecycleSummary } from "../../services/facilityLifecycleApi"
 import { listAccessibleUnitTypes } from "../../services/customerReservationApi"
 import type { CustomerUnitType } from "../../services/customerReservationApi"
+import { getBusinessRackLayout } from "../../services/rackLayoutApi"
+import type { RackResult } from "../../services/rackLayoutApi"
 import { isApiAuthenticated, canApiActor } from "../../services/authApi"
+import { isUuid } from "../../services/renewalOperationsApi"
 import { listNotifications, markNotificationRead, notifyBell, type ApiNotification } from "../../services/notificationApi"
 import {
   type RentalPackagePolicyApi,
@@ -111,6 +116,21 @@ const facilityStatusLabel = (status: Facility['status']) => ({
   inactive: 'Ngừng hoạt động',
 }[status])
 
+const isUnitTypePricingPending = (status: CustomerUnitType['status'], monthlyPrice = 0) =>
+  status === 'draft' || (status === 'awaiting_pricing' && Number(monthlyPrice) <= 0)
+
+const isUnitTypeAwaitingPricing = (status: CustomerUnitType['status'], monthlyPrice = 0) =>
+  status === 'awaiting_pricing' && Number(monthlyPrice) <= 0
+
+const isUnitTypePriceEditable = (status: CustomerUnitType['status']) =>
+  status !== 'archived'
+
+const facilityHasPricedPendingUnitType = (types: CustomerUnitType[]) => {
+  const candidates = types.filter(type => type.status === 'awaiting_pricing' || type.status === 'active')
+  return candidates.some(type => type.status === 'awaiting_pricing')
+    && candidates.every(type => Number(type.monthlyPrice) > 0 && Number(type.availableCount ?? 0) > 0)
+}
+
 const DEFAULT_FACILITY_UNIT_SPECS: FacilityCustomUnitSpec[] = [
   {
     sizeCode: "S",
@@ -132,7 +152,7 @@ const DEFAULT_FACILITY_UNIT_SPECS: FacilityCustomUnitSpec[] = [
       heightM: UNIT_SPECS.S.frameDimensions.heightM,
       depthM: UNIT_SPECS.S.frameDimensions.depthM,
     },
-    rentalPackages: generateDefaultRentalPackages('', 'S', UNIT_SPECS.S.priceMonthly),
+    rentalPackages: [],
   },
   {
     sizeCode: "M",
@@ -154,7 +174,7 @@ const DEFAULT_FACILITY_UNIT_SPECS: FacilityCustomUnitSpec[] = [
       heightM: UNIT_SPECS.M.frameDimensions.heightM,
       depthM: UNIT_SPECS.M.frameDimensions.depthM,
     },
-    rentalPackages: generateDefaultRentalPackages('', 'M', UNIT_SPECS.M.priceMonthly),
+    rentalPackages: [],
   },
   {
     sizeCode: "L",
@@ -176,7 +196,7 @@ const DEFAULT_FACILITY_UNIT_SPECS: FacilityCustomUnitSpec[] = [
       heightM: UNIT_SPECS.L.frameDimensions.heightM,
       depthM: UNIT_SPECS.L.frameDimensions.depthM,
     },
-    rentalPackages: generateDefaultRentalPackages('', 'L', UNIT_SPECS.L.priceMonthly),
+    rentalPackages: [],
   },
   {
     sizeCode: "XL",
@@ -198,7 +218,7 @@ const DEFAULT_FACILITY_UNIT_SPECS: FacilityCustomUnitSpec[] = [
       heightM: UNIT_SPECS.XL.frameDimensions.heightM,
       depthM: UNIT_SPECS.XL.frameDimensions.depthM,
     },
-    rentalPackages: generateDefaultRentalPackages('', 'XL', UNIT_SPECS.XL.priceMonthly),
+    rentalPackages: [],
   },
 ]
 
@@ -331,7 +351,7 @@ const getFeeType = (type: string, lang: string) => {
 
 const getFeeTrigger = (trigger: string, lang: string) => {
   if (lang !== "vi") return trigger
-  // Trigger strings are already in Vietnamese in FEES data - return as-is
+  // Trigger strings are already in Vietnamese in FEES data — return as-is
   return trigger
 }
 
@@ -393,6 +413,7 @@ export default function BusinessApp({
   const [backendFacilityStats, setBackendFacilityStats] = useState<Record<string, { total: number; occupied: number; price: number | null; revenue: number }>>({})
   const [backendDetailCounts, setBackendDetailCounts] = useState<Record<string, { total: number; occupied: number; available: number }>>({})
   const [facilityDetailTypes, setFacilityDetailTypes] = useState<CustomerUnitType[]>([])
+  const [facilityDetailLayouts, setFacilityDetailLayouts] = useState<Record<string, RackResult | null>>({})
   const [facilityDataError, setFacilityDataError] = useState<string>()
   const [businessNotifications, setBusinessNotifications] = useState<ApiNotification[]>([])
   const [reviewOpen, setReviewOpen] = useState(false)
@@ -450,7 +471,8 @@ export default function BusinessApp({
 
   useEffect(() => {
     let isMounted = true
-    listAllFacilitiesApi()
+    const syncFacilities = () => {
+      void listAllFacilitiesApi()
       .then((backendFacs) => {
         if (!isMounted || !Array.isArray(backendFacs)) return
         if (isApiAuthenticated()) setApiFacilitiesReady(true)
@@ -545,8 +567,12 @@ export default function BusinessApp({
           setFacilityDataError(error instanceof Error ? error.message : 'Không thể tải số liệu cơ sở.')
         }
       })
+    }
+    syncFacilities()
+    window.addEventListener('storagehub:facilities-refresh', syncFacilities)
     return () => {
       isMounted = false
+      window.removeEventListener('storagehub:facilities-refresh', syncFacilities)
     }
   }, [])
 
@@ -604,15 +630,6 @@ export default function BusinessApp({
   }
 
   const NAV: NavItem[] = [
-    // ── TỔNG QUAN & BÁO CÁO ──
-    {
-      id: "dashboard",
-      label: "Doanh Thu",
-      icon: Icon.chart,
-      group: "Tổng Quan & Báo Cáo",
-      permission: "facilities:read",
-    },
-
     // ── CƠ SỞ & MẶT BẰNG ──
     {
       id: "facilities",
@@ -670,7 +687,7 @@ export default function BusinessApp({
     },
   ]
 
-  const [page, setPage] = useState(() => getInitialPage(NAV, "dashboard"))
+  const [page, setPage] = useState(() => getInitialPage(NAV, "facilities"))
   const [integrationLocked, setIntegrationLocked] = useState(false)
 
   const [pricingModal, setPricingModal] = useState(false)
@@ -1054,7 +1071,16 @@ export default function BusinessApp({
 
   const [packageSort, setPackageSort] = useState('months-asc')
   const [packageStatusFilter, setPackageStatusFilter] = useState('all')
-  const [durationDiscounts, setDurationDiscounts] = useState<DurationDiscountItem[]>([])
+  const [durationDiscounts, setDurationDiscounts] = useState<DurationDiscountItem[]>(() => {
+    if (isApiAuthenticated()) return []
+    try {
+      const raw = localStorage.getItem('storagehub:durationDiscounts')
+      const parsed = raw ? JSON.parse(raw) : []
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  })
 
   const reloadPackagePolicies = useCallback(async () => {
     if (!isApiAuthenticated()) return
@@ -1077,7 +1103,7 @@ export default function BusinessApp({
           discountPercent: Number(policy.discountRate) * 100,
           depositPercent: policy.depositRate !== undefined ? Math.round(Number(policy.depositRate) * 100) : 20,
           renewalDiscountPercent: 0,
-          description: policy.description?.trim() || policy.name,
+          description: policy.name,
           appliesTo: 'Đặt mới',
           status: (pubStatus === 'PUBLISHED' && runStatus === 'ACTIVE') ? 'active' : 'inactive',
           publicationStatus: pubStatus,
@@ -1114,7 +1140,7 @@ export default function BusinessApp({
     if (!item.backendPolicyIds || Object.keys(item.backendPolicyIds).length === 0) return
     try {
       await Promise.all(Object.values(item.backendPolicyIds).map(pid => inactiveBusinessPackagePolicy(pid)))
-      showToast(lang === 'vi' ? `Đã chuyển gói thuê "${item.title}" sang TẠM DỪNG (INACTIVE). Bây giờ bạn có thể chỉnh sửa!` : `Paused package "${item.title}". Edits allowed now!`)
+      showToast(lang === 'vi' ? `Đã chuyển gói thuê "${item.title}" sang Tạm dừng.` : `Paused package "${item.title}".`)
       await reloadPackagePolicies()
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Không thể tạm dừng gói thuê.')
@@ -1130,14 +1156,18 @@ export default function BusinessApp({
     try {
       if (isApiAuthenticated()) {
         await deleteAllBusinessPackagePolicies()
+        await reloadPackagePolicies()
+      } else {
+        const next = durationDiscounts.map(item => ({
+          ...item, status: 'inactive' as const, publicationStatus: 'INACTIVE' as const, runtimeStatus: 'INACTIVE' as const,
+        }))
+        setDurationDiscounts(next)
+        localStorage.setItem("storagehub:durationDiscounts", JSON.stringify(next))
       }
-      setDurationDiscounts([])
-      localStorage.removeItem("storagehub:durationDiscounts")
       setDeleteAllPackagesModal(false)
-      showToast(lang === 'vi' ? 'Đã xóa toàn bộ gói thuê hiện có!' : 'All rental packages have been deleted!')
-      await reloadPackagePolicies()
+      showToast(lang === 'vi' ? 'Đã ngừng áp dụng tất cả gói thuê.' : 'All rental packages have been deactivated.')
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Không thể xóa các gói thuê.')
+      showToast(error instanceof Error ? error.message : 'Không thể ngừng áp dụng các gói thuê.')
     } finally {
       setIsDeletingAllPackages(false)
     }
@@ -1244,7 +1274,6 @@ export default function BusinessApp({
             rentalMonths: rentalMonthsNumber,
             rentalYears,
             freeSetupDays: newPkg.freeSetupDays,
-            description: formCreateDurationDesc.trim() || null,
             discountRate: newPkg.discountPercent / 100,
             depositRate: (newPkg.depositPercent ?? 20) / 100,
             policyVersion: `v${Date.now()}`,
@@ -1264,7 +1293,6 @@ export default function BusinessApp({
       } catch (error) {
         setPackageFormError(error instanceof Error ? error.message : 'Không thể tạo gói thuê.')
         showToast(error instanceof Error ? error.message : 'Không thể tạo gói thuê.')
-        try { await reloadPackagePolicies() } catch { }
         return
       }
     }
@@ -1279,8 +1307,8 @@ export default function BusinessApp({
   const handleOpenEditDuration = (item: DurationDiscountItem) => {
     if (item.publicationStatus === 'PUBLISHED') {
       showToast(lang === 'vi'
-        ? 'Chính sách đang ở trạng thái ĐÃ XUẤT BẢN (PUBLISHED). Theo quy định, cấu hình đã xuất bản không được chỉnh sửa trực tiếp. Vui lòng bấm [Tạm dừng] trước khi chỉnh sửa!'
-        : 'Published configuration cannot be edited directly. Pause (INACTIVE) first!')
+        ? 'Chính sách đang hoạt động. Hãy tạm dừng trước khi sửa.'
+        : 'This policy is published. Pause it before editing.')
       return
     }
     setPackageFormError(undefined)
@@ -1326,7 +1354,6 @@ export default function BusinessApp({
           name: formDurationTitle.trim() || selectedDurationItem.title,
           rentalMonths: typeof selectedDurationItem.months === 'number' ? selectedDurationItem.months : 1,
           freeSetupDays: formDurationSetupDays === '' ? undefined : Math.max(0, Number(formDurationSetupDays) || 0),
-          description: formDurationDesc.trim() || null,
           discountRate: Math.max(0, Math.min(100, Number(formDurationPercent) || 0)) / 100,
           depositRate: Math.max(5, Math.min(50, Number(formDurationDepositPercent) || 20)) / 100,
           policyVersion: `v${Date.now()}`,
@@ -1396,11 +1423,13 @@ export default function BusinessApp({
           return false
         }
       }
-      const next = durationDiscounts.filter((d) => d.id !== id)
+      const next = durationDiscounts.map(d => d.id === id ? {
+        ...d, status: 'inactive' as const, publicationStatus: 'INACTIVE' as const, runtimeStatus: 'INACTIVE' as const,
+      } : d)
       setDurationDiscounts(next)
       if (!isApiAuthenticated()) localStorage.setItem("storagehub:durationDiscounts", JSON.stringify(next))
       if (selectedDurationItem?.id === id) setEditDurationModal(false)
-      showToast(lang === 'vi' ? `Đã xóa gói "${item.title}"!` : `Package deleted!`)
+      showToast(lang === 'vi' ? `Đã ngừng áp dụng gói "${item.title}".` : 'Package deactivated.')
     }
   }
 
@@ -1473,7 +1502,7 @@ export default function BusinessApp({
     [],
   )
 
-  // Map ngày thanh toán vào tháng báo cáo (Tháng 4 - Tháng 9)
+  // Map ngày thanh toán vào tháng báo cáo (Tháng 4 – Tháng 9)
   const getPaymentReportingMonth = useCallback((dateStr?: string): string => {
     if (!dateStr) return "Tháng 9"
     const d = new Date(dateStr)
@@ -1635,7 +1664,7 @@ export default function BusinessApp({
           growthNum = diff / 100
         }
       } else {
-        growthStr = "-"
+        growthStr = "—"
       }
 
       previousMonthRevenue = monthRevenue
@@ -1749,13 +1778,14 @@ export default function BusinessApp({
   const [facilityPriceModalOpen, setFacilityPriceModalOpen] = useState(false)
   const [editingPriceFacility, setEditingPriceFacility] = useState<any | null>(null)
   const [backendPricingUnitTypes, setBackendPricingUnitTypes] = useState<CustomerUnitType[]>([])
+  const [backendPricingArchivedCount, setBackendPricingArchivedCount] = useState(0)
   const [pricingCatalogByCode, setPricingCatalogByCode] = useState<Record<string, CustomerUnitType[]>>({})
   const [pricingCatalogLoading, setPricingCatalogLoading] = useState(false)
   const [pricingCatalogError, setPricingCatalogError] = useState<string>()
   const [pricingCatalogVersion, setPricingCatalogVersion] = useState(0)
 
   useEffect(() => {
-    if (page !== 'pricing' || !isApiAuthenticated()) return
+    if (!isApiAuthenticated()) return
     let mounted = true
     setPricingCatalogLoading(true)
     setPricingCatalogError(undefined)
@@ -1769,9 +1799,50 @@ export default function BusinessApp({
       if (mounted) { setPricingCatalogByCode({}); setPricingCatalogError(error instanceof Error ? error.message : 'Không thể tải bảng giá cơ sở.') }
     }).finally(() => { if (mounted) setPricingCatalogLoading(false) })
     return () => { mounted = false }
-  }, [page, pricingCatalogVersion])
+  }, [pricingCatalogVersion])
+
+  const pendingPricingRequests = useMemo(() => facilitiesList.flatMap(facility => {
+    const facilityCode = (facility.code || '').trim().toUpperCase()
+    return (pricingCatalogByCode[facilityCode] || [])
+      .filter(unitType => isUnitTypeAwaitingPricing(unitType.status, unitType.monthlyPrice))
+      .map(unitType => ({ facility, unitType }))
+  }), [facilitiesList, pricingCatalogByCode])
+
+  const additionalPricingNotifications = useMemo<LayoutNotification[]>(() => (
+    pendingPricingRequests.map(({ facility, unitType }) => ({
+      id: `unit-type-pricing-${unitType.id}`,
+      title: 'Loại kho cần định giá',
+      message: `${facility.name} (${facility.code}) · ${unitType.name} (${unitType.code}) đang chờ BO nhập giá thuê và tiền cọc.`,
+      date: unitType.updatedAt,
+      page: 'pricing',
+      targetId: unitType.id,
+      isRead: false,
+    }))
+  ), [pendingPricingRequests])
+
+  const selectedPricingFacilityTypes = selectedPricingFacility
+    ? pricingCatalogByCode[(selectedPricingFacility.code || '').trim().toUpperCase()] || []
+    : []
+  const selectedPricingFacilityNeedsPricing = selectedPricingFacilityTypes.some(type => isUnitTypePricingPending(type.status, type.monthlyPrice))
+
   const [backendPricingValues, setBackendPricingValues] = useState<Record<string, { monthlyPrice: number; securityDepositAmount: number }>>({})
   const [backendPricingLoading, setBackendPricingLoading] = useState(false)
+
+  const resolveBackendFacilityId = useCallback(async (facility: { id?: string; code?: string }) => {
+    const facilityCode = (facility.code || '').trim().toUpperCase()
+    const knownId = (facilityCode && backendFacilityIdsByCode[facilityCode]) || facility.id
+    if (isUuid(knownId)) return knownId
+
+    const backendFacilities = await listAllFacilitiesApi()
+    const persisted = backendFacilities.find(item =>
+      item.id === facility.id || (item.code || '').trim().toUpperCase() === facilityCode,
+    )
+    if (!persisted || !isUuid(persisted.id)) {
+      throw new Error('Không tìm thấy cơ sở trên hệ thống. Vui lòng tải lại trang.')
+    }
+    return persisted.id
+  }, [backendFacilityIdsByCode])
+
   const [facilityPricesForm, setFacilityPricesForm] = useState<{ S: number; M: number; L: number; XL: number }>({
     S: 5500000,
     M: 9500000,
@@ -1804,14 +1875,18 @@ export default function BusinessApp({
     if (isApiAuthenticated()) {
       setBackendPricingLoading(true)
       try {
-        const page = await listAccessibleUnitTypes(fac.id, 0, 100)
-        setBackendPricingUnitTypes(page.data)
-        setBackendPricingValues(Object.fromEntries(page.data.map(unitType => [unitType.id, {
-          monthlyPrice: Number(unitType.monthlyPrice) || 0,
-          securityDepositAmount: Number(unitType.securityDepositAmount) || 0,
+        const backendFacilityId = await resolveBackendFacilityId(fac)
+        const page = await listAccessibleUnitTypes(backendFacilityId, 0, 100)
+        const editableUnitTypes = page.data.filter(unitType => isUnitTypePriceEditable(unitType.status))
+        setBackendPricingArchivedCount(page.data.length - editableUnitTypes.length)
+        setBackendPricingUnitTypes(editableUnitTypes)
+        setBackendPricingValues(Object.fromEntries(editableUnitTypes.map(unitType => [unitType.id, {
+          monthlyPrice: isUnitTypePricingPending(unitType.status, unitType.monthlyPrice) ? 0 : Number(unitType.monthlyPrice) || 0,
+          securityDepositAmount: isUnitTypePricingPending(unitType.status, unitType.monthlyPrice) ? 0 : Number(unitType.securityDepositAmount) || 0,
         }])))
       } catch (error) {
         setBackendPricingUnitTypes([])
+        setBackendPricingArchivedCount(0)
         setBackendPricingValues({})
         showToast(error instanceof Error ? error.message : 'Không thể tải danh sách loại kho của cơ sở.')
       } finally {
@@ -1824,20 +1899,23 @@ export default function BusinessApp({
     if (!editingPriceFacility) return
     const facId = editingPriceFacility.id
     if (isApiAuthenticated()) {
-      if (!backendPricingUnitTypes.length) {
-        showToast('Manager chưa khai báo loại kho thực tế cho cơ sở này.')
+      const editableUnitTypes = backendPricingUnitTypes.filter(unitType => isUnitTypePriceEditable(unitType.status))
+      if (!editableUnitTypes.length) {
+        showToast(backendPricingArchivedCount > 0
+          ? 'Các loại kho đã lưu trữ không thể cập nhật giá. Hãy khôi phục loại kho trước khi định giá.'
+          : 'Manager chưa khai báo loại kho thực tế cho cơ sở này.')
         return
       }
-      const invalid = backendPricingUnitTypes.some(unitType => {
+      const invalid = editableUnitTypes.some(unitType => {
         const value = backendPricingValues[unitType.id]
         return !value || value.monthlyPrice <= 0 || value.securityDepositAmount < 0
       })
       if (invalid) {
-        showToast('Giá thuê phải lớn hơn 0 và tiền cọc đảm bảo thuê không được âm.')
+        showToast('Giá thuê phải lớn hơn 0 và tiền cọc đảm bảo kho không được âm.')
         return
       }
       try {
-        await Promise.all(backendPricingUnitTypes.map(unitType =>
+        await Promise.all(editableUnitTypes.map(unitType =>
           priceBusinessUnitTypeApi(unitType.id, backendPricingValues[unitType.id])))
       } catch (error) {
         showToast(error instanceof Error ? error.message : 'Không thể lưu biểu giá lên backend.')
@@ -1849,7 +1927,7 @@ export default function BusinessApp({
       setPricingCatalogVersion(version => version + 1)
       showToast(
         lang === "vi"
-          ? `Đã cập nhật biểu giá cho cơ sở "${editingPriceFacility.name}"! Nếu cơ sở đang ở trạng thái Thiết lập, bạn có thể bấm [Công bố cơ sở] để xuất bản ngay lên Cổng khách hàng.`
+          ? `Đã cập nhật biểu giá cho cơ sở "${editingPriceFacility.name}". Nếu cơ sở đang ở trạng thái Thiết lập, bạn có thể chọn “Công bố cơ sở” để hiển thị trên cổng khách hàng.`
           : `Updated pricing for "${editingPriceFacility.name}"!`
       )
       return
@@ -1915,12 +1993,43 @@ export default function BusinessApp({
 
   const handleOpenFacilityDetails = async (facility: Facility) => {
     if (!isApiAuthenticated()) {
-      setSelectedFacility(facility)
+      const configuredSpecs = facility.unitCustomSpecs?.length
+        ? facility.unitCustomSpecs
+        : DEFAULT_FACILITY_UNIT_SPECS
+          .map(spec => {
+            const configuredCount = facility.unitDistribution?.[spec.sizeCode]
+            return configuredCount === undefined ? spec : { ...spec, count: configuredCount }
+          })
+          .filter(spec => spec.count > 0)
+      setFacilityDetailLayouts({})
+      setFacilityDetailTypes([])
+      setSelectedFacility({ ...facility, unitCustomSpecs: configuredSpecs })
       setViewFacilityModal(true)
       return
     }
     try {
-      const page = await listAccessibleUnitTypes(facility.id, 0, 100)
+      const facilityCode = (facility.code || '').trim().toUpperCase()
+      let backendFacilityId = backendFacilityIdsByCode[facilityCode] || facility.id
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(backendFacilityId)) {
+        const backendFacilities = await listAllFacilitiesApi()
+        const persisted = backendFacilities.find(item =>
+          item.id === facility.id || (item.code || '').trim().toUpperCase() === facilityCode,
+        )
+        if (!persisted) throw new Error('Không tìm thấy cơ sở trên hệ thống. Vui lòng tải lại trang.')
+        backendFacilityId = persisted.id
+      }
+      const page = await listAccessibleUnitTypes(backendFacilityId, 0, 100)
+      const layoutEntries = await Promise.all(page.data.map(async type => {
+        try {
+          const saved = await getBusinessRackLayout(type.id)
+          return [type.id, saved?.result ?? null] as const
+        } catch {
+          // Keep the facility details view available for legacy types that do
+          // not have a persisted rack snapshot yet.
+          return [type.id, null] as const
+        }
+      }))
+      setFacilityDetailLayouts(Object.fromEntries(layoutEntries))
       setFacilityDetailTypes(page.data)
       setBackendDetailCounts(Object.fromEntries(page.data.map(type => [type.code, {
         total: type.totalCount ?? 0, occupied: type.occupiedCount ?? 0, available: type.availableCount ?? 0,
@@ -1934,7 +2043,7 @@ export default function BusinessApp({
         heightM: Number(type.heightM),
         laneWidthM: Number(type.aisleWidthM || 0),
         maxLoadKg: Number(type.maxLoadKg),
-        monthlyPrice: Number(type.monthlyPrice),
+        monthlyPrice: isUnitTypePricingPending(type.status, type.monthlyPrice) ? 0 : Number(type.monthlyPrice),
         count: Number(type.totalCount || 0),
         frameCount: type.rackCount,
         frameDimensions: {
@@ -2000,7 +2109,9 @@ export default function BusinessApp({
           const normalized = (type.code || type.name || '').toUpperCase()
           return normalized === size.toUpperCase() || normalized.includes(`-${size.toUpperCase()}-`) || normalized.includes(`(${size.toUpperCase()})`)
         })
-        return backendType?.monthlyPrice ?? 0
+        return backendType && !isUnitTypePricingPending(backendType.status, backendType.monthlyPrice)
+          ? backendType.monthlyPrice
+          : 0
       }
       if (!fac) return (UNIT_SPECS as any)[size]?.priceMonthly || 5500000
 
@@ -2204,12 +2315,17 @@ export default function BusinessApp({
   const [editFacilityModal, setEditFacilityModal] = useState<boolean>(false)
 
   const [deleteFacilityModal, setDeleteFacilityModal] = useState<boolean>(false)
+  const [confirmFacilityArchive, setConfirmFacilityArchive] = useState(false)
   const [deleteFacilityBusy, setDeleteFacilityBusy] = useState<boolean>(false)
   const [deleteFacilityError, setDeleteFacilityError] = useState<string | null>(null)
+  const [facilityLifecycleSummary, setFacilityLifecycleSummary] = useState<FacilityLifecycleSummary | null>(null)
 
   const [viewFacilityModal, setViewFacilityModal] = useState<boolean>(false)
 
   const [selectedFacility, setSelectedFacility] = useState<any | null>(null)
+  const selectedFacilityLifecycle = facilityLifecycleSummary?.facilityId === selectedFacility?.id ? facilityLifecycleSummary : null
+  const currentFacilityStatus: Facility['status'] | undefined = selectedFacilityLifecycle?.status ?? selectedFacility?.status
+  const canPauseFacility = !!selectedFacilityLifecycle && currentFacilityStatus !== 'maintenance' && currentFacilityStatus !== 'inactive'
 
   const [downloadingExcel, setDownloadingExcel] = useState<boolean>(false)
 
@@ -2552,7 +2668,7 @@ export default function BusinessApp({
     const defaultSpecs = (apiMode ? [] : DEFAULT_FACILITY_UNIT_SPECS).map((s) => ({
       ...s,
       count: 5,
-      rentalPackages: generateDefaultRentalPackages('', s.sizeCode, s.monthlyPrice),
+      rentalPackages: [],
     }))
     setFormFacUnitSpecs(defaultSpecs)
     setFormFacUnits(isApiAuthenticated() ? 0 : 20)
@@ -2614,24 +2730,6 @@ export default function BusinessApp({
           : "Please enter city!",
       )
 
-      return
-    }
-
-    if (formFacPhone.trim() && !isFacilityPhoneValid(formFacPhone)) {
-      showToast(
-        lang === "vi"
-          ? "Số điện thoại cơ sở không đúng định dạng VN (10-11 chữ số hoặc hotline 1800/1900)!"
-          : "Invalid facility phone format!",
-      )
-      return
-    }
-
-    if (formFacAccessHours.trim() && !isFacilityAccessHoursValid(formFacAccessHours)) {
-      showToast(
-        lang === "vi"
-          ? "Khung giờ mở cửa không đúng định dạng (VD: 08:00 - 17:00 hoặc 24/7)!"
-          : "Invalid access hours format (e.g. 08:00 - 17:00 or 24/7)!",
-      )
       return
     }
 
@@ -2787,37 +2885,6 @@ export default function BusinessApp({
       try {
         localStorage.setItem("storagehub:vnd:facility-pricing", JSON.stringify(nextOverrides))
       } catch { }
-    }
-
-    if (backendFacilityId) {
-      setBackendFacilityIdsByCode(prev => ({
-        ...prev,
-        [code]: backendFacilityId!,
-      }))
-      setBackendFacilityStats(prev => ({
-        ...prev,
-        [code]: { total: 0, occupied: 0, price: null, revenue: 0 },
-      }))
-    }
-
-    if (isApiAuthenticated()) {
-      void (async () => {
-        try {
-          const fresh = await listAllFacilitiesApi()
-          setBackendFacilityIdsByCode(Object.fromEntries(
-            fresh.map(f => [f.code.trim().toUpperCase(), f.id])
-          ))
-          setBackendFacilityStats(Object.fromEntries(fresh.map(facility => [facility.code.trim().toUpperCase(), {
-            total: facility.totalUnits ?? 0,
-            occupied: facility.occupiedUnits ?? 0,
-            price: facility.minimumMonthlyPrice ?? null,
-            revenue: facility.monthRevenue ?? 0,
-          }])))
-        } catch { }
-        try {
-          await reloadPackagePolicies()
-        } catch { }
-      })()
     }
 
     setCreateFacilityModal(false)
@@ -2992,7 +3059,7 @@ export default function BusinessApp({
             heightM: rawDims.heightM ?? 1,
             depthM: (rawDims as any).depthM ?? rawDims.lengthM ?? 1,
           } : undefined,
-          rentalPackages: generateDefaultRentalPackages(f.id, sz, p),
+          rentalPackages: [],
         }
       })
     }
@@ -3017,11 +3084,12 @@ export default function BusinessApp({
     const mPrice = getFacilitySizePrice(f, "M")
     const lPrice = getFacilitySizePrice(f, "L")
     const xlPrice = getFacilitySizePrice(f, "XL")
+    const displayPrice = (price: number) => price > 0 ? `${Math.round(price).toLocaleString("vi-VN")}đ` : ""
 
-    setFormFacPriceS(`${Math.round(sPrice).toLocaleString("vi-VN")}đ`)
-    setFormFacPriceM(`${Math.round(mPrice).toLocaleString("vi-VN")}đ`)
-    setFormFacPriceL(`${Math.round(lPrice).toLocaleString("vi-VN")}đ`)
-    setFormFacPriceXL(`${Math.round(xlPrice).toLocaleString("vi-VN")}đ`)
+    setFormFacPriceS(displayPrice(sPrice))
+    setFormFacPriceM(displayPrice(mPrice))
+    setFormFacPriceL(displayPrice(lPrice))
+    setFormFacPriceXL(displayPrice(xlPrice))
 
     const activeSizes = (["S", "M", "L", "XL"] as const).filter((s) => {
       if (s === "S") return sCount > 0
@@ -3128,7 +3196,6 @@ export default function BusinessApp({
       f.accessHours || (isApiAuthenticated() ? "" : "08:00 - 17:00"),
     )
 
-    setFormFacStatus(f.status)
     setEditValidationErrors([])
     setHighlightSpecCode(null)
     setFacilityEditError(undefined)
@@ -3138,40 +3205,6 @@ export default function BusinessApp({
   const handleUpdateFacility = async () => {
     if (!selectedFacility || isUpdatingFacility) return
     setFacilityEditError(undefined)
-
-    if (!formFacName.trim()) {
-      showToast(lang === "vi" ? "Vui lòng nhập tên cơ sở / chi nhánh kho!" : "Please enter facility name!")
-      return
-    }
-
-    if (!formFacAddress.trim()) {
-      showToast(lang === "vi" ? "Vui lòng nhập địa chỉ cơ sở!" : "Please enter facility address!")
-      return
-    }
-
-    if (!formFacCity.trim()) {
-      showToast(lang === "vi" ? "Vui lòng chọn hoặc nhập Tỉnh/Thành phố!" : "Please enter city!")
-      return
-    }
-
-    if (formFacPhone.trim() && !isFacilityPhoneValid(formFacPhone)) {
-      showToast(
-        lang === "vi"
-          ? "Số điện thoại cơ sở không đúng định dạng VN (10-11 chữ số hoặc hotline 1800/1900)!"
-          : "Invalid facility phone format!",
-      )
-      return
-    }
-
-    if (formFacAccessHours.trim() && !isFacilityAccessHoursValid(formFacAccessHours)) {
-      showToast(
-        lang === "vi"
-          ? "Khung giờ mở cửa không đúng định dạng (VD: 08:00 - 17:00 hoặc 24/7)!"
-          : "Invalid access hours format (e.g. 08:00 - 17:00 or 24/7)!",
-      )
-      return
-    }
-
     setIsUpdatingFacility(true)
 
     if (isApiAuthenticated()) {
@@ -3182,7 +3215,7 @@ export default function BusinessApp({
           name: formFacName.trim(), address: formFacAddress.trim(), city: formFacCity.trim(),
           phone: formFacPhone.trim() || null, accessHours: formFacAccessHours.trim() || null,
           imageUrl: formFacImage || null, climateControlled: formFacClimate,
-          securityDescription: formFacSecurity.trim() || null, status: formFacStatus,
+          securityDescription: formFacSecurity.trim() || null,
         })
         updateFacility(selectedFacility.id, {
           name: saved.name, address: saved.address, city: saved.city, phone: saved.phone || '',
@@ -3366,7 +3399,6 @@ export default function BusinessApp({
           imageUrl: formFacImage || null,
           climateControlled: formFacClimate,
           securityDescription: formFacSecurity.trim() || null,
-          status: formFacStatus,
         })
       } catch (error) {
         showToast(error instanceof Error ? error.message : 'Không thể cập nhật cơ sở trên backend.')
@@ -3419,7 +3451,6 @@ export default function BusinessApp({
 
         accessHours: formFacAccessHours,
 
-        status: formFacStatus,
       },
       user,
     )
@@ -3503,8 +3534,34 @@ export default function BusinessApp({
     )
   }
 
+  const handleOpenFacilityLifecycle = async (facility: Facility) => {
+    setSelectedFacility(facility)
+    setConfirmFacilityArchive(false)
+    setDeleteFacilityError(null)
+    setDeleteFacilityBusy(false)
+    setFacilityLifecycleSummary(null)
+    setDeleteFacilityModal(true)
+    if (!isApiAuthenticated()) {
+      setFacilityLifecycleSummary({
+        facilityId: facility.id,
+        status: facility.status,
+        pendingHoldCount: 0,
+        processingReservationCount: 0,
+        activeContractCount: getFacilityOccupiedCount(facility),
+        outstandingPaymentCount: 0,
+        outstandingRefundCount: 0,
+      })
+      return
+    }
+    try {
+      setFacilityLifecycleSummary(await getBusinessFacilityLifecycleSummary(facility.id))
+    } catch (error) {
+      setDeleteFacilityError(error instanceof Error ? error.message : 'Không thể tải số liệu vòng đời cơ sở.')
+    }
+  }
+
   const handleDeactivateFacility = async () => {
-    if (!selectedFacility) return
+    if (!selectedFacility || deleteFacilityBusy || !canPauseFacility) return
     setDeleteFacilityBusy(true)
     setDeleteFacilityError(null)
 
@@ -3523,16 +3580,16 @@ export default function BusinessApp({
             imageUrl: persisted.imageUrl || null,
             climateControlled: persisted.climateControlled,
             securityDescription: persisted.securityDescription || null,
-            status: 'inactive',
+            status: 'maintenance',
           })
         }
       }
-      updateFacility(selectedFacility.id, { status: 'inactive' }, user)
+      updateFacility(selectedFacility.id, { status: 'maintenance' }, user)
       setDeleteFacilityModal(false)
       showToast(
         lang === "vi"
-          ? `Đã chuyển cơ sở "${selectedFacility.name}" sang trạng thái Ngừng hoạt động.`
-          : `Facility "${selectedFacility.name}" deactivated.`
+          ? `Đã chuyển cơ sở "${selectedFacility.name}" sang trạng thái Tạm ngưng nhận đơn mới.`
+          : `Facility "${selectedFacility.name}" stopped accepting new orders.`
       )
       // Đồng bộ lại danh sách cơ sở từ backend
       try {
@@ -3556,6 +3613,69 @@ export default function BusinessApp({
     }
   }
 
+  const handleArchiveFacility = async () => {
+    if (!selectedFacility || deleteFacilityBusy) return
+    setDeleteFacilityBusy(true)
+    setDeleteFacilityError(null)
+    let facilityId: string | undefined
+    try {
+      if (isApiAuthenticated()) {
+        const persisted = (await listAllFacilitiesApi()).find(
+          f => f.id === selectedFacility.id || (f.code && f.code.toUpperCase() === (selectedFacility.code || '').toUpperCase())
+        )
+        if (!persisted) throw new Error('Không tìm thấy cơ sở trên hệ thống. Vui lòng tải lại trang.')
+        facilityId = persisted.id
+        await archiveBusinessFacility(persisted.id)
+      }
+      updateFacility(selectedFacility.id, { status: 'inactive' }, user)
+      setFacilityLifecycleSummary(summary => summary ? { ...summary, status: 'inactive' } : summary)
+      setDeleteFacilityModal(false)
+      showToast(lang === 'vi' ? `Đã lưu trữ cơ sở "${selectedFacility.name}".` : `Facility "${selectedFacility.name}" archived.`)
+    } catch (error) {
+      setConfirmFacilityArchive(false)
+      setDeleteFacilityError(error instanceof Error ? error.message : 'Không thể lưu trữ cơ sở.')
+      if (facilityId) {
+        try {
+          setFacilityLifecycleSummary(await getBusinessFacilityLifecycleSummary(facilityId))
+        } catch {
+          setFacilityLifecycleSummary(null)
+        }
+      }
+    } finally {
+      setDeleteFacilityBusy(false)
+    }
+  }
+
+  const handleRestoreFacility = async () => {
+    if (!selectedFacility || deleteFacilityBusy || !selectedFacilityLifecycle) return
+    const reopeningBookings = selectedFacilityLifecycle.status === 'maintenance'
+    setDeleteFacilityBusy(true)
+    setDeleteFacilityError(null)
+    try {
+      if (isApiAuthenticated()) {
+        const persisted = (await listAllFacilitiesApi()).find(
+          f => f.id === selectedFacility.id || (f.code && f.code.toUpperCase() === (selectedFacility.code || '').toUpperCase())
+        )
+        if (!persisted) throw new Error('Không tìm thấy cơ sở trên hệ thống. Vui lòng tải lại trang.')
+        const restored = await restoreBusinessFacility(persisted.id)
+        updateFacility(selectedFacility.id, { status: restored.status }, user)
+        setFacilityLifecycleSummary(summary => summary ? { ...summary, status: restored.status } : summary)
+        showToast(restored.status === 'active'
+          ? reopeningBookings ? `Cơ sở "${selectedFacility.name}" đã mở lại nhận đơn.` : `Đã khôi phục cơ sở "${selectedFacility.name}".`
+          : `Đã khôi phục cấu hình cơ sở "${selectedFacility.name}". Cần hoàn tất định giá trước khi công bố lại.`)
+      } else {
+        updateFacility(selectedFacility.id, { status: 'active' }, user)
+        setFacilityLifecycleSummary(summary => summary ? { ...summary, status: 'active' } : summary)
+        showToast(reopeningBookings ? `Cơ sở "${selectedFacility.name}" đã mở lại nhận đơn.` : `Đã khôi phục cơ sở "${selectedFacility.name}".`)
+      }
+      setDeleteFacilityModal(false)
+    } catch (error) {
+      setDeleteFacilityError(error instanceof Error ? error.message : 'Không thể khôi phục cơ sở.')
+    } finally {
+      setDeleteFacilityBusy(false)
+    }
+  }
+
   const handlePublishFacility = async (facility: Facility) => {
     try {
       if (isApiAuthenticated()) {
@@ -3565,6 +3685,20 @@ export default function BusinessApp({
         if (!persisted) throw new Error('Không tìm thấy cơ sở trên hệ thống. Vui lòng tải lại trang.')
         const published = await publishBusinessFacilityApi(persisted.id)
         updateFacility(facility.id, { status: published.status }, user)
+        const facilityCode = (facility.code || '').trim().toUpperCase()
+        if (facilityCode) {
+          setPricingCatalogByCode(current => {
+            const currentTypes = current[facilityCode]
+            if (!currentTypes) return current
+            return {
+              ...current,
+              [facilityCode]: currentTypes.map(type =>
+                type.status === 'awaiting_pricing' ? { ...type, status: 'active' } : type,
+              ),
+            }
+          })
+        }
+        setPricingCatalogVersion(version => version + 1)
       } else {
         updateFacility(facility.id, { status: 'active' }, user)
       }
@@ -3578,70 +3712,14 @@ export default function BusinessApp({
     }
   }
 
-  const handleActivateFacility = async () => {
-    if (!selectedFacility) return
-    setDeleteFacilityBusy(true)
-    setDeleteFacilityError(null)
-
-    try {
-      if (isApiAuthenticated()) {
-        const persisted = (await listAllFacilitiesApi()).find(
-          f => f.id === selectedFacility.id || (f.code && f.code.toUpperCase() === (selectedFacility.code || '').toUpperCase())
-        )
-        if (persisted) {
-          await updateBusinessFacilityApi(persisted.id, {
-            name: persisted.name,
-            address: persisted.address,
-            city: persisted.city,
-            phone: persisted.phone || null,
-            accessHours: persisted.accessHours || null,
-            imageUrl: persisted.imageUrl || null,
-            climateControlled: persisted.climateControlled,
-            securityDescription: persisted.securityDescription || null,
-            status: 'active',
-          })
-        }
-      }
-      updateFacility(selectedFacility.id, { status: 'active' }, user)
-      setDeleteFacilityModal(false)
-      showToast(
-        lang === "vi"
-          ? `Đã kích hoạt lại cơ sở "${selectedFacility.name}".`
-          : `Facility "${selectedFacility.name}" reactivated.`
-      )
-      // Đồng bộ lại danh sách cơ sở từ backend
-      try {
-        const backendFacs = await listAllFacilitiesApi()
-        if (Array.isArray(backendFacs)) {
-          backendFacs.forEach(bf => {
-            const cleanBf = sanitizeFacilityStrings(bf)
-            const matching = facilitiesList.find(
-              f => f.id === cleanBf.id || (f.code && f.code.toUpperCase() === (cleanBf.code || '').toUpperCase())
-            )
-            if (matching) {
-              updateFacility(matching.id, { status: cleanBf.status }, user)
-            }
-          })
-        }
-      } catch {}
-    } catch (error) {
-      setDeleteFacilityError(error instanceof Error ? error.message : 'Không thể kích hoạt lại cơ sở.')
-    } finally {
-      setDeleteFacilityBusy(false)
-    }
-  }
-
   // Danh sách cơ sở sau khi lọc & tìm kiếm
 
   const filteredFacilities = useMemo(() => {
     return facilitiesList.filter((f) => {
       if (facFilterCity !== "All" && f.city !== facFilterCity) return false
 
-      if (facFilterStatus !== "All") {
-        if (f.status !== facFilterStatus) return false
-      } else {
-        if (f.status === "inactive") return false
-      }
+      if (facFilterStatus !== "All" && f.status !== facFilterStatus)
+        return false
 
       if (facSearch.trim()) {
         const q = facSearch.toLowerCase()
@@ -3675,7 +3753,7 @@ export default function BusinessApp({
     const set = new Set<string>()
 
     facilitiesList.forEach((f) => {
-      if (f.city && f.status !== "inactive") set.add(f.city)
+      if (f.city) set.add(f.city)
     })
 
     return Array.from(set)
@@ -3694,6 +3772,7 @@ export default function BusinessApp({
     <Layout
       user={user}
       notifications={businessNotifications.map(item => ({ id: item.id, title: item.title, message: item.content, date: item.createdAt, isRead: item.isRead, page: item.type === 'SYSTEM' ? 'pricing' : 'facilities' }))}
+      additionalNotifications={additionalPricingNotifications}
       onNotificationClick={item => {
         const notification = businessNotifications.find(n => n.id === item.id)
         if (notification) {
@@ -3742,22 +3821,6 @@ export default function BusinessApp({
           <BusinessReturnsPanel user={user} />
         </div>
       )}
-      {/* ── BẢNG ĐIỀU KHIỂN & DOANH THU (DASHBOARD) ─────────── */}
-      {page === "dashboard" && (
-        <BusinessDashboardPanel
-          user={user}
-          lang={lang}
-          facilitiesList={facilitiesList}
-          backendFacilityStats={backendFacilityStats}
-          onNavigate={(targetPage, params) => {
-            setPage(targetPage)
-            if (targetPage === "pricing" && params?.facilityId) {
-              setPricingFacilityFilter(params.facilityId)
-            }
-          }}
-        />
-      )}
-
       {/* ── QUẢN LÝ CƠ SỞ (CRUD FACILITIES) ──────────────────── */}
       {page === "facilities" && (
         <div className="fade-in space-y-5">
@@ -3765,31 +3828,35 @@ export default function BusinessApp({
             title={lang === "vi" ? "Quản Lý Cơ Sở" : "Facility Management"}
             subtitle={
               lang === "vi"
-? `${facilitiesList.filter(f => f.status !== "inactive").length} cơ sở trong hệ thống - Thêm, sửa, xóa và theo dõi vận hành`
-                : `${facilitiesList.filter(f => f.status !== "inactive").length} ${facilitiesList.filter(f => f.status !== "inactive").length === 1 ? "facility" : "facilities"}
+                ? `${facilitiesList.length} cơ sở trong hệ thống – Thêm, chỉnh sửa, ngưng hoạt động và theo dõi vận hành`
+                : `${facilitiesList.length} ${facilitiesList.length === 1 ? "facility" : "facilities"
                 } in the portfolio`
             }
             action={
-              <Button
-                variant="primary"
-                size="sm"
-                className="bg-amber-600 hover:bg-amber-700 text-white font-semibold shadow-sm flex items-center gap-1.5"
-                onClick={handleOpenCreateFacility}
-              >
-                {lang === "vi" ? "Thêm Cơ Sở Mới" : "Add New Facility"}
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className="bg-amber-600 hover:bg-amber-700 text-white font-semibold shadow-sm flex items-center gap-1.5"
+                  onClick={handleOpenCreateFacility}
+                >
+                  {Icon.plus}{" "}
+                  {lang === "vi" ? "Thêm Cơ Sở Mới" : "Add New Facility"}
+                </Button>
+              </div>
             }
           />
+          {isApiAuthenticated() && <BusinessFacilityLifecycleRequests />}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <StatCard
               title={lang === "vi" ? "Tổng số cơ sở" : "Total Locations"}
-              value={facilitiesList.filter(f => f.status !== "inactive").length}
+              value={facilitiesList.length}
               icon={Icon.building}
               iconBg="bg-blue-50"
             />
             <StatCard
               title={lang === "vi" ? "Tổng số gian kho" : "Total Units"}
-              value={facilitiesList.filter(f => f.status !== "inactive").reduce((sum, facility) => sum + getFacilityTotalUnits(facility), 0)}
+              value={totalUnits}
               icon={Icon.box}
               iconBg="bg-purple-50"
             />
@@ -3843,19 +3910,16 @@ export default function BusinessApp({
                   onChange={(e) => setFacFilterStatus(e.target.value)}
                 >
                   <option value="All">
-                    {lang === "vi" ? "Tất cả cơ sở hoạt động" : "All Operational"}
+                    {lang === "vi" ? "Tất cả trạng thái" : "All Statuses"}
                   </option>
                   <option value="active">
                     {lang === "vi" ? "Đang hoạt động" : "Active"}
-                  </option>
-                  <option value="setup">
-                    {lang === "vi" ? "Đang thiết lập" : "Setup"}
                   </option>
                   <option value="maintenance">
                     {lang === "vi" ? "Bảo trì" : "Maintenance"}
                   </option>
                   <option value="inactive">
-                    {lang === "vi" ? "Ngừng hoạt động" : "Inactive"}
+                    {lang === "vi" ? "Đã ngừng hoạt động" : "Inactive"}
                   </option>
                 </Select>
               </div>
@@ -3890,6 +3954,9 @@ export default function BusinessApp({
           {filteredFacilities.length === 0 ? (
             <Card className="p-12 text-center border-dashed border-2 border-stone-300">
               <div className="max-w-md mx-auto space-y-3">
+                <div className="w-12 h-12 bg-amber-100 text-amber-700 rounded-full flex items-center justify-center mx-auto text-xl">
+                  {Icon.building}
+                </div>
                 <h4 className="font-bold text-slate-800 text-base">
                   {lang === "vi"
                     ? "Không tìm thấy cơ sở phù hợp"
@@ -3915,6 +3982,8 @@ export default function BusinessApp({
               {filteredFacilities.map((f) => {
                 const cleanF = sanitizeFacilityStrings(f)
                 const facCode = cleanF.code || cleanF.id
+                const facilityPricingTypes = pricingCatalogByCode[(cleanF.code || '').trim().toUpperCase()] || []
+                const canPublishPendingTypes = cleanF.status === 'active' && facilityHasPricedPendingUnitType(facilityPricingTypes)
 
                 const totalUnitsInFac = getFacilityTotalUnits(cleanF)
                 const occupiedInFac = getFacilityOccupiedCount(cleanF)
@@ -3931,46 +4000,20 @@ export default function BusinessApp({
                       <div className="flex-1 min-w-0 space-y-3">
                         {/* Hàng 1: Mã cơ sở + Tên + Badge trạng thái */}
                         <div className="flex flex-wrap items-center gap-3">
-                          <span className="font-mono text-xs font-bold px-2.5 py-1 rounded bg-amber-100/80 text-amber-900 border border-amber-300">
+                          <span className="rounded-full border border-amber-300 bg-amber-100/80 px-3 py-1 font-mono text-xs font-bold text-amber-900">
                             {facCode}
                           </span>
                           <h3 className="font-bold text-slate-900 text-lg leading-snug">
                             {cleanF.name}
                           </h3>
-                          <Badge
-                            variant={
-                              cleanF.status === "active"
-                                ? "success"
-                                : cleanF.status === "setup"
-                                  ? "primary"
-                                  : cleanF.status === "maintenance"
-                                    ? "warning"
-                                    : "neutral"
-                            }
-                          >
-                            {cleanF.status === "active"
-                              ? lang === "vi"
-                                ? "Đang hoạt động"
-                                : "Active"
-                              : cleanF.status === "setup"
-                                ? lang === "vi"
-                                  ? "Đang thiết lập"
-                                  : "Setup"
-                                : cleanF.status === "maintenance"
-                                  ? lang === "vi"
-                                    ? "Bảo trì"
-                                    : "Maintenance"
-                                  : lang === "vi"
-                                    ? "Ngừng hoạt động"
-                                    : "Inactive"}
-                          </Badge>
+                          <FacilityStatusTag status={cleanF.status} lang={lang} />
                         </div>
 
                         {/* Thông tin cơ sở */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs text-slate-600">
                           <div>{cleanF.address} · <b>{cleanF.city}</b></div>
                           <div>Quản lý: <b>{cleanF.manager}</b></div>
-                          <div>Hotline: <b>{cleanF.phone || "Chưa cập nhật"}</b></div>
+                          <div>Số điện thoại liên hệ: <b>{cleanF.phone || "Chưa cập nhật"}</b></div>
                           <div>Khung giờ mở cửa: <b>{cleanF.accessHours || (isApiAuthenticated() ? "Chưa cập nhật" : "08:00 - 17:00")}</b></div>
                         </div>
                         {/* Cơ cấu gian kho */}
@@ -3980,7 +4023,7 @@ export default function BusinessApp({
                               (u.facilityId === f.id || u.facilityId === f.code) &&
                               ((u as any).sizeCode || (u as any).size || ({ Small: "S", Medium: "M", Large: "L", "Extra Large": "XL" } as Record<string, string>)[String(u.type)]) === size
                             ).length
-                            return count > 0 ? <span key={size} className="rounded border border-stone-200 bg-stone-50 px-2 py-1">{size}: {count} kho</span> : null
+                            return count > 0 ? <span key={size} className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 font-bold">{size}: {count} kho</span> : null
                           })}
                         </div>
 
@@ -4002,7 +4045,7 @@ export default function BusinessApp({
                                 onClick={() => {
                                   setPage("policies")
                                 }}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-900 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 transition cursor-pointer"
+                                className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-900 transition cursor-pointer hover:border-emerald-300 hover:bg-emerald-100"
                                 title={lang === "vi" ? "Xem và quản lý các gói thuê của cơ sở này" : "View and manage packages for this facility"}
                               >
                                 <span>
@@ -4019,7 +4062,7 @@ export default function BusinessApp({
 
                       {/* Các nút hành động */}
                       <div className="flex lg:flex-col items-center justify-end gap-2 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-100">
-                        {cleanF.status === "setup" && (
+                        {(cleanF.status === "setup" || canPublishPendingTypes) && (
                           <Button
                             variant="primary"
                             size="sm"
@@ -4028,18 +4071,6 @@ export default function BusinessApp({
                             title={lang === "vi" ? "Công bố cơ sở này lên Cổng khách hàng" : "Publish facility to customer portal"}
                           >
                             {lang === "vi" ? "Công bố cơ sở" : "Publish"}
-                          </Button>
-                        )}
-                        {cleanF.status === "inactive" && (
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            className="w-full justify-center text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-xs"
-                            onClick={() => void handlePublishFacility(cleanF)}
-                            title={lang === "vi" ? "Khôi phục hoạt động cho cơ sở này" : "Reactivate facility"}
-                          >
-                            {lang === "vi" ? "Khôi phục HĐ" : "Reactivate"}
-
                           </Button>
                         )}
                         <Button
@@ -4055,31 +4086,17 @@ export default function BusinessApp({
                           size="sm"
                           className="w-full justify-center text-xs font-semibold border-amber-300 text-amber-800 hover:bg-amber-50"
                           onClick={() => handleOpenEditFacility(cleanF)}
+                          disabled={cleanF.status === "inactive"}
                         >
                           {lang === "vi" ? "Chỉnh sửa" : "Edit"}
                         </Button>
                         <Button
                           variant="outline"
                           size="sm"
-                          className={`w-full justify-center text-xs font-semibold ${
-                            cleanF.status === "active"
-                              ? "border-amber-300 text-amber-800 hover:bg-amber-50"
-                              : "border-emerald-300 text-emerald-800 hover:bg-emerald-50"
-                          }`}
-                          onClick={() => {
-                            setSelectedFacility(cleanF)
-                            setDeleteFacilityError(null)
-                            setDeleteFacilityBusy(false)
-                            setDeleteFacilityModal(true)
-                          }}
+                          className="w-full justify-center text-xs font-semibold border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300"
+                          onClick={() => void handleOpenFacilityLifecycle(cleanF)}
                         >
-                          {lang === "vi"
-                            ? cleanF.status === "active"
-                              ? "Ngừng hoạt động"
-                              : "Kích hoạt lại"
-                            : cleanF.status === "active"
-                              ? "Deactivate"
-                              : "Reactivate"}
+                          {lang === "vi" ? (cleanF.status === "inactive" ? "Khôi phục hoạt động" : "Trạng thái hoạt động") : "Facility status"}
                         </Button>
                       </div>
                     </div>
@@ -4122,7 +4139,7 @@ export default function BusinessApp({
                     <svg className="w-4 h-4 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
-                    <span>{lang === "vi" ? "Xóa Tất Cả Gói Thuê" : "Delete All Packages"}</span>
+                    <span>{lang === "vi" ? "Ngừng áp dụng tất cả gói thuê" : "Deactivate all packages"}</span>
                   </Button>
                 )}
                 <Button
@@ -4131,7 +4148,7 @@ export default function BusinessApp({
                   onClick={handleOpenCreateDuration}
                   className="flex items-center gap-1.5 shadow-sm"
                 >
-                  {lang === "vi" ? "Thêm Gói Thuê Mới" : "Add Rental Package"}
+                  {Icon.plus} {lang === "vi" ? "Thêm Gói Thuê Mới" : "Add Rental Package"}
                 </Button>
               </div>
             }
@@ -4145,9 +4162,6 @@ export default function BusinessApp({
                   {lang === "vi" ? "Danh Sách Gói Thuê & Mức Chiết Khấu" : "Rental Packages & Discount Schedule"}
                 </h3>
               </div>
-              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Tỷ lệ giảm giá (%) được tự động áp dụng vào đơn giá khi khách hàng đặt kho hoặc gia hạn theo các mốc thời gian dưới đây.
-              </p>
             </div>
 
             {/* Cards Tóm Tắt Nhanh Các Gói */}
@@ -4164,7 +4178,7 @@ export default function BusinessApp({
                 </select>
               </label>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5 my-4">
+            <div className="grid w-full grid-cols-1 gap-4 my-4 sm:grid-cols-2 lg:grid-cols-4">
               {[...durationDiscounts].filter(item => packageStatusFilter === 'all' ||
                 (packageStatusFilter === 'active' ? item.status === 'active' : item.status !== 'active')).length === 0 ? (
                 <div className="col-span-full py-8 text-center text-sm text-stone-500">
@@ -4190,7 +4204,7 @@ export default function BusinessApp({
                 return (
                   <div
                     key={item.id}
-                    className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between ${
+                    className={`flex min-w-0 flex-col justify-between rounded-xl border p-3.5 transition-all ${
                       isActive
                         ? hasDiscount || hasRenewal
                           ? "border-emerald-200 bg-emerald-50/40 hover:border-emerald-300 shadow-2xs"
@@ -4203,34 +4217,29 @@ export default function BusinessApp({
                         <span className="font-bold text-slate-900 text-sm truncate" title={item.title}>
                           {item.label}
                         </span>
-                        <div className="flex flex-col items-end gap-0.5">
-                          <Badge
-                            variant={
-                              item.runtimeStatus === 'ACTIVE'
-                                ? "success"
-                                : item.runtimeStatus === 'SCHEDULED'
-                                  ? "info"
-                                  : item.runtimeStatus === 'EXPIRED'
-                                    ? "error"
-                                    : item.runtimeStatus === 'INACTIVE'
-                                      ? "warning"
-                                      : "muted"
-                            }
-                          >
-                            {item.runtimeStatus === 'ACTIVE'
-                              ? "Đang hiệu lực"
+                        <span
+                          className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-semibold ${
+                            item.runtimeStatus === 'ACTIVE'
+                              ? "bg-emerald-100 text-emerald-900"
                               : item.runtimeStatus === 'SCHEDULED'
-                                ? "Lên lịch"
+                                ? "bg-sky-100 text-sky-900"
                                 : item.runtimeStatus === 'EXPIRED'
-                                  ? "Hết hạn"
+                                  ? "bg-red-100 text-red-900"
                                   : item.runtimeStatus === 'INACTIVE'
-                                    ? "Tạm dừng"
-                                    : "Bản nháp"}
-                          </Badge>
-                          <span className="text-[9px] text-stone-400 font-mono">
-                            [{item.publicationStatus || (isActive ? 'PUBLISHED' : 'INACTIVE')}]
-                          </span>
-                        </div>
+                                    ? "bg-amber-100 text-amber-900"
+                                    : "bg-stone-200 text-stone-800"
+                          }`}
+                        >
+                          {item.runtimeStatus === 'ACTIVE'
+                            ? "Đang hiệu lực"
+                            : item.runtimeStatus === 'SCHEDULED'
+                              ? "Lên lịch"
+                              : item.runtimeStatus === 'EXPIRED'
+                                ? "Hết hạn"
+                                : item.runtimeStatus === 'INACTIVE'
+                                  ? "Tạm dừng"
+                                  : "Bản nháp"}
+                        </span>
                       </div>
 
                       {/* Huy hiệu phạm vi cơ sở áp dụng */}
@@ -4261,13 +4270,13 @@ export default function BusinessApp({
                           </span>
                         </div>
                         <div className="flex items-center justify-between border-t border-stone-100 pt-1.5">
-                          <span className="text-[11px] text-slate-600 font-medium">Đặt cọc giữ chỗ:</span>
+                          <span className="text-[11px] text-slate-600 font-medium">Phí giữ chỗ:</span>
                           <span className="font-mono font-bold text-amber-800">
                             {item.depositPercent ?? 20}%
                           </span>
                         </div>
                         <div className="flex items-center justify-between border-t border-stone-100 pt-1.5">
-                          <span className="text-[11px] text-slate-600 font-medium">Hạn chuẩn bị (Miễn phí):</span>
+                          <span className="text-[11px] text-slate-600 font-medium">Chuẩn bị miễn phí:</span>
                           <span className="font-mono font-bold text-blue-800">
                             {item.freeSetupDays == null ? 'Theo kỳ hạn' : `${item.freeSetupDays} ngày`}
                           </span>
@@ -4279,17 +4288,14 @@ export default function BusinessApp({
                       </p>
                     </div>
 
-                    <div className="mt-3 pt-2.5 border-t border-stone-200/60 flex items-center justify-between">
-                      <span className="text-[10px] text-slate-500 font-medium truncate max-w-[80px]" title={item.appliesTo}>
-                        {item.appliesTo}
-                      </span>
-                      <div className="flex items-center gap-1.5">
+                    <div className="mt-3 pt-2.5 border-t border-stone-200/60">
+                      <div className="grid grid-cols-2 gap-2 [&>button]:min-w-0 [&>button]:rounded-md [&>button]:border [&>button]:px-2 [&>button]:py-1.5 [&>button]:text-xs! [&>button]:leading-4! [&>button]:font-semibold!">
                         {item.publicationStatus === 'PUBLISHED' ? (
                           <button
                             type="button"
                             onClick={() => handleInactiveDurationDiscount(item)}
-                            title="Chuyển về INACTIVE để có thể chỉnh sửa"
-                            className="text-[11px] font-bold text-amber-800 hover:text-amber-950 underline cursor-pointer"
+                            title="Tạm dừng gói để có thể chỉnh sửa"
+                            className="border-orange-200 bg-orange-50 text-orange-900 hover:bg-orange-100"
                           >
                             Tạm dừng
                           </button>
@@ -4298,7 +4304,7 @@ export default function BusinessApp({
                             type="button"
                             onClick={() => handlePublishDurationDiscount(item)}
                             title="Xuất bản chính sách này"
-                            className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 underline cursor-pointer"
+                            className="border-orange-200 bg-orange-50 text-orange-900 hover:bg-orange-100"
                           >
                             Xuất bản
                           </button>
@@ -4307,21 +4313,17 @@ export default function BusinessApp({
                           type="button"
                           onClick={() => handleOpenEditDuration(item)}
                           disabled={item.publicationStatus === 'PUBLISHED'}
-                          title={item.publicationStatus === 'PUBLISHED' ? "Chính sách đang PUBLISHED. Vui lòng bấm [Tạm dừng] trước khi sửa!" : "Chỉnh sửa gói thuê"}
-                          className={`text-[11px] font-bold underline ${
-                            item.publicationStatus === 'PUBLISHED'
-                              ? "opacity-40 cursor-not-allowed text-stone-400"
-                              : "text-blue-700 hover:text-blue-900 cursor-pointer"
-                          }`}
+                          title={item.publicationStatus === 'PUBLISHED' ? "Chính sách đang hoạt động. Hãy tạm dừng trước khi sửa." : "Chỉnh sửa gói thuê"}
+                          className="border-orange-200 bg-orange-50 text-orange-900 enabled:hover:bg-orange-100 disabled:cursor-not-allowed disabled:border-stone-200 disabled:bg-stone-50 disabled:text-stone-500"
                         >
                           Sửa
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleDeleteDurationDiscount(item.id)}
-                          className="text-[11px] font-medium text-red-600 hover:text-red-800 underline cursor-pointer"
+                          onClick={() => void handleDeleteDurationDiscount(item.id)}
+                          className="col-span-2 border-orange-300 bg-orange-100 text-orange-950 hover:bg-orange-200"
                         >
-                          Xóa
+                          {lang === 'vi' ? 'Ngừng áp dụng' : 'Deactivate'}
                         </button>
                       </div>
                     </div>
@@ -4766,7 +4768,14 @@ export default function BusinessApp({
             {isApiAuthenticated() ? (
               <div className="space-y-3">
                 {backendPricingLoading && <p className="rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-600">Đang tải danh sách loại kho Manager đã khai báo...</p>}
-                {!backendPricingLoading && backendPricingUnitTypes.length === 0 && <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Manager chưa khai báo loại kho thực tế. BO chỉ có thể định giá sau khi danh sách này tồn tại.</p>}
+                {!backendPricingLoading && backendPricingUnitTypes.length === 0 && <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                  {backendPricingArchivedCount > 0
+                    ? 'Các loại kho của cơ sở đã được lưu trữ nên không thể cập nhật giá. Hãy khôi phục loại kho trước khi định giá.'
+                    : 'Manager chưa khai báo loại kho thực tế. BO chỉ có thể định giá sau khi danh sách này tồn tại.'}
+                </p>}
+                {!backendPricingLoading && backendPricingArchivedCount > 0 && backendPricingUnitTypes.length > 0 && <p className="rounded-xl border border-stone-200 bg-stone-50 p-3 text-xs text-stone-600">
+                  Đã bỏ qua {backendPricingArchivedCount} loại kho đã lưu trữ vì không thể cập nhật giá.
+                </p>}
                 {!backendPricingLoading && backendPricingUnitTypes.map(unitType => {
                   const value = backendPricingValues[unitType.id] || { monthlyPrice: 0, securityDepositAmount: 0 }
                   return <div key={unitType.id} className="grid gap-3 rounded-xl border border-stone-200 bg-white p-4 shadow-2xs sm:grid-cols-[1fr_190px_190px] sm:items-end">
@@ -4793,7 +4802,7 @@ export default function BusinessApp({
                         </span>
                       </div>
                     </label>
-                    <label className="text-[11px] font-semibold text-slate-700">Tiền cọc đảm bảo thuê (VNĐ)
+                    <label className="text-[11px] font-semibold text-slate-700">Tiền cọc đảm bảo kho (VNĐ)
                       <div className="relative mt-1">
                         <input
                           type="text"
@@ -4885,7 +4894,7 @@ export default function BusinessApp({
                 <Button variant="outline" onClick={() => setFacilityPriceModalOpen(false)}>
                   Hủy
                 </Button>
-                <Button variant="primary" onClick={handleSaveFacilityPrices}>
+                <Button variant="primary" onClick={handleSaveFacilityPrices} disabled={isApiAuthenticated() && (backendPricingLoading || backendPricingUnitTypes.length === 0)}>
                   Lưu Biểu Giá Cơ Sở
                 </Button>
               </div>
@@ -5318,7 +5327,7 @@ export default function BusinessApp({
         open={deleteAllPackagesModal}
         size="md"
         onClose={() => !isDeletingAllPackages && setDeleteAllPackagesModal(false)}
-        title={lang === "vi" ? "Xác nhận xóa tất cả gói thuê" : "Confirm Delete All Packages"}
+        title={lang === "vi" ? "Ngừng áp dụng tất cả gói thuê" : "Deactivate all packages"}
       >
         <div className="space-y-4">
           <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-900 text-sm leading-relaxed flex items-start gap-3">
@@ -5327,12 +5336,12 @@ export default function BusinessApp({
             </svg>
             <div>
               <p className="font-semibold text-red-950">
-                {lang === "vi" ? "Cảnh báo hành động xóa toàn bộ" : "Action Warning"}
+                {lang === "vi" ? "Tất cả cơ sở sẽ bị ảnh hưởng" : "This affects all facilities"}
               </p>
               <p className="mt-1 text-xs text-red-800">
                 {lang === "vi"
-                  ? `Bạn có chắc chắn muốn xóa toàn bộ ${durationDiscounts.length} gói thuê hiện có trên hệ thống? Hành động này sẽ xóa sạch cấu hình các gói thuê và không thể hoàn tác.`
-                  : `Are you sure you want to delete all ${durationDiscounts.length} existing rental packages? This action cannot be undone.`}
+                  ? "Các gói sẽ ngừng xuất hiện trong lựa chọn đặt kho và gia hạn mới. Hồ sơ đã tạo vẫn được lưu để tra cứu."
+                  : "These packages will no longer be offered for new bookings or renewals. Existing records remain available."}
               </p>
             </div>
           </div>
@@ -5359,10 +5368,10 @@ export default function BusinessApp({
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                   </svg>
-                  <span>{lang === "vi" ? "Đang xóa..." : "Deleting..."}</span>
+                  <span>{lang === "vi" ? "Đang xử lý..." : "Updating..."}</span>
                 </>
               ) : (
-                <span>{lang === "vi" ? "Xác nhận xóa tất cả" : "Confirm Delete All"}</span>
+                <span>{lang === "vi" ? "Xác nhận ngừng áp dụng" : "Confirm deactivation"}</span>
               )}
             </Button>
           </div>
@@ -5389,24 +5398,22 @@ export default function BusinessApp({
             </p>
           </div>
 
-          <div className={isApiAuthenticated() ? "space-y-3" : "grid grid-cols-1 sm:grid-cols-2 gap-3"}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               label={lang === "vi" ? "Tên gói thuê đầy đủ" : "Package Title"}
               placeholder="VD: Gói thuê 9 tháng"
               value={formCreateDurationTitle}
               onChange={(e) => setFormCreateDurationTitle(e.target.value)}
             />
-            {!isApiAuthenticated() && (
-              <Input
-                label={lang === "vi" ? "Nhãn ngắn gọn (Hiển thị thẻ)" : "Short Label"}
-                placeholder="VD: 9 tháng"
-                value={formCreateDurationLabel}
-                onChange={(e) => setFormCreateDurationLabel(e.target.value)}
-              />
-            )}
+            <Input
+              label={lang === "vi" ? "Nhãn ngắn gọn (Hiển thị thẻ)" : "Short Label"}
+              placeholder="VD: 9 tháng"
+              value={formCreateDurationLabel}
+              onChange={(e) => setFormCreateDurationLabel(e.target.value)}
+            />
           </div>
 
-          <div className={isApiAuthenticated() ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3"}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             <Input
               label={lang === "vi" ? "Số tháng kỳ hạn" : "Months"}
               type="number"
@@ -5416,7 +5423,7 @@ export default function BusinessApp({
               onChange={(e) => setFormCreateDurationMonths(Number(e.target.value))}
             />
             <Input
-              label={lang === "vi" ? "Hạn chuẩn bị (miễn phí, ngày)" : "Free preparation period (days)"}
+              label={lang === "vi" ? "Thời gian chuẩn bị miễn phí (ngày)" : "Free setup (days)"}
               type="number"
               min={0}
               max={365}
@@ -5432,18 +5439,16 @@ export default function BusinessApp({
               value={formCreateDurationPercent.toString()}
               onChange={(e) => setFormCreateDurationPercent(Number(e.target.value))}
             />
-            {!isApiAuthenticated() && (
-              <Input
-                label={lang === "vi" ? "Giảm giá gia hạn (%)" : "Renewal (%)"}
-                type="number"
-                min={0}
-                max={100}
-                value={formCreateDurationRenewalPercent.toString()}
-                onChange={(e) => setFormCreateDurationRenewalPercent(Number(e.target.value))}
-              />
-            )}
             <Input
-              label={lang === "vi" ? "Đặt cọc giữ chỗ (%)" : "Deposit (%)"}
+              label={lang === "vi" ? "Giảm giá gia hạn (%)" : "Renewal (%)"}
+              type="number"
+              min={0}
+              max={100}
+              value={formCreateDurationRenewalPercent.toString()}
+              onChange={(e) => setFormCreateDurationRenewalPercent(Number(e.target.value))}
+            />
+            <Input
+              label={lang === "vi" ? "Phí giữ chỗ (%)" : "Deposit (%)"}
               type="number"
               min={5}
               max={50}
@@ -5452,19 +5457,17 @@ export default function BusinessApp({
             />
           </div>
 
-          <div className={isApiAuthenticated() ? "space-y-3" : "grid grid-cols-1 sm:grid-cols-2 gap-3"}>
-            {!isApiAuthenticated() && (
-              <Select
-                label={lang === "vi" ? "Phạm vi giao dịch áp dụng" : "Applies To"}
-                value={formCreateDurationAppliesTo}
-                onChange={(e) => setFormCreateDurationAppliesTo(e.target.value)}
-              >
-                <option value="Đặt mới & Gia hạn">Đặt mới & Gia hạn</option>
-                <option value="Chỉ đặt mới">Chỉ đặt mới</option>
-                <option value="Chỉ gia hạn">Chỉ gia hạn</option>
-                <option value="Không áp dụng giảm">Không áp dụng giảm</option>
-              </Select>
-            )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Select
+              label={lang === "vi" ? "Phạm vi giao dịch áp dụng" : "Applies To"}
+              value={formCreateDurationAppliesTo}
+              onChange={(e) => setFormCreateDurationAppliesTo(e.target.value)}
+            >
+              <option value="Đặt mới & Gia hạn">Đặt mới & Gia hạn</option>
+              <option value="Chỉ đặt mới">Chỉ đặt mới</option>
+              <option value="Chỉ gia hạn">Chỉ gia hạn</option>
+              <option value="Không áp dụng giảm">Không áp dụng giảm</option>
+            </Select>
 
             <Select
               label={lang === "vi" ? "Trạng thái ban đầu" : "Status"}
@@ -5650,24 +5653,22 @@ export default function BusinessApp({
               </p>
             </div>
 
-            <div className={isApiAuthenticated() ? "space-y-3" : "grid grid-cols-1 sm:grid-cols-2 gap-3"}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Input
                 label="Tên gói thuê"
                 value={formDurationTitle}
                 onChange={(e) => setFormDurationTitle(e.target.value)}
               />
-              {!isApiAuthenticated() && (
-                <Input
-                  label="Nhãn ngắn gọn"
-                  value={formDurationLabel}
-                  onChange={(e) => setFormDurationLabel(e.target.value)}
-                />
-              )}
+              <Input
+                label="Nhãn ngắn gọn"
+                value={formDurationLabel}
+                onChange={(e) => setFormDurationLabel(e.target.value)}
+              />
             </div>
 
-            <div className={isApiAuthenticated() ? "grid grid-cols-1 sm:grid-cols-3 gap-3" : "grid grid-cols-1 sm:grid-cols-4 gap-3"}>
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <Input
-                label="Hạn chuẩn bị (miễn phí, ngày)"
+                label="Thời gian chuẩn bị miễn phí (ngày)"
                 type="number"
                 min={0}
                 max={365}
@@ -5684,19 +5685,17 @@ export default function BusinessApp({
                 onChange={(e) => setFormDurationPercent(Number(e.target.value))}
               />
 
-              {!isApiAuthenticated() && (
-                <Input
-                  label="Giảm giá khi gia hạn (%)"
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={formDurationRenewalPercent.toString()}
-                  onChange={(e) => setFormDurationRenewalPercent(Number(e.target.value))}
-                />
-              )}
+              <Input
+                label="Giảm giá khi gia hạn (%)"
+                type="number"
+                min={0}
+                max={100}
+                value={formDurationRenewalPercent.toString()}
+                onChange={(e) => setFormDurationRenewalPercent(Number(e.target.value))}
+              />
 
               <Input
-                label="Đặt cọc giữ chỗ (%)"
+                label="Phí giữ chỗ (%)"
                 type="number"
                 min={5}
                 max={50}
@@ -5705,19 +5704,17 @@ export default function BusinessApp({
               />
             </div>
 
-            <div className={isApiAuthenticated() ? "space-y-3" : "grid grid-cols-1 sm:grid-cols-2 gap-3"}>
-              {!isApiAuthenticated() && (
-                <Select
-                  label="Phạm vi giao dịch áp dụng"
-                  value={formDurationAppliesTo}
-                  onChange={(e) => setFormDurationAppliesTo(e.target.value)}
-                >
-                  <option value="Đặt mới & Gia hạn">Đặt mới & Gia hạn</option>
-                  <option value="Chỉ đặt mới">Chỉ đặt mới</option>
-                  <option value="Chỉ gia hạn">Chỉ gia hạn</option>
-                  <option value="Không áp dụng giảm">Không áp dụng giảm</option>
-                </Select>
-              )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Select
+                label="Phạm vi giao dịch áp dụng"
+                value={formDurationAppliesTo}
+                onChange={(e) => setFormDurationAppliesTo(e.target.value)}
+              >
+                <option value="Đặt mới & Gia hạn">Đặt mới & Gia hạn</option>
+                <option value="Chỉ đặt mới">Chỉ đặt mới</option>
+                <option value="Chỉ gia hạn">Chỉ gia hạn</option>
+                <option value="Không áp dụng giảm">Không áp dụng giảm</option>
+              </Select>
 
               <Select
                 label="Trạng thái chính sách"
@@ -5869,7 +5866,7 @@ export default function BusinessApp({
                 className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 text-xs font-semibold"
                 onClick={() => handleDeleteDurationDiscount(selectedDurationItem.id)}
               >
-                Xóa Gói Này
+                {lang === 'vi' ? 'Ngừng áp dụng gói' : 'Deactivate package'}
               </Button>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setEditDurationModal(false)}>
@@ -5940,7 +5937,6 @@ export default function BusinessApp({
           if (formFacCity.trim() !== (orig.city || "").trim()) return true
           if (formFacPhone.trim() !== (orig.phone || "").trim()) return true
           if (formFacAccessHours.trim() !== (orig.accessHours || "").trim()) return true
-          if (formFacStatus !== orig.status) return true
           if (formFacImage !== (orig.image || "")) return true
 
           if (formFacUnitSpecs.length !== editInitialSpecs.length) return true
@@ -6041,10 +6037,7 @@ export default function BusinessApp({
                         !formFacName.trim() ||
                         !formFacCode.trim() ||
                         !formFacAddress.trim() ||
-                        !formFacCity.trim() ||
-                        (formFacPhone.trim() !== "" && !isFacilityPhoneValid(formFacPhone)) ||
-                        (formFacAccessHours.trim() !== "" && !isFacilityAccessHoursValid(formFacAccessHours)) ||
-                        facilitiesList.some(
+                                                facilitiesList.some(
                           (f) => (f.code || f.id).toUpperCase() === formFacCode.trim().toUpperCase()
                         )
                       }
@@ -6155,21 +6148,14 @@ export default function BusinessApp({
                       <FacilityOperations
                         accessHours={formFacAccessHours}
                         onChangeAccessHours={setFormFacAccessHours}
-                        status={formFacStatus}
-                        onChangeStatus={setFormFacStatus}
-                        statusReadOnly={false}
-                        initialStatus={selectedFacility.status}
+                        status={selectedFacility.status}
                         lang={lang}
                       />
 
                       {/* Sticky footer */}
                       <div className="sticky -bottom-6 -mx-6 -mb-6 bg-white/95 backdrop-blur-xs px-6 py-3 border-t border-stone-200 flex flex-col sm:flex-row items-center justify-between gap-2.5 z-10">
                         <div className="text-xs text-stone-500">
-                          {!isEditDirty ? (
-                            <span className="text-stone-400 italic">
-                              Chưa có thay đổi nào so với dữ liệu gốc
-                            </span>
-                          ) : (
+                          {isEditDirty && (
                             <span className="text-amber-800 font-semibold">
                               Có thay đổi chưa lưu
                             </span>
@@ -6193,10 +6179,7 @@ export default function BusinessApp({
                               !formFacName.trim() ||
                               !formFacCode.trim() ||
                               !formFacAddress.trim() ||
-                              !formFacCity.trim() ||
-                              hasDuplicateCode ||
-                              (formFacPhone.trim() !== "" && !isFacilityPhoneValid(formFacPhone)) ||
-                              (formFacAccessHours.trim() !== "" && !isFacilityAccessHoursValid(formFacAccessHours))
+                              hasDuplicateCode
                             }
                             onClick={handleUpdateFacility}
                           >
@@ -6276,7 +6259,7 @@ export default function BusinessApp({
         )
       })()}
 
-      {/* 3. Modal Quản Lý Trạng Thái: Ngừng Hoạt Động / Kích Hoạt Lại Cơ Sở */}
+      {/* 3. Modal quản lý trạng thái hoạt động cơ sở */}
       <Modal
         open={deleteFacilityModal}
         onClose={() => {
@@ -6285,122 +6268,102 @@ export default function BusinessApp({
             setDeleteFacilityError(null)
           }
         }}
-        title={
-          lang === "vi"
-            ? selectedFacility?.status === "active"
-              ? "Ngừng Hoạt Động Cơ Sở"
-              : "Kích Hoạt Lại Cơ Sở"
-            : selectedFacility?.status === "active"
-              ? "Deactivate Facility"
-              : "Reactivate Facility"
-        }
+        title={lang === "vi" ? "Trạng thái hoạt động cơ sở" : "Facility status"}
+        titleAdornment={currentFacilityStatus && <FacilityStatusTag status={currentFacilityStatus} lang={lang} />}
       >
         {selectedFacility && (
           <div className="space-y-4">
-            {/* TH 1: Đang có khách thuê hoạt động */}
-            {selectedFacility.occupied > 0 ? (
-              <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-xl text-sm space-y-2">
-                <div className="font-bold flex items-center gap-1.5 text-base text-red-700">
-                  CẢNH BÁO AN TOÀN HỢP ĐỒNG:
-                </div>
-                <p>
-                  Cơ sở <b>{selectedFacility.name} ({selectedFacility.code || selectedFacility.id})</b> hiện đang có{" "}
-                  <b className="text-red-700">{selectedFacility.occupied} gian kho có hợp đồng khách thuê đang hoạt động</b>.
-                </p>
-                <p className="text-xs text-red-600 leading-relaxed">
-                  Hệ thống <b>không thể ngừng hoạt động</b> cơ sở này nhằm bảo đảm quyền lợi khách hàng đang thuê kho, an ninh tài sản và tính pháp lý kế toán. Toàn bộ hợp đồng phải được hoàn tất thanh lý và nghiệm thu tại mục <b>Trả kho & Quyết toán</b> trước khi thao tác.
-                </p>
-              </div>
-            ) : selectedFacility.status === "active" ? (
-              /* TH 2: Đang hoạt động, không có khách thuê (occupied = 0) */
-              <div className="space-y-3">
-                <p className="text-sm text-slate-700">
-                  Bạn có chắc chắn muốn chuyển cơ sở <b className="text-slate-900">{selectedFacility.name}</b> sang trạng thái <b>Ngừng hoạt động</b>?
-                </p>
-                <div className="bg-amber-50 border border-amber-200 p-3.5 rounded-xl text-xs text-amber-900 space-y-1.5">
-                  <div className="font-bold text-amber-950 flex items-center gap-1">
-                    Thông tin hiện trạng cơ sở:
-                  </div>
-                  <div><b>Mã cơ sở:</b> <span className="font-mono">{selectedFacility.code || selectedFacility.id}</span></div>
-                  <div><b>Địa điểm:</b> {selectedFacility.address}, {selectedFacility.city}</div>
-                  <div><b>Quy mô:</b> {selectedFacility.units} gian kho (Hiện 0 khách thuê)</div>
-                  <p className="text-amber-800 pt-1 leading-relaxed">
-                    Khi chuyển sang trạng thái <b>Ngừng hoạt động</b>, cơ sở sẽ tạm ẩn khỏi Cổng khách hàng. Tất cả số liệu gian kho, cấu hình gói cước và lịch sử kiểm toán vẫn được lưu trữ an toàn. Bạn có thể kích hoạt lại cơ sở bất cứ lúc nào.
-                  </p>
-                </div>
-              </div>
-            ) : (
-              /* TH 3: Cơ sở đã ở trạng thái Ngừng hoạt động / Bảo trì -> Kích hoạt lại */
-              <div className="space-y-3">
-                <p className="text-sm text-slate-700">
-                  Bạn có muốn kích hoạt lại cơ sở <b className="text-slate-900">{selectedFacility.name}</b> để tiếp tục đón khách thuê?
-                </p>
-                <div className="bg-emerald-50 border border-emerald-200 p-3.5 rounded-xl text-xs text-emerald-900 space-y-1.5">
-                  <div className="font-bold text-emerald-950 flex items-center gap-1">
-                    Mở lại hoạt động cơ sở:
-                  </div>
-                  <div><b>Mã cơ sở:</b> <span className="font-mono">{selectedFacility.code || selectedFacility.id}</span></div>
-                  <div><b>Địa điểm:</b> {selectedFacility.address}, {selectedFacility.city}</div>
-                  <div><b>Quy mô:</b> {selectedFacility.units} gian kho</div>
-                  <p className="text-emerald-800 pt-1 leading-relaxed">
-                    Sau khi kích hoạt lại, cơ sở sẽ trở lại trạng thái <b>Đang hoạt động</b> và sẵn sàng hiển thị trên hệ thống để khách hàng tìm kiếm và đặt thuê kho.
-                  </p>
-                </div>
-              </div>
-            )}
+            <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-700">
+              <p>Cơ sở <b>{selectedFacility.name}</b> · mã <span className="font-mono">{selectedFacility.code || selectedFacility.id}</span></p>
+            </div>
+
+            {selectedFacilityLifecycle ? <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+              {[
+                ['Đơn giữ kho chờ', selectedFacilityLifecycle.pendingHoldCount],
+                ['Đơn đặt kho xử lý', selectedFacilityLifecycle.processingReservationCount],
+                ['Hợp đồng hiệu lực', selectedFacilityLifecycle.activeContractCount],
+                ['Thanh toán tồn đọng', selectedFacilityLifecycle.outstandingPaymentCount],
+                ['Hoàn tiền tồn đọng', selectedFacilityLifecycle.outstandingRefundCount],
+              ].map(([label, value]) => <div key={String(label)} className="rounded-lg border border-stone-200 bg-white p-3">
+                <p className="text-xs text-stone-500">{label}</p>
+                <p className="mt-1 text-lg font-bold text-stone-900">{Number(value).toLocaleString('vi-VN')}</p>
+              </div>)}
+            </div> : <p className="text-sm text-stone-500">Đang kiểm tra số liệu giao dịch...</p>}
+
+            {selectedFacilityLifecycle && currentFacilityStatus !== 'inactive' && !(
+              selectedFacilityLifecycle.pendingHoldCount === 0 &&
+              selectedFacilityLifecycle.processingReservationCount === 0 &&
+              selectedFacilityLifecycle.activeContractCount === 0 &&
+              selectedFacilityLifecycle.outstandingPaymentCount === 0 &&
+              selectedFacilityLifecycle.outstandingRefundCount === 0
+            ) && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              {currentFacilityStatus === 'maintenance'
+                ? 'Cơ sở còn giao dịch đang xử lý. Vui lòng xử lý xong trước khi lưu trữ.'
+                : 'Cơ sở còn giao dịch đang xử lý. Chỉ được tạm ngưng nhận đơn mới, chưa được lưu trữ.'}
+            </p>}
 
             {/* Thông báo lỗi inline nếu có */}
             {deleteFacilityError && (
-              <div role="alert" className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 space-y-2">
-                <div className="font-semibold flex items-center gap-1.5">
-                  <span>{deleteFacilityError}</span>
-                </div>
-              </div>
+              <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{deleteFacilityError}</div>
             )}
 
+            {confirmFacilityArchive && (
+              <p className="text-sm text-stone-700">
+                {lang === 'vi' ? 'Sau khi lưu trữ, cơ sở sẽ ngừng nhận đơn mới. Hồ sơ và giao dịch cũ vẫn có thể tra cứu.' : 'Archiving stops new bookings. Existing records and transactions remain available.'}
+              </p>
+            )}
             <div className="flex flex-wrap items-center justify-end gap-2 pt-3 border-t border-slate-100">
               <Button
                 variant="outline"
                 disabled={deleteFacilityBusy}
                 onClick={() => {
+                  if (confirmFacilityArchive) {
+                    setConfirmFacilityArchive(false)
+                    return
+                  }
                   setDeleteFacilityModal(false)
                   setDeleteFacilityError(null)
                 }}
               >
-                {lang === "vi" ? "Đóng" : "Cancel"}
+                {confirmFacilityArchive ? 'Quay lại' : 'Đóng'}
               </Button>
 
-              {/* Nút Chuyển sang Ngừng hoạt động */}
-              {selectedFacility.occupied === 0 && selectedFacility.status === "active" && (
+              {!confirmFacilityArchive && currentFacilityStatus !== 'inactive' && (
                 <Button
-                  variant="primary"
-                  disabled={deleteFacilityBusy}
-                  className="bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs"
-                  onClick={handleDeactivateFacility}
+                  variant={currentFacilityStatus === 'maintenance' ? 'primary' : 'outline'}
+                  disabled={deleteFacilityBusy || (currentFacilityStatus === 'maintenance' ? !selectedFacilityLifecycle : !canPauseFacility)}
+                  className={currentFacilityStatus === 'maintenance' ? undefined : 'border-amber-300 text-amber-800 disabled:opacity-50'}
+                  onClick={currentFacilityStatus === 'maintenance' ? handleRestoreFacility : handleDeactivateFacility}
                 >
-                  {deleteFacilityBusy ? "Đang xử lý..." : (lang === "vi" ? "Xác nhận Ngừng hoạt động" : "Deactivate Facility")}
+                  {deleteFacilityBusy ? 'Đang xử lý' : currentFacilityStatus === 'maintenance' ? 'Hoạt động lại' : 'Tạm ngưng nhận đơn mới'}
                 </Button>
               )}
 
-              {/* Nút Kích hoạt lại */}
-              {selectedFacility.status !== "active" && (
+              {selectedFacilityLifecycle?.status === 'inactive' ? (
                 <Button
                   variant="primary"
                   disabled={deleteFacilityBusy}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs"
-                  onClick={handleActivateFacility}
+                  onClick={handleRestoreFacility}
                 >
-                  {deleteFacilityBusy ? "Đang xử lý..." : (lang === "vi" ? "Kích hoạt lại cơ sở" : "Reactivate Facility")}
+                  {deleteFacilityBusy ? "Đang xử lý" : "Khôi phục hoạt động"}
                 </Button>
-              )}
+              ) : selectedFacilityLifecycle && selectedFacilityLifecycle.pendingHoldCount === 0 && selectedFacilityLifecycle.processingReservationCount === 0 && selectedFacilityLifecycle.activeContractCount === 0 && selectedFacilityLifecycle.outstandingPaymentCount === 0 && selectedFacilityLifecycle.outstandingRefundCount === 0 ? (
+                <Button
+                  variant="primary"
+                  disabled={deleteFacilityBusy}
+                  onClick={confirmFacilityArchive ? handleArchiveFacility : () => setConfirmFacilityArchive(true)}
+                >
+                  {deleteFacilityBusy ? 'Đang xử lý' : confirmFacilityArchive ? 'Xác nhận lưu trữ' : 'Lưu trữ cơ sở'}
+                </Button>
+              ) : null}
             </div>
           </div>
         )}
       </Modal>
 
-      <Modal open={!!deleteConfirmation} onClose={() => { if (!deleteConfirmationBusy) setDeleteConfirmation(null) }} title={deleteConfirmation?.kind === 'package' ? 'Xóa gói thuê' : 'Xóa chính sách'}>
+      <Modal open={!!deleteConfirmation} onClose={() => { if (!deleteConfirmationBusy) setDeleteConfirmation(null) }} title={deleteConfirmation?.kind === 'package' ? 'Ngừng áp dụng gói thuê' : 'Xóa chính sách'}>
         <div className="space-y-4">
-          <p>Bạn có chắc muốn xóa <b>{deleteConfirmation?.title}</b>?</p>
+          <p>Bạn có chắc muốn {deleteConfirmation?.kind === 'package' ? 'ngừng áp dụng' : 'xóa'} <b>{deleteConfirmation?.title}</b>?</p>
           {deleteConfirmation?.kind === 'package' && <p className="text-sm text-stone-500">Gói sẽ ngừng áp dụng cho lượt thuê mới. Hồ sơ thuê và hóa đơn đã tạo vẫn được giữ nguyên.</p>}
           {deleteConfirmationError && <p role="alert" className="text-sm text-red-700">{deleteConfirmationError}</p>}
           <div className="flex justify-end gap-3">
@@ -6417,444 +6380,25 @@ export default function BusinessApp({
               } catch (error) {
                 setDeleteConfirmationError(error instanceof Error ? error.message : 'Không thể xóa. Vui lòng thử lại.')
               } finally { setDeleteConfirmationBusy(false) }
-            }}>{deleteConfirmationBusy ? 'Đang xử lý…' : 'Xác nhận xóa'}</Button>
+            }}>{deleteConfirmationBusy ? 'Đang xử lý…' : deleteConfirmation?.kind === 'package' ? 'Xác nhận ngừng áp dụng' : 'Xác nhận xóa'}</Button>
           </div>
         </div>
       </Modal>
       <UnitTypeReviewModal open={reviewOpen} requestId={reviewRequestId} onClose={() => setReviewOpen(false)} />
-      {/* 4. Modal Chi Tiết Cơ Sở & Danh Mục Gian Kho Quy Hoạch */}
-      <Modal
+      <BusinessFacilityDetailsModal
         open={viewFacilityModal}
         onClose={() => setViewFacilityModal(false)}
-        title={lang === "vi" ? "Thông Tin Chi Tiết Cơ Sở" : "Facility Details"}
-        size="2xl"
-      >
-        {selectedFacility &&
-          (() => {
-            const facCode = selectedFacility.code || selectedFacility.id
-
-            const facilityUnits = unitsList.filter(
-              (u) =>
-                u.facilityId === selectedFacility.id ||
-                u.facilityId === facCode,
-            )
-
-            const occupancyRate = selectedFacility.units
-              ? Math.round(
-                (getFacilityOccupiedCount(selectedFacility) /
-                  Math.max(1, getFacilityTotalUnits(selectedFacility))) *
-                100,
-              )
-              : 0
-
-            const defaultLoadS = selectedFacility.unitLoadLimits?.S ?? 1000
-            const defaultLoadM = selectedFacility.unitLoadLimits?.M ?? 1600
-            const defaultLoadL = selectedFacility.unitLoadLimits?.L ?? 2800
-            const defaultLoadXL = selectedFacility.unitLoadLimits?.XL ?? 4000
-
-            const totalFacilityLoadTon = isApiAuthenticated()
-              ? Math.round(
-                facilityDetailTypes.reduce(
-                  (total, type) => total + (Number(type.totalCount) || 0) * (Number(type.maxLoadKg) || 0),
-                  0,
-                ) / 100,
-              ) / 10
-              : selectedFacility.totalDesignLoadTon ??
-                Math.round(
-                  (((selectedFacility.unitDistribution?.S ?? 0) * defaultLoadS +
-                    (selectedFacility.unitDistribution?.M ?? 0) * defaultLoadM +
-                    (selectedFacility.unitDistribution?.L ?? 0) * defaultLoadL +
-                    (selectedFacility.unitDistribution?.XL ?? 0) * defaultLoadXL) /
-                    1000) *
-                  10,
-                ) / 10
-
-            const hasWarehouseInfo = isApiAuthenticated()
-              ? facilityDetailTypes.length > 0
-              : facilityUnits.length > 0 ||
-                (Array.isArray(selectedFacility.unitCustomSpecs) && selectedFacility.unitCustomSpecs.length > 0) ||
-                Object.values(selectedFacility.unitDistribution || {}).some((count) => Number(count || 0) > 0)
-
-            return (
-              <div className="space-y-4 max-h-[80vh] overflow-y-auto pr-1">
-                {/* Ảnh kho bãi của cơ sở */}
-                {selectedFacility.image && (
-                  <div className="relative h-44 sm:h-52 w-full rounded-xl overflow-hidden border border-stone-200 shadow-xs group">
-                    <img
-                      src={
-                        selectedFacility.image.startsWith("http") ||
-                          selectedFacility.image.startsWith("data:")
-                          ? selectedFacility.image
-                          : `https://images.unsplash.com/${selectedFacility.image}?w=800&auto=format&fit=crop`
-                      }
-                      alt={selectedFacility.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                      onError={(e) => {
-                        (e.currentTarget as HTMLImageElement).style.display = "none"
-                      }}
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-stone-950/85 via-stone-900/30 to-transparent flex items-end p-4">
-                      <div className="text-white">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-amber-500 text-stone-950 shadow-xs">
-                            {facCode}
-                          </span>
-                          <span className="text-xs text-amber-200 font-medium">
-                            {selectedFacility.city}
-                          </span>
-                          {totalFacilityLoadTon > 0 && (
-                            <span className="text-xs text-sky-200 bg-sky-950/60 px-2 py-0.5 rounded border border-sky-400/30 font-mono">
-                              Tải trọng sàn: {totalFacilityLoadTon} tấn
-                            </span>
-                          )}
-                        </div>
-                        <h3 className="text-xl font-bold text-white drop-shadow-sm">
-                          {selectedFacility.name}
-                        </h3>
-                        <p className="text-xs text-stone-300 mt-0.5">
-                          {selectedFacility.address}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Header chi tiết cơ sở */}
-                <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-3 gap-2">
-                  <div>
-                    {!selectedFacility.image && (
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300">
-                          {facCode}
-                        </span>
-                        <h3 className="text-lg font-bold text-slate-900">
-                          {selectedFacility.name}
-                        </h3>
-                      </div>
-                    )}
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      {selectedFacility.address} · {selectedFacility.city}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {totalFacilityLoadTon > 0 && !selectedFacility.image && (
-                      <span className="px-2.5 py-1 rounded bg-sky-50 text-sky-800 border border-sky-200 font-mono text-xs font-bold">
-                        Tải trọng sàn: {totalFacilityLoadTon} tấn
-                      </span>
-                    )}
-                    <Badge
-                      variant={
-                        selectedFacility.status === "active"
-                          ? "success"
-                          : "warning"
-                      }
-                    >
-                      {facilityStatusLabel(selectedFacility.status)}
-                    </Badge>
-                  </div>
-                </div>
-
-                {/* Thông số kỹ thuật & Vận hành */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 text-xs">
-                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/60">
-                    <span className="text-slate-400 block mb-0.5">
-                      Người quản lý:
-                    </span>
-                    <b className="text-slate-800 block text-sm">
-                      {selectedFacility.manager}
-                    </b>
-                  </div>
-                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/60">
-                    <span className="text-slate-400 block mb-0.5">Hotline cơ sở:</span>
-                    <b className="text-slate-800 block text-sm">
-                      {selectedFacility.phone || "Chưa cập nhật"}
-                    </b>
-                  </div>
-                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/60">
-                    <span className="text-slate-400 block mb-0.5">
-                      {lang === "vi" ? "Cước cơ sở từ:" : "Base rate from:"}
-                    </span>
-                    <b className="text-slate-800 block text-sm">
-                      {hasWarehouseInfo ? `${selectedFacility.price}/tháng từ` : "Chưa cấu hình giá"}
-                    </b>
-                  </div>
-                  <div className="bg-amber-50/70 p-3 rounded-lg border border-amber-200/80">
-                    <span className="text-amber-800/80 block mb-0.5 font-medium">
-                      {lang === "vi" ? "Tải trọng sàn:" : "Floor Load Limit:"}
-                    </span>
-                    <b className="text-amber-950 block text-sm font-bold font-mono">
-                      {hasWarehouseInfo ? `${totalFacilityLoadTon} tấn` : "Chưa cấu hình"}
-                    </b>
-                    <span className="text-amber-700 font-medium text-[11px]">
-                      {lang === "vi" ? "Thiết kế chịu tải" : "Max floor load"}
-                    </span>
-                  </div>
-                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/60">
-                    <span className="text-slate-400 block mb-0.5">
-                      Khung giờ mở cửa:
-                    </span>
-                    <b className="text-slate-800 block text-xs">
-                      {selectedFacility.accessHours || (isApiAuthenticated() ? "Chưa cập nhật" : "08:00 - 17:00")}
-                    </b>
-                  </div>
-                </div>
-
-                {/* Thông số thực tế của từng loại kho, lấy trực tiếp từ API Manager. */}
-                {facilityDetailTypes.length > 0 ? (
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-semibold">Loại kho thuộc cơ sở</h3>
-                    {facilityDetailTypes.map(type => {
-                      const missing = "Chưa khai báo"
-                      const measure = (value: number | null | undefined, unit: string) =>
-                        value == null ? missing : `${Number(value).toLocaleString("vi-VN")} ${unit}`
-                      const dimensions = (length: number, width: number, height: number) =>
-                        [length, width, height].some(value => value == null) ? missing : `${length} × ${width} × ${height} m`
-                      const groups = [
-                        { title: "Kích thước và tải trọng", fields: [
-                          ["Kích thước kho (D × R × C)", dimensions(type.lengthM, type.widthM, type.heightM)],
-                          ["Diện tích", measure(type.areaM2, "m²")],
-                          ["Thể tích", measure(type.volumeM3, "m³")],
-                          ["Tải trọng tối đa", measure(type.maxLoadKg, "kg")],
-                        ]},
-                        { title: "Khung kệ và thiết bị hỗ trợ", fields: [
-                          ["Số khung kệ", measure(type.rackCount, "khung")],
-                          ["Kích thước khung (D × R × C)", dimensions(type.rackLengthM, type.rackWidthM, type.rackHeightM)],
-                          ["Chiều rộng lối đi", measure(type.aisleWidthM, "m")],
-                          ["Xe đẩy hỗ trợ", type.trolleyType || missing],
-                          ["Sức chứa thùng nhỏ", measure(type.smallBoxCapacity, "thùng")],
-                          ["Sức chứa thùng lớn", measure(type.largeBoxCapacity, "thùng")],
-                        ]},
-                        { title: "Số lượng và giá thuê", fields: [
-                          ["Tổng số gian", measure(type.totalCount, "gian")],
-                          ["Đang sử dụng", measure(type.occupiedCount, "gian")],
-                          ["Còn trống", measure(type.availableCount, "gian")],
-                          ["Giá thuê mỗi tháng", Number(type.monthlyPrice) > 0 ? formatCurrency(type.monthlyPrice) : "Chờ BO định giá"],
-                          ["Tiền cọc đảm bảo thuê", Number(type.securityDepositAmount) > 0 ? formatCurrency(type.securityDepositAmount) : "Chưa cấu hình"],
-                          ["Trạng thái loại kho", ({ active: "Đã công bố", awaiting_pricing: "Chờ BO định giá / duyệt", draft: "Đang thiết lập", inactive: "Ngừng hoạt động" } as Record<string, string>)[type.status] || type.status],
-                        ]},
-                      ]
-                      return (
-                        <article key={type.id} className="overflow-hidden rounded-xl border border-stone-200 bg-white">
-                          <div className="flex flex-col gap-4 border-b border-stone-200 bg-stone-50 p-4 sm:flex-row">
-                            {type.imageUrl && <img src={type.imageUrl} alt={type.name} className="h-28 w-full rounded-lg object-cover sm:w-40" />}
-                            <div className="min-w-0 flex-1">
-                              <p className="text-xs text-slate-500 break-words">{type.code}</p>
-                              <h4 className="mt-1 text-base font-semibold break-words">{type.name}</h4>
-                              <p className="mt-2 whitespace-pre-wrap break-words text-sm text-slate-600">{type.description || "Chưa có mô tả"}</p>
-                              {type.imageUrl && <a href={type.imageUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-xs text-amber-700 underline">Xem ảnh gốc</a>}
-                            </div>
-                          </div>
-                          {type.detailImageUrl && <figure className="border-b border-stone-200 p-4">
-                            <figcaption className="mb-2 text-sm font-semibold">Ảnh chi tiết / sơ đồ bố trí</figcaption>
-                            <img src={type.detailImageUrl} alt={`Sơ đồ ${type.name}`} className="max-h-72 w-full rounded-lg object-contain" />
-                          </figure>}
-                          <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-2">
-                            {groups.map((group, groupIndex) => (
-                              <section key={group.title} className={`min-w-0 overflow-hidden rounded-xl border border-stone-200 ${groupIndex === 2 ? 'lg:col-span-2' : ''}`}>
-                                <h5 className="border-b border-stone-200 bg-stone-50 px-4 py-3 text-sm font-semibold text-slate-800">{group.title}</h5>
-                                <dl className={groupIndex === 2 ? "grid gap-px bg-stone-200 sm:grid-cols-2 lg:grid-cols-3" : "divide-y divide-stone-100 px-4"}>
-                                  {group.fields.map(([label, value]) => (
-                                    <div key={label} className={groupIndex === 2 ? "min-w-0 bg-white px-4 py-3" : "grid grid-cols-1 gap-1 py-3 text-sm sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] sm:gap-3"}>
-                                      <dt className={groupIndex === 2 ? "mb-1 text-xs text-slate-500" : "text-slate-500"}>{label}</dt>
-                                      <dd className={`min-w-0 whitespace-pre-wrap break-words font-medium ${groupIndex === 2 ? 'text-base text-slate-900' : 'text-sm text-slate-800'}`}>{value}</dd>
-                                    </div>
-                                  ))}
-                                </dl>
-                              </section>
-                            ))}
-                          </div>
-                        </article>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50 px-5 py-8 text-center">
-                    <p className="font-semibold text-stone-700">Chưa có thông tin loại kho</p>
-                  </div>
-                )}
-
-                {/* Khối gói thuê đang áp dụng tại cơ sở này */}
-                {(() => {
-                  const activePackagesForFac = durationDiscounts.filter((p) => {
-                    if (p.status !== "active") return false
-                    if (p.scopeType === "all") return true
-                    if (Array.isArray(p.facilityIds) && p.facilityIds.length > 0) {
-                      return (
-                        p.facilityIds.includes(selectedFacility.id) ||
-                        (selectedFacility.code && p.facilityIds.includes(selectedFacility.code))
-                      )
-                    }
-                    return true
-                  })
-
-                  return (
-                    <div className="rounded-xl border border-stone-200 bg-stone-50/70 p-4 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-bold text-slate-900 text-sm">
-                            {lang === "vi" ? "Gói Thuê & Chiết Khấu Kỳ Hạn Áp Dụng" : "Active Rental Packages"}
-                          </h4>
-                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-200">
-                            {activePackagesForFac.length} {lang === "vi" ? "gói thuê" : "packages"}
-                          </span>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setViewFacilityModal(false)
-                            setPage("policies")
-                          }}
-                          className="text-xs font-bold text-emerald-800 hover:text-emerald-950 underline cursor-pointer"
-                        >
-                          {lang === "vi" ? "Quản lý gói thuê →" : "Manage Packages →"}
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
-                        {activePackagesForFac.map((pkg) => (
-                          <div
-                            key={pkg.id}
-                            className="p-3 rounded-lg border border-stone-200 bg-white space-y-1 shadow-2xs"
-                          >
-                            <div className="flex items-center justify-between gap-1">
-                              <span className="font-semibold text-slate-900 text-xs truncate">
-                                {pkg.label}
-                              </span>
-                              <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                                {pkg.discountPercent > 0 ? `-${pkg.discountPercent}%` : "Gốc"}
-                              </span>
-                            </div>
-                            <div className="text-[11px] text-slate-500 truncate">
-                              {pkg.title}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )
-                })()}
-
-                {/* 4. Chính sách và quy định áp dụng (Đồng bộ trực quan với Customer Portal) */}
-                {(() => {
-                  const repType = facilityDetailTypes.find(t => Number(t.monthlyPrice) > 0) || facilityDetailTypes[0]
-                  const samplePrice = isApiAuthenticated() ? null : repType && Number(repType.monthlyPrice) > 0 ? Number(repType.monthlyPrice) : null
-                  const overdueFeePerDay = samplePrice == null ? null : samplePrice / 30 * 0.5
-                  const overdueExampleDays = 4
-
-                  return (
-                    <>
-                      <section className="rounded-2xl border border-blue-200 bg-blue-50/50 p-5 space-y-3">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div>
-                            <h4 className="font-bold text-blue-900">4. Chính sách và quy định áp dụng</h4>
-                            <p className="mt-0.5 text-xs text-stone-600">
-                              Áp dụng cho khách thuê tại {selectedFacility.name} (hiển thị trực tiếp cho khách trên cổng Customer Portal).
-                            </p>
-                          </div>
-                          <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
-                            Quy chế công bố
-                          </span>
-                        </div>
-
-                        <div className="grid gap-3.5 sm:grid-cols-2">
-                          <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-2xs">
-                            <h5 className="font-bold text-xs uppercase tracking-wider text-slate-700">Phí quá hạn</h5>
-                            <p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">
-                              {isApiAuthenticated() ? 'Chưa có chính sách phí quá hạn từ backend.' : '50% đơn giá thuê ngày cho mỗi ngày trễ'}
-                            </p>
-                            <p className="text-xs leading-5 text-stone-600">
-                              {isApiAuthenticated() ? 'Chi tiết phí quá hạn chỉ hiển thị khi backend có dữ liệu chính sách.' : 'Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30). Tổng phí = số ngày quá hạn × phí mỗi ngày.'}
-                            </p>
-                          </article>
-
-                          <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-2xs">
-                            <h5 className="font-bold text-xs uppercase tracking-wider text-slate-700">Tiền cọc đảm bảo thuê</h5>
-                            <p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">
-                              {repType && Number(repType.securityDepositAmount) > 0
-                                ? formatVndAmount(repType.securityDepositAmount)
-                                : "Theo biểu giá từng loại kho"}
-                            </p>
-                            <p className="text-xs leading-5 text-stone-600">
-                              {isApiAuthenticated() ? 'Số tiền cọc được lấy từ loại kho backend, điều kiện quyết toán hiển thị theo hồ sơ thực tế.' : 'Thu khi nhận kho, hoàn trả lại cho khách hàng sau khi nghiệm thu bàn giao trả kho (trừ công nợ, hư hại nếu có).'}
-                            </p>
-                          </article>
-
-                          <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-2xs">
-                            <h5 className="font-bold text-xs uppercase tracking-wider text-slate-700">Thời hạn thuê tối thiểu</h5>
-                            <p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">
-                              {isApiAuthenticated()
-                                ? (durationDiscounts.filter(item => item.status === 'active' && typeof item.months === 'number').map(item => item.months as number).sort((a, b) => a - b)[0]
-                                  ? `${durationDiscounts.filter(item => item.status === 'active' && typeof item.months === 'number').map(item => item.months as number).sort((a, b) => a - b)[0]} tháng`
-                                  : 'Chưa có dữ liệu')
-                                : '01 tháng'}
-                            </p>
-                            <p className="text-xs leading-5 text-stone-600">
-                              {isApiAuthenticated() ? 'Kỳ hạn và ưu đãi cụ thể lấy từ các gói đang hiệu lực trên backend.' : 'Kỳ thuê sử dụng trọn tháng. Thời gian và ưu đãi cụ thể được xác nhận trong báo giá.'}
-                            </p>
-                          </article>
-
-                          <article className="rounded-xl border border-blue-100 bg-white p-4 shadow-2xs">
-                            <h5 className="font-bold text-xs uppercase tracking-wider text-slate-700">Gia hạn quá hạn</h5>
-                            <p className="my-2 rounded-lg bg-blue-50 p-2 text-sm font-semibold text-blue-800">
-                              {isApiAuthenticated() ? 'Chưa có dữ liệu' : 'Tối đa 7 ngày'}
-                            </p>
-                            <p className="text-xs leading-5 text-stone-600">
-                              {isApiAuthenticated() ? 'Chưa có dữ liệu thời hạn xử lý quá hạn từ backend.' : 'Sau khi hợp đồng hết hạn, khách có tối đa 7 ngày để hoàn tất gia hạn. Nếu đến ngày thứ 8 vẫn chưa hoàn tất, kho sẽ được chuyển sang quy trình thu hồi.'}
-                            </p>
-                          </article>
-                        </div>
-                      </section>
-
-                      <section className="rounded-2xl border border-rose-200 bg-rose-50 p-5 space-y-3">
-                        <h4 className="font-bold text-rose-900">Quy định trả kho và gia hạn</h4>
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <article className="rounded-xl border border-rose-200 bg-white p-4 text-xs">
-                            <b className="text-slate-800 text-sm">Trả kho sau ngày hết hạn</b>
-                            <ul className="mt-2 list-disc space-y-1.5 pl-4 text-stone-700 leading-relaxed">
-                              {isApiAuthenticated() ? <li>Chưa có chính sách phí quá hạn được backend công bố cho cơ sở này.</li> : <>
-                                <li>Thời gian quá hạn tính từ ngày kế tiếp ngày hết hạn đến khi bàn giao và nghiệm thu kho thực tế.</li>
-                                <li>Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30 ngày).</li>
-                                <li>Tổng phí bằng số ngày quá hạn nhân với phí mỗi ngày. Khoản còn thiếu sau khấu trừ tiền cọc đảm bảo thuê được đưa vào quyết toán.</li>
-                              </>}
-                            </ul>
-                          </article>
-
-                          <article className="rounded-xl border border-amber-200 bg-white p-4 text-xs">
-                            <b className="text-slate-800 text-sm">Gia hạn kỳ thuê</b>
-                            <ul className="mt-2 list-disc space-y-1.5 pl-4 text-stone-700 leading-relaxed">
-                              {isApiAuthenticated() ? <li>Chi tiết gia hạn được lấy theo chính sách backend của từng cơ sở.</li> : <>
-                                <li>Yêu cầu gia hạn không tự động kéo dài kỳ thuê và cần được cơ sở xác nhận.</li>
-                                <li>Khách hàng hoàn tất hồ sơ và các khoản phải thu trước khi kỳ gia hạn có hiệu lực.</li>
-                              </>}
-                            </ul>
-                          </article>
-                        </div>
-
-                        <p className="rounded-lg bg-rose-100 p-3 text-xs leading-5 text-rose-950 font-medium">
-                          {isApiAuthenticated()
-                            ? 'Chưa có chính sách phí quá hạn từ backend để tính ví dụ.'
-                            : samplePrice == null || overdueFeePerDay == null
-                              ? 'Chưa có đơn giá loại kho để tính ví dụ phí quá hạn.'
-                            : `Theo giá hiện tại (${repType ? repType.name : 'Loại kho'}): ${formatVndAmount(samplePrice)} ÷ 30 × 50% = ${formatVndAmount(overdueFeePerDay)}/ngày. Trễ ${overdueExampleDays} ngày tương ứng ${formatVndAmount(overdueFeePerDay * overdueExampleDays)}.`}
-                        </p>
-                      </section>
-                    </>
-                  )
-                })()}
-
-                <div className="flex justify-end pt-2 border-t border-slate-100">
-                  <Button
-                    variant="outline"
-                    onClick={() => setViewFacilityModal(false)}
-                  >
-                    {lang === "vi" ? "Đóng" : "Close"}
-                  </Button>
-                </div>
-              </div>
-            )
-          })()}
-      </Modal>
+        facility={selectedFacility}
+        apiMode={isApiAuthenticated()}
+        unitTypes={facilityDetailTypes}
+        localUnitSpecs={selectedFacility?.unitCustomSpecs || []}
+        facilityUnits={selectedFacility ? unitsList.filter(unit => unit.facilityId === selectedFacility.id || unit.facilityId === selectedFacility.code) : []}
+        facilityTotalCount={getFacilityTotalUnits(selectedFacility)}
+        facilityOccupiedCount={getFacilityOccupiedCount(selectedFacility)}
+        facilityAvailableCount={getFacilityAvailableCount(selectedFacility)}
+        packages={durationDiscounts}
+        layouts={facilityDetailLayouts}
+      />
     </Layout>
   )
 }

@@ -34,7 +34,7 @@ export const statusLabels: Record<string, string> = {
   requested: 'Đã yêu cầu trả kho',
   scheduled: 'Đã hẹn nghiệm thu',
   inspected: 'Đã nghiệm thu hiện trường',
-  awaiting_business_review: 'Chờ Business duyệt bảng giá cũ',
+  awaiting_business_review: 'Chờ Ban điều hành duyệt bảng giá cũ',
   awaiting_customer_confirmation: 'Chờ khách xác nhận quyết toán',
   disputed: 'Đang khiếu nại (Chờ Quản lý thẩm định)',
   payment_due: 'Chờ khách nộp phụ phí',
@@ -125,7 +125,7 @@ const SAMPLE_RETURNS: Array<{
     returnedKey: false,
     returnedCard: false,
     returnedLock: false,
-    inspectionNotes: 'Khách hàng hẹn trả kho đúng hạn hợp đồng. Chờ Staff kiểm tra hiện trạng.',
+    inspectionNotes: 'Khách hàng hẹn trả kho đúng hạn hợp đồng. Chờ nhân viên kiểm tra hiện trạng.',
     customerDecisionNote: null,
     managerResolutionNote: null,
     proposedUnitStatus: 'available',
@@ -487,10 +487,10 @@ export default function BusinessReturnsPanel({ user }: Props) {
     setRefundNotes(useApi ? '' : `Đã chuyển hoàn tiền cọc cho khách hàng ${item.customerName} theo quyết toán thanh lý hợp đồng.`)
     setSetupRefundAmount(item.netRefundAmount || item.depositAmount || 0)
     setSetupRentalRefundAmount(item.earlyTerminationPolicy?.rentalRefundAmount || 0)
-    setSetupDecisionNote(useApi ? '' : 'Business duyệt xử lý theo chính sách hủy hiện hành.')
+    setSetupDecisionNote(useApi ? '' : 'Ban điều hành duyệt xử lý theo chính sách hủy hiện hành.')
     setLegacyRentalCharge(item.activeReturnPolicy?.totalRentalCharge || item.earlyTerminationPolicy?.totalRentalCharge || 0)
     setLegacyRentalRefund(item.activeReturnPolicy?.rentalRefundAmount || item.earlyTerminationPolicy?.rentalRefundAmount || 0)
-    setLegacyDecisionNote(useApi ? '' : 'Business duyệt theo chứng cứ lưu cùng hồ sơ cũ.')
+    setLegacyDecisionNote(useApi ? '' : 'Ban điều hành duyệt theo chứng cứ lưu cùng hồ sơ cũ.')
     setLegacySnapshotJson('')
     setLegacyEvidenceFileId(item.legacyPricingEvidenceFileId || '')
     setFeedback('')
@@ -500,7 +500,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
   const handleSetupExitDecision = async () => {
     if (!selectedItem || !selectedItem.setupExitReviewRequired) return
     if (selectedItem.moveInCompletedAt && !selectedItem.inspectedAt) {
-      setFeedback('Hàng đã được đưa vào kho, Staff phải kiểm kê/trả kho trước khi Business quyết định số tiền hoàn.')
+      setFeedback('Hàng đã được đưa vào kho. Nhân viên phải kiểm kê và nghiệm thu trả kho trước khi Ban điều hành quyết định số tiền hoàn.')
       return
     }
     if (!setupDecisionNote.trim()) {
@@ -521,7 +521,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
               netRefundAmount: setupRefundAmount + setupRentalRefundAmount,
               totalDeductions: Math.max(0, item.depositAmount - setupRefundAmount),
               status: setupRefundAmount + setupRentalRefundAmount > 0 ? 'refund_pending' : 'completed',
-              managerResolutionNote: `Business preparation-period decision: ${setupDecisionNote.trim()}`,
+              managerResolutionNote: `Quyết định của Ban điều hành về thời gian chuẩn bị: ${setupDecisionNote.trim()}`,
             }
           : item))
       }
@@ -531,10 +531,10 @@ export default function BusinessReturnsPanel({ user }: Props) {
         netRefundAmount: setupRefundAmount + setupRentalRefundAmount,
         totalDeductions: Math.max(0, prev.depositAmount - setupRefundAmount),
         status: setupRefundAmount + setupRentalRefundAmount > 0 ? 'refund_pending' : 'completed',
-        managerResolutionNote: `Business preparation-period decision: ${setupDecisionNote.trim()}`,
+        managerResolutionNote: `Quyết định của Ban điều hành về thời gian chuẩn bị: ${setupDecisionNote.trim()}`,
       } : null)
       setFeedback(setupRefundAmount > 0
-        ? 'Đã duyệt khoản hoàn. Staff sẽ thực hiện chứng từ hoàn tiền thực tế.'
+        ? 'Đã duyệt khoản hoàn. Nhân viên sẽ thực hiện hoàn tiền và lưu chứng từ.'
         : 'Đã chốt không hoàn tiền và giải phóng hồ sơ thời gian chuẩn bị.')
       setActiveTab('overview')
     } catch (err) {
@@ -547,7 +547,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
   const handleLegacyPricingDecision = async () => {
     if (!selectedItem || selectedItem.status !== 'awaiting_business_review') return
     if (!legacyDecisionNote.trim() || !legacySnapshotJson.trim() || !legacyEvidenceFileId.trim()) {
-      setFeedback('Cần nhập lý do, snapshot bảng giá JSON và mã file bằng chứng nguồn.')
+      setFeedback('Cần nhập lý do, bảng giá trả sớm theo định dạng JSON và mã tệp chứng từ gốc.')
       return
     }
     setSubmitting(true)
@@ -563,7 +563,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
         })
         await loadApiData()
       }
-      setFeedback('Đã lưu snapshot bảng giá cũ và chuyển hồ sơ sang bước quyết toán.')
+      setFeedback('Đã lưu bảng giá trả sớm của hồ sơ cũ và chuyển hồ sơ sang bước quyết toán.')
     } catch (error) {
       setFeedback(returnError(error))
     } finally {
@@ -576,7 +576,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
     if (!selectedItem) return
 
     if (isBusiness) {
-      setFeedback('Business chỉ được theo dõi hồ sơ và thực hiện hoàn cọc đã đủ điều kiện.')
+      setFeedback('Ban điều hành chỉ được theo dõi hồ sơ và thực hiện hoàn cọc đã đủ điều kiện.')
       return
     }
     setSubmitting(true)
@@ -645,9 +645,9 @@ export default function BusinessReturnsPanel({ user }: Props) {
   // 3. Thao tác: Thẩm định khiếu nại (BO Review Dispute)
   const handleReviewDispute = async () => {
     if (!selectedItem) return
-    if (useApi) { setFeedback('Xem xét khiếu nại thuộc Manager theo quyền hiện tại.'); return }
+    if (useApi) { setFeedback('Quản lý cơ sở phụ trách xem xét khiếu nại này.'); return }
     if (isBusiness) {
-      setFeedback('Business không thẩm định khiếu nại, thao tác này thuộc Manager.')
+      setFeedback('Quản lý cơ sở phụ trách thẩm định khiếu nại.')
       return
     }
     if (!resolutionNote.trim()) {
@@ -728,7 +728,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
   const handleCompleteRefund = async () => {
     if (!selectedItem || refundLock.current) return
     if (isBusiness) {
-      setFeedback('Business chỉ phê duyệt/giám sát, Staff mới được ghi nhận thu hoặc hoàn tiền kèm biên lai thực tế.')
+      setFeedback('Ban điều hành phê duyệt và giám sát. Nhân viên ghi nhận khoản thu hoặc hoàn tiền kèm biên lai.')
       return
     }
     if (useApi && !refundReference.trim()) {
@@ -805,9 +805,9 @@ export default function BusinessReturnsPanel({ user }: Props) {
   // 5. Thao tác: Khách nộp phụ phí phát sinh (Pay Due)
   const handlePayDue = async () => {
     if (!selectedItem) return
-    if (useApi) { setFeedback('Thu khoản còn thiếu thuộc Staff tại cơ sở.'); return }
+    if (useApi) { setFeedback('Nhân viên tại cơ sở thu khoản còn thiếu.'); return }
     if (isBusiness) {
-      setFeedback('Business không ghi nhận phụ phí, thao tác này thuộc Customer/Staff theo contract.')
+      setFeedback('Khách hàng hoặc nhân viên xử lý phụ phí theo hợp đồng.')
       return
     }
     setSubmitting(true)
@@ -889,7 +889,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
         returnedKey: false,
         returnedCard: false,
         returnedLock: false,
-        inspectionNotes: 'Hồ sơ mới tạo từ cổng Ban Điều Hành. Chờ Staff kiểm tra hiện trạng gian kho.',
+        inspectionNotes: 'Hồ sơ mới tạo từ cổng Ban Điều Hành. Chờ nhân viên kiểm tra hiện trạng gian kho.',
         customerDecisionNote: newNotes,
         managerResolutionNote: null,
         proposedUnitStatus: 'available' as const,
@@ -934,7 +934,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
 
     // Bước 2
     await new Promise((r) => setTimeout(r, 1500))
-    addLog('2. Staff tiến hành nghiệm thu: Thu đủ chìa & thẻ, phát hiện xước sàn (-200k), vệ sinh bụi (-100k) -> Tổng trừ: 300,000 ₫')
+    addLog('2. Nhân viên nghiệm thu: Thu đủ chìa & thẻ, phát hiện xước sàn (-200k), vệ sinh bụi (-100k) -> Tổng trừ: 300,000 ₫')
     setDemoStep(3)
 
     // Bước 3
@@ -1068,7 +1068,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
               className="px-3 py-2 border border-[#cfcdc1] rounded-lg text-sm bg-white font-medium focus:outline-none cursor-pointer"
             >
               <option value="all">Tất cả trạng thái quy trình</option>
-              <option value="awaiting_business_review">Chờ Business duyệt bảng giá cũ</option>
+              <option value="awaiting_business_review">Chờ Ban điều hành duyệt bảng giá cũ</option>
               <option value="disputed">Đang khiếu nại (Chờ Quản lý thẩm định)</option>
 
               <option value="refund_pending">Chờ giải ngân hoàn cọc</option>
@@ -1454,11 +1454,11 @@ export default function BusinessReturnsPanel({ user }: Props) {
                     <div>
                       <p className="font-bold text-amber-950 text-sm">Quyết định trả/hủy trong thời gian chuẩn bị</p>
                       <p className="text-xs text-amber-900 mt-1">
-                        Thời gian chuẩn bị chưa phải kỳ thuê đã trả. Business quyết định số tiền hoàn, Staff chỉ thực hiện sau khi có chứng từ thực tế.
-                        {selectedItem.moveInCompletedAt && !selectedItem.inspectedAt && ' Hàng đã vào kho nên cần Staff kiểm tra trả kho trước.'}
+                        Thời gian chuẩn bị chưa phải kỳ thuê đã trả. Ban điều hành quyết định số tiền hoàn. Nhân viên thực hiện khi có chứng từ.
+                        {selectedItem.moveInCompletedAt && !selectedItem.inspectedAt && ' Hàng đã vào kho nên cần nhân viên kiểm tra khi trả kho trước.'}
                       </p>
                       {selectedItem.earlyTerminationPolicy && <p className="mt-2 rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs text-amber-950">
-                        Theo snapshot lúc đặt: phí chấm dứt sớm <b>{formatAmount(selectedItem.earlyTerminationPolicy.earlyTerminationFee)}</b>
+                        Theo bảng giá đã lưu khi đặt kho: phí chấm dứt sớm <b>{formatAmount(selectedItem.earlyTerminationPolicy.earlyTerminationFee)}</b>
                         {selectedItem.earlyTerminationPolicy.type === 'GOODS_MOVED_IN' && <> + phí dùng hàng {selectedItem.earlyTerminationPolicy.billableSetupDays} ngày ({formatAmount(selectedItem.earlyTerminationPolicy.usedGoodsCharge)})</>}, tiền thuê dự kiến hoàn <b>{formatAmount(selectedItem.earlyTerminationPolicy.rentalRefundAmount)}</b>. Cọc đảm bảo thuê vẫn quyết toán riêng.
                       </p>}
                     </div>
@@ -1476,7 +1476,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                         />
                       </label>
                       <label className="text-xs font-semibold text-stone-700">
-                        Hoàn tiền thuê theo snapshot (VND)
+                        Hoàn tiền thuê theo bảng giá đã lưu (VND)
                         <input
                           type="number"
                           min="0"
@@ -1515,8 +1515,8 @@ export default function BusinessReturnsPanel({ user }: Props) {
                 {isBusiness && selectedItem.status === 'awaiting_business_review' && (
                   <div className="p-3 bg-rose-50 rounded-xl border border-rose-300 space-y-3">
                     <div>
-                      <p className="font-bold text-rose-950 text-sm">Bổ sung snapshot cho hồ sơ cũ</p>
-                      <p className="mt-1 text-xs text-rose-900">Hồ sơ này không có bảng giá trả sớm bất biến. Business phải dựa trên chứng cứ gốc, lưu JSON snapshot và chịu trách nhiệm phê duyệt trước khi khách xác nhận.</p>
+                      <p className="font-bold text-rose-950 text-sm">Bổ sung bảng giá trả sớm cho hồ sơ cũ</p>
+                      <p className="mt-1 text-xs text-rose-900">Hồ sơ chưa có bảng giá trả sớm đã lưu. Ban điều hành cần đối chiếu chứng từ gốc, lưu bảng giá theo định dạng JSON và duyệt trước khi khách xác nhận.</p>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <label className="text-xs font-semibold text-stone-700">
@@ -1529,11 +1529,11 @@ export default function BusinessReturnsPanel({ user }: Props) {
                       </label>
                     </div>
                     <label className="block text-xs font-semibold text-stone-700">
-                      Mã file báo giá/hợp đồng gốc
-                      <input required value={legacyEvidenceFileId} onChange={(event) => setLegacyEvidenceFileId(event.target.value)} placeholder="UUID file đã lưu trong hệ thống" className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm font-mono" />
+                      Mã tệp chứng từ gốc (báo giá hoặc hợp đồng)
+                      <input required value={legacyEvidenceFileId} onChange={(event) => setLegacyEvidenceFileId(event.target.value)} placeholder="Nhập mã tệp chứng từ đã lưu" className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm font-mono" />
                     </label>
                     <label className="block text-xs font-semibold text-stone-700">
-                      Pricing snapshot JSON
+                      Bảng giá trả sớm (định dạng JSON)
                       <textarea required rows={5} value={legacySnapshotJson} onChange={(event) => setLegacySnapshotJson(event.target.value)} placeholder='{"policyVersion":"legacy-approved","tiers":[]}' className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-xs font-mono" />
                     </label>
                     <label className="block text-xs font-semibold text-stone-700">
@@ -1541,7 +1541,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                       <textarea required rows={3} maxLength={2000} value={legacyDecisionNote} onChange={(event) => setLegacyDecisionNote(event.target.value)} className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
                     </label>
                     <Button variant="primary" size="sm" disabled={submitting} className="bg-rose-700 hover:bg-rose-800 text-white font-bold" onClick={() => void handleLegacyPricingDecision()}>
-                      Lưu snapshot & chuyển duyệt
+                      Lưu bảng giá và chuyển duyệt
                     </Button>
                   </div>
                 )}
@@ -1597,7 +1597,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                         <span className="text-red-600 font-mono">-{formatAmount(selectedItem.activeReturnPolicy.totalRentalCharge)}</span>
                       </div>
                       <div className="flex justify-between p-2 border-b border-stone-100 text-stone-600 text-xs">
-                        <span>• Hoàn tiền thuê theo snapshot</span>
+                        <span>• Hoàn tiền thuê theo bảng giá đã lưu</span>
                         <span className="text-emerald-700 font-mono">+{formatAmount(selectedItem.activeReturnPolicy.rentalRefundAmount)}</span>
                       </div>
                     </>}

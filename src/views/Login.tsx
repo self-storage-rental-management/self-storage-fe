@@ -696,10 +696,9 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
       {/* ── Right Panel: Auth Form ── */}
       <section className="bg-[#FCFBF7] p-5 sm:p-8 md:p-10 relative flex flex-col justify-between">
         <div>
-          {/* Mobile-only Header (< 768px): Logo and Slogan */}
+          {/* Mobile logo */}
           <div className="md:hidden flex flex-col items-center text-center mb-6 pt-1">
             <BrandLogo className="items-center" />
-            <p className="text-xs text-stone-500 font-medium mt-1">Hệ thống tự lưu trữ thông minh chuẩn quốc tế</p>
           </div>
 
           {/* Top navigation & Portal Badge */}

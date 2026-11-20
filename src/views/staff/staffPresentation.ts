@@ -172,10 +172,10 @@ export function staffErrorMessage(error: unknown, fallback: string) {
     if (message.includes("Customer setup must be completed"))
       return "Khách chưa được ghi nhận đã chuẩn bị xong nên chưa thể kiểm kê."
     if (message.includes("Evidence can only be uploaded"))
-      return "Chỉ được tải bằng chứng khi quy trình check-in đang thực hiện. Vui lòng mở lại hồ sơ và tiếp tục từ bước hiện tại."
+      return "Chỉ được tải bằng chứng khi đang thực hiện quy trình nhận kho. Vui lòng mở lại hồ sơ và tiếp tục từ bước hiện tại."
     if (message.includes("lock reference"))
       return "Mã ổ khóa không khớp với credential đã kích hoạt. Vui lòng kiểm tra lại mã ổ khóa."
-    return "Hồ sơ vừa thay đổi trạng thái. Vui lòng tải lại danh sách rồi tiếp tục check-in."
+    return "Hồ sơ vừa thay đổi trạng thái. Vui lòng tải lại danh sách rồi tiếp tục nhận kho."
   }
   if (status === 413)
     return "Tệp tải lên vượt quá dung lượng cho phép."

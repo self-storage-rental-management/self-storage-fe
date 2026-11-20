@@ -816,7 +816,7 @@ export default function AdminLoginHistoryApiPanel({
                   className="h-10 rounded-lg border border-stone-300 bg-white px-3 text-sm text-stone-700 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#e9a12c]"
                 >
                   <option value="all">Tất cả vai trò</option>
-                  <option value="ADMIN">Quản trị viên (Admin)</option>
+                  <option value="ADMIN">Quản trị viên</option>
                   <option value="MANAGER">Quản lý cơ sở</option>
                   <option value="STAFF">Nhân viên kho</option>
                   <option value="CUSTOMER">Khách hàng thuê</option>

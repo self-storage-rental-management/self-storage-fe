@@ -103,7 +103,22 @@ export function managerDisplayError(error: unknown): string {
     if (error.status === 401) return 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'
     if (error.status === 403) return 'Bạn không có quyền xử lý hồ sơ này.'
     if (error.status === 404) return 'Không tìm thấy dữ liệu cần thao tác. Vui lòng tải lại trang.'
-    if (error.status === 400 || error.status === 422) return 'Thông tin chưa hợp lệ. Vui lòng kiểm tra lại các mục đã nhập.'
+    if (error.status === 400 || error.status === 422) {
+      const detailValues = Array.isArray(error.details)
+        ? error.details.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+        : error.details && typeof error.details === 'object'
+          ? Object.values(error.details).filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+          : []
+      const vietnameseDetails = detailValues.filter(value => /[À-ỹ]/u.test(value))
+      if (vietnameseDetails.length > 0) return vietnameseDetails.join(' ')
+      if (/[À-ỹ]/u.test(error.message)) return error.message
+      return 'Thông tin chưa hợp lệ. Vui lòng kiểm tra lại các mục đã nhập.'
+    }
+    if (error.status === 409 && (
+      error.message.startsWith('Không thể lưu trữ loại kho')
+      || error.message.startsWith('Loại kho đã được lưu trữ')
+      || error.message.startsWith('Không thể xóa loại kho đang chờ BO duyệt')
+    )) return error.message
     if (error.status === 409) return 'Dữ liệu đã thay đổi hoặc chưa đủ điều kiện xử lý. Vui lòng tải lại trước khi tiếp tục.'
     if (error.status != null && error.status >= 500) return 'Hệ thống gặp lỗi khi tải hoặc xử lý dữ liệu. Vui lòng thử lại.'
     if (error.status === null) return 'Không kết nối được hệ thống hoặc yêu cầu đã hết thời gian chờ. Vui lòng thử lại.'

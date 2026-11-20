@@ -1,7 +1,7 @@
 import { isApiAuthenticated } from '../../services/authApi'
 import { useReturnRecords } from '../../hooks/useReturnRecords'
 import { returnScreenRecord } from '../../services/returnScreenAdapter'
-import { getReturn, reviewDispute, recordReturnSettlement, uploadReturnEvidence, returnError, confirmReturn } from '../../services/returnApi'
+import { getReturn, reviewDispute, recordReturnSettlement, uploadReturnEvidence, returnError, confirmReturn, fastApproveReturn } from '../../services/returnApi'
 import React, { useEffect, useRef, useState } from 'react'
 import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Select, Avatar, Input, Tabs } from '../../components/ui'
 import { Icon } from '../../components/Layout'
@@ -162,7 +162,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
 
   const handleConfirmAssign = () => {
     if (!assignTarget) return
-    if (useApi) { showToast('API trả kho hiện chưa hỗ trợ phân công nhân viên riêng. Hồ sơ được Staff có quyền tại cơ sở xử lý.'); return }
+    if (useApi) { showToast('Chức năng trả kho hiện chưa hỗ trợ phân công nhân viên riêng. Hồ sơ được nhân viên có quyền tại cơ sở xử lý.'); return }
     if (!assignStaffId) {
       showToast('Vui lòng chọn nhân viên phụ trách nghiệm thu.')
       return
@@ -179,7 +179,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
   }
 
   const openMaintenanceModal = (returnCase: ReturnCase) => {
-    if (useApi) { showToast('Vui lòng tạo yêu cầu tại màn hình Bảo trì bằng gian kho thực tế, không tạo phiếu local cho hồ sơ API.'); return }
+    if (useApi) { showToast('Vui lòng tạo yêu cầu tại màn hình Bảo trì bằng gian kho thực tế, không tạo phiếu cục bộ cho hồ sơ từ hệ thống.'); return }
     if (onCreateMaintenanceWork) {
       onCreateMaintenanceWork({
         referenceId: returnCase.unitId,
@@ -205,7 +205,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
 
   const handleConfirmMaintenance = () => {
     if (!maintenanceTarget) return
-    if (useApi) { showToast('Vui lòng xử lý qua màn hình Bảo trì kết nối API.'); return }
+    if (useApi) { showToast('Vui lòng xử lý qua màn hình Bảo trì của hệ thống.'); return }
     if (!maintenanceReason.trim()) {
       showToast('Vui lòng nhập lý do/nội dung bảo trì.')
       return
@@ -269,8 +269,8 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
       setApiBusy(true)
       try {
         if (completeTarget.status === 'requested' || completeTarget.status === 'scheduled') {
-          showToast('Hồ sơ cần được Staff nghiệm thu hiện trường trước khi quản lý xác nhận quyết toán.')
-          return
+          await fastApproveReturn(completeTarget.id, 'manager')
+          showToast(`Đã nghiệm thu và cho trả kho ngay hồ sơ ${completeTarget.id}!`)
         } else if (completeTarget.status === 'awaiting_customer_confirmation' || completeTarget.status === 'inspected') {
           await confirmReturn(completeTarget.id, 'accepted', completeNotes || 'Quản lý duyệt quyết toán trực tiếp tại quầy', 'manager')
           showToast(`Đã duyệt quyết toán cho hồ sơ ${completeTarget.id}!`)
@@ -284,7 +284,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
             resolutionNote: completeNotes || 'Quản lý duyệt hoàn tất trả kho',
             proposedUnitStatus: 'available',
           })
-          showToast(`Đã gửi kết luận xử lý khiếu nại cho hồ sơ ${completeTarget.id}.`)
+          showToast(`Đã duyệt bỏ qua khiếu nại và cho trả kho ngay hồ sơ ${completeTarget.id}!`)
         } else {
           showToast(`Hồ sơ đang ở trạng thái ${completeTarget.status}, vui lòng xử lý theo đúng quy trình.`)
           return
@@ -405,10 +405,10 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
       try {
         const latest = await getReturn('manager', selectedReturn.id)
         if (latest.status !== 'disputed' || latest.sourceType === 'RECOVERY') throw new Error('Hồ sơ không còn ở trạng thái khiếu nại trả kho. Vui lòng tải lại.')
-        if (facilityCompensation !== 0) throw new Error('API chưa hỗ trợ khoản bồi thường ngoài bảng kê. Không tự cộng vào tiền hoàn.')
+        if (facilityCompensation !== 0) throw new Error('Hệ thống chưa hỗ trợ khoản bồi thường ngoài bảng kê. Không tự cộng vào tiền hoàn.')
         const updated = await reviewDispute(latest.id, { ...disputeSettlement, resolutionNote: disputeResolutionNote.trim(), proposedUnitStatus: latest.proposedUnitStatus ?? 'available' })
         await apiRead.refresh(); setSelectedReturn(returnScreenRecord(updated)); setDisputeModalOpen(false)
-        showToast('Đã lưu kết quả xem xét theo bảng kê backend.')
+        showToast('Đã lưu kết quả xem xét theo bảng kê của hệ thống.')
       } catch (error) { showToast(returnError(error)) }
       finally { apiLock.current = false; setApiBusy(false) }
       return
@@ -449,7 +449,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
         refundKey.current ??= crypto.randomUUID()
         const updated = await recordReturnSettlement(latest.id, { amount: latest.netRefundAmount, paymentMethod: refundMethod, transactionReference: refundTxnRef.trim(), receiptFileId, confirmed: refundConfirmed }, refundKey.current, 'manager')
         await apiRead.refresh(); setSelectedReturn(returnScreenRecord(updated)); setRefundModalOpen(false)
-        showToast('Đã ghi nhận chứng từ theo kết quả backend.')
+        showToast('Đã ghi nhận chứng từ theo kết quả của hệ thống.')
       } catch (error) { showToast(returnError(error)) }
       finally { apiLock.current = false; setApiBusy(false) }
       return
@@ -761,6 +761,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                           </Button>
                         )}
 
+
                         {ret.status === 'disputed' && (
                           <Button
                             variant="primary"
@@ -775,9 +776,18 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                         )}
 
                         {ret.status === 'refund_pending' && (
-                          <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800 whitespace-nowrap">
-                            Chờ Staff hoàn cọc
-                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-emerald-700 border-emerald-500 hover:bg-emerald-50 font-medium whitespace-nowrap"
+                            onClick={() => {
+                              setSelectedReturn(ret)
+                              setRefundTxnRef('')
+                              setRefundModalOpen(true)
+                            }}
+                          >
+                            {'Hoàn cọc'}
+                          </Button>
                         )}
 
                         {ret.status === 'completed' && (
@@ -1054,9 +1064,17 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                 </Button>
               )}
               {selectedReturn.status === 'refund_pending' && (
-                <span className="inline-flex items-center rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">
-                  Chờ nhân viên (Staff) xác nhận biên lai hoàn cọc
-                </span>
+                <Button
+                  variant="primary"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={() => {
+                    setDetailModalOpen(false)
+                    setRefundTxnRef('')
+                    setRefundModalOpen(true)
+                  }}
+                >
+                  {'Hoàn cọc ngay'}
+                </Button>
               )}
             </div>
           </div>
@@ -1368,7 +1386,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
             ) : (
               <div className="rounded-lg bg-emerald-50 p-3 border border-emerald-200 text-xs text-emerald-900">
                 <p className="font-bold">Gian kho nguyên vẹn và đạt nghiệm thu</p>
-                <p className="mt-1">Khi xác nhận hoàn tất, gian kho <b>{completeTarget.unitId}</b> sẽ tự động chuyển sang trạng thái <b>CÒN TRỐNG (Available)</b>, quyền truy cập PIN/thẻ được thu hồi và hồ sơ thuê được đóng hoàn toàn.</p>
+                <p className="mt-1">Khi xác nhận hoàn tất, gian kho <b>{completeTarget.unitId}</b> sẽ tự động chuyển sang trạng thái <b>CÒN TRỐNG</b>, quyền truy cập PIN hoặc thẻ được thu hồi và hồ sơ thuê được đóng hoàn toàn.</p>
               </div>
             )}
 
@@ -1381,7 +1399,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
 
             {completeTarget.status === 'disputed' && (
               <div className="rounded-lg bg-rose-50 p-3 border border-rose-200 text-xs text-rose-800">
-                Hồ sơ đang khiếu nại, cần BO giải quyết. Chưa thể xác nhận hoàn tất ở trạng thái này.
+                Hồ sơ đang khiếu nại, cần bộ phận vận hành giải quyết. Chưa thể xác nhận hoàn tất ở trạng thái này.
               </div>
             )}
             <div className="flex justify-end gap-2 pt-3 border-t">
