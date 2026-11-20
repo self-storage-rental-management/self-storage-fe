@@ -381,7 +381,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
             <div className="mt-2 space-y-1">
               <p><b>Địa chỉ:</b> {[displayedFacility?.address, displayedFacility?.city].filter(Boolean).join(', ') || 'Chưa cập nhật'}</p>
               <p><b>Liên hệ:</b> {displayedFacility?.phone || 'Chưa cập nhật'}</p>
-              <p><b>Giờ hoạt động:</b> {displayedFacility?.accessHours || 'Chưa cập nhật'}</p>
+              <p><b>Giờ hoạt động:</b> {'24/24 mỗi ngày'}</p>
               {displayedUnitType && <>
                 <p><b>Kích thước kho:</b> {displayedUnitType.lengthM != null && displayedUnitType.widthM != null && displayedUnitType.heightM != null
                   ? `${displayedUnitType.lengthM} × ${displayedUnitType.widthM} × ${displayedUnitType.heightM} m` : 'Chưa cập nhật'}

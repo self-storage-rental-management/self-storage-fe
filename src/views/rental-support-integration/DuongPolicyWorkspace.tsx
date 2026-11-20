@@ -41,8 +41,8 @@ const labels: Record<string, string> = {
   warningThroughDay: "Số ngày kết thúc mức Cảnh báo 1",
   seriousThroughDay: "Số ngày kết thúc mức Cảnh báo nghiêm trọng",
   urgentThroughDay: "Hạn chót gia hạn (số ngày sau hết hạn)",
-  recoveryCutoffTime: "Giờ chốt gia hạn ngày cuối (ví dụ 17:00:00)",
-  recoveryStartTime: "Giờ chuyển sang xử lý thu hồi (ví dụ 08:00:00)",
+  recoveryCutoffTime: "Giờ chốt gia hạn ngày cuối (ví dụ 23:59:59)",
+  recoveryStartTime: "Giờ chuyển sang xử lý thu hồi (ví dụ 00:00:00)",
   reminderCooldownMinutes:
     "Khoảng cách tối thiểu giữa hai lần nhắc (phút, không bắt buộc)",
   supportReviewDays: "Thời gian khách hàng xem xét kết quả hỗ trợ (ngày)",
@@ -122,8 +122,8 @@ export function buildPolicyInput(kind: PolicyKind, d: Draft): PolicyInput {
             seriousThroughDay: Number(d.seriousThroughDay || 6),
             urgentThroughDay: Number(d.urgentThroughDay || 7),
             recoveryFromDay: Number(d.urgentThroughDay || 7) + 1,
-            recoveryCutoffTime: d.recoveryCutoffTime || '17:00:00',
-            recoveryStartTime: d.recoveryStartTime || '08:00:00',
+            recoveryCutoffTime: d.recoveryCutoffTime || '23:59:59',
+            recoveryStartTime: d.recoveryStartTime || '00:00:00',
           } : undefined,
         }
       : {
@@ -223,8 +223,8 @@ function PolicyEditor({
         seriousThroughDay: 6,
         urgentThroughDay: 7,
         recoveryFromDay: 8,
-        recoveryCutoffTime: '17:00:00',
-        recoveryStartTime: '08:00:00',
+        recoveryCutoffTime: '23:59:59',
+        recoveryStartTime: '00:00:00',
       }
   const packageRead = useRentalApiResource(
     `${actor.id}:all-renewal-packages`,
@@ -601,8 +601,8 @@ function PolicyEditor({
                     seriousThroughDay: Number(draft.seriousThroughDay || 6),
                     urgentThroughDay: Number(draft.urgentThroughDay || 7),
                     recoveryFromDay: Number(draft.urgentThroughDay || 7) + 1,
-                    recoveryCutoffTime: draft.recoveryCutoffTime || '17:00:00',
-                    recoveryStartTime: draft.recoveryStartTime || '08:00:00',
+                    recoveryCutoffTime: draft.recoveryCutoffTime || '23:59:59',
+                    recoveryStartTime: draft.recoveryStartTime || '00:00:00',
                   } : undefined,
                 }
 
@@ -1054,7 +1054,7 @@ function PolicyEditor({
                         <input
                           className={inputClass}
                           type="time"
-                          value={(draft.recoveryCutoffTime || "17:00:00").slice(0, 5)}
+                          value={(draft.recoveryCutoffTime || "23:59:59").slice(0, 5)}
                           onChange={(e) => {
                             isDirty.current = true
                             setDraft((d) => ({ ...d, recoveryCutoffTime: e.target.value.length === 5 ? `${e.target.value}:00` : e.target.value }))

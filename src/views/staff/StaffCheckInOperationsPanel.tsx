@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useId, useMemo, useState } from "react"
 
 import {
   completeCheckIn,
@@ -15,6 +15,7 @@ import {
   verifyCheckInIdentity,
   type CheckInCase,
   type CheckInChecklist,
+  type CheckInInventoryLine,
   type CheckInListStatus,
 } from "../../services/checkInApi"
 
@@ -124,6 +125,44 @@ function parseEmptyStorageHandover(note: string | null | undefined) {
   }
 }
 
+function HandoverWorkflowHelp() {
+  const [visible, setVisible] = useState(false)
+  const tooltipId = useId()
+
+  return (
+    <div className="shrink-0" onMouseLeave={() => setVisible(false)}>
+      <button
+        type="button"
+        aria-label="Lưu ý về quy trình bàn giao"
+        aria-describedby={visible ? tooltipId : undefined}
+        onMouseEnter={() => setVisible(true)}
+        onFocus={() => setVisible(true)}
+        onBlur={() => setVisible(false)}
+        onClick={() => setVisible(true)}
+        onKeyDown={event => {
+          if (event.key === "Escape" && visible) {
+            event.stopPropagation()
+            setVisible(false)
+          }
+        }}
+        className="flex h-8 w-8 items-center justify-center rounded-full text-amber-800 hover:bg-amber-50 focus-visible:outline-2 focus-visible:outline-amber-600"
+      >
+        <svg aria-hidden="true" className="show-icon h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7.5v5m0 3.5h.01" />
+        </svg>
+      </button>
+      {visible && (
+        <div id={tooltipId} role="tooltip" className="absolute inset-x-4 z-20 max-w-md pt-1 sm:inset-x-6">
+          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-950 shadow-md">
+            Hoàn tất bàn giao kho trống sẽ chuyển sang chờ khách hàng xác nhận nhận kho. Thời gian chuẩn bị chỉ bắt đầu sau khi khách xác nhận. Nhân viên kiểm kê khi khách báo đã chuẩn bị xong.
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ComparisonBadge({ matches }: { matches: boolean | null }) {
   if (matches === null) {
     return <Badge variant="muted">Chưa đủ dữ liệu</Badge>
@@ -134,6 +173,78 @@ function ComparisonBadge({ matches }: { matches: boolean | null }) {
       {matches ? "Khớp" : "Chênh lệch"}
     </Badge>
   )
+}
+
+type InventoryDraft = {
+  quantity: string
+  condition: CheckInInventoryLine["condition"] | ""
+  note: string
+  lengthCm: string
+  widthCm: string
+  heightCm: string
+  weightKg: string
+  weightEdited?: boolean
+  checked: boolean
+}
+
+const emptyInventory: InventoryDraft = {
+  quantity: "", condition: "", note: "", lengthCm: "", widthCm: "", heightCm: "", weightKg: "", checked: false,
+}
+
+type DeclaredInventoryLine = NonNullable<CheckInCase["declaredGoodsLines"]>[number]
+
+function calculateInventoryWeight(weightPerPackageKg: number | null | undefined, quantity: string) {
+  const count = Number(quantity)
+  if (weightPerPackageKg == null || !quantity.trim() || !Number.isInteger(count) || count < 0) return ""
+  return formatInputNumber(Number((weightPerPackageKg * count).toFixed(2)))
+}
+
+function inventoryFromDeclaration(line: DeclaredInventoryLine): InventoryDraft {
+  const quantity = formatInputNumber(line.quantity)
+  return {
+    ...emptyInventory,
+    quantity,
+    lengthCm: formatInputNumber(line.lengthCm),
+    widthCm: formatInputNumber(line.widthCm),
+    heightCm: formatInputNumber(line.heightCm),
+    weightKg: calculateInventoryWeight(line.weightPerPackageKg, quantity),
+  }
+}
+
+function applyInventoryChanges(line: DeclaredInventoryLine, entry: InventoryDraft, changes: Partial<InventoryDraft>): InventoryDraft {
+  const next = { ...entry, checked: false, ...changes }
+  if (changes.weightKg !== undefined) {
+    next.weightEdited = true
+  }
+  if (!next.weightEdited && changes.quantity !== undefined) {
+    next.weightKg = calculateInventoryWeight(line.weightPerPackageKg, next.quantity)
+  }
+  return next
+}
+
+const inventoryDimensions = [
+  ["lengthCm", "Dài thực tế (cm)"], ["widthCm", "Rộng thực tế (cm)"], ["heightCm", "Cao thực tế (cm)"],
+] as const
+
+function compareInventory(line: DeclaredInventoryLine, entry: InventoryDraft) {
+  const quantity = entry.quantity.trim() ? Number(entry.quantity) : NaN
+  const dimensions: [number, number, number] = [Number(entry.lengthCm), Number(entry.widthCm), Number(entry.heightCm)]
+  const declaredDimensions: [number | null, number | null, number | null] = [line.lengthCm, line.widthCm, line.heightCm]
+  const weight = Number(entry.weightKg)
+  const measured = [...dimensions, weight].every(value => Number.isFinite(value) && value >= 0.01)
+  const volume = quantity === 0 ? 0 : measured ? dimensions[0] * dimensions[1] * dimensions[2] * quantity / 1_000_000 : NaN
+  const declaredVolume = declaredDimensions.every(value => value != null)
+    ? Number(line.lengthCm) * Number(line.widthCm) * Number(line.heightCm) * line.quantity / 1_000_000
+    : NaN
+  const badges = [
+    { label: "Số kiện", matches: Number.isInteger(quantity) ? quantity === line.quantity : null },
+    { label: "Khối lượng", matches: measured && quantity > 0 && line.weightPerPackageKg != null
+      ? !hasMaterialVariance(entry.weightKg, line.weightPerPackageKg * line.quantity, 0.1) : null },
+    { label: "Thể tích", matches: quantity > 0 && Number.isFinite(volume) && Number.isFinite(declaredVolume)
+      ? !hasMaterialVariance(String(volume), declaredVolume, 0.0001) : null },
+    { label: "Kích thước", matches: measured && quantity > 0 ? dimensionsMatch(dimensions, declaredDimensions) : null },
+  ]
+  return { quantity, dimensions, weight, volume, measured, badges, needsNote: badges.some(badge => badge.matches === false) || entry.condition === "DAMAGED" }
 }
 
 const MAX_UPLOAD_FILE_SIZE_BYTES = 25 * 1024 * 1024
@@ -277,6 +388,7 @@ export default function StaffCheckInOperationsPanel({
   )
 
   const [packageCount, setPackageCount] = useState("1")
+  const [inventoryDraft, setInventoryDraft] = useState<Record<string, InventoryDraft>>({})
 
   const [goodsCategory, setGoodsCategory] = useState("Hàng hóa đã khai báo")
 
@@ -383,10 +495,37 @@ export default function StaffCheckInOperationsPanel({
     }
   }, [page, query, refreshKey, scheduledFrom, scheduledTo, status])
 
-  const allChecksComplete = useMemo(
-    () => checklistLabels.every(([key]) => checklist[key]),
-
-    [checklist],
+  const declaredLines = handoverTarget?.declaredGoodsLines ?? []
+  const lineInventory = declaredLines.length > 0 && (
+    handoverTarget?.checkInStatus !== "completed" || Boolean(handoverTarget.handover?.inventoryLines?.some(line => line.measurements))
+  )
+  const inventoryRows = declaredLines.map(line => {
+    const entry = inventoryDraft[line.id] ?? (
+      handoverTarget?.checkInStatus === "completed" ? emptyInventory : inventoryFromDeclaration(line)
+    )
+    return { line, entry, comparison: compareInventory(line, entry) }
+  })
+  const inventoryLinesComplete = inventoryRows.every(({ entry, comparison }) => {
+    const { quantity, measured, needsNote } = comparison
+    return entry.checked && Number.isInteger(quantity) && quantity >= 0 && quantity <= 2147483647
+      && Boolean(entry.condition) && (quantity === 0 ? entry.condition === "NOT_PRESENT" : measured && Number.isFinite(comparison.volume) && entry.condition !== "NOT_PRESENT")
+      && (!needsNote || Boolean(entry.note.trim()))
+  })
+  const actualDimensions = [0, 0, 0]
+  let actualWeight = 0
+  let actualVolume = 0
+  for (const { comparison } of inventoryRows) {
+    if (!(comparison.quantity > 0 && comparison.measured)) continue
+    const sorted = [...comparison.dimensions].sort((a, b) => a - b)
+    sorted.forEach((value, index) => { actualDimensions[index] = Math.max(actualDimensions[index], value) })
+    actualWeight += comparison.weight
+    actualVolume += comparison.volume
+  }
+  const totalPackages = lineInventory
+    ? inventoryRows.reduce((sum, { comparison }) => sum + (comparison.quantity || 0), 0)
+    : Number(packageCount)
+  const allChecksComplete = checklistLabels.every(([key]) =>
+    lineInventory && (key === "measurementVerified" || key === "conditionRecorded") ? inventoryLinesComplete : checklist[key],
   )
 
   useEffect(() => {
@@ -459,7 +598,25 @@ export default function StaffCheckInOperationsPanel({
     }
   }, [handoverTarget, heightCm, lengthCm, packageCount, volumeM3, weightKg, widthCm])
 
-  const measurementVariance = checkInComparison?.hasVariance ?? false
+  const packageCountValid = Number.isInteger(totalPackages) && totalPackages > 0 && totalPackages <= 2147483647
+  const updateInventoryLine = (line: DeclaredInventoryLine, changes: Partial<InventoryDraft>) => {
+    const field = `inventory-${line.id}`
+    setFieldErrors(current => Object.fromEntries(Object.entries(current).filter(([key]) => !key.startsWith(`${field}-`) && key !== "packageCount")))
+    setInventoryDraft(current => ({
+      ...current,
+      [line.id]: applyInventoryChanges(line, current[line.id] ?? inventoryFromDeclaration(line), changes),
+    }))
+    setVarianceAccepted(false)
+  }
+  const measurementVariance = lineInventory
+    ? inventoryRows.some(({ comparison }) => comparison.badges.some(badge => badge.matches === false))
+      || (inventoryLinesComplete && packageCountValid && (totalPackages !== handoverTarget?.declaredPackageCount
+        || hasMaterialVariance(String(actualWeight), handoverTarget?.declaredGoodsWeightKg ?? NaN, 0.1)
+        || hasMaterialVariance(String(actualVolume), handoverTarget?.declaredGoodsVolumeM3 ?? NaN, 0.0001)
+        || dimensionsMatch([actualDimensions[0], actualDimensions[1], actualDimensions[2]], [
+          handoverTarget?.declaredGoodsLengthCm ?? null, handoverTarget?.declaredGoodsWidthCm ?? null, handoverTarget?.declaredGoodsHeightCm ?? null,
+        ]) === false))
+    : checkInComparison?.hasVariance ?? false
   const hasEmptyStorageEvidence = evidenceFiles.length > 0 || evidenceReferences.length > 0
   const emptyStorageHandoverReady = Boolean(keyLockReference.trim() && initialCondition.trim() && hasEmptyStorageEvidence)
 
@@ -471,13 +628,13 @@ export default function StaffCheckInOperationsPanel({
   )
 
   const declaredIdentityDocument = handoverTarget?.identityDocumentNumber?.trim() || ""
+  const identityVerificationBlocked = !normalizeIdentityDocument(identityDocumentNumber)
   const identityMismatch = Boolean(
     declaredIdentityDocument &&
       identityDocumentNumber.trim() &&
       normalizeIdentityDocument(declaredIdentityDocument) !==
         normalizeIdentityDocument(identityDocumentNumber),
   )
-  const identityVerificationBlocked = !normalizeIdentityDocument(identityDocumentNumber)
 
   const refresh = () => setRefreshKey((value) => value + 1)
 
@@ -616,38 +773,54 @@ export default function StaffCheckInOperationsPanel({
     setError(null)
 
     const errors: Record<string, string> = {}
-    const parsedLength = Number(lengthCm)
-    const parsedWidth = Number(widthCm)
-    const parsedHeight = Number(heightCm)
-    const parsedWeight = Number(weightKg)
-    const parsedPackages = Number(packageCount)
-
-    if (!lengthCm.trim() || !Number.isFinite(parsedLength) || parsedLength <= 0) {
-      errors.lengthCm = "Chiều dài thực tế phải là số lớn hơn 0"
+    if (lineInventory) {
+      for (const { line, entry, comparison } of inventoryRows) {
+        const field = `inventory-${line.id}`
+        const { quantity, measured, needsNote } = comparison
+        if (!Number.isInteger(quantity) || quantity < 0 || quantity > 2147483647) {
+          errors[`${field}-quantity`] = "Nhập số kiện nguyên từ 0 trở lên"
+        }
+        if (quantity > 0 && (!measured || !Number.isFinite(comparison.volume))) {
+          errors[`${field}-measurements`] = "Nhập đủ kích thước và khối lượng thực tế của dòng hàng"
+        }
+        if (!entry.condition || (quantity === 0) !== (entry.condition === "NOT_PRESENT")) {
+          errors[`${field}-condition`] = "Chọn tình trạng phù hợp với số kiện thực tế"
+        }
+        if (needsNote && !entry.note.trim()) {
+          errors[`${field}-note`] = "Ghi chú lý do chênh lệch hoặc hư hỏng"
+        }
+        if (!entry.checked) {
+          errors[`${field}-checked`] = "Xác nhận đã đối chiếu dòng hàng"
+        }
+      }
+    } else {
+      const measurements = [
+        ["lengthCm", lengthCm, "Chiều dài"], ["widthCm", widthCm, "Chiều rộng"],
+        ["heightCm", heightCm, "Chiều cao"], ["weightKg", weightKg, "Khối lượng"],
+      ] as const
+      for (const [key, value, label] of measurements) {
+        if (!Number.isFinite(Number(value)) || Number(value) < 0.01) {
+          errors[key] = `${label} thực tế phải từ 0,01 trở lên`
+        }
+      }
+      if (!goodsCondition.trim()) {
+        errors.goodsCondition = "Vui lòng nhập tình trạng hàng hóa"
+      }
+      if (!checklist.conditionRecorded) {
+        errors.conditionRecorded = "Vui lòng đánh dấu đã ghi nhận tình trạng hàng hóa"
+      }
+      if (!Object.values(measurementChecks).every(Boolean)) {
+        errors.measurementChecks = "Vui lòng xác nhận đã đối chiếu số liệu"
+      }
     }
-    if (!widthCm.trim() || !Number.isFinite(parsedWidth) || parsedWidth <= 0) {
-      errors.widthCm = "Chiều rộng thực tế phải là số lớn hơn 0"
+    if (!packageCountValid) {
+      errors.packageCount = "Tổng số kiện thực tế phải là số nguyên từ 1 đến 2.147.483.647"
     }
-    if (!heightCm.trim() || !Number.isFinite(parsedHeight) || parsedHeight <= 0) {
-      errors.heightCm = "Chiều cao thực tế phải là số lớn hơn 0"
-    }
-    if (!weightKg.trim() || !Number.isFinite(parsedWeight) || parsedWeight <= 0) {
-      errors.weightKg = "Khối lượng thực tế phải là số lớn hơn 0"
-    }
-    if (!packageCount.trim() || !Number.isFinite(parsedPackages) || parsedPackages < 1) {
-      errors.packageCount = "Số kiện phải từ 1 trở lên"
-    }
-    if (!goodsCategory.trim()) {
-      errors.goodsCategory = "Vui lòng nhập loại hàng"
-    }
-    if (!goodsCondition.trim()) {
-      errors.goodsCondition = "Vui lòng nhập tình trạng hàng hóa"
-    }
-    if (!checklist.conditionRecorded) {
-      errors.conditionRecorded = "Vui lòng đánh dấu đã ghi nhận tình trạng hàng hóa"
-    }
-    if (!Object.values(measurementChecks).every(Boolean)) {
-      errors.measurementChecks = "Vui lòng tích xác nhận đã đối chiếu đủ số kiện, khối lượng, thể tích và kích thước"
+    if (!goodsCategory.trim()) errors.goodsCategory = "Vui lòng nhập loại hàng"
+    if (!initialCondition.trim()) errors.initialCondition = "Cần ghi nhận hiện trạng kho ở bước bàn giao"
+    if (!keyLockReference.trim()) errors.lockReference = "Cần ghi nhận mã ổ khóa hoặc chìa khóa ở bước bàn giao"
+    if ((!lineInventory || inventoryLinesComplete) && !allChecksComplete && !Object.keys(errors).length) {
+      errors.handoverChecklist = "Cần hoàn tất các bước xác nhận trước khi kiểm kê"
     }
     if (measurementVariance) {
       if (!varianceAccepted) {
@@ -657,7 +830,8 @@ export default function StaffCheckInOperationsPanel({
         errors.varianceReason = "Vui lòng nhập lý do chênh lệch khi hàng hóa khác đơn đặt"
       }
     }
-    if (!evidenceFiles.length && !evidenceReferences.length) {
+    const emptyStorageReferences = parseEmptyStorageHandover(handoverTarget?.readinessNote).evidenceReferences
+    if (!evidenceFiles.length && !evidenceReferences.some(reference => !emptyStorageReferences.includes(reference))) {
       errors.evidenceFiles = "Cần tải lên ít nhất 1 ảnh hoặc tệp PDF bằng chứng kiểm kê"
     }
 
@@ -697,22 +871,22 @@ export default function StaffCheckInOperationsPanel({
       }
 
       await completeCheckIn(handoverTarget.checkInId, {
-        checklist,
+        checklist: lineInventory ? { ...checklist, measurementVerified: true, conditionRecorded: true } : checklist,
 
         identityDocumentNumber: identityDocumentNumber.trim(),
 
         identityVerificationNote: verificationNotes.trim() || null,
 
         actualMeasurements: {
-          lengthCm: Number(lengthCm),
+          lengthCm: lineInventory ? actualDimensions[0] : Number(lengthCm),
 
-          widthCm: Number(widthCm),
+          widthCm: lineInventory ? actualDimensions[1] : Number(widthCm),
 
-          heightCm: Number(heightCm),
+          heightCm: lineInventory ? actualDimensions[2] : Number(heightCm),
 
-          weightKg: Number(weightKg),
+          weightKg: lineInventory ? actualWeight : Number(weightKg),
 
-          actualVolumeM3: Number(volumeM3),
+          actualVolumeM3: lineInventory ? actualVolume : Number(volumeM3),
 
           varianceAccepted: measurementVariance && varianceAccepted,
         },
@@ -721,9 +895,21 @@ export default function StaffCheckInOperationsPanel({
 
         initialUnitCondition: initialCondition.trim(),
 
-        goodsCondition: goodsCondition.trim(),
+        goodsCondition: lineInventory ? "Đã ghi nhận tình trạng theo từng dòng hàng" : goodsCondition.trim(),
 
-        packageCount: Number(packageCount),
+        packageCount: totalPackages,
+        inventoryLines: lineInventory ? inventoryRows.map(({ line, entry, comparison }) => ({
+          goodsItemId: line.id,
+          actualQuantity: comparison.quantity,
+          condition: entry.condition as CheckInInventoryLine["condition"],
+          note: entry.note.trim() || null,
+          measurements: comparison.quantity > 0 ? {
+            lengthCm: comparison.dimensions[0],
+            widthCm: comparison.dimensions[1],
+            heightCm: comparison.dimensions[2],
+            weightKg: comparison.weight,
+          } : null,
+        })) : [],
 
         goodsCategory: goodsCategory.trim(),
 
@@ -1011,7 +1197,16 @@ export default function StaffCheckInOperationsPanel({
 
     setVolumeM3(formatInputNumber(item.declaredGoodsVolumeM3))
 
-    setPackageCount(String(item.declaredPackageCount ?? 1))
+    const savedLines = item.handover?.inventoryLines ?? []
+    setInventoryDraft(Object.fromEntries(savedLines.map(line => [line.goodsItemId, {
+      quantity: String(line.actualQuantity), condition: line.condition, note: line.note ?? "",
+      lengthCm: formatInputNumber(line.measurements?.lengthCm),
+      widthCm: formatInputNumber(line.measurements?.widthCm),
+      heightCm: formatInputNumber(line.measurements?.heightCm),
+      weightKg: formatInputNumber(line.measurements?.weightKg),
+      checked: true,
+    }])))
+    setPackageCount(String(item.handover?.packageCount ?? (item.declaredGoodsLines?.length ? 0 : item.declaredPackageCount ?? 1)))
 
     setMeasurementChecks(emptyMeasurementChecks())
 
@@ -1311,6 +1506,7 @@ export default function StaffCheckInOperationsPanel({
         open={Boolean(handoverTarget)}
         onClose={closeHandover}
         title="Quy trình bàn giao, chuẩn bị và kiểm kê"
+        titleAdornment={<HandoverWorkflowHelp />}
         size="3xl"
       >
         {handoverTarget && (
@@ -1321,7 +1517,6 @@ export default function StaffCheckInOperationsPanel({
                 ['Khách hàng nhận kho', handoverTarget.customerName], ['Tên cơ sở', handoverTarget.facilityName || 'StorageHub'],
               ].map(([label, value]) => <div key={label}><dt className="text-xs text-stone-500">{label}</dt><dd className="mt-1 break-words font-semibold text-stone-900">{value || 'Chưa cập nhật'}</dd></div>)}
             </dl>
-            <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">Hoàn tất bàn giao kho trống sẽ chuyển sang chờ khách hàng xác nhận nhận kho. Thời gian chuẩn bị chỉ bắt đầu sau xác nhận của khách; kiểm kê thực hiện khi khách báo đã chuẩn bị xong.</p>
             {error && (
               <div role="alert" className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800 flex items-start gap-3 shadow-sm">
                 <svg className="h-5 w-5 text-red-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1442,7 +1637,14 @@ export default function StaffCheckInOperationsPanel({
                     <FilePreviewList files={contractFile ? [contractFile] : []} onRemove={() => { setContractFile(null); setConfirmedSetupTerms(null) }} disabled={submitting || isReviewingCompletedStep} />
                     {setupTermsKey && <label className="flex items-start gap-2 text-sm text-blue-950">
                       <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-amber-600" checked={confirmedSetupTerms === setupTermsKey} disabled={submitting || isReviewingCompletedStep || !contractFile || handoverTarget.setupEarlyExitFee == null} onChange={event => setConfirmedSetupTerms(event.target.checked ? setupTermsKey : null)} />
-                      <span>Đã đối chiếu hợp đồng đã ký có điều khoản phí trả kho trong thời gian chuẩn bị một lần {handoverTarget.setupEarlyExitFee == null ? '(chưa xác định, cần đối soát)' : `${handoverTarget.setupEarlyExitFee.toLocaleString('vi-VN')} đồng`}, đúng điều khoản khách đã chấp nhận khi đặt kho.</span>
+                      <span>
+                        Tôi đã kiểm tra hợp đồng đã ký và xác nhận khoản phí khớp với điều khoản khách đồng ý khi đặt kho.
+                        <span className="mt-1 block">
+                          {handoverTarget.setupEarlyExitFee == null
+                            ? 'Chưa xác định được mức phí trả kho trong thời gian chuẩn bị. Cần đối soát trước khi tiếp tục.'
+                            : <>Nếu khách trả kho trong thời gian chuẩn bị, khoản phí áp dụng một lần là <strong>{handoverTarget.setupEarlyExitFee.toLocaleString('vi-VN')} đồng</strong>.</>}
+                        </span>
+                      </span>
                     </label>}
                   </>
                 )}
@@ -1624,10 +1826,7 @@ export default function StaffCheckInOperationsPanel({
                 {handoverTarget.checkInStatus === "handover_pending_receipt" ? (
                   <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 pb-3">
-                      <div>
-                        <p className="font-bold text-base">Đang chờ khách hàng sẵn sàng bàn giao</p>
-                        <p className="mt-0.5 text-xs text-amber-800">Staff đã ghi nhận kho trống và mã ra vào. Chưa thể chuyển sang kiểm kê khi khách chưa xác nhận trên cổng khách hàng.</p>
-                      </div>
+                      <p className="font-bold text-base">Đang chờ khách hàng sẵn sàng bàn giao</p>
                       <span className="rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-bold text-amber-900">Chờ khách xác nhận</span>
                     </div>
                     <p className="mt-3 text-sm">Vui lòng chờ khách hàng nhấn <b>“Sẵn sàng bàn giao”</b>. Hệ thống sẽ tự cập nhật bước tiếp theo.</p>
@@ -1677,6 +1876,70 @@ export default function StaffCheckInOperationsPanel({
             {handoverStep === 6 && (
               <div className="space-y-4">
                 <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-950"><b>Kiểm kê hàng hóa</b><p className="mt-1 text-xs">Chỉ đối chiếu số kiện, khối lượng, thể tích, kích thước và tình trạng hàng hóa sau khi khách đã sắp xếp xong. Hiện trạng kho trống đã được ghi nhận ở bước bàn giao.</p>{handoverTarget.inventoryDueAt && <p className="mt-1 text-xs">Hạn kiểm kê: <b>{formatStaffDateTime(handoverTarget.inventoryDueAt)}</b></p>}</div>
+                {lineInventory ? (
+                  <div className="space-y-5">
+                    {inventoryRows.map(({ line, entry, comparison }, index) => {
+                      const absent = comparison.quantity === 0
+                      const errorKey = `inventory-${line.id}`
+                      return (
+                        <fieldset key={line.id} className="min-w-0 space-y-3 rounded-lg border border-stone-200 px-4 pb-4" disabled={isReviewingCompletedStep || submitting}>
+                          <legend className="max-w-full px-1">
+                            <span className="inline-block max-w-full break-words rounded-full bg-teal-100 px-3 py-1 text-sm font-semibold text-teal-950">
+                              {line.name || `Hàng hóa ${index + 1}`}
+                            </span>
+                          </legend>
+                          <p className="text-sm text-stone-600">
+                            Khai báo {line.quantity} kiện
+                            {line.lengthCm != null && line.widthCm != null && line.heightCm != null && ` · ${line.lengthCm} × ${line.widthCm} × ${line.heightCm} cm/kiện`}
+                            {line.weightPerPackageKg != null && ` · ${line.weightPerPackageKg} kg/kiện`}
+                          </p>
+                          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                            {inventoryDimensions.map(([field, label]) => (
+                              <Input key={field} label={label} type="number" min="0.01" step="any" value={absent ? "" : entry[field]} disabled={absent}
+                                onChange={event => updateInventoryLine(line, { [field]: event.target.value })} />
+                            ))}
+                            <Input label="Khối lượng cả dòng (kg)" type="number" min="0.01" step="any" value={absent ? "0" : entry.weightKg} disabled={absent}
+                              onChange={event => updateInventoryLine(line, { weightKg: event.target.value })} />
+                            <Input label="Thể tích cả dòng (m³)" value={absent ? "0" : formatVolume(comparison.volume)} readOnly />
+                            <Input label="Số kiện thực tế *" error={fieldErrors[`${errorKey}-quantity`]} type="number" min="0" step="1" value={entry.quantity} onChange={event => {
+                              const quantity = event.target.value
+                              const condition = quantity && Number(quantity) === 0 ? "NOT_PRESENT" : entry.condition === "NOT_PRESENT" ? "" : entry.condition
+                              updateInventoryLine(line, { quantity, condition })
+                            }} />
+                          </div>
+                          {fieldErrors[`${errorKey}-measurements`] && <p className="text-xs text-red-700">{fieldErrors[`${errorKey}-measurements`]}</p>}
+                          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                            {comparison.badges.map(({ label, matches }) => (
+                              <div key={label} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 px-3 py-2 text-sm">
+                                <b>{label}</b><ComparisonBadge matches={matches} />
+                              </div>
+                            ))}
+                          </div>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="space-y-1">
+                              <Select label="Tình trạng hàng hóa *" value={entry.condition} onChange={event =>
+                                updateInventoryLine(line, { condition: event.target.value as InventoryDraft["condition"] })}>
+                                <option value="">Chọn tình trạng</option>
+                                <option value="INTACT" disabled={absent}>Nguyên vẹn</option>
+                                <option value="DAMAGED" disabled={absent}>Có hư hỏng</option>
+                                <option value="NOT_PRESENT" disabled={!absent}>Không có kiện nào</option>
+                              </Select>
+                              {fieldErrors[`${errorKey}-condition`] && <p className="text-xs text-red-700">{fieldErrors[`${errorKey}-condition`]}</p>}
+                            </div>
+                            <Input label={comparison.needsNote ? "Ghi chú chênh lệch hoặc hư hỏng *" : "Ghi chú kiểm kê"} error={fieldErrors[`${errorKey}-note`]} value={entry.note} maxLength={1000}
+                              onChange={event => updateInventoryLine(line, { note: event.target.value })} />
+                          </div>
+                          <label className="flex items-center gap-2 text-sm">
+                            <input type="checkbox" checked={entry.checked} onChange={event => updateInventoryLine(line, { checked: event.target.checked })} />
+                            Đã đối chiếu số liệu và ghi nhận tình trạng *
+                          </label>
+                          {fieldErrors[`${errorKey}-checked`] && <p className="text-xs text-red-700">{fieldErrors[`${errorKey}-checked`]}</p>}
+                        </fieldset>
+                      )
+                    })}
+                    {fieldErrors.packageCount && <p className="text-sm text-red-700">{fieldErrors.packageCount}</p>}
+                  </div>
+                ) : (<>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   <Input
                     label="Dài thực tế (cm) *"
@@ -1781,6 +2044,7 @@ export default function StaffCheckInOperationsPanel({
                     )}
                   </div>
                 </div>}
+                </>)}
                 {measurementVariance && (
                   <div className={`space-y-3 rounded-lg border ${fieldErrors.varianceAccepted || fieldErrors.varianceReason ? 'border-red-300 bg-red-50/50' : 'border-amber-300 bg-amber-50'} p-3 text-sm`}>
                     <div>
@@ -1830,6 +2094,7 @@ export default function StaffCheckInOperationsPanel({
                       <p className="text-xs text-red-600 font-medium mt-1">{fieldErrors.initialCondition || fieldErrors.initialUnitCondition}</p>
                     )}
                   </div>
+                  {!lineInventory && (
                   <Input
                     label="Tình trạng hàng hóa *"
                     error={fieldErrors.goodsCondition}
@@ -1840,6 +2105,7 @@ export default function StaffCheckInOperationsPanel({
                       setGoodsCondition(event.target.value)
                     }}
                   />
+                  )}
                   <Input
                     label="Ghi chú kiểm kê"
                     error={fieldErrors.notes}
@@ -1851,6 +2117,7 @@ export default function StaffCheckInOperationsPanel({
                     }}
                   />
                 </div>
+                {!lineInventory && (
                 <div className="space-y-1">
                   <label className="flex items-center gap-2 text-sm cursor-pointer">
                     <input
@@ -1868,6 +2135,8 @@ export default function StaffCheckInOperationsPanel({
                     <p className="text-xs text-red-600 font-medium pl-6">{fieldErrors.conditionRecorded}</p>
                   )}
                 </div>
+                )}
+                {(fieldErrors.handoverChecklist || fieldErrors.lockReference) && <p className="text-sm text-red-700">{fieldErrors.handoverChecklist || fieldErrors.lockReference}</p>}
                 {!isReviewingCompletedStep && (
                   <div className="space-y-1">
                     <label className="block text-sm font-medium">
@@ -2037,13 +2306,7 @@ export default function StaffCheckInOperationsPanel({
                 Chưa thể chuyển sang kiểm kê hàng hóa ở bước này.
               </p>
             </div>
-            <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs leading-5 text-stone-600">
-              Khi khách xác nhận, hệ thống sẽ tự đóng thông báo này và chuyển hồ sơ sang thời gian chuẩn bị. Sau khi khách sắp xếp hàng xong và nhấn “Sẵn sàng để kiểm kê”, Staff mới có thể mở bước kiểm kê.
-            </div>
             <div className="flex flex-wrap justify-end gap-2">
-              <Button variant="outline" onClick={() => void refreshHandoverTarget()} disabled={submitting}>
-                Kiểm tra trạng thái
-              </Button>
               <Button onClick={() => setCustomerWaitTarget(null)} disabled={submitting}>
                 Đóng thông báo
               </Button>
@@ -2248,6 +2511,23 @@ export default function StaffCheckInOperationsPanel({
       >
         {detailTarget?.handover && (
           <div className="space-y-4 text-sm">
+            {!!detailTarget.handover.inventoryLines?.length && (
+              <section className="divide-y divide-stone-200 rounded-lg border border-stone-200">
+                <h3 className="px-3 py-2 font-semibold">Kết quả kiểm kê từng dòng hàng</h3>
+                {detailTarget.handover.inventoryLines.map((line, index) => {
+                  const declared = detailTarget.declaredGoodsLines?.find(item => item.id === line.goodsItemId)
+                  const condition = { INTACT: "Nguyên vẹn", DAMAGED: "Có hư hỏng", NOT_PRESENT: "Không có kiện nào" }[line.condition]
+                  return (
+                    <div key={line.goodsItemId} className="space-y-1 p-3">
+                      <p className="font-medium">{declared?.name || `Hàng hóa ${index + 1}`}{declared?.code && ` · ${declared.code}`}</p>
+                      <p className="text-stone-700">{declared && `Khai báo ${declared.quantity} kiện · `}Thực tế {line.actualQuantity} kiện · {condition}</p>
+                      {line.measurements && <p className="text-stone-700">{line.measurements.lengthCm} × {line.measurements.widthCm} × {line.measurements.heightCm} cm/kiện · {line.measurements.weightKg} kg cả dòng</p>}
+                      {line.note && <p className="break-words text-stone-700">{line.note}</p>}
+                    </div>
+                  )
+                })}
+              </section>
+            )}
             <div className="rounded-lg bg-stone-50 p-3">
               <dl className="grid gap-3 sm:grid-cols-3">
                 <div><dt className="text-xs text-stone-500">Mã đơn giữ kho</dt><dd className="mt-1 font-semibold">{detailTarget.reservationCode}</dd></div>
