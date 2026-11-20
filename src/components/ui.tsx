@@ -124,7 +124,7 @@ export function Tbody({ children }: { children: ReactNode }) {
 }
 
 export function Th({ children, className = '' }: { children?: ReactNode; className?: string }) {
-  return <th className={`px-4 py-3 font-mono text-[11px] font-semibold text-stone-500 uppercase tracking-[.06em] ${className}`}>{children}</th>
+  return <th className={`px-4 py-3 text-[11px] font-semibold text-stone-500 uppercase tracking-wider ${className}`}>{children}</th>
 }
 
 export function Td({ children, className = '', ...rest }: TdHTMLAttributes<HTMLTableCellElement>) {

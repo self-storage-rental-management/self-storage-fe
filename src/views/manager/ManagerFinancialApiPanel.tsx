@@ -52,10 +52,10 @@ const statusVariants: Record<ManagerPaymentHistoryStatus, string> = {
 
 function paymentMethodLabel(method: string | null) {
   if (!method) return 'Chưa ghi nhận'
-  const normalized = method.toUpperCase()
-  if (normalized === 'VNPAY') return 'VNPay'
-  if (normalized === 'CASH') return 'Tiền mặt'
-  if (normalized === 'BANK_TRANSFER') return 'Chuyển khoản'
+  const normalized = method.trim().toUpperCase()
+  if (normalized === 'VNPAY' || normalized === 'ONLINE_GATEWAY' || normalized === 'NCB' || normalized.startsWith('VNPAY')) return 'VNPay'
+  if (normalized === 'CASH' || normalized.includes('TIỀN MẶT')) return 'Tiền mặt'
+  if (normalized === 'BANK_TRANSFER' || normalized.includes('CHUYỂN KHOẢN')) return 'Chuyển khoản'
   return method
 }
 

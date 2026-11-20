@@ -1280,7 +1280,7 @@ setSavingProfile(true)
 
             {isCustomer && (
               <Card className="sticky top-6 self-start p-5 bg-[#fbfaf6] border-stone-200">
-                <h3 className="text-xs font-mono font-semibold tracking-wider text-stone-600 mb-2">
+                <h3 className="text-xs font-semibold tracking-wider text-stone-600 mb-2">
                   Bảo vệ tài khoản khách hàng
                 </h3>
                 <p className="text-xs text-stone-600 leading-relaxed">Hồ sơ khách hàng được bảo mật theo tiêu chuẩn StorageHub. Bạn có thể đổi mật khẩu trực tiếp ở tab Bảo mật.</p>
@@ -1488,7 +1488,7 @@ setSavingProfile(true)
 
           <div className="mt-6 pt-4 border-t border-stone-100 flex items-center justify-between text-[11px] text-stone-600">
             <span>Tùy chọn được lưu tự động theo tài khoản của bạn trên thiết bị này</span>
-            <span className="font-mono text-emerald-600 font-semibold flex items-center gap-1">
+            <span className="text-emerald-600 font-semibold flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               Tự động lưu
             </span>
