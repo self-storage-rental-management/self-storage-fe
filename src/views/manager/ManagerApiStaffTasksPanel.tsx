@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Badge, Button, Card, Input, Modal, SectionHeader, Select, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import { getAuthenticatedActor } from '../../services/authApi'
+import { vietnamDateInput } from '../../utils/vietnamTime'
 import { ApiClientError } from '../../services/apiClient'
 import { managerDisplayError, managerDisplayText } from './managerPresentation'
 import { managerStatusLabel } from './managerI18n'
@@ -70,7 +71,9 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
   const [storageUnitId, setStorageUnitId] = useState('')
   const [assignedStaffId, setAssignedStaffId] = useState('')
   const [priority, setPriority] = useState<MaintenanceTaskPriority>('medium')
-  const [dueAt, setDueAt] = useState(new Date(Date.now() + 86_400_000).toISOString().slice(0, 10))
+  const [dueAt, setDueAt] = useState(() => vietnamDateInput(Date.now() + 86_400_000))
+  const earliestDueDate = vietnamDateInput()
+  const dueDateInPast = Boolean(dueAt && dueAt < earliestDueDate)
   const [saving, setSaving] = useState(false)
   const [cancelTarget, setCancelTarget] = useState<MaintenanceTaskApi | null>(null)
   const [cancelReason, setCancelReason] = useState('')
@@ -149,11 +152,15 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
     setStorageUnitId('')
     setAssignedStaffId('')
     setPriority('medium')
-    setDueAt(new Date(Date.now() + 86_400_000).toISOString().slice(0, 10))
+    setDueAt(vietnamDateInput(Date.now() + 86_400_000))
   }
 
   const createTask = async () => {
     if (!title.trim() || !reason.trim() || !storageUnitId || !assignedStaffId || !dueAt) return
+    if (dueAt < vietnamDateInput()) {
+      showToast('Hạn xử lý phải từ hôm nay trở đi.')
+      return
+    }
     setSaving(true)
     try {
       await createMaintenanceTask({
@@ -320,8 +327,14 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
           <Input label="Lý do / nội dung xử lý" value={reason} onChange={event => setReason(event.target.value)} maxLength={2000} />
           <Select label="Gian kho" value={storageUnitId} onChange={event => setStorageUnitId(event.target.value)}><option value="">Chọn gian kho</option>{units.map(unit => <option key={unit.id} value={unit.id}>{unit.code} · {managerStatusLabel(unit.status, 'vi')}</option>)}</Select>
           <Select label="Nhân viên phụ trách" value={assignedStaffId} onChange={event => setAssignedStaffId(event.target.value)}><option value="">Chọn nhân viên</option>{staff.map(member => <option key={member.id} value={member.id}>{member.fullName}</option>)}</Select>
-          <div className="grid gap-3 sm:grid-cols-2"><Select label="Mức ưu tiên" value={priority} onChange={event => setPriority(event.target.value as MaintenanceTaskPriority)}><option value="low">Thấp</option><option value="medium">Trung bình</option><option value="high">Cao</option></Select><Input label="Hạn xử lý" type="date" value={dueAt} onChange={event => setDueAt(event.target.value)} /></div>
-          <div className="flex justify-end gap-2"><Button variant="outline" disabled={saving} onClick={() => setModalOpen(false)}>Đóng</Button><Button disabled={saving || !title.trim() || !reason.trim() || !storageUnitId || !assignedStaffId || !dueAt} onClick={() => void createTask()}>{saving ? 'Đang tạo…' : 'Tạo & giao nhiệm vụ'}</Button></div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Select label="Mức ưu tiên" value={priority} onChange={event => setPriority(event.target.value as MaintenanceTaskPriority)}><option value="low">Thấp</option><option value="medium">Trung bình</option><option value="high">Cao</option></Select>
+            <div className="space-y-1">
+              <Input label="Hạn xử lý" type="date" min={earliestDueDate} value={dueAt} aria-invalid={dueDateInPast} aria-describedby={dueDateInPast ? 'maintenance-due-date-error' : undefined} onChange={event => setDueAt(event.target.value)} />
+              {dueDateInPast && <p id="maintenance-due-date-error" className="text-xs text-red-700">Hạn xử lý phải từ hôm nay trở đi.</p>}
+            </div>
+          </div>
+          <div className="flex justify-end gap-2"><Button variant="outline" disabled={saving} onClick={() => setModalOpen(false)}>Đóng</Button><Button disabled={saving || !title.trim() || !reason.trim() || !storageUnitId || !assignedStaffId || !dueAt || dueDateInPast} onClick={() => void createTask()}>{saving ? 'Đang tạo…' : 'Tạo & giao nhiệm vụ'}</Button></div>
         </div>
       </Modal>
 
