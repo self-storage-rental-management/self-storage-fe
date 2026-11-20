@@ -121,9 +121,8 @@ export function CustomerNoCompatibleWarehouse({ check, goodsItems = [], maxSuppo
       <h5 className="font-semibold">Lý do không thể lưu trữ</h5>
       <p className="mt-2 leading-5">{issue}</p>
     </div>
-    <div className="grid gap-2 sm:grid-cols-2">
-      <Button type="button" onClick={onEditGoods}>Chỉnh sửa thông tin hàng hóa</Button>
-      <Button type="button" variant="outline" onClick={onSupport}>Liên hệ tư vấn</Button>
+    <div>
+      <Button type="button" onClick={onEditGoods} className="w-full sm:w-auto">Chỉnh sửa thông tin hàng hóa</Button>
     </div>
   </section>
 }
@@ -165,9 +164,8 @@ export function CustomerNoVacantWarehouse({ currentName, currentUnitTypeId, faci
         </div>
       }) : <p className="py-3 text-xs text-stone-600">Chưa nhận được đủ thông tin sức chứa của các loại kho.</p>}
     </div>
-    <div className="grid gap-2 sm:grid-cols-2">
-      <Button type="button" onClick={onChangeRental}>Thay đổi thời gian thuê</Button>
-      <Button type="button" variant="outline" onClick={onSupport}>Liên hệ tư vấn</Button>
+    <div>
+      <Button type="button" onClick={onChangeRental} className="w-full sm:w-auto">Thay đổi thời gian thuê</Button>
     </div>
   </section>
 }
