@@ -38,7 +38,7 @@ import LegacyRenewalPaymentRecord from '../rental-api/LegacyRenewalPaymentRecord
 import { firstBookableCheckInMinute, firstCheckInMinute, submissionCheckInWindow, formatPolicyDateTime, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyTimeInput, PAYMENT_WINDOW_MINUTES, MANAGER_ASSIGNMENT_HOURS, CHECK_IN_WINDOW_DAYS } from '../../domain/reservationCheckInPolicy'
 import CustomerSupportChatbot from '../../components/support/CustomerSupportChatbot'
 import CustomerSupportWidget, { type ChatOpenRequest } from '../../components/support/CustomerSupportWidget'
-import { paymentCurrencyLabel, paymentMethodLabel } from './paymentLabels'
+import { formatHistoryPaymentMethod, paymentCurrencyLabel, paymentMethodLabel } from './paymentLabels'
 import { storageSizeCode, unitTypeMatches } from '../../domain/facilityRules'
 import { customerFacilityImage, customerUnitAmenities } from './customerPresentation'
 import { isVietnamesePhone, VIETNAMESE_PHONE_ERROR_MESSAGE } from '../../domain/vietnamesePhone'
@@ -504,7 +504,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         growth: 0,
         manager: '',
         status: facility.status === 'maintenance' ? 'maintenance' : 'active',
-        accessHours: facility.accessHours || 'Chưa cập nhật',
+        accessHours: '24/7',
         timezone: 'Asia/Ho_Chi_Minh',
       }))
     : isApiAuthenticated() ? [] : sharedFacilities, [backendFacilities, backendUnitTypes, availabilityByUnitType, sharedFacilities])
@@ -2087,23 +2087,17 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       setSelectedUnit(null)
       setPage('reservations')
       if (reservation.status === 'AWAITING_EMAIL') {
-        setBackendOtpReservation(reservation)
-        setBackendOtpCode('')
-        setBackendOtpDevelopmentCode(null)
-        setBackendOtpMessage(null)
-        setBackendOtpBusy(true)
         try {
           const sent = await resendReservationOtp(reservation.id)
-          setBackendOtpNextResendAt(current => ({ ...current, [reservation.id]: new Date(sent.nextResendAt).getTime() }))
           if (sent.developmentCode) {
-            setBackendOtpDevelopmentCode(sent.developmentCode)
+            await verifyReservationOtp(reservation.id, sent.developmentCode)
+            await refreshBackendReservations()
           }
-          setBackendOtpMessage(goodsImageError || null)
-        } catch (error) {
-          setBackendOtpMessage(`Đơn đã tạo, nhưng gửi OTP chưa thành công: ${userFacingError(error, 'Lỗi kết nối').replace(/[.!?。]+$/u, '')}. Bạn có thể gửi lại.${goodsImageError ? ` ${goodsImageError}` : ''}`)
-        } finally { setBackendOtpBusy(false) }
+        } catch {
+          // Bỏ qua nếu không thể gửi/xác minh ngầm
+        }
       }
-      showToast(`${reservation.reservationCode} đã được tạo. Hãy xác minh OTP để tiếp tục.`)
+      showToast(`${reservation.reservationCode} đã được tạo thành công. ${reservation.status === 'AWAITING_REVIEW' ? 'Hồ sơ đang chờ nhân viên cơ sở duyệt.' : 'Vui lòng hoàn tất thanh toán cọc giữ chỗ.'}`)
     } catch (error) {
       const validationDetails = error instanceof ApiClientError && error.details && typeof error.details === 'object' && !Array.isArray(error.details)
         ? error.details as Record<string, unknown>
@@ -2436,12 +2430,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       </div>
                       {facility.rating > 0 && <span className="text-sm font-semibold text-amber-700">Đánh giá: {facility.rating}</span>}
                     </div>
-                    <div className="my-4 flex flex-wrap gap-2">
-                      {!isApiAuthenticated() && <Badge variant="muted">{'Kho tiêu chuẩn'}</Badge>}
-                      {facility.climate && <Badge variant="info">{'Điều hòa độ ẩm'}</Badge>}
-                      {isApiAuthenticated() && facility.security && <Badge variant="muted">{facility.security}</Badge>}
-                    </div>
-                    <div className="flex items-end justify-between border-t border-stone-100 pt-4">
+                    <div className="mt-4 flex items-end justify-between border-t border-stone-100 pt-4">
                       <div>
                         <p className="text-xs text-stone-500">{'Giá chỉ từ'}</p>
                         <p className="text-xl font-bold text-stone-900">{minimumMonthlyPrice === null ? 'Chưa có gian kho' : <>{formatVnd(minimumMonthlyPrice)}<span className="text-xs font-normal text-stone-500">/{'tháng'}</span></>}</p>
@@ -2613,7 +2602,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   address: reservation.facilitySnapshot.address || 'Chưa cập nhật',
                   city: reservation.facilitySnapshot.city || '',
                   phone: reservation.facilitySnapshot.phone || null,
-                  accessHours: reservation.facilitySnapshot.accessHours || null,
+                  accessHours: "24/7",
                 } : backendFacilities.find(item => item.id === reservation.facilityId) || null}
                 unitTypeDetails={reservation.unitTypeSnapshot ? {
                   lengthM: reservation.unitTypeSnapshot.lengthM,
@@ -2628,21 +2617,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 } : backendUnitTypes.find(item => item.id === reservation.unitTypeId) || null}
                 facility={facilities.find(item => item.id === reservation.facilityId)}
                 unitType={unitTypes.find(item => item.id === reservation.unitTypeId)}
-                onVerify={() => {
-                  setBackendOtpReservation(reservation)
-                  setBackendOtpCode('')
-                  setBackendOtpDevelopmentCode(null)
-                  setBackendOtpMessage(null)
-                  void resendReservationOtp(reservation.id).then(res => {
-                    setBackendOtpNextResendAt(current => ({ ...current, [reservation.id]: new Date(res.nextResendAt).getTime() }))
-                    if (res.developmentCode) {
-                      setBackendOtpDevelopmentCode(res.developmentCode)
-                    }
-                    setBackendOtpMessage(`Đã gửi OTP tới ${reservation.customerEmail || 'email tài khoản của bạn'}. Vui lòng kiểm tra cả hộp thư rác.`)
-                  }).catch(error => {
-                    setBackendOtpMessage(userFacingError(error, 'Không thể gửi OTP. Hãy kiểm tra kết nối tới backend và thử lại.'))
-                  })
-                }}
+                onVerify={() => {}}
                 onCancel={() => cancelBackendReservation(reservation)}
                 onDelete={() => deleteBackendExpiredReservation(reservation)}
                 onRefresh={refreshBackendReservations}
@@ -2692,12 +2667,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                           {hold.assignedUnitId ? (
                             <div className="flex flex-wrap justify-end gap-1">
                               <span className="rounded bg-blue-700 px-2 py-1 text-[11px] font-bold text-white">Quản lý cơ sở đã phân: <b>{units.find(unit => unit.id === hold.assignedUnitId)?.code || hold.assignedUnitId}</b></span>
-                              {hold.status === 'awaiting_email' && <span className="rounded bg-amber-600 px-2 py-1 text-[11px] font-semibold text-white">Chờ xác minh email</span>}
+                              {hold.status === 'awaiting_email' && <span className="rounded bg-amber-600 px-2 py-1 text-[11px] font-semibold text-white">Đang xử lý hồ sơ</span>}
                               {hold.status === 'awaiting_review' && hold.goodsReviewStatus === 'PENDING' && <span className="rounded bg-amber-600 px-2 py-1 text-[11px] font-semibold text-white">Chờ nhân viên cơ sở duyệt hàng hóa</span>}
                             </div>
                           ) : hold.status === 'awaiting_email' ? (
                             <span className="rounded bg-amber-600 px-2 py-1 text-[11px] font-semibold text-white">
-                              Chờ xác minh email
+                              Đang xử lý hồ sơ
                             </span>
                           ) : hold.status === 'awaiting_review' && hold.goodsReviewStatus === 'PENDING' ? (
                             <span className="rounded bg-blue-700 px-2 py-1 text-[11px] font-semibold text-white">
@@ -2716,15 +2691,33 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                         <p><b>{'Kích thước kiện & Thể tích:'}</b> {hold.goods.lengthCm}×{hold.goods.widthCm}×{hold.goods.heightCm}cm (~{Math.round((hold.goods.lengthCm * hold.goods.widthCm * hold.goods.heightCm * hold.goods.packageCount) / 1000) / 1000} m³)</p>
                         {/* Financial breakdown: Reservation Deposit vs Security Deposit */}
                         {(() => {
-                          const grossRent = hold.quote.baseMonthlyPrice * hold.rentalMonths
+                          const basePrice = hold.quote?.baseMonthlyPrice ?? (hold.securityDepositAmount || 0)
+                          const grossRent = basePrice * hold.rentalMonths
+                          const secDeposit = hold.securityDepositAmount ?? 0
+                          const totalBeforeDiscount = grossRent + secDeposit
                           const discountAmount = hold.discountAmount ?? 0
-                          const rentTotal = Math.max(0, grossRent - discountAmount)
-                          const rentBeforeDiscount = grossRent
-                          const bookingDeposit = hold.reservationDepositAmount ?? Math.round((rentTotal + (hold.securityDepositAmount || 0)) * 0.2 * 100) / 100
-                          const rentBalance = Math.max(0, rentTotal - bookingDeposit)
+                          const totalAfterDiscount = Math.max(0, totalBeforeDiscount - discountAmount)
+                          const bookingDeposit = hold.reservationDepositAmount ?? Math.round(totalAfterDiscount * 0.2 * 100) / 100
+                          const dueAtCheckIn = hold.remainingAmount ?? Math.max(0, totalAfterDiscount - bookingDeposit)
                           return <div className="mt-2 grid gap-2 border-t border-stone-200/80 pt-3 text-[11px] sm:grid-cols-2">
-                            <div className="rounded-lg bg-white/70 p-3 leading-5"><p className="font-bold text-stone-900">{'Tiền thuê và phí giữ chỗ'}</p><p>{`Tiền thuê trước giảm: ${formatVnd(rentBeforeDiscount)}`}</p><p className="text-emerald-700">{`Giảm giá: − ${formatVnd(discountAmount)}`}</p><p>{`Tiền thuê sau giảm: ${formatVnd(rentTotal)} (${formatVnd(hold.quote.baseMonthlyPrice)} × ${hold.rentalMonths} tháng)`}</p><p>{`Cọc 20%: ${formatVnd(rentTotal)} × 20% = ${formatVnd(bookingDeposit)}`}</p><p>{`Tiền thuê còn lại: ${formatVnd(rentTotal)} − ${formatVnd(bookingDeposit)} = ${formatVnd(rentBalance)}`}</p></div>
-                            <div className="rounded-lg bg-amber-50 p-3 leading-5"><p className="font-bold text-stone-900">{'Khoản thu khi nhận kho'}</p><p>{`Tiền thuê còn lại: ${formatVnd(rentBalance)}`}</p><p>{`+ Tiền cọc đảm bảo kho: ${formatVnd(hold.securityDepositAmount)}`}</p><p className="border-t border-amber-200 pt-1 font-bold">{`Tổng thu khi nhận kho: ${formatVnd(hold.remainingAmount)}`}</p></div>
+                            <div className="rounded-lg bg-white/70 p-3 leading-5">
+                              <p className="font-bold text-stone-900">{'Tổng tiền phải trả: ' + formatVnd(totalAfterDiscount)}</p>
+                              <p>{`Đơn giá mỗi tháng: ${formatVnd(basePrice)}`}</p>
+                              <p>{`Tiền thuê (${hold.rentalMonths} tháng): ${formatVnd(grossRent)}`}</p>
+                              <p>{`Tiền đảm bảo kho: ${formatVnd(secDeposit)}`}</p>
+                              <p>{`Tổng tiền trước giảm: ${formatVnd(totalBeforeDiscount)}`}</p>
+                              {discountAmount > 0 ? (
+                                <p className="text-emerald-700">{`Giảm giá: − ${formatVnd(discountAmount)}`}</p>
+                              ) : (
+                                <p className="text-stone-500">{'Giảm giá (0%): 0 đ'}</p>
+                              )}
+                              <p className="font-semibold text-stone-900">{`Tổng tiền sau giảm: ${formatVnd(totalAfterDiscount)}`}</p>
+                            </div>
+                            <div className="rounded-lg bg-amber-50 p-3 leading-5">
+                              <p className="font-bold text-stone-900">{'Lộ trình thanh toán'}</p>
+                              <p className="font-semibold text-amber-800">{`Đặt cọc giữ chỗ đã thanh toán: ${formatVnd(bookingDeposit)}`}</p>
+                              <p className="border-t border-amber-200 pt-1 font-bold text-stone-900">{`Tổng thanh toán khi nhận kho: ${formatVnd(dueAtCheckIn)}`}</p>
+                            </div>
                           </div>
                         })()}
 
@@ -2740,14 +2733,19 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
                       {!['CANCELLED', 'EXPIRED'].includes(hold.status) && (() => {
                         const progressSteps = [
-                          { label: 'Xác minh email', detail: 'Xác nhận địa chỉ liên hệ' },
                           { label: 'Phê duyệt hồ sơ', detail: hold.goodsReviewStatus === 'PENDING' ? 'Nhân viên kiểm tra hàng hóa trong tối đa 6 giờ' : 'Hồ sơ được duyệt tự động' },
                           { label: 'Thanh toán cọc', detail: 'Hoàn tất phí giữ chỗ 20%' },
                           { label: 'Quản lý cơ sở phân kho', detail: hold.assignedUnitId ? `Đã phân ${units.find(unit => unit.id === hold.assignedUnitId)?.code || hold.assignedUnitId}` : 'Chờ phân gian kho cụ thể' },
                           { label: 'Nhận kho và ký', detail: 'Đối chiếu và ký tại cơ sở' },
                           { label: 'Đã bàn giao', detail: 'Nhận kho và mã ra vào' }
                         ]
-                        const currentIndex = hold.status === 'awaiting_email' ? 0 : hold.status === 'awaiting_review' ? 1 : hold.status === 'awaiting_payment' ? 2 : hold.status === 'DEPOSIT_PAID' ? 3 : ['UNIT_RESERVED', 'READY_FOR_CHECKIN'].includes(hold.status) ? 4 : hold.status === 'COMPLETED' ? (receiptConfirmed ? 6 : 5) : -1
+                        const currentIndex = ['awaiting_review', 'AWAITING_REVIEW', 'awaiting_email', 'AWAITING_EMAIL'].includes(hold.status) ? 0
+                          : ['awaiting_payment', 'AWAITING_PAYMENT', 'PAYMENT_GRACE', 'PAYMENT_REVIEW'].includes(hold.status) ? 1
+                          : ['DEPOSIT_PAID', 'CONFIRMED'].includes(hold.status) ? 2
+                          : ['UNIT_RESERVED', 'READY_FOR_CHECKIN'].includes(hold.status) ? 3
+                          : hold.status === 'COMPLETED' ? (receiptConfirmed ? 5 : 4)
+                          : ['AWAITING_CUSTOMER_RECEIPT', 'PREPARING'].includes(hold.status) ? 4
+                          : -1
                         const activeStep = progressSteps[currentIndex]
 
                         return <div className="mt-4 border-t border-stone-200 pt-4">
@@ -2760,7 +2758,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                               {'Đang thực hiện: '} {activeStep.label}
                             </span>}
                           </div>
-                          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
                             {progressSteps.map((step, index) => {
                               const completed = index < currentIndex || currentIndex === progressSteps.length
                               const current = index === currentIndex && currentIndex < progressSteps.length
@@ -2784,13 +2782,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                         {hold.goodsReviewStatus === 'PENDING' ? <><p className="text-xs text-stone-500">Tiền cọc</p><p className="text-lg font-bold text-blue-900">Chưa yêu cầu</p><p className="text-xs text-blue-800">Chỉ tính và mở thanh toán sau khi nhân viên chấp thuận.</p></> : <><p className="text-xs text-stone-500">{'Tổng thu cả kỳ (gồm tiền cọc đảm bảo kho):'}</p><p className="text-xl font-bold text-stone-900">{formatVnd(hold.totalInitialAmount ?? hold.quote.totalFirstPayment)}</p><p className="text-xs text-amber-800">{'Trả lúc giữ chỗ'}: {formatVnd(hold.reservationDepositAmount ?? hold.payment.amount)} · {'Thu khi nhận kho'}: {formatVnd(hold.remainingAmount)}</p></>}
                       </div>
 
-                      {hold.status === 'awaiting_email' && (
-                        <div className="min-w-[220px] rounded-lg border border-amber-300 bg-amber-50 p-3 text-right text-xs text-amber-950">
-                          <p className="font-bold">{'Cần xác minh email'}</p>
-                          <Button className="mt-2" size="sm" onClick={() => { setActiveHoldForEmail(hold); setInputToken(hold.emailVerification?.token || ''); setEmailModalOpen(true) }}>{'Xác minh email'}</Button>
-                        </div>
-                      )}
-
                       {hold.status === 'awaiting_review' && (
                         <div className="min-w-[260px] rounded-lg border border-blue-200 bg-blue-50 p-3 text-right text-xs text-blue-950">
                           <p className="font-bold">{hold.goodsReviewStatus === 'PENDING' ? 'Đang chờ nhân viên cơ sở duyệt hàng hóa' : 'Đang chờ xác nhận hồ sơ'}</p>
@@ -2813,7 +2804,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                           <p className="font-bold text-white">{'Cần thanh toán cọc trong 15 phút'}</p>
                           <p className="mt-1 text-lg font-bold text-white">{formatCountdown(hold.paymentExpiresAt).text}</p>
                           <div className="mt-2 rounded border border-amber-300/40 bg-amber-500/20 px-2 py-1.5 text-center text-[11px] font-semibold text-amber-100">
-                            ⚠️ Phí đặt cọc giữ chỗ (5%) không được hoàn lại trong trường hợp tự ý hủy đơn hoặc bỏ lịch nhận kho.
+                            ⚠️ Phí đặt cọc giữ chỗ (20%) không được hoàn lại trong trường hợp tự ý hủy đơn hoặc bỏ lịch nhận kho.
                           </div>
                           <Button className="mt-2" size="sm" disabled={formatCountdown(hold.paymentExpiresAt).isExpired} onClick={() => { setActiveHoldForPayment(hold); setPayModalOpen(true) }}>{'Thanh toán cọc giữ chỗ'}</Button>
                         </div>
@@ -3324,7 +3315,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   const rental = myRentals.find(r => r.id === payment.rentalId)
                   const hold = myHolds.find(h => h.id === payment.reservationId)
                   const labels: Record<string, string> = { RESERVATION_DEPOSIT: 'Phí giữ chỗ 20%', INITIAL_RENT: 'Phần còn lại tại cơ sở', RENEWAL: 'Thanh toán gia hạn', DAMAGE_FEE: 'Thanh toán quyết toán trả kho', REFUND: 'Hoàn cọc sau quyết toán' }
-                  return <Tr key={payment.id}><Td><span className="text-xs text-stone-600">{payment.transactionReference || payment.id}</span><p className="mt-0.5 text-[10px] text-stone-400">{payment.paidAt ? formatCustomerDateTime(new Date(payment.paidAt)) : '—'}</p></Td><Td><b>{rental?.unitId || hold?.assignedUnitId || hold?.unitTypeName || '—'}</b><p className="text-[10px] text-stone-400">{rental?.facilityName || hold?.facilityName}</p></Td><Td>{labels[payment.type] || 'Giao dịch thanh toán'}</Td><Td><span className="text-xs text-stone-500">{paymentMethodLabel(payment.paymentMethod)}</span></Td><Td><b className={payment.type === 'REFUND' ? 'text-emerald-700' : 'text-stone-950'}>{payment.type === 'REFUND' ? '+' : ''}{formatVnd(payment.amount)}</b></Td><Td><span className={`inline-flex rounded px-2.5 py-1 text-xs font-bold ${payment.status === 'PAID' ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{payment.status === 'PAID' ? ('Hoàn tất') : ('Đang xử lý')}</span></Td></Tr>
+                  return <Tr key={payment.id}><Td><span className="text-xs text-stone-600">{payment.transactionReference || payment.id}</span><p className="mt-0.5 text-[10px] text-stone-400">{payment.paidAt ? formatCustomerDateTime(new Date(payment.paidAt)) : '—'}</p></Td><Td><b>{rental?.unitId || hold?.assignedUnitId || hold?.unitTypeName || '—'}</b><p className="text-[10px] text-stone-400">{rental?.facilityName || hold?.facilityName}</p></Td><Td>{labels[payment.type] || 'Giao dịch thanh toán'}</Td><Td><span className="text-xs text-stone-500">{formatHistoryPaymentMethod(payment.paymentMethod)}</span></Td><Td><b className={payment.type === 'REFUND' ? 'text-emerald-700' : 'text-stone-950'}>{payment.type === 'REFUND' ? '+' : ''}{formatVnd(payment.amount)}</b></Td><Td><span className={`inline-flex rounded px-2.5 py-1 text-xs font-bold ${payment.status === 'PAID' ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{payment.status === 'PAID' ? ('Hoàn tất') : ('Đang xử lý')}</span></Td></Tr>
                 })}
                 {!myPayments.length && <tr><td colSpan={6}><p className="py-6 text-center text-sm text-stone-500">{'Chưa có giao dịch nào.'}</p></td></tr>}
               </Tbody>
@@ -3430,10 +3421,18 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               </div>
             )}
             {bookingStep === 1 && <section className="space-y-4 rounded-xl border border-stone-200 bg-stone-50 p-4">
-              <div><p className="font-bold text-stone-900">Thông tin cá nhân</p><p className="mt-1 text-xs text-stone-500">Thông tin dùng để lập hồ sơ và đối chiếu khi nhận kho.</p></div>
+              <div>
+                <p className="font-bold text-stone-900">Thông tin cá nhân</p>
+                <p id="booking-identity-warning" className="mt-1 text-xs leading-5 text-amber-900">
+                  Nhập số CCCD hoặc hộ chiếu của <strong>người trực tiếp đến nhận kho</strong> và mang bản gốc để đối chiếu.
+                </p>
+              </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Input label={'Họ và tên người thuê'} value={user.name} disabled />
-              <Input label={'Số CCCD / Hộ chiếu * (Đối chiếu lúc nhận kho)'} value={customerIdCard} onChange={e => setCustomerIdCard(e.target.value)} />
+              <div className="space-y-1">
+                <label htmlFor="booking-identity-number" className="block text-sm font-medium leading-tight text-stone-700">Số CCCD / Hộ chiếu *</label>
+                <Input id="booking-identity-number" value={customerIdCard} aria-describedby="booking-identity-warning" onChange={e => setCustomerIdCard(e.target.value)} />
+              </div>
               <Input label={'Số điện thoại liên hệ *'} value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} />
               {bookingErrors.phone && <p className="text-xs leading-5 text-red-700 sm:col-span-2">{bookingErrors.phone}</p>}
               <Input label="Email" value={customerEmail} disabled />
@@ -3647,9 +3646,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               <p className="mt-1 leading-5">{reservationSubmitError}</p>
             </div>}
 
-            <div className="h-10 shrink-0" aria-hidden="true" />
-
-            <div className="sticky bottom-0 z-20 -mx-4 -mb-4 sm:-mx-6 sm:-mb-6 bg-white/95 backdrop-blur-sm p-4 sm:px-6 border-t border-stone-200 flex flex-wrap justify-between gap-2 shadow-xs">
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 pt-4">
               <div>
                 {bookingStep === 1
                   ? <Button variant="outline" onClick={() => { resetReservationDraft(); resetBookingForm(); setBookOpen(false); showToast('Đã hủy thao tác đặt kho.'); }}>Hủy đặt kho</Button>
@@ -3774,12 +3771,13 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       >
         {activeHoldForPayment && (() => {
           const originalRent = activeHoldForPayment.originalMonthlyRate ?? activeHoldForPayment.quote.baseMonthlyPrice
-          const grossTotal = originalRent * activeHoldForPayment.rentalMonths
+          const grossRent = originalRent * activeHoldForPayment.rentalMonths
+          const secDeposit = activeHoldForPayment.securityDepositAmount ?? originalRent
+          const totalBeforeDiscount = grossRent + secDeposit
           const discountAmount = activeHoldForPayment.discountAmount ?? 0
-          const totalDue = Math.max(0, grossTotal - discountAmount)
-          const reservationDeposit = activeHoldForPayment.reservationDepositAmount ?? Math.round((totalDue + (activeHoldForPayment.securityDepositAmount ?? originalRent)) * 0.2 * 100) / 100
-          const securityDeposit = activeHoldForPayment.securityDepositAmount ?? originalRent
-          const dueAtCheckIn = activeHoldForPayment.remainingAmount ?? totalDue - reservationDeposit + securityDeposit
+          const totalAfterDiscount = Math.max(0, totalBeforeDiscount - discountAmount)
+          const reservationDeposit = activeHoldForPayment.reservationDepositAmount ?? Math.round(totalAfterDiscount * 0.2 * 100) / 100
+          const dueAtCheckIn = activeHoldForPayment.remainingAmount ?? Math.max(0, totalAfterDiscount - reservationDeposit)
 
           return (
             <div className="space-y-4">
@@ -3794,18 +3792,41 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 </div>
 
                 <div className="space-y-1.5 pt-1">
-                  <div className="flex justify-between"><span className="text-stone-600">{'Giá thuê mỗi tháng:'}</span><span className="font-semibold text-black">{formatVnd(originalRent)}</span></div>
-                  <div className="flex justify-between"><span className="text-stone-600">{'Thời hạn thuê:'}</span><span className="font-semibold text-black">{activeHoldForPayment.rentalMonths} {'tháng'}</span></div>
-                  <div className="flex justify-between text-emerald-700"><span>{'Giảm giá:'}</span><span className="font-semibold">− {formatVnd(discountAmount)}</span></div>
-
-                  <div className="flex justify-between text-base font-bold text-black pt-2 border-t border-stone-300">
-                    <span>{'Tổng giá trị kỳ thuê:'}</span>
-                    <span className="">{formatVnd(totalDue)}</span>
+                  <div className="flex justify-between text-base font-bold text-amber-700 pb-1 border-b border-stone-200">
+                    <span>{'Tổng tiền phải trả:'}</span>
+                    <span>{formatVnd(totalAfterDiscount)}</span>
                   </div>
-                  <div className="flex justify-between font-bold text-black"><span>{'Cọc cần thanh toán (20%):'}</span><span>{formatVnd(reservationDeposit)}</span></div>
-                  <div className="flex justify-between"><span>{'Tiền cọc đảm bảo kho:'}</span><span className="font-semibold text-emerald-700">{formatVnd(securityDeposit)}</span></div>
-                  <div className="flex justify-between"><span>{'Còn thu tại nhận kho:'}</span><span>{formatVnd(dueAtCheckIn)}</span></div>
-                  <p className="border-t border-stone-200 pt-2 text-xs text-stone-600">{'Phí giữ chỗ 20% được khấu trừ vào tiền thuê. Tiền cọc đảm bảo kho được thu riêng khi nhận kho, dùng để bảo đảm hư hại, vệ sinh và công nợ. Phần không bị khấu trừ sẽ hoàn sau nghiệm thu trả kho.'}</p>
+                  <div className="flex justify-between"><span className="text-stone-600">{'Đơn giá mỗi tháng:'}</span><span className="font-semibold text-black">{formatVnd(originalRent)}</span></div>
+                  <div className="flex justify-between"><span className="text-stone-600">{`Tiền thuê (${activeHoldForPayment.rentalMonths} tháng):`}</span><span className="font-semibold text-black">{formatVnd(grossRent)}</span></div>
+                  <div className="flex justify-between"><span className="text-stone-600">{'Tiền đảm bảo kho:'}</span><span className="font-semibold text-black">{formatVnd(secDeposit)}</span></div>
+                  <div className="flex justify-between font-semibold text-stone-900 border-t border-stone-200 pt-1">
+                    <span>{'Tổng tiền trước giảm:'}</span>
+                    <span>{formatVnd(totalBeforeDiscount)}</span>
+                  </div>
+                  {discountAmount > 0 ? (
+                    <div className="flex justify-between text-emerald-700">
+                      <span>{'Ưu đãi giảm giá:'}</span>
+                      <span className="font-semibold">− {formatVnd(discountAmount)}</span>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between text-stone-500">
+                      <span>{'Ưu đãi giảm giá (0%):'}</span>
+                      <span>0 đ</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-bold text-stone-900 border-t border-stone-200 pt-1">
+                    <span>{'Tổng tiền sau giảm:'}</span>
+                    <span>{formatVnd(totalAfterDiscount)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-amber-800">
+                    <span>{'Đặt cọc giữ chỗ cần thanh toán (20%):'}</span>
+                    <span>{formatVnd(reservationDeposit)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-stone-900 border-t border-amber-200 pt-1">
+                    <span>{'Còn thu tại nhận kho:'}</span>
+                    <span>{formatVnd(dueAtCheckIn)}</span>
+                  </div>
+                  <p className="border-t border-stone-200 pt-2 text-xs text-stone-600">{'Phí giữ chỗ 20% được khấu trừ vào tổng tiền thuê và tiền đảm bảo kho. Khoản thanh toán còn lại sẽ được thu khi làm thủ tục nhận kho tại cơ sở.'}</p>
                 </div>
               </div>
 
@@ -3821,7 +3842,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
               <div className="flex items-center gap-2 rounded-lg border-2 border-amber-500 bg-amber-50 p-3 text-xs font-semibold text-amber-950 shadow-xs">
                 <span className="text-base text-amber-600">⚠️</span>
-                <span><b>Quy định không hoàn tiền:</b> Phí đặt cọc giữ chỗ (5%) là khoản bảo đảm việc giữ loại kho đã chọn và không được hoàn lại trong trường hợp khách hàng tự ý hủy đơn hoặc bỏ lịch nhận kho.</span>
+                <span><b>Quy định không hoàn tiền:</b> Phí đặt cọc giữ chỗ (20%) là khoản bảo đảm việc giữ loại kho đã chọn và không được hoàn lại trong trường hợp khách hàng tự ý hủy đơn hoặc bỏ lịch nhận kho.</span>
               </div>
 
               <div className="flex justify-end gap-2 border-t border-stone-100 pt-3">
@@ -3930,7 +3951,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     ].map(([label, value]) => <div key={label} className="bg-white px-4 py-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-stone-500">{label}</p><p className="mt-1 font-bold leading-5 text-stone-900">{value}</p></div>)}</div></section>
                     <section><p className="mb-2 text-[10px] font-bold uppercase tracking-[.14em] text-amber-700">{'3. Điều khoản chính'}</p><div className="grid gap-2 sm:grid-cols-2">{[
                       `Đơn giá đã lưu: ${formatVnd(activeHoldForContract.quote.baseMonthlyPrice)}/tháng. Tổng giá trị tiền thuê sau gia hạn cần được đối soát trong Hồ sơ thuê.`,
-                      `Quy định đặt cọc giữ chỗ: Phí đặt cọc giữ chỗ (5%) là khoản bảo đảm việc giữ loại kho đã chọn và không được hoàn lại trong trường hợp khách hàng tự ý hủy đơn hoặc bỏ lịch nhận kho. Khi nhận kho đúng hẹn, khoản này (${formatVnd(deposit)}) sẽ được khấu trừ 100% vào tiền thuê. Tiền cọc đảm bảo thuê (${formatVnd(securityDeposit)}) là khoản riêng để bảo đảm cơ sở vật chất và sẽ được hoàn lại sau khi thanh lý hợp đồng.`,
+                      `Quy định đặt cọc giữ chỗ: Phí đặt cọc giữ chỗ (20%) là khoản bảo đảm việc giữ loại kho đã chọn và không được hoàn lại trong trường hợp khách hàng tự ý hủy đơn hoặc bỏ lịch nhận kho. Khi nhận kho đúng hẹn, khoản này (${formatVnd(deposit)}) sẽ được khấu trừ 100% vào tổng nghĩa vụ thanh toán. Tiền cọc đảm bảo thuê (${formatVnd(securityDeposit)}) là khoản riêng để bảo đảm cơ sở vật chất và sẽ được hoàn lại sau khi thanh lý hợp đồng.`,
                       'Thời hạn nhận kho: Khách hàng cần hoàn tất thủ tục nhận kho đúng lịch hẹn (tối đa trong vòng 7 ngày). Quá thời hạn này mà không nhận kho sẽ bị coi là bỏ lịch (No-show) và mất cọc giữ chỗ.',
                       'Khách chỉ lưu hàng đã khai báo, tuân thủ tải trọng, kích thước cửa kho, PCCC và danh mục hàng cấm.',
                       'Gia hạn theo gói tháng. Hệ thống kiểm tra điều kiện và mở thanh toán khi các nguồn cần thiết sẵn sàng, quản lý cơ sở theo dõi hồ sơ.',
@@ -4008,7 +4029,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   ['Nội dung thanh toán', payment.type === 'RENEWAL' && payment.id.startsWith('PAY-RNW-BAL-') ? (`Thanh toán phần còn lại của kỳ gia hạn: ${formatVnd(payment.amount)}`) : payment.description || (payment.type === 'RESERVATION_DEPOSIT' ? ('Phí giữ chỗ 20% giá trị kỳ thuê') : payment.type === 'INITIAL_RENT' ? ('Thanh toán phần còn lại tại nhận kho') : payment.type === 'RENEWAL' ? ('Thanh toán gia hạn hợp đồng') : 'Giao dịch thanh toán')],
                   ['Số hóa đơn', payment.invoiceNumber || '—'],
                   ['Mã đơn / hợp đồng', `${activeHoldForContract.id} · ${contracts.find(item => item.reservationId === activeHoldForContract.id)?.contractNumber || '—'}`],
-                  ['Phương thức', paymentMethodLabel(payment.paymentMethod || activeHoldForContract.payment.method)],
+                  ['Phương thức', formatHistoryPaymentMethod(payment.paymentMethod || activeHoldForContract.payment.method)],
                   ['Mã giao dịch đối soát', payment.transactionReference || activeHoldForContract.payment.transactionId || payment.id],
                   ['Số tiền / tiền tệ', `${formatVnd(payment.amount)} · ${paymentCurrencyLabel('VND')}`],
                   ['Người ghi nhận', payment.receivedBy || payment.recordedBy || 'Hệ thống StorageHub']

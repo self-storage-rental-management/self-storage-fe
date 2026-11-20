@@ -241,7 +241,7 @@ const INITIAL_FACILITIES: Facility[] = FACILITIES.map(f => ({
   growth: f.growth,
   manager: f.manager,
   status: 'active',
-  accessHours: '08:00 - 17:00',
+  accessHours: '24/7',
   timezone: 'Asia/Ho_Chi_Minh',
   unitDistribution: f.unitDistribution
 }))
@@ -276,6 +276,11 @@ export const KNOWN_FACILITY_CORRECTIONS: Record<string, { name?: string; address
     name: 'Kho Việt - Cơ sở Thủ Đức',
     address: 'Số 1 Võ Văn Ngân, Phường Linh Chiểu, TP. Thủ Đức',
     city: 'TP. Hồ Chí Minh'
+  },
+  'HTP-F01': {
+    name: 'Kho Hồ Thanh Phương',
+    address: 'Lô E2a-7, Đường D1, Khu Công nghệ cao, Phường Long Thạnh Mỹ, TP. Thủ Đức, TP. Hồ Chí Minh',
+    city: 'TP. Hồ Chí Minh'
   }
 }
 
@@ -295,7 +300,9 @@ export function sanitizeFacilityStrings<T extends { code?: string; id?: string; 
   if (!fix) {
     const addr = f.address || ''
     const nm = f.name || ''
-    if (addr.includes('123 Nguy') || addr.includes('Huß') || addr.includes('Nguyß') || addr.includes('Phã') || (nm.includes('Quận 1') && nm.includes('StorageHub'))) {
+    if (addr.includes('E2a-7') || nm.includes('Thanh Phương')) {
+      fix = KNOWN_FACILITY_CORRECTIONS['HTP-F01']
+    } else if (addr.includes('123 Nguy') || addr.includes('Huß') || addr.includes('Nguyß') || addr.includes('Phã') || (nm.includes('Quận 1') && nm.includes('StorageHub'))) {
       fix = KNOWN_FACILITY_CORRECTIONS['FAC-Q1']
     } else if (addr.includes('Võ Văn Ngân') || nm.includes('Thủ Đức')) {
       fix = KNOWN_FACILITY_CORRECTIONS['HCM-TD-F01']
@@ -2296,7 +2303,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       startDate,
       endDate,
       moveInDate: params.moveInDate,
-      status: 'awaiting_email',
+      status: requiresGoodsReview ? 'awaiting_review' : 'awaiting_payment',
       reservationDepositAmount: requiresGoodsReview ? 0 : reservationDepositAmount,
       securityDepositAmount,
       remainingAmount,
@@ -2351,7 +2358,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           entityType: 'hold',
           entityId: holdId,
           notes: requiresGoodsReview
-            ? `Khách hàng chọn loại kho ${unitType.name}. Chờ xác minh email trước khi Staff duyệt hàng hóa “Khác”, chưa thu cọc.`
+            ? `Khách hàng chọn loại kho ${unitType.name}. Chờ Staff duyệt hàng hóa “Khác”, chưa thu cọc.`
             : `Khách hàng chọn loại kho ${unitType.name}. Chờ cọc 20% (${formatVnd(reservationDepositAmount)}) trong 24 giờ.`,
           timestamp: now.toLocaleString('vi-VN')
         },
@@ -2362,7 +2369,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     return {
       outcome: 'PASS',
       hold: newReservation,
-      messageVi: requiresGoodsReview ? 'Suất kho theo loại đã được giữ. Vui lòng xác minh email để gửi hồ sơ hàng hóa cho Staff duyệt.' : 'Suất kho theo loại đã được giữ. Vui lòng xác minh email để chuyển sang bước thanh toán cọc.',
+      messageVi: requiresGoodsReview ? 'Suất kho theo loại đã được giữ. Hồ sơ đang được chuyển cho Staff duyệt.' : 'Suất kho theo loại đã được giữ. Vui lòng chuyển sang bước thanh toán cọc.',
       messageEn: 'Request created. Verify your email before the facility review.'
     }
   }
@@ -4200,7 +4207,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       manager: data.manager?.trim() || 'Quản lý cơ sở',
       phone: data.phone?.trim() || '1900 6868',
       status: data.status || 'active',
-      accessHours: data.accessHours || '08:00 - 17:00',
+      accessHours: '24/7',
       timezone: data.timezone || 'Asia/Ho_Chi_Minh',
       unitDistribution,
       unitPrices: data.unitPrices,

@@ -265,7 +265,7 @@ export function assignStaffWithWorkloadAndUrgency(params: {
 
     return {
       assignedStaff: null,
-      assignedStaffName: isUrgent ? `Quản lý ca trực (${dutyManager.name})` : 'Hàng đợi ca sáng mai (08:00)',
+      assignedStaffName: isUrgent ? `Quản lý ca trực (${dutyManager.name})` : 'Hàng đợi hỗ trợ 24/24',
       assignedStaffInitials: isUrgent ? dutyManager.initials : 'SH',
       isAllOffline: true,
       isUrgent,
@@ -273,7 +273,7 @@ export function assignStaffWithWorkloadAndUrgency(params: {
       estimatedWaitMinutes: isUrgent ? 5 : 480,
       estimatedWaitLabel: isUrgent
         ? 'Kênh khẩn cấp 24/7 - Quản lý trực ca xử lý ngay trong 5-10 phút'
-        : 'Đầu ca sáng mai (08:00)',
+        : 'Chờ nhân viên trực tiếp nhận',
       queuePosition: 1,
       emergencyHotline: '1900 8820',
       emergencyManagerName: dutyManager.name,

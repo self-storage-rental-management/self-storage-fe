@@ -48,14 +48,14 @@ import {
   type CredentialAlert,
 } from "../../services/checkInApi"
 import { listReturns, type ApiReturn } from "../../services/returnApi"
-import { listStaffActiveReservations, type StaffReservationProgress } from "../../services/staffReservationApi"
+import { listStaffActiveReservations, listStaffReservationReviews, type ReservationReview, type StaffReservationProgress } from "../../services/staffReservationApi"
+import StaffReservationReviews from "./StaffReservationReviews"
 import {
   loadStaffDailyOperations,
   type StaffDailyOperation,
 } from "../../services/staffDailyOperationsApi"
 
 import ProfileView from "../ProfileView"
-import StaffReservationReviews from './StaffReservationReviews'
 import ReturnSettlementModal from '../../components/ReturnSettlementModal'
 import { canApiActor, isApiAuthenticated } from '../../services/authApi'
 import { listNotifications, markNotificationRead, type ApiNotification } from '../../services/notificationApi'
@@ -820,6 +820,13 @@ export default function StaffApp({
 }) {
   const hub = useStorageHub()
 
+  const [apiOverviewCounts, setApiOverviewCounts] = useState({
+    depositWaiting: 0,
+    upcomingCheckins: 0,
+    returnsToProcess: 0,
+    pendingReviews: 0,
+  })
+
   const nav: NavItem[] = [
     {
       id: "dashboard",
@@ -846,9 +853,21 @@ export default function StaffApp({
     },
 
     {
+      id: "reservations",
+
+      label: "Đơn đặt giữ kho",
+
+      icon: Icon.calendar,
+
+      group: "Vận hành",
+
+      permission: "reservations:read",
+    },
+
+    {
       id: "return",
 
-      label: "Nghiệm thu trả kho",
+      label: "Trả kho & nghiệm thu",
 
       icon: Icon.clipboard,
 
@@ -860,7 +879,6 @@ export default function StaffApp({
     ...(isApiAuthenticated() ? [{ id: "renewal-signing", label: "Ký gia hạn", icon: Icon.policy, group: "Vận hành", permission: "renewals:operate" as const }] : []),
     ...(isApiAuthenticated() ? [
       { id: "unit-release", label: "Giải phóng kho hủy", icon: Icon.box, group: "Vận hành", permission: "checkins:read" as const },
-      { id: "credentials", label: "Cấp lại quyền truy cập", icon: Icon.key, group: "Vận hành", permission: "checkins:read" as const },
     ] : []),
 
     {
@@ -918,12 +936,6 @@ export default function StaffApp({
   const [apiDailyOperationsError, setApiDailyOperationsError] = useState<string | null>(null)
 
   const [apiDailyOperationsRefresh, setApiDailyOperationsRefresh] = useState(0)
-
-  const [apiOverviewCounts, setApiOverviewCounts] = useState({
-    depositWaiting: 0,
-    upcomingCheckins: 0,
-    returnsToProcess: 0,
-  })
 
   const [apiOverviewLoading, setApiOverviewLoading] = useState(false)
 
@@ -1254,7 +1266,7 @@ export default function StaffApp({
 
   useEffect(() => {
     if (!isApiAuthenticated()) {
-      setApiOverviewCounts({ depositWaiting: 0, upcomingCheckins: 0, returnsToProcess: 0 })
+      setApiOverviewCounts({ depositWaiting: 0, upcomingCheckins: 0, returnsToProcess: 0, pendingReviews: 0 })
       setApiOverviewLoading(false)
       return
     }
@@ -1267,6 +1279,7 @@ export default function StaffApp({
         listStaffActiveReservations({ page: 0, size: 100 }),
         listCheckIns({ page: 0, pageSize: 100 }),
         listReturns("staff", 0, 100),
+        listStaffReservationReviews(0, 100),
       ])
 
       if (!active) return
@@ -1280,6 +1293,9 @@ export default function StaffApp({
       const returns = results[2].status === "fulfilled"
         ? results[2].value.data as ApiReturn[]
         : []
+      const reviews = results[3].status === "fulfilled"
+        ? results[3].value.data as ReservationReview[]
+        : []
 
       const waitingStatuses = new Set([
         "CONFIRMED",
@@ -1292,6 +1308,7 @@ export default function StaffApp({
         depositWaiting: reservations.filter((item) => waitingStatuses.has(item.status)).length,
         upcomingCheckins: checkIns.filter((item) => !["completed", "no_show", "cancelled", "rejected"].includes(item.checkInStatus ?? "")).length,
         returnsToProcess: returns.filter((item) => item.status !== "completed").length,
+        pendingReviews: reviews.filter((item) => item.goodsReviewStatus === "PENDING").length,
       })
       setApiOverviewLoading(false)
     }
@@ -1894,7 +1911,7 @@ export default function StaffApp({
 
         priority: "high",
 
-        page: "reservations",
+        page: "checkin",
       })),
 
     ...reservations
@@ -1916,7 +1933,7 @@ export default function StaffApp({
 
         priority: "medium",
 
-        page: "reservations",
+        page: "checkin",
       })),
 
     ...eligibleCheckins
@@ -2196,14 +2213,16 @@ export default function StaffApp({
     page: "dashboard",
   }))
 
-  const notificationPage = (type: ApiNotification["type"]) => {
+  const notificationPage = (notification: ApiNotification) => {
+    if (notification.title === "Khách hàng đã cập nhật lịch nhận kho") return "reservations"
+    const type = notification.type
     if (type === "CHECKIN") return "checkin"
     if (type === "SUPPORT") return "support"
     if (type === "RETURN") return "return"
     if (type === "RENEWAL") return "renewal-signing"
     if (type === "OVERDUE") return "dashboard"
     if (type === "PAYMENT") return "checkin"
-    if (type === "RESERVATION") return "reservations"
+    if (type === "RESERVATION") return "checkin"
     if (type === "SYSTEM") return "tasks"
     return "dashboard"
   }
@@ -2213,7 +2232,7 @@ export default function StaffApp({
     title: notification.title,
     message: notification.content,
     date: notification.createdAt,
-    page: notificationPage(notification.type),
+    page: notificationPage(notification),
     targetId: notification.relatedEntityId ?? undefined,
     isRead: notification.isRead,
   }))
@@ -2412,47 +2431,77 @@ export default function StaffApp({
             subtitle={`${user.facility ?? "Chưa được gán cơ sở"} · ${new Date().toLocaleDateString("vi-VN")}`}
           />
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-            <StatCard
-              title={"Đơn đã cọc · Chờ nhận kho"}
-              value={isApiAuthenticated()
-                ? apiOverviewLoading ? "…" : apiOverviewCounts.depositWaiting
-                : reservations.filter((r) => r.status === "CONFIRMED").length}
-              icon={Icon.alert}
-              iconBg="bg-amber-50"
-            />
-            <StatCard
-              title={"Nhận kho sắp tới"}
-              value={isApiAuthenticated()
-                ? apiOverviewLoading ? "…" : apiOverviewCounts.upcomingCheckins
-                : eligibleCheckins.filter(
-                    (c) => c.status !== "completed" && c.status !== "no-show",
-                  ).length}
-              icon={Icon.truck}
-              iconBg="bg-blue-50"
-            />
-            <StatCard
-              title={"Trả kho cần xử lý"}
-              value={isApiAuthenticated()
-                ? apiOverviewLoading ? "…" : apiOverviewCounts.returnsToProcess
-                : returns.filter((r) => r.status !== "refunded").length}
-              icon={Icon.clipboard}
-              iconBg="bg-purple-50"
-            />
-            <StatCard
-              title={"Hỗ trợ đang mở"}
-              value={
-                facilityTickets.filter((ticket) => ticket.status !== "resolved")
-                  .length
-              }
-              icon={Icon.support}
-              iconBg="bg-red-50"
-            />
-            <StatCard
-              title={"Quản lý giao · Chưa xong"}
-              value={openAssignedFacilityTasks.length}
-              icon={Icon.tasks}
-              iconBg="bg-red-50"
-            />
+            <button
+              type="button"
+              onClick={() => setPage("reservations")}
+              className="text-left w-full cursor-pointer hover:opacity-90 transition-opacity focus:outline-none"
+            >
+              <StatCard
+                title={"Đơn đã cọc · Chờ nhận kho"}
+                value={isApiAuthenticated()
+                  ? apiOverviewLoading ? "…" : apiOverviewCounts.depositWaiting
+                  : reservations.filter((r) => r.status === "CONFIRMED").length}
+                icon={Icon.alert}
+                iconBg="bg-amber-50"
+              />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage("checkin")}
+              className="text-left w-full cursor-pointer hover:opacity-90 transition-opacity focus:outline-none"
+            >
+              <StatCard
+                title={"Nhận kho sắp tới"}
+                value={isApiAuthenticated()
+                  ? apiOverviewLoading ? "…" : apiOverviewCounts.upcomingCheckins
+                  : eligibleCheckins.filter(
+                      (c) => c.status !== "completed" && c.status !== "no-show",
+                    ).length}
+                icon={Icon.truck}
+                iconBg="bg-blue-50"
+              />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage("return")}
+              className="text-left w-full cursor-pointer hover:opacity-90 transition-opacity focus:outline-none"
+            >
+              <StatCard
+                title={"Trả kho cần xử lý"}
+                value={isApiAuthenticated()
+                  ? apiOverviewLoading ? "…" : apiOverviewCounts.returnsToProcess
+                  : returns.filter((r) => r.status !== "refunded").length}
+                icon={Icon.clipboard}
+                iconBg="bg-purple-50"
+              />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage("support")}
+              className="text-left w-full cursor-pointer hover:opacity-90 transition-opacity focus:outline-none"
+            >
+              <StatCard
+                title={"Hỗ trợ đang mở"}
+                value={
+                  facilityTickets.filter((ticket) => ticket.status !== "resolved")
+                    .length
+                }
+                icon={Icon.support}
+                iconBg="bg-red-50"
+              />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage("tasks")}
+              className="text-left w-full cursor-pointer hover:opacity-90 transition-opacity focus:outline-none"
+            >
+              <StatCard
+                title={"Quản lý giao · Chưa xong"}
+                value={openAssignedFacilityTasks.length}
+                icon={Icon.tasks}
+                iconBg="bg-red-50"
+              />
+            </button>
           </div>
           <StaffDailyTaskQueue
             assignedTasks={assignedFacilityTasks}
@@ -2690,8 +2739,12 @@ export default function StaffApp({
         )}
       </Modal>
 
-      {/* ── RESERVATIONS ──────────────────────────────────────── */}
-      {page === "reservations" && isApiAuthenticated() && <StaffReservationReviews canApprove={canApiActor(user, 'reservations:approve')} facilityNames={user.facilityNames} />}
+      {/* ── RESERVATIONS ─────────────────────────────────────── */}
+      {page === "reservations" && isApiAuthenticated() && (
+        <StaffReservationReviews
+          canApprove={canApiActor(user, "reservations:approve")}
+        />
+      )}
       {page === "reservations" && !isApiAuthenticated() && (
         <div className="fade-in">
           <SectionHeader
@@ -2933,7 +2986,7 @@ export default function StaffApp({
             <div className="fade-in space-y-4">
               <SectionHeader
                 eyebrow="CỔNG NHÂN VIÊN · KIỂM KÊ & BẰNG CHỨNG"
-                title="Nghiệm thu trả kho"
+                title="Trả kho & nghiệm thu"
                 subtitle="Đối chiếu hiện trạng, ghi nhận quyết toán và hoàn cọc trên dữ liệu máy chủ"
               />
               <ReturnApiPanel role="staff" onChanged={refreshCredentialAlerts} />
@@ -2944,7 +2997,7 @@ export default function StaffApp({
             <div className="fade-in">
           <SectionHeader
             eyebrow={"CỔNG NHÂN VIÊN · KIỂM KÊ & BẰNG CHỨNG"}
-            title={"Nghiệm thu trả kho"}
+            title={"Trả kho & nghiệm thu"}
             subtitle={
               "Đối chiếu hiện trạng trước-sau, kiểm kê hàng hóa, phân loại và lưu bằng chứng"
             }

@@ -171,6 +171,8 @@ export function staffErrorMessage(error: unknown, fallback: string) {
       return "Gian kho không còn ở trạng thái giữ chỗ cho hồ sơ này. Vui lòng tải lại để kiểm tra."
     if (message.includes("Customer setup must be completed"))
       return "Khách chưa được ghi nhận đã chuẩn bị xong nên chưa thể kiểm kê."
+    if (message.includes("Chỉ khách hàng được xác nhận đã chuẩn bị xong"))
+      return "Chỉ khách hàng được phép xác nhận đã chuẩn bị xong trước khi kiểm kê."
     if (message.includes("Evidence can only be uploaded"))
       return "Chỉ được tải bằng chứng khi đang thực hiện quy trình nhận kho. Vui lòng mở lại hồ sơ và tiếp tục từ bước hiện tại."
     if (message.includes("lock reference"))
@@ -179,12 +181,106 @@ export function staffErrorMessage(error: unknown, fallback: string) {
   }
   if (status === 413)
     return "Tệp tải lên vượt quá dung lượng cho phép."
-  if (status === 422 || status === 400)
+  if (status === 422 || status === 400) {
+    if (message.includes("varianceReason is required"))
+      return "Cần nhập lý do chênh lệch khi kích thước hoặc khối lượng hàng hóa khác với đơn đặt kho."
+    if (message.includes("dimensions do not fit"))
+      return "Kích thước hàng hóa đo đạc thực tế không vừa gian kho."
+    if (message.includes("exceeds the storage unit limit"))
+      return "Khối lượng hàng hóa thực tế vượt quá tải trọng tối đa của gian kho."
+    if (message.includes("exceeds the storage unit capacity"))
+      return "Thể tích hàng hóa thực tế vượt quá dung tích của gian kho."
+    if (message.includes("variance is not accepted"))
+      return "Kích thước hoặc khối lượng có chênh lệch, vui lòng xác nhận chấp thuận chênh lệch với khách hàng."
+    if (message.includes("identityDocumentNumber is required"))
+      return "Số CCCD/CMND không được để trống."
+    if (message.includes("evidenceReferences") && message.includes("empty"))
+      return "Cần ít nhất một ảnh hoặc PDF bằng chứng kiểm kê."
+
+    const fieldErrors = extractStaffFieldErrors(error)
+    const errorList = Object.values(fieldErrors).filter(Boolean)
+    if (errorList.length > 0) {
+      return errorList.join(". ")
+    }
+    if (message && !message.includes("API request failed") && !message.includes("Thông tin gửi lên chưa hợp lệ") && !message.includes("Request parameters are invalid")) {
+      return message
+    }
     return "Thông tin chưa hợp lệ. Vui lòng kiểm tra lại các trường đã nhập."
+  }
   if (status === 429)
     return "Bạn thao tác quá nhanh. Vui lòng đợi một lát rồi thử lại."
   if (status !== null && status >= 500)
     return "Hệ thống đang tạm thời gián đoạn. Vui lòng thử lại sau."
 
   return fallback
+}
+
+export function extractStaffFieldErrors(error: unknown): Record<string, string> {
+  if (!error || typeof error !== "object") return {}
+  const candidate = error as { details?: unknown; message?: unknown }
+  const fieldErrors: Record<string, string> = {}
+
+  if (candidate.details && typeof candidate.details === "object" && !Array.isArray(candidate.details)) {
+    for (const [rawKey, rawVal] of Object.entries(candidate.details as Record<string, unknown>)) {
+      if (typeof rawVal !== "string") continue
+      let key = rawKey
+      if (key.startsWith("actualMeasurements.")) {
+        key = key.replace("actualMeasurements.", "")
+      }
+      if (key === "lockReference") key = "keyLockReference"
+      if (key === "initialUnitCondition") key = "initialCondition"
+
+      let friendlyMsg = rawVal
+      if (rawVal.includes("CCCD/CMND") || key === "identityDocumentNumber") {
+        friendlyMsg = "CCCD/CMND phải gồm đúng 9 hoặc 12 chữ số"
+      } else if (rawVal.includes("must not be empty") || rawVal.includes("must not be blank") || rawVal.includes("required")) {
+        switch (key) {
+          case "lengthCm": friendlyMsg = "Vui lòng nhập chiều dài thực tế (lớn hơn 0)"; break
+          case "widthCm": friendlyMsg = "Vui lòng nhập chiều rộng thực tế (lớn hơn 0)"; break
+          case "heightCm": friendlyMsg = "Vui lòng nhập chiều cao thực tế (lớn hơn 0)"; break
+          case "weightKg": friendlyMsg = "Vui lòng nhập khối lượng thực tế (lớn hơn 0)"; break
+          case "packageCount": friendlyMsg = "Vui lòng nhập số kiện (từ 1 trở lên)"; break
+          case "goodsCategory": friendlyMsg = "Vui lòng nhập loại hàng"; break
+          case "goodsCondition": friendlyMsg = "Vui lòng nhập tình trạng hàng hóa"; break
+          case "initialCondition": friendlyMsg = "Vui lòng ghi nhận hiện trạng kho trống"; break
+          case "keyLockReference": friendlyMsg = "Vui lòng nhập mã ổ khóa"; break
+          case "varianceReason": friendlyMsg = "Vui lòng nhập lý do chênh lệch"; break
+          case "evidenceReferences": friendlyMsg = "Cần tải lên ít nhất 1 ảnh hoặc tệp PDF bằng chứng"; break
+          default: friendlyMsg = rawVal; break
+        }
+      }
+      fieldErrors[key] = friendlyMsg
+    }
+  }
+
+  const msg = typeof candidate.message === "string" ? candidate.message : ""
+  if (msg.includes("varianceReason is required")) {
+    fieldErrors.varianceReason = "Vui lòng nhập lý do chênh lệch khi kích thước hoặc khối lượng khác đơn đặt"
+  }
+  if (msg.includes("Actual goods weight exceeds")) {
+    fieldErrors.weightKg = "Khối lượng hàng hóa thực tế vượt quá tải trọng gian kho"
+  }
+  if (msg.includes("Actual goods volume exceeds")) {
+    fieldErrors.volumeM3 = "Thể tích hàng hóa vượt quá dung tích gian kho"
+  }
+  if (msg.includes("Actual goods dimensions do not fit")) {
+    fieldErrors.lengthCm = "Kích thước hàng hóa đo đạc thực tế không vừa gian kho"
+  }
+  if (msg.includes("variance is not accepted")) {
+    fieldErrors.varianceAccepted = "Cần đánh dấu xác nhận chấp thuận chênh lệch với khách"
+  }
+  if (msg.includes("identityDocumentNumber is required")) {
+    fieldErrors.identityDocumentNumber = "Số CCCD/CMND không được để trống"
+  }
+  if (msg.includes("Customer identity does not match")) {
+    fieldErrors.identityDocumentNumber = "CCCD/CMND không khớp với thông tin đã khai báo trong đơn"
+  }
+  if (msg.includes("initialUnitCondition") || msg.includes("hiện trạng kho trống")) {
+    fieldErrors.initialCondition = "Cần ghi nhận hiện trạng kho trống trước khi bàn giao"
+  }
+  if (msg.includes("lockReference") || msg.includes("mã ổ khóa")) {
+    fieldErrors.keyLockReference = "Vui lòng kiểm tra lại mã ổ khóa bàn giao"
+  }
+
+  return fieldErrors
 }

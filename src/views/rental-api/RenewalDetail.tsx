@@ -301,7 +301,7 @@ export default function RenewalDetail({
               disabled={operationsLocked || paymentBusy || paymentExpired || payment?.paymentStatus === "PAID"}
               onClick={openRenewalPayment}
             >
-              {paymentBusy ? "Đang mở VNPay" : payment && ["PENDING", "PROCESSING", "NOT_RECEIVED"].includes(payment.paymentStatus) ? "Tiếp tục thanh toán" : hasDeposit ? "Thanh toán" : "Thanh toán toàn kỳ"}
+              {paymentBusy ? "Đang mở cổng VNPay..." : payment && ["PENDING", "PROCESSING", "NOT_RECEIVED"].includes(payment.paymentStatus) ? "Tiếp tục thanh toán qua VNPay" : hasDeposit ? "Thanh toán trả trước qua VNPay" : "Thanh toán toàn kỳ qua VNPay"}
             </Button>
           </div>
         </div>

@@ -242,7 +242,7 @@ export default function Layout({
       'support': 'Hỗ Trợ Khách Hàng',
       'tasks': 'Nhiệm Vụ Hàng Ngày',
       'checkin': 'Bàn Giao & Nhận Kho',
-      'return': 'Nghiệm Thu Trả Kho',
+      'return': 'Trả Kho & Nghiệm Thu',
       'dashboard': 'Bảng Điều Khiển',
       'reports': 'Báo Cáo Cơ Sở',
       'units': 'Quản Lý Kho',
@@ -409,7 +409,7 @@ export default function Layout({
   }
 
   return (
-    <div className={`flex min-h-dvh h-dvh min-h-0 w-full min-w-0 max-w-full overflow-hidden bg-[#f3f2eb] ${user.role === 'customer' ? 'customer-role-layout' : ''}`}>
+    <div className={`flex min-h-dvh h-dvh min-h-0 w-full min-w-0 max-w-full overflow-hidden bg-[#f3f2eb] ${user.role ? `${user.role}-role-layout` : ''}`}>
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -460,7 +460,7 @@ export default function Layout({
             return (
               <Fragment key={item.id}>
                 {groupText && groupText !== prevGroupText && (
-                  <p className={`px-2 pb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-stone-500 ${index === 0 ? 'mt-1' : 'mt-5'}`}>
+                  <p className={`px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-stone-400 ${index === 0 ? 'mt-1' : 'mt-5'}`}>
                     {groupText}
                   </p>
                 )}
@@ -543,7 +543,7 @@ export default function Layout({
           </button>
           <BrandLogo className="lg:hidden" />
           <div className="hidden lg:block">
-            <p className="text-xs text-stone-400 font-mono uppercase tracking-wider">{getTranslatedRole()} {'· CỔNG QUẢN TRỊ'}</p>
+            <p className="text-xs text-stone-500 font-medium uppercase tracking-wide">{getTranslatedRole()} {'· CỔNG QUẢN TRỊ'}</p>
             <p className="text-sm font-semibold text-stone-800">{'Quản lý cơ sở lưu trữ thông minh StorageHub'}</p>
           </div>
           {(user.role === 'manager' || user.role === 'staff') && (
@@ -627,7 +627,7 @@ export default function Layout({
                             ? item.message.replace(/^([^·]+ · [^·]+) · /, '$1\nLý do: ')
                             : item.message
                       }</span>}
-                      {item.date && <span className="mt-1.5 block text-[10px] text-stone-400 font-mono">{formatNotificationDate(item.date)}</span>}
+                      {item.date && <span className="mt-1.5 block text-[10px] text-stone-400">{formatNotificationDate(item.date)}</span>}
                     </button>
                   )) : (
                     <div className="flex flex-col items-center justify-center px-4 py-10 text-center text-stone-400">

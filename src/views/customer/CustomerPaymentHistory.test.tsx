@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { paymentHistoryTimestamp, visibleCustomerPaymentWarnings } from './CustomerPaymentHistory'
+import { formatHistoryPaymentMethod, paymentMethodLabel } from './paymentLabels'
 import { renderToStaticMarkup } from 'react-dom/server'
 import ReservationReceipt from './ReservationReceipt'
 import { bookingDepositAccepted, paymentRecordLabel } from './paymentPresentation'
@@ -52,12 +53,13 @@ describe('VNPay history nullable processing timestamp', () => {
     expect(html).toContain('Phương thức thanh toán')
     expect(html).not.toContain('Hệ thống tự động qua VNPay')
     expect(html).not.toContain('>VNPay<')
-    expect(html).toMatch(/Phương thức thanh toán<\/dt><dd[^>]*>-<\/dd>/)
+    expect(html).toMatch(/Phương thức thanh toán<\/dt><dd[^>]*>Chưa có thông tin<\/dd>/)
     expect(html).toMatch(/Người ghi nhận<\/dt><dd[^>]*>-<\/dd>/)
   })
-  it('shows the bank returned by VNPay', () => {
+  it('shows a consistent Vietnamese method for a bank returned by VNPay', () => {
     const html = renderToStaticMarkup(<ReservationReceipt payment={{ ...paid, paymentMethod: 'NCB' }} reservationCode="RSV-TEST" />)
-    expect(html).toContain('>NCB<')
+    expect(html).toContain('>Thanh toán trực tuyến<')
+    expect(html).not.toContain('>NCB<')
   })
   it('keeps the counter payment method and employee on the remaining rental receipt', () => {
     const html = renderToStaticMarkup(<ReservationReceipt payment={{ ...paid, purpose: 'RENTAL_BALANCE', paymentMethod: 'Tiền mặt', initiatedByName: 'Nhân viên cơ sở' }} reservationCode="RSV-TEST" />)
@@ -68,5 +70,40 @@ describe('VNPay history nullable processing timestamp', () => {
   it('never invents an epoch date for pending transactions', () => {
     expect(paymentHistoryTimestamp(null)).toBe('Chưa ghi nhận')
     expect(paymentHistoryTimestamp('invalid')).toBe('Chưa ghi nhận')
+  })
+})
+
+describe('standardized payment method labels in payment history', () => {
+  it.each([
+    ['CASH', 'Tiền mặt'],
+    ['Tiền mặt', 'Tiền mặt'],
+    ['Tiền mặt tại cơ sở', 'Tiền mặt'],
+    ['Tiền mặt tại quầy', 'Tiền mặt'],
+    ['TIEN_MAT', 'Tiền mặt'],
+    ['NCB', 'VNPay'],
+    ['VNPAY', 'VNPay'],
+    ['VNPay', 'VNPay'],
+    ['VNPAY_SANDBOX', 'VNPay'],
+    ['ONLINE_GATEWAY', 'VNPay'],
+    ['BANK_TRANSFER', 'Chuyển khoản'],
+    ['CHUYEN_KHOAN', 'Chuyển khoản'],
+    ['Chuyển khoản', 'Chuyển khoản'],
+    ['DEPOSIT_OFFSET', 'Đối trừ quyết toán'],
+    ['Đối trừ quyết toán', 'Đối trừ quyết toán'],
+    [null, '—'],
+    [undefined, '—'],
+    ['', '—'],
+    ['Chưa có', '—'],
+    ['Chưa có thông tin', '—'],
+  ])('formats %s to %s', (input, expected) => {
+    expect(formatHistoryPaymentMethod(input)).toBe(expected)
+  })
+
+  it('standardizes paymentMethodLabel for common aliases', () => {
+    expect(paymentMethodLabel('CASH')).toBe('Tiền mặt')
+    expect(paymentMethodLabel('Tiền mặt tại cơ sở')).toBe('Tiền mặt')
+    expect(paymentMethodLabel('BANK_TRANSFER')).toBe('Chuyển khoản')
+    expect(paymentMethodLabel('VNPAY')).toBe('Thanh toán trực tuyến')
+    expect(paymentMethodLabel(null)).toBe('Chưa có thông tin')
   })
 })

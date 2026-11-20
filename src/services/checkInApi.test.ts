@@ -61,7 +61,13 @@ describe('checkInApi', () => {
   })
 
   it('completes handover and supports no-show', async () => {
-    const fetchMock = mockEnvelope({ ...responseCase, checkInStatus: 'completed' })
+    const inventoryLines = [
+      { goodsItemId: 'goods-1', actualQuantity: 2, condition: 'INTACT' as const, note: null,
+        measurements: { lengthCm: 100, widthCm: 100, heightCm: 50, weightKg: 100 } },
+      { goodsItemId: 'goods-2', actualQuantity: 0, condition: 'NOT_PRESENT' as const,
+        note: 'Khách chưa đưa hàng vào kho', measurements: null },
+    ]
+    const fetchMock = mockEnvelope({ ...responseCase, checkInStatus: 'completed', handover: { inventoryLines } })
     vi.stubGlobal('fetch', fetchMock)
     const request = {
       checklist: {
@@ -77,13 +83,14 @@ describe('checkInApi', () => {
       identityDocumentNumber: '079203009988',
       identityVerificationNote: null,
       actualMeasurements: {
-        lengthCm: 100, widthCm: 100, heightCm: 100,
+        lengthCm: 50, widthCm: 100, heightCm: 100,
         weightKg: 100, actualVolumeM3: 1, varianceAccepted: true,
       },
       varianceReason: null,
       initialUnitCondition: 'Tốt',
       goodsCondition: 'Nguyên vẹn',
       packageCount: 2,
+      inventoryLines,
       goodsCategory: 'Đồ gia dụng',
       evidenceReferences: ['evidence.jpg'],
       handedOverItems: ['Ổ khóa LOCK-TEST', 'Biên nhận'],
@@ -91,10 +98,12 @@ describe('checkInApi', () => {
       lockReference: 'LOCK-TEST',
     }
 
-    await completeCheckIn('checkin-1', request)
+    const completed = await completeCheckIn('checkin-1', request)
     await markCheckInNoShow('checkin-1', 'Khách không đến')
 
     expect(fetchMock.mock.calls[0][0]).toContain('/checkin-1/complete')
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body)).inventoryLines).toEqual(inventoryLines)
+    expect(completed.handover?.inventoryLines).toEqual(inventoryLines)
     expect(fetchMock.mock.calls[1][0]).toContain('/checkin-1/no-show')
   })
 
