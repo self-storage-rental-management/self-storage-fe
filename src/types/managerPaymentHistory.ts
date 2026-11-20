@@ -40,6 +40,8 @@ export interface ManagerPaymentHistoryItem {
   invoiceNumber?: string | null
   invoiceStatus?: InvoiceStatus
   invoiceIssuedAt?: string | null
+  reservationCode?: string | null
+  gatewayTransactionNo?: string | null
 }
 
 export interface ManagerPaymentHistoryPage {
