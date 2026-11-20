@@ -1,4 +1,4 @@
-import { apiRequest } from './apiClient'
+import { apiDownload, apiRequest } from './apiClient'
 import type { PageResponse, PaymentComplaint } from './customerReservationApi'
 
 interface ApiEnvelope<T> { data: T }
@@ -19,3 +19,13 @@ export async function decideManagerPaymentComplaint(complaintId: string, decisio
   })
   return response.data
 }
+
+export async function downloadComplaintImage(fileId: string) {
+  const result = await apiDownload(`/api/files/${fileId}`)
+  return {
+    blob: result.blob,
+    url: URL.createObjectURL(result.blob),
+    fileName: result.fileName,
+  }
+}
+

@@ -201,11 +201,17 @@ function InventoryRead({
         {read.data.catalog.map(type => {
           const detail = unitTypes.data?.find(item => item.id === type.id)
           const unit = read.data?.units.find(item => item.unitTypeId === type.id)
+          const totalUnitsForType = detail?.totalCount ?? Object.values(type.counts).reduce((a, b) => a + b, 0)
+          const availableUnitsForType = detail?.availableCount ?? type.counts.available ?? 0
+          const occupiedUnitsForType = detail?.occupiedCount ?? type.counts.occupied ?? 0
+          const inactiveUnitsForType = type.counts.inactive ?? 0
+          const maintenanceUnitsForType = type.counts.maintenance ?? 0
+          const reservedUnitsForType = (type.counts.reserved ?? 0) + (type.counts.assigned ?? 0) + (type.counts.held ?? 0)
           return <article key={type.id} className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-100 p-4">
-              <div><div className="flex flex-wrap items-center gap-2"><h4 className="text-base font-bold">{type.name}</h4>{detail ? <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ${facilityCatalogTypeStatusClass(detail)}`}>{facilityCatalogTypeStatusLabel(detail)}</span> : <Badge variant="muted">Đang tải</Badge>}</div><p className="mt-1 text-xs text-stone-500">Mã {type.code} · {type.total} gian · Tầng {unit?.floor || '—'} · {unit?.zone || 'Chưa có khu vực'}</p></div>
+              <div><div className="flex flex-wrap items-center gap-2"><h4 className="text-base font-bold">{type.name}</h4>{detail ? <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ${facilityCatalogTypeStatusClass(detail)}`}>{facilityCatalogTypeStatusLabel(detail)}</span> : <Badge variant="muted">Đang tải</Badge>}</div><p className="mt-1 text-xs text-stone-500">Mã {type.code} · Tổng <b>{totalUnitsForType}</b> gian ({availableUnitsForType} khả dụng{inactiveUnitsForType > 0 ? `, ${inactiveUnitsForType} tạm ngưng` : ''}{occupiedUnitsForType > 0 ? `, ${occupiedUnitsForType} đang dùng` : ''}) · Tầng {unit?.floor || '—'} · {unit?.zone || 'Chưa có khu vực'}</p></div>
               <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={async () => {
+            <Button variant="outline" disabled={actionBusy} onClick={async () => {
               setActionBusy(true); setActionError(undefined)
               try {
                 const loaded = detail || (await listAccessibleUnitTypes(facilityId, 0, 100)).data.find(item => item.id === type.id)
@@ -231,8 +237,19 @@ function InventoryRead({
               </dl>
               <dl className="grid gap-x-5 gap-y-3 text-sm sm:grid-cols-2">
                 <div><dt className="text-xs text-stone-500">Kích thước kho</dt><dd className="mt-1 font-medium">{detail.lengthM} × {detail.widthM} × {detail.heightM} m</dd></div>
-                <div><dt className="text-xs text-stone-500">Tình trạng sử dụng</dt><dd className="mt-1 font-medium">{detail.availableCount ?? 0} còn trống · {detail.occupiedCount ?? 0} đang dùng</dd></div>
-                <div><dt className="text-xs text-stone-500">Số khung kệ mỗi gian</dt><dd className="mt-1 font-medium">{detail.rackCount} khung</dd></div>
+                <div>
+                  <dt className="text-xs text-stone-500">Tình trạng sử dụng</dt>
+                  <dd className="mt-1 font-medium">
+                    <span className="font-semibold text-emerald-700">{availableUnitsForType} còn trống</span>
+                    {' · '}
+                    <span>{occupiedUnitsForType} đang dùng</span>
+                    {reservedUnitsForType > 0 && <span>{` · ${reservedUnitsForType} đã phân`}</span>}
+                    {inactiveUnitsForType > 0 && <span className="text-stone-500">{` · ${inactiveUnitsForType} tạm ngưng`}</span>}
+                    {maintenanceUnitsForType > 0 && <span className="text-amber-700">{` · ${maintenanceUnitsForType} bảo trì`}</span>}
+                    {` (Tổng ${totalUnitsForType} gian)`}
+                  </dd>
+                </div>
+                <div><dt className="text-xs text-stone-500">Khung kệ</dt><dd className="mt-1 font-medium">{detail.rackCount} kệ, kích thước {detail.rackLengthM} × {detail.rackWidthM} × {detail.rackHeightM} m</dd></div>
                 <div><dt className="text-xs text-stone-500">Lối đi và xe đẩy</dt><dd className="mt-1 font-medium">Rộng {detail.aisleWidthM ?? '—'} m · {detail.trolleyType || 'Chưa khai báo'}</dd></div>
                 <div><dt className="text-xs text-stone-500">Sức chứa dự kiến</dt><dd className="mt-1 font-medium">{detail.smallBoxCapacity ?? 0} thùng nhỏ · {detail.largeBoxCapacity ?? 0} thùng lớn</dd></div>
                 <div><dt className="text-xs text-stone-500">Tiền cọc đảm bảo kho</dt><dd className="mt-1 font-medium">{formatVndAmount(detail.securityDepositAmount)}</dd></div>
@@ -404,8 +421,8 @@ export function InventoryContent({
   )
   return (
     <>
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
-        <StatCard title="Tổng số gian" value={operationalCount} icon={Icon.box} />
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-6">
+        <StatCard title="Tổng số gian" value={units.length} icon={Icon.box} />
         <StatCard
           title="Còn trống"
           value={count("available")}
@@ -416,6 +433,11 @@ export function InventoryContent({
           title="Đã phân gian"
           value={count("reserved") + count("assigned")}
           icon={Icon.calendar}
+        />
+        <StatCard
+          title="Tạm ngưng"
+          value={count("inactive")}
+          icon={Icon.alert}
         />
         <StatCard
           title="Đang bảo trì"
