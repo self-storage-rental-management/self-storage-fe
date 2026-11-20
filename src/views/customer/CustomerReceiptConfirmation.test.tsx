@@ -30,7 +30,7 @@ function command(refresh: () => Promise<void>) {
     if (Array.isArray(value)) { for (const child of value) { const result = find(child); if (result) return result } }
     if (!value || typeof value !== 'object') return undefined
     const props = (value as ReactElement<{ children?: unknown; onClick?: () => void }>).props
-    if (props?.children === 'Xác nhận đã nhận kho') return props.onClick
+    if (props?.children === 'Sẵn sàng bàn giao') return props.onClick
     return find(props?.children)
   }
   const click = find(tree); if (!click) throw new Error('Receipt command is missing'); return click

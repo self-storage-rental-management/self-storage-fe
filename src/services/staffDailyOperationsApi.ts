@@ -12,6 +12,7 @@ import { listSupportTickets } from "./supportApi"
 import type { SupportTicket } from "../types/supportApi"
 import { getAuthenticatedActor } from "./authApi"
 import { listAllRecoveryTasks, type RecoveryTask } from "./recoveryTasksApi"
+import { listStaffReservationReviews, type ReservationReview } from "./staffReservationApi"
 import { ApiClientError } from "./apiClient"
 
 export type StaffDailyOperationPriority = "high" | "medium" | "low"
@@ -96,26 +97,32 @@ const checkInTask = (item: CheckInCase): StaffDailyOperation => {
   }
 }
 
-const returnTask = (item: ApiReturn): StaffDailyOperation => ({
-  id: `return-${item.id}`,
-  title: `Kiểm tra trả kho ${item.unitNumber}`,
-  customer: item.customerName,
-  time: item.scheduledDate,
-  dueAt: `${item.scheduledDate}T23:59:59`,
-  sla:
-    item.status === "refund_pending"
-      ? "Cần chuyển hoàn cọc cho khách hàng"
-      : item.status === "payment_due"
-        ? "Chờ khách hàng thanh toán thêm"
-        : item.status === "disputed"
-          ? "Quản lý đang xem xét yêu cầu tính lại"
-          : "Khách cần trả kho hôm nay",
-  priority:
-    item.status === "refund_pending" || item.status === "payment_due"
-      ? "high"
-      : "medium",
-  page: "return",
-})
+const returnTask = (item: ApiReturn): StaffDailyOperation => {
+  const today = new Date().toISOString().slice(0, 10)
+  const isOverdue = item.scheduledDate ? item.scheduledDate < today : false
+  return {
+    id: `return-${item.id}`,
+    title: `Trả kho ${item.unitNumber}`,
+    customer: item.customerName,
+    time: item.scheduledDate,
+    dueAt: item.scheduledDate ? `${item.scheduledDate}T23:59:59` : new Date().toISOString(),
+    sla:
+      item.status === "refund_pending"
+        ? "Cần chuyển hoàn cọc cho khách hàng"
+        : item.status === "payment_due"
+          ? "Chờ khách hàng thanh toán thêm"
+          : item.status === "disputed"
+            ? "Quản lý đang xem xét yêu cầu tính lại"
+            : item.status === "requested"
+              ? isOverdue ? "Quá hạn hẹn - Khách đã yêu cầu trả kho" : "Khách đã yêu cầu trả kho - Cần nghiệm thu"
+              : isOverdue ? "Quá hạn trả kho - Cần nghiệm thu" : "Khách cần trả kho hôm nay",
+    priority:
+      item.status === "refund_pending" || item.status === "payment_due" || isOverdue
+        ? "high"
+        : "medium",
+    page: "return",
+  }
+}
 
 const supportTask = (item: SupportTicket): StaffDailyOperation => {
   const dueAt =
@@ -143,6 +150,17 @@ const maintenanceTask = (item: MaintenanceTaskApi): StaffDailyOperation => ({
   page: "tasks",
 })
 
+const reviewTask = (item: ReservationReview): StaffDailyOperation => ({
+  id: `review-${item.reservationId}`,
+  title: `Duyệt hàng hóa ${item.reservationCode}`,
+  customer: item.customerEmail,
+  time: item.reviewDueAt || item.startDate,
+  dueAt: item.reviewDueAt || `${item.startDate}T23:59:59`,
+  sla: "Cần nhân viên duyệt hàng hóa (Loại khác)",
+  priority: "high",
+  page: "reservations",
+})
+
 /** Load Staff operations from the real API surface and normalize them for one daily list. */
 export async function loadStaffDailyOperations(
   date: string,
@@ -168,6 +186,7 @@ export async function loadStaffDailyOperations(
       pageSize: 100,
     }),
     Promise.allSettled(recoveryScopes.map(id => listAllRecoveryTasks('staff',id))),
+    listStaffReservationReviews(0, 100),
   ])
 
   const failedSources: string[] = []
@@ -197,7 +216,11 @@ export async function loadStaffDailyOperations(
   const recoveryResults = read<PromiseSettledResult<RecoveryTask[]>[]>(4, "thu hồi kho") || []
   if (recoveryResults.some(result => result.status === 'rejected')) failedSources.push('thu hồi kho')
   const recoveryTasks = recoveryResults.flatMap(result => result.status === 'fulfilled' ? result.value : [])
+  const reviews = read<Awaited<ReturnType<typeof listStaffReservationReviews>>>(5, "duyệt đặt kho")
   const tasks = [
+    ...(reviews?.data || [])
+      .filter((item) => item.goodsReviewStatus === "PENDING")
+      .map(reviewTask),
     ...recoveryTasks.filter(task => task.status !== 'CLOSED').map((task): StaffDailyOperation => ({
       id: `recovery-${task.id}`,title: `Thu hồi kho - ${task.storageUnitCode}`,customer: task.customerName,
       time: task.receivedAt,dueAt: '',sla: task.status === 'IN_PROGRESS' ? 'Đang xử lý thu hồi' : 'Chờ xử lý thu hồi',
@@ -208,15 +231,14 @@ export async function loadStaffDailyOperations(
       .map(credentialTask),
     ...(checkIns?.data || [])
       .filter(isOpenCheckIn)
-      .filter(
-        (item) =>
-          dayOf(item.appointmentAt || item.scheduledAt || item.startDate) ===
-          date,
-      )
+      .filter((item) => {
+        const checkDate = dayOf(item.appointmentAt || item.scheduledAt || item.startDate)
+        return !checkDate || checkDate <= date
+      })
       .map(checkInTask),
     ...(returns?.data || [])
       .filter(isOpenReturn)
-      .filter((item) => item.scheduledDate === date)
+      .filter((item) => !item.scheduledDate || item.scheduledDate <= date)
       .map(returnTask),
     ...(support?.data || [])
       .filter(isOpenSupport)

@@ -16,7 +16,21 @@ export interface CheckInChecklist {
   accessHandedOver: boolean
 }
 
+export interface CheckInInventoryLine {
+  goodsItemId: string
+  actualQuantity: number
+  condition: 'INTACT' | 'DAMAGED' | 'NOT_PRESENT'
+  note: string | null
+  measurements?: {
+    lengthCm: number
+    widthCm: number
+    heightCm: number
+    weightKg: number
+  } | null
+}
+
 export interface CompleteCheckInRequest {
+  inventoryLines?: CheckInInventoryLine[] | null
   checklist: CheckInChecklist
   identityDocumentNumber: string
   identityVerificationNote: string | null
@@ -40,6 +54,16 @@ export interface CompleteCheckInRequest {
 }
 
 export interface CheckInCase {
+  declaredGoodsLines?: {
+    id: string
+    code: string | null
+    name: string | null
+    quantity: number
+    lengthCm: number | null
+    widthCm: number | null
+    heightCm: number | null
+    weightPerPackageKg?: number | null
+  }[]
   setupEarlyExitPolicyVersion?: string | null
   setupEarlyExitFee?: number | null
   checkInId: string | null

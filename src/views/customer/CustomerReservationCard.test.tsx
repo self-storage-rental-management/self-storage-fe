@@ -53,9 +53,9 @@ describe('customer reservation layout regression', () => {
     expect(html).toContain('Thời gian thanh toán đặt cọc giữ chỗ còn lại')
     expect(html).not.toContain('Thanh toán mô phỏng')
   })
-  it('restores the amber card, financial breakdown and six-step progress for real reservations', () => {
+  it('restores the amber card, financial breakdown and five-step progress for real reservations', () => {
     const html = render('AWAITING_EMAIL')
-    for (const text of ['border-l-amber-500', 'RSV-TEST', 'Kho HCM', 'Báo giá đặt kho', 'Số tiền còn lại phải thanh toán khi bàn giao kho', 'Tiến trình đơn đặt kho', 'Quản lý phân kho', 'Nhận kho và ký', 'Đã bàn giao', 'Xác minh email']) {
+    for (const text of ['border-l-amber-500', 'RSV-TEST', 'Kho HCM', 'Báo giá đặt kho', 'Số tiền còn lại phải thanh toán khi bàn giao kho', 'Tiến trình đơn đặt kho', 'Phê duyệt hồ sơ', 'Quản lý phân kho', 'Nhận kho và ký', 'Đã bàn giao']) {
       expect(html).toContain(text)
     }
     expect(html).toContain('aria-current="step"')
@@ -79,6 +79,10 @@ describe('customer reservation layout regression', () => {
     }
     expect(render('AWAITING_CUSTOMER_RECEIPT')).not.toContain('Lưu lịch nhận kho')
   })
+  it('shows the two customer gates before inventory', () => {
+    expect(render('AWAITING_CUSTOMER_RECEIPT')).toContain('Sẵn sàng bàn giao')
+    expect(render('PREPARING')).toContain('Sẵn sàng để kiểm kê')
+  })
   it('requires an explicit cancellation confirmation', () => {
     const html = render('AWAITING_EMAIL')
     expect(html).toContain('Hủy giữ kho')
@@ -92,10 +96,10 @@ describe('customer reservation layout regression', () => {
     expect(html).not.toContain('Gia hạn thanh toán')
   })
   it.each([
-    ['AWAITING_EMAIL', 0], ['AWAITING_REVIEW', 1], ['AWAITING_PAYMENT', 2],
-    ['PAYMENT_GRACE', 2], ['PAYMENT_REVIEW', 2], ['CONFIRMED', 3],
-    ['UNIT_RESERVED', 4], ['READY_FOR_CHECKIN', 4], ['AWAITING_CUSTOMER_RECEIPT', 5],
-    ['COMPLETED', 6], ['CANCELLED', null], ['EXPIRED', null], ['REJECTED', null],
+    ['AWAITING_EMAIL', 0], ['AWAITING_REVIEW', 0], ['AWAITING_PAYMENT', 1],
+    ['PAYMENT_GRACE', 1], ['PAYMENT_REVIEW', 1], ['CONFIRMED', 2],
+    ['UNIT_RESERVED', 3], ['READY_FOR_CHECKIN', 3], ['AWAITING_CUSTOMER_RECEIPT', 4],
+    ['COMPLETED', 5], ['CANCELLED', null], ['EXPIRED', null], ['REJECTED', null],
   ] as const)('maps backend status %s to progress %s', (status, step) => {
     expect(reservationProgress(status)).toBe(step)
   })

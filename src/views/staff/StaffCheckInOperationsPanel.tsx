@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useId, useMemo, useState } from "react"
 
 import {
   completeCheckIn,
-  completeCheckInSetup,
   confirmCheckInPayment,
   downloadCheckInEvidence,
   listCheckIns,
@@ -17,6 +16,7 @@ import {
   type CheckInCase,
   type CheckInPaymentMethod,
   type CheckInChecklist,
+  type CheckInInventoryLine,
   type CheckInListStatus,
 } from "../../services/checkInApi"
 
@@ -37,6 +37,7 @@ import {
 } from "../../components/ui"
 
 import {
+  extractStaffFieldErrors,
   formatStaffDateTime,
   staffCheckInStatusLabel,
   staffErrorMessage,
@@ -125,6 +126,44 @@ function parseEmptyStorageHandover(note: string | null | undefined) {
   }
 }
 
+function HandoverWorkflowHelp() {
+  const [visible, setVisible] = useState(false)
+  const tooltipId = useId()
+
+  return (
+    <div className="shrink-0" onMouseLeave={() => setVisible(false)}>
+      <button
+        type="button"
+        aria-label="Lưu ý về quy trình bàn giao"
+        aria-describedby={visible ? tooltipId : undefined}
+        onMouseEnter={() => setVisible(true)}
+        onFocus={() => setVisible(true)}
+        onBlur={() => setVisible(false)}
+        onClick={() => setVisible(true)}
+        onKeyDown={event => {
+          if (event.key === "Escape" && visible) {
+            event.stopPropagation()
+            setVisible(false)
+          }
+        }}
+        className="flex h-8 w-8 items-center justify-center rounded-full text-amber-800 hover:bg-amber-50 focus-visible:outline-2 focus-visible:outline-amber-600"
+      >
+        <svg aria-hidden="true" className="show-icon h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7.5v5m0 3.5h.01" />
+        </svg>
+      </button>
+      {visible && (
+        <div id={tooltipId} role="tooltip" className="absolute inset-x-4 z-20 max-w-md pt-1 sm:inset-x-6">
+          <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-950 shadow-md">
+            Hoàn tất bàn giao kho trống sẽ chuyển sang chờ khách hàng xác nhận nhận kho. Thời gian chuẩn bị chỉ bắt đầu sau khi khách xác nhận. Nhân viên kiểm kê khi khách báo đã chuẩn bị xong.
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ComparisonBadge({ matches }: { matches: boolean | null }) {
   if (matches === null) {
     return <Badge variant="muted">Chưa đủ dữ liệu</Badge>
@@ -135,6 +174,78 @@ function ComparisonBadge({ matches }: { matches: boolean | null }) {
       {matches ? "Khớp" : "Chênh lệch"}
     </Badge>
   )
+}
+
+type InventoryDraft = {
+  quantity: string
+  condition: CheckInInventoryLine["condition"] | ""
+  note: string
+  lengthCm: string
+  widthCm: string
+  heightCm: string
+  weightKg: string
+  weightEdited?: boolean
+  checked: boolean
+}
+
+const emptyInventory: InventoryDraft = {
+  quantity: "", condition: "", note: "", lengthCm: "", widthCm: "", heightCm: "", weightKg: "", checked: false,
+}
+
+type DeclaredInventoryLine = NonNullable<CheckInCase["declaredGoodsLines"]>[number]
+
+function calculateInventoryWeight(weightPerPackageKg: number | null | undefined, quantity: string) {
+  const count = Number(quantity)
+  if (weightPerPackageKg == null || !quantity.trim() || !Number.isInteger(count) || count < 0) return ""
+  return formatInputNumber(Number((weightPerPackageKg * count).toFixed(2)))
+}
+
+function inventoryFromDeclaration(line: DeclaredInventoryLine): InventoryDraft {
+  const quantity = formatInputNumber(line.quantity)
+  return {
+    ...emptyInventory,
+    quantity,
+    lengthCm: formatInputNumber(line.lengthCm),
+    widthCm: formatInputNumber(line.widthCm),
+    heightCm: formatInputNumber(line.heightCm),
+    weightKg: calculateInventoryWeight(line.weightPerPackageKg, quantity),
+  }
+}
+
+function applyInventoryChanges(line: DeclaredInventoryLine, entry: InventoryDraft, changes: Partial<InventoryDraft>): InventoryDraft {
+  const next = { ...entry, checked: false, ...changes }
+  if (changes.weightKg !== undefined) {
+    next.weightEdited = true
+  }
+  if (!next.weightEdited && changes.quantity !== undefined) {
+    next.weightKg = calculateInventoryWeight(line.weightPerPackageKg, next.quantity)
+  }
+  return next
+}
+
+const inventoryDimensions = [
+  ["lengthCm", "Dài thực tế (cm)"], ["widthCm", "Rộng thực tế (cm)"], ["heightCm", "Cao thực tế (cm)"],
+] as const
+
+function compareInventory(line: DeclaredInventoryLine, entry: InventoryDraft) {
+  const quantity = entry.quantity.trim() ? Number(entry.quantity) : NaN
+  const dimensions: [number, number, number] = [Number(entry.lengthCm), Number(entry.widthCm), Number(entry.heightCm)]
+  const declaredDimensions: [number | null, number | null, number | null] = [line.lengthCm, line.widthCm, line.heightCm]
+  const weight = Number(entry.weightKg)
+  const measured = [...dimensions, weight].every(value => Number.isFinite(value) && value >= 0.01)
+  const volume = quantity === 0 ? 0 : measured ? dimensions[0] * dimensions[1] * dimensions[2] * quantity / 1_000_000 : NaN
+  const declaredVolume = declaredDimensions.every(value => value != null)
+    ? Number(line.lengthCm) * Number(line.widthCm) * Number(line.heightCm) * line.quantity / 1_000_000
+    : NaN
+  const badges = [
+    { label: "Số kiện", matches: Number.isInteger(quantity) ? quantity === line.quantity : null },
+    { label: "Khối lượng", matches: measured && quantity > 0 && line.weightPerPackageKg != null
+      ? !hasMaterialVariance(entry.weightKg, line.weightPerPackageKg * line.quantity, 0.1) : null },
+    { label: "Thể tích", matches: quantity > 0 && Number.isFinite(volume) && Number.isFinite(declaredVolume)
+      ? !hasMaterialVariance(String(volume), declaredVolume, 0.0001) : null },
+    { label: "Kích thước", matches: measured && quantity > 0 ? dimensionsMatch(dimensions, declaredDimensions) : null },
+  ]
+  return { quantity, dimensions, weight, volume, measured, badges, needsNote: badges.some(badge => badge.matches === false) || entry.condition === "DAMAGED" }
 }
 
 const MAX_UPLOAD_FILE_SIZE_BYTES = 25 * 1024 * 1024
@@ -233,9 +344,21 @@ export default function StaffCheckInOperationsPanel({
 
   const [handoverTarget, setHandoverTarget] = useState<CheckInCase | null>(null)
 
+  const [customerWaitTarget, setCustomerWaitTarget] = useState<"receipt" | "preparation" | null>(null)
+
   const [handoverStep, setHandoverStep] = useState(1)
 
   const [checklist, setChecklist] = useState<CheckInChecklist>(emptyChecklist)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+
+  const clearFieldError = (fieldName: string) => {
+    setFieldErrors((prev) => {
+      if (!prev[fieldName]) return prev
+      const next = { ...prev }
+      delete next[fieldName]
+      return next
+    })
+  }
 
   const [identityDocumentNumber, setIdentityDocumentNumber] = useState("")
 
@@ -266,6 +389,7 @@ export default function StaffCheckInOperationsPanel({
   )
 
   const [packageCount, setPackageCount] = useState("1")
+  const [inventoryDraft, setInventoryDraft] = useState<Record<string, InventoryDraft>>({})
 
   const [goodsCategory, setGoodsCategory] = useState("Hàng hóa đã khai báo")
 
@@ -320,6 +444,7 @@ export default function StaffCheckInOperationsPanel({
   } | null>(null)
 
   const [submitting, setSubmitting] = useState(false)
+  const [showCustomerReadyModal, setShowCustomerReadyModal] = useState(false)
 
   useEffect(() => {
     const refreshCheckIns = () => setRefreshKey((value) => value + 1)
@@ -371,10 +496,37 @@ export default function StaffCheckInOperationsPanel({
     }
   }, [page, query, refreshKey, scheduledFrom, scheduledTo, status])
 
-  const allChecksComplete = useMemo(
-    () => checklistLabels.every(([key]) => checklist[key]),
-
-    [checklist],
+  const declaredLines = handoverTarget?.declaredGoodsLines ?? []
+  const lineInventory = declaredLines.length > 0 && (
+    handoverTarget?.checkInStatus !== "completed" || Boolean(handoverTarget.handover?.inventoryLines?.some(line => line.measurements))
+  )
+  const inventoryRows = declaredLines.map(line => {
+    const entry = inventoryDraft[line.id] ?? (
+      handoverTarget?.checkInStatus === "completed" ? emptyInventory : inventoryFromDeclaration(line)
+    )
+    return { line, entry, comparison: compareInventory(line, entry) }
+  })
+  const inventoryLinesComplete = inventoryRows.every(({ entry, comparison }) => {
+    const { quantity, measured, needsNote } = comparison
+    return entry.checked && Number.isInteger(quantity) && quantity >= 0 && quantity <= 2147483647
+      && Boolean(entry.condition) && (quantity === 0 ? entry.condition === "NOT_PRESENT" : measured && Number.isFinite(comparison.volume) && entry.condition !== "NOT_PRESENT")
+      && (!needsNote || Boolean(entry.note.trim()))
+  })
+  const actualDimensions = [0, 0, 0]
+  let actualWeight = 0
+  let actualVolume = 0
+  for (const { comparison } of inventoryRows) {
+    if (!(comparison.quantity > 0 && comparison.measured)) continue
+    const sorted = [...comparison.dimensions].sort((a, b) => a - b)
+    sorted.forEach((value, index) => { actualDimensions[index] = Math.max(actualDimensions[index], value) })
+    actualWeight += comparison.weight
+    actualVolume += comparison.volume
+  }
+  const totalPackages = lineInventory
+    ? inventoryRows.reduce((sum, { comparison }) => sum + (comparison.quantity || 0), 0)
+    : Number(packageCount)
+  const allChecksComplete = checklistLabels.every(([key]) =>
+    lineInventory && (key === "measurementVerified" || key === "conditionRecorded") ? inventoryLinesComplete : checklist[key],
   )
 
   useEffect(() => {
@@ -447,7 +599,25 @@ export default function StaffCheckInOperationsPanel({
     }
   }, [handoverTarget, heightCm, lengthCm, packageCount, volumeM3, weightKg, widthCm])
 
-  const measurementVariance = checkInComparison?.hasVariance ?? false
+  const packageCountValid = Number.isInteger(totalPackages) && totalPackages > 0 && totalPackages <= 2147483647
+  const updateInventoryLine = (line: DeclaredInventoryLine, changes: Partial<InventoryDraft>) => {
+    const field = `inventory-${line.id}`
+    setFieldErrors(current => Object.fromEntries(Object.entries(current).filter(([key]) => !key.startsWith(`${field}-`) && key !== "packageCount")))
+    setInventoryDraft(current => ({
+      ...current,
+      [line.id]: applyInventoryChanges(line, current[line.id] ?? inventoryFromDeclaration(line), changes),
+    }))
+    setVarianceAccepted(false)
+  }
+  const measurementVariance = lineInventory
+    ? inventoryRows.some(({ comparison }) => comparison.badges.some(badge => badge.matches === false))
+      || (inventoryLinesComplete && packageCountValid && (totalPackages !== handoverTarget?.declaredPackageCount
+        || hasMaterialVariance(String(actualWeight), handoverTarget?.declaredGoodsWeightKg ?? NaN, 0.1)
+        || hasMaterialVariance(String(actualVolume), handoverTarget?.declaredGoodsVolumeM3 ?? NaN, 0.0001)
+        || dimensionsMatch([actualDimensions[0], actualDimensions[1], actualDimensions[2]], [
+          handoverTarget?.declaredGoodsLengthCm ?? null, handoverTarget?.declaredGoodsWidthCm ?? null, handoverTarget?.declaredGoodsHeightCm ?? null,
+        ]) === false))
+    : checkInComparison?.hasVariance ?? false
   const hasEmptyStorageEvidence = evidenceFiles.length > 0 || evidenceReferences.length > 0
   const emptyStorageHandoverReady = Boolean(keyLockReference.trim() && initialCondition.trim() && hasEmptyStorageEvidence)
 
@@ -459,15 +629,87 @@ export default function StaffCheckInOperationsPanel({
   )
 
   const declaredIdentityDocument = handoverTarget?.identityDocumentNumber?.trim() || ""
+  const identityVerificationBlocked = !normalizeIdentityDocument(identityDocumentNumber)
   const identityMismatch = Boolean(
     declaredIdentityDocument &&
       identityDocumentNumber.trim() &&
       normalizeIdentityDocument(declaredIdentityDocument) !==
         normalizeIdentityDocument(identityDocumentNumber),
   )
-  const identityVerificationBlocked = !normalizeIdentityDocument(identityDocumentNumber) || identityMismatch
 
   const refresh = () => setRefreshKey((value) => value + 1)
+
+  const refreshHandoverTarget = async () => {
+    if (!handoverTarget?.checkInId) return
+
+    try {
+      const response = await listCheckIns({
+        page: 0,
+        pageSize: 100,
+        q: handoverTarget.reservationCode,
+      })
+      const latest = response.data.find((item) => item.checkInId === handoverTarget.checkInId)
+      if (!latest) return
+
+      setHandoverTarget(latest)
+      setHandoverStep(stepForCheckIn(latest))
+      if (latest.checkInStatus === "handover_pending_receipt") setCustomerWaitTarget("receipt")
+      else if (latest.checkInStatus === "setup_in_progress") setCustomerWaitTarget("preparation")
+      else setCustomerWaitTarget(null)
+    } catch (reason) {
+      fail(reason, "Không thể cập nhật trạng thái bàn giao.")
+    }
+  }
+
+  useEffect(() => {
+    if (!customerWaitTarget || !handoverTarget?.checkInId) return
+
+    let active = true
+    const pollCustomerReceipt = async () => {
+      try {
+        const response = await listCheckIns({
+          page: 0,
+          pageSize: 100,
+          q: handoverTarget.reservationCode,
+        })
+        const latest = response.data.find((item) => item.checkInId === handoverTarget.checkInId)
+        if (!active || !latest) return
+
+        setHandoverTarget(latest)
+        setHandoverStep(stepForCheckIn(latest))
+        if (latest.checkInStatus === "handover_pending_receipt") {
+          setCustomerWaitTarget("receipt")
+        } else if (latest.checkInStatus === "setup_in_progress") {
+          if (customerWaitTarget === "receipt") {
+            showToast("Khách hàng đã xác nhận sẵn sàng bàn giao. Đang chờ khách chuẩn bị hàng để kiểm kê.")
+          }
+          setCustomerWaitTarget("preparation")
+        } else {
+          if (customerWaitTarget === "preparation" && latest.checkInStatus === "setup_completed") {
+            showToast("Khách hàng đã báo sẵn sàng kiểm kê. Bước kiểm kê hàng hóa đã được mở.")
+          }
+          setCustomerWaitTarget(null)
+        }
+      } catch {
+        // Keep the waiting popup open. The next poll can recover from a temporary read error.
+      }
+    }
+
+    const timer = window.setInterval(() => void pollCustomerReceipt(), 3000)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
+  }, [customerWaitTarget, handoverTarget?.checkInId, handoverTarget?.reservationCode, showToast])
+
+  const closeHandover = () => {
+    if (submitting) return
+    setError(null)
+    setFieldErrors({})
+    setCustomerWaitTarget(null)
+    setShowCustomerReadyModal(false)
+    setHandoverTarget(null)
+  }
 
   const applyFilters = () => {
     if (
@@ -518,31 +760,96 @@ export default function StaffCheckInOperationsPanel({
   }
 
   const fail = (reason: unknown, fallback: string) => {
+    const fields = extractStaffFieldErrors(reason)
+    if (Object.keys(fields).length > 0) {
+      setFieldErrors(fields)
+    }
     const message = staffErrorMessage(reason, fallback)
     setError(message)
     showToast(message)
   }
 
   const submitHandover = async () => {
-    const hasKeyLock = Boolean(keyLockReference.trim())
-    if (
-      !handoverTarget?.checkInId ||
-      !allChecksComplete ||
-      !hasKeyLock ||
-      !Number.isFinite(Number(lengthCm)) ||
-      !Number.isFinite(Number(widthCm)) ||
-      !Number.isFinite(Number(heightCm)) ||
-      !Number.isFinite(Number(weightKg)) ||
-      !Number.isFinite(Number(volumeM3)) ||
-      identityVerificationBlocked
-    ) return
+    setFieldErrors({})
+    setError(null)
 
-    const declaredIdentity = normalizeIdentityDocument(handoverTarget.identityDocumentNumber)
+    const errors: Record<string, string> = {}
+    if (lineInventory) {
+      for (const { line, entry, comparison } of inventoryRows) {
+        const field = `inventory-${line.id}`
+        const { quantity, measured, needsNote } = comparison
+        if (!Number.isInteger(quantity) || quantity < 0 || quantity > 2147483647) {
+          errors[`${field}-quantity`] = "Nhập số kiện nguyên từ 0 trở lên"
+        }
+        if (quantity > 0 && (!measured || !Number.isFinite(comparison.volume))) {
+          errors[`${field}-measurements`] = "Nhập đủ kích thước và khối lượng thực tế của dòng hàng"
+        }
+        if (!entry.condition || (quantity === 0) !== (entry.condition === "NOT_PRESENT")) {
+          errors[`${field}-condition`] = "Chọn tình trạng phù hợp với số kiện thực tế"
+        }
+        if (needsNote && !entry.note.trim()) {
+          errors[`${field}-note`] = "Ghi chú lý do chênh lệch hoặc hư hỏng"
+        }
+        if (!entry.checked) {
+          errors[`${field}-checked`] = "Xác nhận đã đối chiếu dòng hàng"
+        }
+      }
+    } else {
+      const measurements = [
+        ["lengthCm", lengthCm, "Chiều dài"], ["widthCm", widthCm, "Chiều rộng"],
+        ["heightCm", heightCm, "Chiều cao"], ["weightKg", weightKg, "Khối lượng"],
+      ] as const
+      for (const [key, value, label] of measurements) {
+        if (!Number.isFinite(Number(value)) || Number(value) < 0.01) {
+          errors[key] = `${label} thực tế phải từ 0,01 trở lên`
+        }
+      }
+      if (!goodsCondition.trim()) {
+        errors.goodsCondition = "Vui lòng nhập tình trạng hàng hóa"
+      }
+      if (!checklist.conditionRecorded) {
+        errors.conditionRecorded = "Vui lòng đánh dấu đã ghi nhận tình trạng hàng hóa"
+      }
+      if (!Object.values(measurementChecks).every(Boolean)) {
+        errors.measurementChecks = "Vui lòng xác nhận đã đối chiếu số liệu"
+      }
+    }
+    if (!packageCountValid) {
+      errors.packageCount = "Tổng số kiện thực tế phải là số nguyên từ 1 đến 2.147.483.647"
+    }
+    if (!goodsCategory.trim()) errors.goodsCategory = "Vui lòng nhập loại hàng"
+    if (!initialCondition.trim()) errors.initialCondition = "Cần ghi nhận hiện trạng kho ở bước bàn giao"
+    if (!keyLockReference.trim()) errors.lockReference = "Cần ghi nhận mã ổ khóa hoặc chìa khóa ở bước bàn giao"
+    if ((!lineInventory || inventoryLinesComplete) && !allChecksComplete && !Object.keys(errors).length) {
+      errors.handoverChecklist = "Cần hoàn tất các bước xác nhận trước khi kiểm kê"
+    }
+    if (measurementVariance) {
+      if (!varianceAccepted) {
+        errors.varianceAccepted = "Cần trao đổi với khách và đánh dấu chấp nhận chênh lệch"
+      }
+      if (!varianceReason.trim()) {
+        errors.varianceReason = "Vui lòng nhập lý do chênh lệch khi hàng hóa khác đơn đặt"
+      }
+    }
+    const emptyStorageReferences = parseEmptyStorageHandover(handoverTarget?.readinessNote).evidenceReferences
+    if (!evidenceFiles.length && !evidenceReferences.some(reference => !emptyStorageReferences.includes(reference))) {
+      errors.evidenceFiles = "Cần tải lên ít nhất 1 ảnh hoặc tệp PDF bằng chứng kiểm kê"
+    }
+
     const providedIdentity = normalizeIdentityDocument(identityDocumentNumber)
-    if (!providedIdentity || (declaredIdentity && declaredIdentity !== providedIdentity)) {
-      setError("CCCD/CMND không khớp thông tin đơn đặt kho. Chưa thể tiếp tục bàn giao.")
+    if (!providedIdentity) {
+      errors.identityDocumentNumber = "Số CCCD/CMND không được để trống"
+    } else if (!/^(?:\d{9}|\d{12})$/.test(providedIdentity)) {
+      errors.identityDocumentNumber = "CCCD/CMND phải gồm đúng 9 hoặc 12 chữ số"
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors)
+      setError("Một số trường thông tin chưa hợp lệ. Vui lòng kiểm tra các trường được đánh dấu đỏ bên dưới.")
       return
     }
+
+    if (!handoverTarget?.checkInId) return
 
     setSubmitting(true)
 
@@ -565,22 +872,22 @@ export default function StaffCheckInOperationsPanel({
       }
 
       await completeCheckIn(handoverTarget.checkInId, {
-        checklist,
+        checklist: lineInventory ? { ...checklist, measurementVerified: true, conditionRecorded: true } : checklist,
 
         identityDocumentNumber: identityDocumentNumber.trim(),
 
         identityVerificationNote: verificationNotes.trim() || null,
 
         actualMeasurements: {
-          lengthCm: Number(lengthCm),
+          lengthCm: lineInventory ? actualDimensions[0] : Number(lengthCm),
 
-          widthCm: Number(widthCm),
+          widthCm: lineInventory ? actualDimensions[1] : Number(widthCm),
 
-          heightCm: Number(heightCm),
+          heightCm: lineInventory ? actualDimensions[2] : Number(heightCm),
 
-          weightKg: Number(weightKg),
+          weightKg: lineInventory ? actualWeight : Number(weightKg),
 
-          actualVolumeM3: Number(volumeM3),
+          actualVolumeM3: lineInventory ? actualVolume : Number(volumeM3),
 
           varianceAccepted: measurementVariance && varianceAccepted,
         },
@@ -589,9 +896,21 @@ export default function StaffCheckInOperationsPanel({
 
         initialUnitCondition: initialCondition.trim(),
 
-        goodsCondition: goodsCondition.trim(),
+        goodsCondition: lineInventory ? "Đã ghi nhận tình trạng theo từng dòng hàng" : goodsCondition.trim(),
 
-        packageCount: Number(packageCount),
+        packageCount: totalPackages,
+        inventoryLines: lineInventory ? inventoryRows.map(({ line, entry, comparison }) => ({
+          goodsItemId: line.id,
+          actualQuantity: comparison.quantity,
+          condition: entry.condition as CheckInInventoryLine["condition"],
+          note: entry.note.trim() || null,
+          measurements: comparison.quantity > 0 ? {
+            lengthCm: comparison.dimensions[0],
+            widthCm: comparison.dimensions[1],
+            heightCm: comparison.dimensions[2],
+            weightKg: comparison.weight,
+          } : null,
+        })) : [],
 
         goodsCategory: goodsCategory.trim(),
 
@@ -624,6 +943,7 @@ export default function StaffCheckInOperationsPanel({
         `Đã hoàn tất bàn giao ${handoverTarget.storageUnitCode}. Hồ sơ vẫn được lưu trong Nhận kho & bàn giao để xem lại.`,
       )
 
+      setCustomerWaitTarget(null)
       setHandoverTarget(null)
 
       refresh()
@@ -638,9 +958,17 @@ export default function StaffCheckInOperationsPanel({
     if (!handoverTarget?.checkInId) return
     setSubmitting(true)
     setError(null)
+    setFieldErrors({})
     try {
       let updated: CheckInCase | null = null
       if (handoverStep === 1) {
+        const normalized = normalizeIdentityDocument(identityDocumentNumber)
+        if (!normalized || !/^(?:\d{9}|\d{12})$/.test(normalized)) {
+          setFieldErrors({ identityDocumentNumber: "CCCD/CMND phải gồm đúng 9 hoặc 12 chữ số." })
+          setError("Số CCCD/CMND trên giấy tờ gốc không hợp lệ. Vui lòng nhập đúng 9 hoặc 12 chữ số.")
+          setSubmitting(false)
+          return
+        }
         updated = await verifyCheckInIdentity(handoverTarget.checkInId, {
           identityDocumentNumber: identityDocumentNumber.trim(),
           note: verificationNotes.trim() || undefined,
@@ -692,11 +1020,22 @@ export default function StaffCheckInOperationsPanel({
           evidenceReferences: emptyStorageEvidence,
         })
         setChecklist((current) => ({ ...current, accessHandedOver: true, unitWalkthrough: true }))
+        if (updated.checkInStatus === "handover_pending_receipt") {
+          setCustomerWaitTarget("receipt")
+        }
       } else if (handoverStep === 5) {
-        updated = await completeCheckInSetup(handoverTarget.checkInId, "Xác nhận hoàn tất chuẩn bị hàng, chuyển sang kiểm kê thực tế")
+        if (handoverTarget.checkInStatus === "handover_pending_receipt") {
+          setCustomerWaitTarget("receipt")
+          throw new Error("Đang chờ khách hàng nhấn Sẵn sàng bàn giao trên cổng khách hàng.")
+        }
+        throw new Error("Chỉ khách hàng được xác nhận đã chuẩn bị xong. Staff chỉ có thể kiểm kê sau khi khách báo sẵn sàng.")
       }
-      if (updated) setHandoverTarget(updated)
-      setHandoverStep((current) => Math.min(6, current + 1))
+      if (updated) {
+        setHandoverTarget(updated)
+        setHandoverStep(stepForCheckIn(updated))
+      } else {
+        setHandoverStep((current) => Math.min(6, current + 1))
+      }
       refresh()
     } catch (reason) {
       fail(reason, "Không thể hoàn tất bước nhận kho này.")
@@ -802,7 +1141,15 @@ export default function StaffCheckInOperationsPanel({
 
   const openHandover = (item: CheckInCase) => {
     setError(null)
+    setFieldErrors({})
     setHandoverTarget(item)
+    setCustomerWaitTarget(
+      item.checkInStatus === "handover_pending_receipt"
+        ? "receipt"
+        : item.checkInStatus === "setup_in_progress"
+          ? "preparation"
+          : null,
+    )
 
     setHandoverStep(stepForCheckIn(item))
 
@@ -851,7 +1198,16 @@ export default function StaffCheckInOperationsPanel({
 
     setVolumeM3(formatInputNumber(item.declaredGoodsVolumeM3))
 
-    setPackageCount(String(item.declaredPackageCount ?? 1))
+    const savedLines = item.handover?.inventoryLines ?? []
+    setInventoryDraft(Object.fromEntries(savedLines.map(line => [line.goodsItemId, {
+      quantity: String(line.actualQuantity), condition: line.condition, note: line.note ?? "",
+      lengthCm: formatInputNumber(line.measurements?.lengthCm),
+      widthCm: formatInputNumber(line.measurements?.widthCm),
+      heightCm: formatInputNumber(line.measurements?.heightCm),
+      weightKg: formatInputNumber(line.measurements?.weightKg),
+      checked: true,
+    }])))
+    setPackageCount(String(item.handover?.packageCount ?? (item.declaredGoodsLines?.length ? 0 : item.declaredPackageCount ?? 1)))
 
     setMeasurementChecks(emptyMeasurementChecks())
 
@@ -1149,8 +1505,9 @@ export default function StaffCheckInOperationsPanel({
 
       <Modal
         open={Boolean(handoverTarget)}
-        onClose={() => { if (!submitting) { setError(null); setHandoverTarget(null) } }}
+        onClose={closeHandover}
         title="Quy trình bàn giao, chuẩn bị và kiểm kê"
+        titleAdornment={<HandoverWorkflowHelp />}
         size="3xl"
       >
         {handoverTarget && (
@@ -1161,7 +1518,6 @@ export default function StaffCheckInOperationsPanel({
                 ['Khách hàng nhận kho', handoverTarget.customerName], ['Tên cơ sở', handoverTarget.facilityName || 'StorageHub'],
               ].map(([label, value]) => <div key={label}><dt className="text-xs text-stone-500">{label}</dt><dd className="mt-1 break-words font-semibold text-stone-900">{value || 'Chưa cập nhật'}</dd></div>)}
             </dl>
-            <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">Hoàn tất bàn giao kho trống sẽ chuyển sang chờ khách hàng xác nhận nhận kho. Thời gian chuẩn bị chỉ bắt đầu sau xác nhận của khách; kiểm kê thực hiện khi khách báo đã chuẩn bị xong.</p>
             {error && (
               <div role="alert" className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800 flex items-start gap-3 shadow-sm">
                 <svg className="h-5 w-5 text-red-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1170,10 +1526,20 @@ export default function StaffCheckInOperationsPanel({
                 <div className="flex-1">
                   <b className="font-semibold text-red-900">Không thể thực hiện thao tác:</b>
                   <p className="mt-0.5 whitespace-pre-wrap">{error}</p>
+                  {Object.keys(fieldErrors).length > 0 && (
+                    <div className="mt-2.5 rounded-lg border border-red-200 bg-white/70 p-2.5">
+                      <p className="text-xs font-semibold text-red-900 mb-1">Chi tiết các trường cần kiểm tra lại:</p>
+                      <ul className="list-disc list-inside space-y-0.5 text-xs text-red-700">
+                        {Object.entries(fieldErrors).map(([key, msg]) => (
+                          <li key={key}>{msg}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
                 <button
                   type="button"
-                  onClick={() => setError(null)}
+                  onClick={() => { setError(null); setFieldErrors({}) }}
                   className="rounded px-1.5 py-0.5 text-xs font-bold text-red-500 hover:bg-red-100 hover:text-red-700"
                   aria-label="Đóng lỗi"
                 >
@@ -1185,24 +1551,19 @@ export default function StaffCheckInOperationsPanel({
               {workflowStepLabels.map((label, index) => {
                 const step = index + 1
                 return (
-                  <button
+                  <div
                     key={label}
-                    type="button"
-                    disabled={submitting || step > workflowCurrentStep}
-                    onClick={() => {
-                      setError(null)
-                      setHandoverStep(step)
-                    }}
                     aria-current={handoverStep === step ? "step" : undefined}
-                    className={`rounded-lg border px-3 py-2 text-left text-xs transition ${
+                    className={`rounded-lg border px-3 py-2 text-left text-xs transition select-none cursor-default ${
                     handoverStep === step
                       ? "border-amber-500 bg-amber-50 font-semibold text-amber-950"
                       : workflowCurrentStep >= step
                         ? "border-emerald-300 bg-emerald-50 text-emerald-900"
-                        : "border-stone-200 bg-stone-50 text-stone-500"
-                    } ${step <= workflowCurrentStep ? "cursor-pointer hover:brightness-95" : "cursor-not-allowed opacity-70"}`}>
+                        : "border-stone-200 bg-stone-50 text-stone-500 opacity-70"
+                    }`}
+                  >
                     <span className="mr-1 font-bold">{step}.</span>{label}
-                  </button>
+                  </div>
                 )
               })}
             </div>
@@ -1211,10 +1572,43 @@ export default function StaffCheckInOperationsPanel({
               <div className="space-y-4">
                 <div className="grid gap-3 rounded-lg border border-stone-200 p-4 text-sm md:grid-cols-3">
                   <div><span className="text-stone-500">Khách hàng</span><p className="font-semibold">{handoverTarget.customerName}</p></div>
-                  <div><span className="text-stone-500">CCCD/CMND đã khai báo</span><p className="font-semibold">{declaredIdentityDocument || "Chưa có dữ liệu"}</p></div>
-                  <Input label="CCCD/CMND trên giấy tờ gốc *" value={identityDocumentNumber} disabled={isReviewingCompletedStep} onChange={(event) => setIdentityDocumentNumber(event.target.value)} />
+                  <div>
+                    <span className="text-stone-500">CCCD/CMND đã khai báo</span>
+                    <p className="font-semibold">{declaredIdentityDocument || "Chưa có dữ liệu"}</p>
+                    {identityMismatch && !isReviewingCompletedStep && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          clearFieldError("identityDocumentNumber")
+                          setIdentityDocumentNumber(declaredIdentityDocument)
+                        }}
+                        className="mt-1 text-xs text-amber-700 hover:text-amber-800 underline"
+                      >
+                        Khôi phục số đã khai báo
+                      </button>
+                    )}
+                  </div>
+                  <Input
+                    label="CCCD/CMND trên giấy tờ gốc *"
+                    error={fieldErrors.identityDocumentNumber}
+                    value={identityDocumentNumber}
+                    disabled={isReviewingCompletedStep}
+                    onChange={(event) => {
+                      clearFieldError("identityDocumentNumber")
+                      setIdentityDocumentNumber(event.target.value)
+                    }}
+                  />
                 </div>
-                {identityMismatch && <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">Số giấy tờ không khớp với đơn đặt kho. Backend sẽ không cho chuyển sang bước ký hợp đồng.</p>}
+                {identityMismatch && (
+                  <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+                    <p className="font-semibold flex items-center gap-1.5">
+                      <span>⚠️</span> Số giấy tờ gốc khác với thông tin đã khai báo ban đầu ({declaredIdentityDocument || "chưa khai báo"}).
+                    </p>
+                    <p className="mt-1 text-xs text-amber-900 leading-relaxed">
+                      Nhân viên đã đối chiếu giấy tờ gốc thực tế. Khi bấm <b>Xác nhận và tiếp tục</b>, hệ thống sẽ tự động cập nhật số CCCD/CMND mới ({identityDocumentNumber.trim()}) vào hồ sơ đơn hàng và lưu lịch sử xác minh.
+                    </p>
+                  </div>
+                )}
                 <div className="grid gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm sm:grid-cols-2">
                   <label className="flex items-center gap-2"><input type="checkbox" disabled={isReviewingCompletedStep} checked={checklist.identityVerified && checklist.reservationMatched} onChange={(event) => setChecklist((value) => ({ ...value, identityVerified: event.target.checked, reservationMatched: event.target.checked }))} />Đã kiểm tra giấy tờ gốc và đối chiếu khách hàng với đơn đặt kho *</label>
                 </div>
@@ -1244,7 +1638,14 @@ export default function StaffCheckInOperationsPanel({
                     <FilePreviewList files={contractFile ? [contractFile] : []} onRemove={() => { setContractFile(null); setConfirmedSetupTerms(null) }} disabled={submitting || isReviewingCompletedStep} />
                     {setupTermsKey && <label className="flex items-start gap-2 text-sm text-blue-950">
                       <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-amber-600" checked={confirmedSetupTerms === setupTermsKey} disabled={submitting || isReviewingCompletedStep || !contractFile || handoverTarget.setupEarlyExitFee == null} onChange={event => setConfirmedSetupTerms(event.target.checked ? setupTermsKey : null)} />
-                      <span>Đã đối chiếu hợp đồng đã ký có điều khoản phí trả kho trong thời gian chuẩn bị một lần {handoverTarget.setupEarlyExitFee == null ? '(chưa xác định, cần đối soát)' : `${handoverTarget.setupEarlyExitFee.toLocaleString('vi-VN')} đồng`}, đúng điều khoản khách đã chấp nhận khi đặt kho.</span>
+                      <span>
+                        Tôi đã kiểm tra hợp đồng đã ký và xác nhận khoản phí khớp với điều khoản khách đồng ý khi đặt kho.
+                        <span className="mt-1 block">
+                          {handoverTarget.setupEarlyExitFee == null
+                            ? 'Chưa xác định được mức phí trả kho trong thời gian chuẩn bị. Cần đối soát trước khi tiếp tục.'
+                            : <>Nếu khách trả kho trong thời gian chuẩn bị, khoản phí áp dụng một lần là <strong>{handoverTarget.setupEarlyExitFee.toLocaleString('vi-VN')} đồng</strong>.</>}
+                        </span>
+                      </span>
                     </label>}
                   </>
                 )}
@@ -1308,16 +1709,26 @@ export default function StaffCheckInOperationsPanel({
                     <div className="grid gap-3 sm:grid-cols-2">
                       <Input
                         label="Mã ổ khóa / Chìa khóa *"
+                        error={fieldErrors.keyLockReference || fieldErrors.lockReference}
                         value={keyLockReference}
                         disabled={isReviewingCompletedStep}
-                        onChange={(event) => setKeyLockReference(event.target.value)}
+                        onChange={(event) => {
+                          clearFieldError("keyLockReference")
+                          clearFieldError("lockReference")
+                          setKeyLockReference(event.target.value)
+                        }}
                         placeholder="Ví dụ: LOCK-018 hoặc KEY-A04"
                       />
                       <Input
                         label="Hiện trạng kho trống bàn giao *"
+                        error={fieldErrors.initialCondition || fieldErrors.initialUnitCondition}
                         value={initialCondition}
                         disabled={isReviewingCompletedStep}
-                        onChange={(event) => setInitialCondition(event.target.value)}
+                        onChange={(event) => {
+                          clearFieldError("initialCondition")
+                          clearFieldError("initialUnitCondition")
+                          setInitialCondition(event.target.value)
+                        }}
                         placeholder="Ghi nhận trần, sàn, vách, đèn..."
                       />
                     </div>
@@ -1414,72 +1825,39 @@ export default function StaffCheckInOperationsPanel({
             {handoverStep === 5 && (
               <div className="space-y-4">
                 {handoverTarget.checkInStatus === "handover_pending_receipt" ? (
-                  <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950 space-y-3">
-                    <div className="flex items-center gap-2 font-bold text-amber-900">
-                      <svg className="h-5 w-5 text-amber-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                      </svg>
-                      <span className="text-base">Đang chờ khách hàng xác nhận nhận kho</span>
-                      <span className="ml-auto rounded-full bg-amber-200/80 px-2.5 py-0.5 text-xs font-bold text-amber-900">
-                        Bước 5/6
-                      </span>
+                  <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 pb-3">
+                      <p className="font-bold text-base">Đang chờ khách hàng sẵn sàng bàn giao</p>
+                      <span className="rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-bold text-amber-900">Chờ khách xác nhận</span>
                     </div>
-                    <p className="text-xs text-amber-900 leading-relaxed">
-                      Nhân viên đã bàn giao kho trống và mã khóa. Theo quy trình hệ thống, <b>khách hàng cần đăng nhập vào Cổng khách hàng</b> (mục Đơn đặt giữ kho) và bấm <b>&quot;Kiểm tra và xác nhận nhận kho&quot;</b> để kích hoạt thời gian chuẩn bị hàng ({handoverTarget.freeSetupDays || 3} ngày miễn phí).
-                    </p>
-                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-white/90 p-3 text-xs">
-                      <span className="text-stone-600 font-medium">Khách hàng đã bấm xác nhận trên điện thoại hoặc cổng khách hàng?</span>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        type="button"
-                        onClick={async () => {
-                          try {
-                            const res = await listCheckIns({ q: handoverTarget.reservationCode, page: 0, pageSize: 5 })
-                            const updated = res.data.find(d => d.checkInId === handoverTarget.checkInId)
-                            if (updated) {
-                              setHandoverTarget(updated)
-                              setHandoverStep(stepForCheckIn(updated))
-                              setError(null)
-                              showToast(`Đã đồng bộ trạng thái: ${updated.checkInStatus || 'Cập nhật thành công'}`)
-                            }
-                          } catch {
-                            showToast("Chưa thể cập nhật trạng thái.")
-                          }
-                        }}
-                      >
-                        Làm mới trạng thái
-                      </Button>
-                    </div>
+                    <p className="mt-3 text-sm">Vui lòng chờ khách hàng nhấn <b>“Sẵn sàng bàn giao”</b>. Hệ thống sẽ tự cập nhật bước tiếp theo.</p>
                   </div>
                 ) : (
+                  <>
                   <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 text-violet-950">
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-violet-200/60 pb-3">
-                      <div>
-                        <p className="font-bold text-base text-violet-950">Khách hàng đang trong thời gian chuẩn bị</p>
-                        <p className="text-xs text-violet-800 mt-0.5">Khách hàng đang chủ động đưa hàng hóa vào gian kho và sắp xếp kiện hàng.</p>
-                      </div>
-                      <span className="rounded-full bg-violet-100 border border-violet-300 px-3 py-1 text-xs font-bold text-violet-900">
-                        Bước 5/6
-                      </span>
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-violet-200/60 pb-3">
+                    <div>
+                      <p className="font-bold text-base text-violet-950">Khách hàng đang trong thời gian chuẩn bị</p>
+                      <p className="text-xs text-violet-800 mt-0.5">Khách hàng đang chủ động đưa hàng hóa vào gian kho và sắp xếp kiện hàng.</p>
                     </div>
+                    <span className="rounded-full bg-violet-100 border border-violet-300 px-3 py-1 text-xs font-bold text-violet-900">Bước 5/6</span>
+                  </div>
 
-                    <div className="mt-3 grid gap-3 sm:grid-cols-3 text-xs">
-                      <div className="rounded-lg border border-violet-200 bg-white p-3">
-                        <span className="text-stone-500">Bắt đầu bàn giao:</span>
-                        <p className="font-bold text-stone-900 mt-0.5">{formatStaffDateTime(handoverTarget.setupStartedAt)}</p>
-                      </div>
-                      <div className="rounded-lg border border-violet-200 bg-white p-3">
-                        <span className="text-stone-500">Thời gian chuẩn bị miễn phí:</span>
-                        <p className="font-bold text-emerald-700 mt-0.5">{handoverTarget.freeSetupDays} ngày</p>
-                      </div>
-                      <div className="rounded-lg border border-violet-200 bg-white p-3">
-                        <span className="text-stone-500">Tính cước kỳ thuê từ:</span>
-                        <p className="font-bold text-stone-900 mt-0.5">{handoverTarget.paidRentalStartsOn || `Bàn giao + ${handoverTarget.freeSetupDays} ngày`}</p>
-                      </div>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-3 text-xs">
+                    <div className="rounded-lg border border-violet-200 bg-white p-3">
+                      <span className="text-stone-500">Bắt đầu bàn giao:</span>
+                      <p className="font-bold text-stone-900 mt-0.5">{formatStaffDateTime(handoverTarget.setupStartedAt)}</p>
+                    </div>
+                    <div className="rounded-lg border border-violet-200 bg-white p-3">
+                      <span className="text-stone-500">Thời gian chuẩn bị miễn phí:</span>
+                      <p className="font-bold text-emerald-700 mt-0.5">{handoverTarget.freeSetupDays} ngày</p>
+                    </div>
+                    <div className="rounded-lg border border-violet-200 bg-white p-3">
+                      <span className="text-stone-500">Tính cước kỳ thuê từ:</span>
+                      <p className="font-bold text-stone-900 mt-0.5">{handoverTarget.paidRentalStartsOn || `Bàn giao + ${handoverTarget.freeSetupDays} ngày`}</p>
                     </div>
                   </div>
-                )}
+                  </div>
 
                 <div className="rounded-xl border border-stone-200 bg-white p-4 text-sm text-stone-700 space-y-2">
                   <p className="font-bold text-stone-900">Quy trình tiếp theo</p>
@@ -1487,9 +1865,11 @@ export default function StaffCheckInOperationsPanel({
                     Sau khi khách hàng hoàn tất việc chuyển đồ vào kho hoặc hết thời gian chuẩn bị miễn phí, nhân viên cơ sở sẽ tiến hành <b>Kiểm kê thực tế</b> (đo đạc kích thước kiện, cân nặng và chụp ảnh lưu hồ sơ).
                   </p>
                   <p className="text-xs text-stone-500">
-                    Bấm <b>"Xác nhận đã chuẩn bị xong và tiếp tục kiểm kê"</b> khi khách hàng báo đã sắp xếp xong hoặc khi đến hạn kiểm kê.
+                    Bấm <b>"Xác nhận bàn giao"</b> khi khách hàng báo đã sắp xếp xong hoặc khi đến hạn kiểm kê.
                   </p>
                 </div>
+                 </>
+                )}
 
               </div>
             )}
@@ -1497,13 +1877,143 @@ export default function StaffCheckInOperationsPanel({
             {handoverStep === 6 && (
               <div className="space-y-4">
                 <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-950"><b>Kiểm kê hàng hóa</b><p className="mt-1 text-xs">Chỉ đối chiếu số kiện, khối lượng, thể tích, kích thước và tình trạng hàng hóa sau khi khách đã sắp xếp xong. Hiện trạng kho trống đã được ghi nhận ở bước bàn giao.</p>{handoverTarget.inventoryDueAt && <p className="mt-1 text-xs">Hạn kiểm kê: <b>{formatStaffDateTime(handoverTarget.inventoryDueAt)}</b></p>}</div>
+                {lineInventory ? (
+                  <div className="space-y-5">
+                    {inventoryRows.map(({ line, entry, comparison }, index) => {
+                      const absent = comparison.quantity === 0
+                      const errorKey = `inventory-${line.id}`
+                      return (
+                        <fieldset key={line.id} className="min-w-0 space-y-3 rounded-lg border border-stone-200 px-4 pb-4" disabled={isReviewingCompletedStep || submitting}>
+                          <legend className="max-w-full px-1">
+                            <span className="inline-block max-w-full break-words rounded-full bg-teal-100 px-3 py-1 text-sm font-semibold text-teal-950">
+                              {line.name || `Hàng hóa ${index + 1}`}
+                            </span>
+                          </legend>
+                          <p className="text-sm text-stone-600">
+                            Khai báo {line.quantity} kiện
+                            {line.lengthCm != null && line.widthCm != null && line.heightCm != null && ` · ${line.lengthCm} × ${line.widthCm} × ${line.heightCm} cm/kiện`}
+                            {line.weightPerPackageKg != null && ` · ${line.weightPerPackageKg} kg/kiện`}
+                          </p>
+                          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                            {inventoryDimensions.map(([field, label]) => (
+                              <Input key={field} label={label} type="number" min="0.01" step="any" value={absent ? "" : entry[field]} disabled={absent}
+                                onChange={event => updateInventoryLine(line, { [field]: event.target.value })} />
+                            ))}
+                            <Input label="Khối lượng cả dòng (kg)" type="number" min="0.01" step="any" value={absent ? "0" : entry.weightKg} disabled={absent}
+                              onChange={event => updateInventoryLine(line, { weightKg: event.target.value })} />
+                            <Input label="Thể tích cả dòng (m³)" value={absent ? "0" : formatVolume(comparison.volume)} readOnly />
+                            <Input label="Số kiện thực tế *" error={fieldErrors[`${errorKey}-quantity`]} type="number" min="0" step="1" value={entry.quantity} onChange={event => {
+                              const quantity = event.target.value
+                              const condition = quantity && Number(quantity) === 0 ? "NOT_PRESENT" : entry.condition === "NOT_PRESENT" ? "" : entry.condition
+                              updateInventoryLine(line, { quantity, condition })
+                            }} />
+                          </div>
+                          {fieldErrors[`${errorKey}-measurements`] && <p className="text-xs text-red-700">{fieldErrors[`${errorKey}-measurements`]}</p>}
+                          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                            {comparison.badges.map(({ label, matches }) => (
+                              <div key={label} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 px-3 py-2 text-sm">
+                                <b>{label}</b><ComparisonBadge matches={matches} />
+                              </div>
+                            ))}
+                          </div>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="space-y-1">
+                              <Select label="Tình trạng hàng hóa *" value={entry.condition} onChange={event =>
+                                updateInventoryLine(line, { condition: event.target.value as InventoryDraft["condition"] })}>
+                                <option value="">Chọn tình trạng</option>
+                                <option value="INTACT" disabled={absent}>Nguyên vẹn</option>
+                                <option value="DAMAGED" disabled={absent}>Có hư hỏng</option>
+                                <option value="NOT_PRESENT" disabled={!absent}>Không có kiện nào</option>
+                              </Select>
+                              {fieldErrors[`${errorKey}-condition`] && <p className="text-xs text-red-700">{fieldErrors[`${errorKey}-condition`]}</p>}
+                            </div>
+                            <Input label={comparison.needsNote ? "Ghi chú chênh lệch hoặc hư hỏng *" : "Ghi chú kiểm kê"} error={fieldErrors[`${errorKey}-note`]} value={entry.note} maxLength={1000}
+                              onChange={event => updateInventoryLine(line, { note: event.target.value })} />
+                          </div>
+                          <label className="flex items-center gap-2 text-sm">
+                            <input type="checkbox" checked={entry.checked} onChange={event => updateInventoryLine(line, { checked: event.target.checked })} />
+                            Đã đối chiếu số liệu và ghi nhận tình trạng *
+                          </label>
+                          {fieldErrors[`${errorKey}-checked`] && <p className="text-xs text-red-700">{fieldErrors[`${errorKey}-checked`]}</p>}
+                        </fieldset>
+                      )
+                    })}
+                    {fieldErrors.packageCount && <p className="text-sm text-red-700">{fieldErrors.packageCount}</p>}
+                  </div>
+                ) : (<>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  <Input label="Dài thực tế (cm) *" disabled={isReviewingCompletedStep} type="number" min="0.01" value={lengthCm} onChange={(event) => { const next = event.target.value; setLengthCm(next); setVolumeM3(volumeFromDimensions(next, widthCm, heightCm)) }} />
-                  <Input label="Rộng thực tế (cm) *" disabled={isReviewingCompletedStep} type="number" min="0.01" value={widthCm} onChange={(event) => { const next = event.target.value; setWidthCm(next); setVolumeM3(volumeFromDimensions(lengthCm, next, heightCm)) }} />
-                  <Input label="Cao thực tế (cm) *" disabled={isReviewingCompletedStep} type="number" min="0.01" value={heightCm} onChange={(event) => { const next = event.target.value; setHeightCm(next); setVolumeM3(volumeFromDimensions(lengthCm, widthCm, next)) }} />
-                  <Input label="Khối lượng (kg) *" disabled={isReviewingCompletedStep} type="number" min="0.01" value={weightKg} onChange={(event) => setWeightKg(event.target.value)} />
-                  <Input label="Thể tích (m³) *" value={volumeM3} readOnly />
-                  <Input label="Số kiện *" disabled={isReviewingCompletedStep} type="number" min="1" value={packageCount} onChange={(event) => setPackageCount(event.target.value)} />
+                  <Input
+                    label="Dài thực tế (cm) *"
+                    error={fieldErrors.lengthCm}
+                    disabled={isReviewingCompletedStep}
+                    type="number"
+                    min="0.01"
+                    value={lengthCm}
+                    onChange={(event) => {
+                      clearFieldError("lengthCm")
+                      const next = event.target.value
+                      setLengthCm(next)
+                      setVolumeM3(volumeFromDimensions(next, widthCm, heightCm))
+                    }}
+                  />
+                  <Input
+                    label="Rộng thực tế (cm) *"
+                    error={fieldErrors.widthCm}
+                    disabled={isReviewingCompletedStep}
+                    type="number"
+                    min="0.01"
+                    value={widthCm}
+                    onChange={(event) => {
+                      clearFieldError("widthCm")
+                      const next = event.target.value
+                      setWidthCm(next)
+                      setVolumeM3(volumeFromDimensions(lengthCm, next, heightCm))
+                    }}
+                  />
+                  <Input
+                    label="Cao thực tế (cm) *"
+                    error={fieldErrors.heightCm}
+                    disabled={isReviewingCompletedStep}
+                    type="number"
+                    min="0.01"
+                    value={heightCm}
+                    onChange={(event) => {
+                      clearFieldError("heightCm")
+                      const next = event.target.value
+                      setHeightCm(next)
+                      setVolumeM3(volumeFromDimensions(lengthCm, widthCm, next))
+                    }}
+                  />
+                  <Input
+                    label="Khối lượng (kg) *"
+                    error={fieldErrors.weightKg}
+                    disabled={isReviewingCompletedStep}
+                    type="number"
+                    min="0.01"
+                    value={weightKg}
+                    onChange={(event) => {
+                      clearFieldError("weightKg")
+                      setWeightKg(event.target.value)
+                    }}
+                  />
+                  <Input
+                    label="Thể tích (m³) *"
+                    error={fieldErrors.volumeM3}
+                    value={volumeM3}
+                    readOnly
+                  />
+                  <Input
+                    label="Số kiện *"
+                    error={fieldErrors.packageCount}
+                    disabled={isReviewingCompletedStep}
+                    type="number"
+                    min="1"
+                    value={packageCount}
+                    onChange={(event) => {
+                      clearFieldError("packageCount")
+                      setPackageCount(event.target.value)
+                    }}
+                  />
                 </div>
                 {checkInComparison && <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                   {([
@@ -1512,20 +2022,156 @@ export default function StaffCheckInOperationsPanel({
                     ['volume', 'Thể tích', checkInComparison.volumeMatches],
                     ['dimensions', 'Kích thước', checkInComparison.dimensionMatches],
                   ] as Array<[MeasurementComparisonKey, string, boolean | null]>).map(([key, label, matches]) => <div key={key} className="rounded-lg border border-stone-200 p-3 text-sm"><div className="mb-2 flex items-center justify-between gap-2"><b>{label}</b><ComparisonBadge matches={matches} /></div></div>)}
-                  <label className="flex items-center gap-2 rounded-lg border border-stone-200 p-3 text-sm sm:col-span-2"><input type="checkbox" disabled={isReviewingCompletedStep} checked={Object.values(measurementChecks).every(Boolean)} onChange={(event) => setMeasurementChecks({ packageCount: event.target.checked, weight: event.target.checked, volume: event.target.checked, dimensions: event.target.checked })} />Đã đối chiếu đủ số kiện, khối lượng, thể tích và kích thước *</label>
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="flex items-center gap-2 rounded-lg border border-stone-200 p-3 text-sm cursor-pointer hover:bg-stone-50 transition">
+                      <input
+                        type="checkbox"
+                        disabled={isReviewingCompletedStep}
+                        checked={Object.values(measurementChecks).every(Boolean)}
+                        onChange={(event) => {
+                          clearFieldError("measurementChecks")
+                          setMeasurementChecks({
+                            packageCount: event.target.checked,
+                            weight: event.target.checked,
+                            volume: event.target.checked,
+                            dimensions: event.target.checked,
+                          })
+                        }}
+                      />
+                      Đã đối chiếu đủ số kiện, khối lượng, thể tích và kích thước *
+                    </label>
+                    {fieldErrors.measurementChecks && (
+                      <p className="text-xs text-red-600 font-medium pl-2">{fieldErrors.measurementChecks}</p>
+                    )}
+                  </div>
                 </div>}
-                {measurementVariance && <div className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm"><label className="flex gap-2"><input type="checkbox" disabled={isReviewingCompletedStep} checked={varianceAccepted} onChange={(event) => setVarianceAccepted(event.target.checked)} />Đã trao đổi với khách và chấp nhận chênh lệch *</label><Input label="Lý do chênh lệch *" disabled={isReviewingCompletedStep} value={varianceReason} onChange={(event) => setVarianceReason(event.target.value)} /></div>}
-                <div className="grid gap-3 sm:grid-cols-2"><Input label="Loại hàng *" disabled={isReviewingCompletedStep} value={goodsCategory} onChange={(event) => setGoodsCategory(event.target.value)} /><div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm"><span className="text-stone-500">Tình trạng kho trống đã ghi nhận</span><b className="mt-1 block">{initialCondition || 'Chưa ghi nhận'}</b></div><Input label="Tình trạng hàng hóa *" disabled={isReviewingCompletedStep} value={goodsCondition} onChange={(event) => setGoodsCondition(event.target.value)} /><Input label="Ghi chú kiểm kê" disabled={isReviewingCompletedStep} value={handoverNotes} onChange={(event) => setHandoverNotes(event.target.value)} /></div>
-                <label className="flex items-center gap-2 text-sm"><input type="checkbox" disabled={isReviewingCompletedStep} checked={checklist.conditionRecorded} onChange={(event) => setChecklist((value) => ({ ...value, conditionRecorded: event.target.checked }))} />Đã ghi nhận tình trạng hàng hóa *</label>
-                {!isReviewingCompletedStep && <><label className="block text-sm font-medium">Ảnh/PDF bằng chứng kiểm kê hàng hóa (tối đa 25MB/tệp) *<input className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2" type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => {
-                    const selected = Array.from(event.target.files || [])
-                    const tooBig = selected.find(f => !validateUploadFile(f, 'kiểm kê', setError))
-                    if (tooBig) {
-                      event.target.value = ""
-                      return
-                    }
-                    setEvidenceFiles(selected)
-                  }} /></label><FilePreviewList files={evidenceFiles} onRemove={(index) => setEvidenceFiles((files) => files.filter((_, current) => current !== index))} disabled={submitting} /></>}
+                </>)}
+                {measurementVariance && (
+                  <div className={`space-y-3 rounded-lg border ${fieldErrors.varianceAccepted || fieldErrors.varianceReason ? 'border-red-300 bg-red-50/50' : 'border-amber-300 bg-amber-50'} p-3 text-sm`}>
+                    <div>
+                      <label className="flex gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          disabled={isReviewingCompletedStep}
+                          checked={varianceAccepted}
+                          onChange={(event) => {
+                            clearFieldError("varianceAccepted")
+                            setVarianceAccepted(event.target.checked)
+                          }}
+                        />
+                        Đã trao đổi với khách và chấp nhận chênh lệch *
+                      </label>
+                      {fieldErrors.varianceAccepted && (
+                        <p className="text-xs text-red-600 font-medium mt-1 pl-6">{fieldErrors.varianceAccepted}</p>
+                      )}
+                    </div>
+                    <Input
+                      label="Lý do chênh lệch *"
+                      error={fieldErrors.varianceReason}
+                      disabled={isReviewingCompletedStep}
+                      value={varianceReason}
+                      onChange={(event) => {
+                        clearFieldError("varianceReason")
+                        setVarianceReason(event.target.value)
+                      }}
+                    />
+                  </div>
+                )}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Input
+                    label="Loại hàng *"
+                    error={fieldErrors.goodsCategory}
+                    disabled={isReviewingCompletedStep}
+                    value={goodsCategory}
+                    onChange={(event) => {
+                      clearFieldError("goodsCategory")
+                      setGoodsCategory(event.target.value)
+                    }}
+                  />
+                  <div className={`rounded-lg border ${fieldErrors.initialCondition || fieldErrors.initialUnitCondition ? 'border-red-400 bg-red-50/30' : 'border-stone-200 bg-stone-50'} px-3 py-2 text-sm`}>
+                    <span className="text-stone-500">Tình trạng kho trống đã ghi nhận</span>
+                    <b className="mt-1 block">{initialCondition || 'Chưa ghi nhận'}</b>
+                    {(fieldErrors.initialCondition || fieldErrors.initialUnitCondition) && (
+                      <p className="text-xs text-red-600 font-medium mt-1">{fieldErrors.initialCondition || fieldErrors.initialUnitCondition}</p>
+                    )}
+                  </div>
+                  {!lineInventory && (
+                  <Input
+                    label="Tình trạng hàng hóa *"
+                    error={fieldErrors.goodsCondition}
+                    disabled={isReviewingCompletedStep}
+                    value={goodsCondition}
+                    onChange={(event) => {
+                      clearFieldError("goodsCondition")
+                      setGoodsCondition(event.target.value)
+                    }}
+                  />
+                  )}
+                  <Input
+                    label="Ghi chú kiểm kê"
+                    error={fieldErrors.notes}
+                    disabled={isReviewingCompletedStep}
+                    value={handoverNotes}
+                    onChange={(event) => {
+                      clearFieldError("notes")
+                      setHandoverNotes(event.target.value)
+                    }}
+                  />
+                </div>
+                {!lineInventory && (
+                <div className="space-y-1">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      disabled={isReviewingCompletedStep}
+                      checked={checklist.conditionRecorded}
+                      onChange={(event) => {
+                        clearFieldError("conditionRecorded")
+                        setChecklist((value) => ({ ...value, conditionRecorded: event.target.checked }))
+                      }}
+                    />
+                    Đã ghi nhận tình trạng hàng hóa *
+                  </label>
+                  {fieldErrors.conditionRecorded && (
+                    <p className="text-xs text-red-600 font-medium pl-6">{fieldErrors.conditionRecorded}</p>
+                  )}
+                </div>
+                )}
+                {(fieldErrors.handoverChecklist || fieldErrors.lockReference) && <p className="text-sm text-red-700">{fieldErrors.handoverChecklist || fieldErrors.lockReference}</p>}
+                {!isReviewingCompletedStep && (
+                  <div className="space-y-1">
+                    <label className="block text-sm font-medium">
+                      Ảnh/PDF bằng chứng kiểm kê hàng hóa (tối đa 25MB/tệp) *
+                      <input
+                        className={`mt-1 block w-full rounded-lg border ${fieldErrors.evidenceFiles || fieldErrors.evidenceReferences ? 'border-red-500 bg-red-50/20' : 'border-stone-300'} bg-white px-3 py-2 text-sm`}
+                        type="file"
+                        multiple
+                        accept="image/jpeg,image/png,image/webp,application/pdf"
+                        onChange={(event) => {
+                          clearFieldError("evidenceFiles")
+                          clearFieldError("evidenceReferences")
+                          const selected = Array.from(event.target.files || [])
+                          const tooBig = selected.find((f) => !validateUploadFile(f, 'kiểm kê', setError))
+                          if (tooBig) {
+                            event.target.value = ""
+                            return
+                          }
+                          setEvidenceFiles(selected)
+                        }}
+                      />
+                    </label>
+                    {(fieldErrors.evidenceFiles || fieldErrors.evidenceReferences) && (
+                      <p className="text-xs text-red-600 font-medium">{fieldErrors.evidenceFiles || fieldErrors.evidenceReferences}</p>
+                    )}
+                    <FilePreviewList
+                      files={evidenceFiles}
+                      onRemove={(index) => {
+                        setEvidenceFiles((files) => files.filter((_, current) => current !== index))
+                      }}
+                      disabled={submitting}
+                    />
+                  </div>
+                )}
                 {isReviewingCompletedStep && handoverTarget.handover?.evidenceReferences.length ? <p className="text-xs text-stone-600">Đã lưu {handoverTarget.handover.evidenceReferences.length} tệp bằng chứng kiểm kê trong biên bản.</p> : null}
               </div>
             )}
@@ -1535,10 +2181,19 @@ export default function StaffCheckInOperationsPanel({
                 <svg className="h-5 w-5 text-red-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <span className="flex-1 font-medium">{error}</span>
+                <div className="flex-1 font-medium">
+                  <span>{error}</span>
+                  {Object.keys(fieldErrors).length > 0 && (
+                    <ul className="mt-1 list-disc list-inside space-y-0.5 text-xs text-red-700">
+                      {Object.entries(fieldErrors).map(([key, msg]) => (
+                        <li key={key}>{msg}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
                 <button
                   type="button"
-                  onClick={() => setError(null)}
+                  onClick={() => { setError(null); setFieldErrors({}) }}
                   className="rounded px-1 text-xs font-bold text-red-500 hover:bg-red-100 hover:text-red-700"
                   aria-label="Đóng lỗi"
                 >
@@ -1547,38 +2202,178 @@ export default function StaffCheckInOperationsPanel({
               </div>
             )}
 
-            <div className="flex items-center justify-between gap-3 border-t border-stone-200 pt-4">
-              <Button variant="outline" onClick={() => { setError(null); setHandoverTarget(null); }} disabled={submitting}>Đóng</Button>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 pt-4">
+              <Button variant="outline" onClick={closeHandover} disabled={submitting}>Đóng</Button>
               {isReviewingCompletedStep ? (
-                <span className="text-xs text-stone-500">Đang xem lại dữ liệu đã lưu, không thể thay đổi bước này.</span>
+                <div className="flex flex-wrap items-center justify-end gap-3">
+                  <span className="text-xs text-stone-500">Đang xem lại dữ liệu đã lưu, không thể thay đổi bước này.</span>
+                  {handoverStep > 1 && (
+                    <Button
+                      variant="outline"
+                      onClick={() => { setError(null); setHandoverStep((prev) => Math.max(1, prev - 1)); }}
+                      disabled={submitting}
+                    >
+                      Quay lại
+                    </Button>
+                  )}
+                  {handoverStep < workflowCurrentStep && (
+                    <Button
+                      onClick={() => { setError(null); setHandoverStep((prev) => Math.min(workflowCurrentStep, prev + 1)); }}
+                      disabled={submitting}
+                    >
+                      Tiếp tục
+                    </Button>
+                  )}
+                </div>
               ) : handoverStep === 5 ? (
                 <div className="flex flex-wrap items-center justify-end gap-3">
-                  <span className="text-xs text-violet-800">
+                  <span className="text-xs text-stone-600">
                     {handoverTarget.checkInStatus === "handover_pending_receipt"
-                      ? "Chờ khách xác nhận nhận kho trên Cổng khách hàng trước khi bấm tiếp tục."
-                      : "Khách có thể bấm tự xác nhận trên cổng khách hàng hoặc nhân viên xác nhận tại đây."}
+                      ? "Đang chờ khách nhấn Sẵn sàng bàn giao."
+                      : "Đang chờ khách nhấn Sẵn sàng để kiểm kê sau khi sắp xếp hàng hóa xong."}
                   </span>
+                  <Button variant="outline" onClick={() => void refreshHandoverTarget()} disabled={submitting}>
+                    Kiểm tra trạng thái
+                  </Button>
+                  {handoverStep > 1 && (
+                    <Button
+                      variant="outline"
+                      onClick={() => { setError(null); setHandoverStep((prev) => Math.max(1, prev - 1)); }}
+                      disabled={submitting}
+                    >
+                      Quay lại
+                    </Button>
+                  )}
                   <Button
-                    onClick={() => submitWorkflowStep()}
+                    onClick={() => setShowCustomerReadyModal(true)}
                     disabled={submitting || handoverTarget.checkInStatus === "handover_pending_receipt"}
                   >
                     {submitting
                       ? "Đang xác nhận…"
                       : handoverTarget.checkInStatus === "handover_pending_receipt"
                         ? "Chờ khách xác nhận nhận kho"
-                        : "Xác nhận đã chuẩn bị xong và tiếp tục kiểm kê"}
+                        : "Xác nhận bàn giao"}
                   </Button>
                 </div>
               ) : handoverStep < 6 ? (
-                <Button disabled={submitting ||
-                  (handoverStep === 1 && (!checklist.identityVerified || !checklist.reservationMatched || identityVerificationBlocked)) ||
-                  (handoverStep === 2 && (!contractFile || !!setupTermsKey && (confirmedSetupTerms !== setupTermsKey || handoverTarget.setupEarlyExitFee == null))) ||
-                  (handoverStep === 3 && (handoverTarget.dueAtCheckIn ?? 0) > 0 && !paymentEvidenceFile) ||
-                  (handoverStep === 4 && !emptyStorageHandoverReady)
-                } onClick={() => submitWorkflowStep()}>{submitting ? "Đang lưu…" : "Xác nhận và tiếp tục"}</Button>
+                <div className="flex flex-wrap items-center justify-end gap-3">
+                  {handoverStep > 1 && (
+                    <Button
+                      variant="outline"
+                      onClick={() => { setError(null); setHandoverStep((prev) => Math.max(1, prev - 1)); }}
+                      disabled={submitting}
+                    >
+                      Quay lại
+                    </Button>
+                  )}
+                  <Button disabled={submitting ||
+                    (handoverStep === 1 && (!checklist.identityVerified || !checklist.reservationMatched || identityVerificationBlocked)) ||
+                    (handoverStep === 2 && (!contractFile || !!setupTermsKey && (confirmedSetupTerms !== setupTermsKey || handoverTarget.setupEarlyExitFee == null))) ||
+                    (handoverStep === 3 && (handoverTarget.dueAtCheckIn ?? 0) > 0 && !paymentEvidenceFile) ||
+                    (handoverStep === 4 && !emptyStorageHandoverReady)
+                  } onClick={() => submitWorkflowStep()}>{submitting ? "Đang lưu…" : "Xác nhận và tiếp tục"}</Button>
+                </div>
               ) : (
-                <Button disabled={submitting || !allChecksComplete || !evidenceFiles.length || !initialCondition.trim() || !goodsCondition.trim() || !goodsCategory.trim() || (measurementVariance && (!varianceAccepted || !varianceReason.trim()))} onClick={() => submitHandover()}>{submitting ? "Đang hoàn tất…" : "Hoàn tất kiểm kê"}</Button>
+                <div className="flex flex-wrap items-center justify-end gap-3">
+                  {handoverStep > 1 && (
+                    <Button
+                      variant="outline"
+                      onClick={() => { setError(null); setHandoverStep((prev) => Math.max(1, prev - 1)); }}
+                      disabled={submitting}
+                    >
+                      Quay lại
+                    </Button>
+                  )}
+                  <Button disabled={submitting} onClick={() => submitHandover()}>{submitting ? "Đang hoàn tất…" : "Hoàn tất kiểm kê"}</Button>
+                </div>
               )}
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={customerWaitTarget === "receipt" && Boolean(handoverTarget)}
+        onClose={() => setCustomerWaitTarget(null)}
+        title="Đang chờ khách hàng sẵn sàng bàn giao"
+        size="md"
+      >
+        {handoverTarget && (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+              <p className="font-bold">Staff đã xác nhận bàn giao kho trống</p>
+              <p className="mt-2 leading-6">
+                Đơn <b>{handoverTarget.reservationCode}</b> đang chờ khách hàng nhấn <b>“Sẵn sàng bàn giao”</b> trên cổng khách hàng.
+                Chưa thể chuyển sang kiểm kê hàng hóa ở bước này.
+              </p>
+            </div>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button onClick={() => setCustomerWaitTarget(null)} disabled={submitting}>
+                Đóng thông báo
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={showCustomerReadyModal}
+        onClose={() => { if (!submitting) setShowCustomerReadyModal(false); }}
+        title="Khách hàng sẵn sàng bàn giao"
+        size="md"
+      >
+        {handoverTarget && (
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 rounded-xl border border-violet-200 bg-violet-50 p-4 text-violet-950">
+              <div className="rounded-full bg-violet-100 p-2 text-violet-700 shrink-0">
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <div>
+                <p className="font-bold text-base text-violet-950">Khách hàng đã sẵn sàng bàn giao</p>
+                <p className="mt-1 text-xs text-violet-800 leading-relaxed">
+                  Khách hàng đã hoàn tất việc sắp xếp hàng hóa vào gian kho và xác nhận sẵn sàng để nhân viên cơ sở thực hiện kiểm kê thực tế.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-stone-500">Khách hàng:</span>
+                <span className="font-semibold text-stone-900">{handoverTarget.customerName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-stone-500">Mã đơn giữ kho:</span>
+                <span className="font-mono font-medium text-stone-900">{handoverTarget.reservationCode}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-stone-500">Gian kho bàn giao:</span>
+                <span className="font-mono font-bold text-amber-700">{handoverTarget.storageUnitCode}</span>
+              </div>
+            </div>
+
+            <p className="text-xs text-stone-600">
+              Sau khi xác nhận, hệ thống sẽ kết thúc thời gian chuẩn bị và chuyển hồ sơ sang <b>Bước 6: Kiểm kê hàng hóa</b> (đo đạc kích thước kiện, cân nặng và chụp ảnh lưu hồ sơ).
+            </p>
+
+            <div className="flex items-center justify-end gap-3 border-t border-stone-200 pt-3">
+              <Button
+                variant="outline"
+                disabled={submitting}
+                onClick={() => setShowCustomerReadyModal(false)}
+              >
+                Quay lại
+              </Button>
+              <Button
+                disabled={submitting}
+                onClick={async () => {
+                  setShowCustomerReadyModal(false)
+                  await submitWorkflowStep()
+                }}
+              >
+                {submitting ? "Đang xử lý…" : "Khách hàng sẵn sàng bàn giao"}
+              </Button>
             </div>
           </div>
         )}
@@ -1717,6 +2512,23 @@ export default function StaffCheckInOperationsPanel({
       >
         {detailTarget?.handover && (
           <div className="space-y-4 text-sm">
+            {!!detailTarget.handover.inventoryLines?.length && (
+              <section className="divide-y divide-stone-200 rounded-lg border border-stone-200">
+                <h3 className="px-3 py-2 font-semibold">Kết quả kiểm kê từng dòng hàng</h3>
+                {detailTarget.handover.inventoryLines.map((line, index) => {
+                  const declared = detailTarget.declaredGoodsLines?.find(item => item.id === line.goodsItemId)
+                  const condition = { INTACT: "Nguyên vẹn", DAMAGED: "Có hư hỏng", NOT_PRESENT: "Không có kiện nào" }[line.condition]
+                  return (
+                    <div key={line.goodsItemId} className="space-y-1 p-3">
+                      <p className="font-medium">{declared?.name || `Hàng hóa ${index + 1}`}{declared?.code && ` · ${declared.code}`}</p>
+                      <p className="text-stone-700">{declared && `Khai báo ${declared.quantity} kiện · `}Thực tế {line.actualQuantity} kiện · {condition}</p>
+                      {line.measurements && <p className="text-stone-700">{line.measurements.lengthCm} × {line.measurements.widthCm} × {line.measurements.heightCm} cm/kiện · {line.measurements.weightKg} kg cả dòng</p>}
+                      {line.note && <p className="break-words text-stone-700">{line.note}</p>}
+                    </div>
+                  )
+                })}
+              </section>
+            )}
             <div className="rounded-lg bg-stone-50 p-3">
               <dl className="grid gap-3 sm:grid-cols-3">
                 <div><dt className="text-xs text-stone-500">Mã đơn giữ kho</dt><dd className="mt-1 font-semibold">{detailTarget.reservationCode}</dd></div>

@@ -157,7 +157,7 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
 
       {needsReview && (
         <p className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs text-stone-700 sm:text-sm">
-          Hàng hóa “Khác”: tài khoản đã xác minh email được chuyển hồ sơ trực tiếp cho nhân viên cơ sở duyệt. Chưa thu cọc cho đến khi hồ sơ được chấp thuận.
+          Hàng hóa “Khác” được chuyển hồ sơ trực tiếp cho nhân viên cơ sở duyệt. Chưa thu cọc cho đến khi hồ sơ được chấp thuận.
         </p>
       )}
     </section>

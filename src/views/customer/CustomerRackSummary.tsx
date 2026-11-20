@@ -118,6 +118,5 @@ export default function CustomerRackSummary({ result }: { result: RackResult }) 
       </div>
     </section>
 
-    <p className="text-xs leading-5 text-stone-600">Sức chứa thực tế phụ thuộc vào kích thước, khối lượng và khả năng xếp chồng của hàng hóa. Hệ thống sẽ tự động tính toán khi bạn đặt kho. Các kích thước tấm kê trong bảng là kết quả tính từ cấu hình khung, không phải số Manager tự nhập.</p>
   </div>
 }

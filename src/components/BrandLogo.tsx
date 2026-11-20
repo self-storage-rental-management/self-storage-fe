@@ -13,7 +13,7 @@ export default function BrandLogo({ light = false, subtitle, className = '', img
         alt="StorageHub"
         className={imgClassName}
       />
-      {subtitle && <span className={`font-mono text-[10px] uppercase tracking-[.08em] ${light ? 'text-stone-400' : 'text-stone-500'}`}>{subtitle}</span>}
+      {subtitle && <span className={`text-[10px] font-medium uppercase tracking-wider ${light ? 'text-stone-400' : 'text-stone-500'}`}>{subtitle}</span>}
     </div>
   )
 }
