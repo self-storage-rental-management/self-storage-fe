@@ -46,10 +46,10 @@ const text = (value: unknown, fallback = '') => value == null ? fallback : Strin
 function initialForm(initial?: UnitTypeEditorTarget): UnitTypeForm {
   return {
     code: text(initial?.code), name: text(initial?.name), description: text(initial?.description),
-    lengthM: text(initial?.lengthM, '8'), widthM: text(initial?.widthM, '10'), heightM: text(initial?.heightM, '5'),
-    maxLoadKg: text(initial?.maxLoadKg, '1000'),
-    aisleWidthM: text(initial?.aisleWidthM, '1.8'), storageAisleWidthM: text(initial?.storageAisleWidthM),
-    gateWidthM: text(initial?.gateWidthM), gateHeightM: text(initial?.gateHeightM),
+    lengthM: text(initial?.lengthM, '12'), widthM: text(initial?.widthM, '11.6'), heightM: text(initial?.heightM, '5'),
+    maxLoadKg: text(initial?.maxLoadKg, '600'),
+    aisleWidthM: text(initial?.aisleWidthM, '3.0'), storageAisleWidthM: text(initial?.storageAisleWidthM, '2.5'),
+    gateWidthM: text(initial?.gateWidthM, '2.4'), gateHeightM: text(initial?.gateHeightM, '3.0'),
     lowestObstructionHeightM: text(initial?.lowestObstructionHeightM), overheadClearanceM: text(initial?.overheadClearanceM),
     trolleyType: text(initial?.trolleyType, 'Xe đẩy tay / xe sàn nhỏ'),
     physicalUnitCount: text(initial?.totalCount, '1'), floor: text(initial?.floor, '1'), zone: text(initial?.zone, 'Khu A'),
@@ -69,7 +69,7 @@ function initialRackForm(initial?: UnitTypeEditorTarget): RackForm {
     palletsPerCompartment: 1,
     maxRackLoadKg: 1200,
     maxBeamPairLoadKg: 100,
-    requestedRackCount: Math.max(1, Math.floor(Number(initial?.rackCount ?? 1))),
+    requestedRackCount: Math.max(1, Math.floor(Number(initial?.rackCount ?? 4))),
   }
 }
 
@@ -283,6 +283,7 @@ export default function ManagerUnitTypeModal({ open, facilityId, onClose, onCrea
         if (/tối đa\s+\d+\s+khung|kích thước tối đa theo hướng/i.test(searchable)) return friendlyDetails
         if (/giới hạn tải mỗi khoang|giới hạn tải mỗi khung|tải hiệu dụng của khung/i.test(searchable)) return friendlyDetails
         if (/số tấm kê mỗi khoang.*tối đa/i.test(searchable)) return friendlyDetails
+        if (/chiều dài tấm kê|chiều rộng tấm kê|mép ngoài hai dầm/i.test(searchable)) return friendlyDetails
         const maxLevelMatch = searchable.match(/tối đa\s+(\d+)\s+tầng/i)
         if (maxLevelMatch || /số tầng/i.test(searchable)) {
           return maxLevelMatch
@@ -290,8 +291,9 @@ export default function ManagerUnitTypeModal({ open, facilityId, onClose, onCrea
             : 'Số tầng vượt quá khả năng chiều cao khung. Hãy giảm số tầng hoặc tăng chiều cao khung.'
         }
         if (/chồng|tường|lối|bố trí|không đủ không gian/i.test(searchable)) return 'Không thể bố trí số khung đã nhập trong gian kho. Hãy giảm số khung hoặc điều chỉnh kích thước khung và lối đi.'
-        if (/tấm kê|khoang/i.test(searchable)) return 'Số tấm kê chưa phù hợp với kích thước khoang. Hãy giảm số tấm kê mỗi khoang.'
+        if (/số tấm kê.*kích thước khoang/i.test(searchable)) return 'Số tấm kê chưa phù hợp với kích thước khoang. Hãy giảm số tấm kê mỗi khoang.'
         if (/tải trọng|giới hạn tải/i.test(searchable)) return 'Giới hạn tải của cấu hình chưa phù hợp. Hãy kiểm tra lại các mức tải đã nhập.'
+        if (/tấm kê|khoang/i.test(searchable)) return friendlyDetails || 'Cấu hình tấm kê hoặc khoang chưa phù hợp. Hãy kiểm tra lại kích thước khung và khoang.'
       }
     }
     return managerDisplayError(cause)

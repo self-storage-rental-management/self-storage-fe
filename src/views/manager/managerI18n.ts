@@ -95,7 +95,10 @@ const paymentTypes: Record<string, BilingualLabel> = {
 const methods: Record<string, BilingualLabel> = {
   BANK_TRANSFER: labels('Bank transfer', 'Chuyển khoản'),
   CASH: labels('Cash', 'Tiền mặt'),
-  ONLINE_GATEWAY: labels('Online gateway', 'Cổng thanh toán trực tuyến')
+  ONLINE_GATEWAY: labels('Online gateway', 'VNPay'),
+  VNPAY: labels('VNPay', 'VNPay'),
+  VNPAY_SANDBOX: labels('VNPay', 'VNPay'),
+  NCB: labels('VNPay', 'VNPay'),
 }
 
 const taskTypes: Record<string, BilingualLabel> = {
@@ -198,7 +201,20 @@ export const managerUnitTypeLabel = (value: string, lang: Language) => {
 }
 
 export const managerPaymentTypeLabel = (value: string, lang: Language) => labelFrom(paymentTypes, value, lang)
-export const managerPaymentMethodLabel = (value: string, lang: Language) => labelFrom(methods, value, lang)
+export const managerPaymentMethodLabel = (value: string, lang: Language) => {
+  if (!value) return '-'
+  const upper = value.trim().toUpperCase()
+  if (upper === 'CASH' || upper === 'TIEN_MAT' || upper.startsWith('TIỀN MẶT')) {
+    return lang === 'en' ? 'Cash' : 'Tiền mặt'
+  }
+  if (upper === 'BANK_TRANSFER' || upper === 'CHUYEN_KHOAN' || upper.startsWith('CHUYỂN KHOẢN')) {
+    return lang === 'en' ? 'Bank transfer' : 'Chuyển khoản'
+  }
+  if (upper === 'ONLINE_GATEWAY' || upper === 'VNPAY' || upper === 'VNPAY_SANDBOX' || upper === 'NCB') {
+    return 'VNPay'
+  }
+  return labelFrom(methods, value, lang)
+}
 export const managerTaskTypeLabel = (value: string, lang: Language) => labelFrom(taskTypes, value, lang)
 export const managerPriorityLabel = (value: string, lang: Language) => labelFrom(priorities, value, lang)
 export const managerActivityLabel = (value: string, lang: Language) => labelFrom(activities, value, lang)

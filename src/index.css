@@ -1,10 +1,10 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&family=Oswald:wght@500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
 @import 'tailwindcss';
 
 @theme {
-  --font-sans: 'Inter', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
-  --font-oswald: 'Oswald', system-ui, sans-serif;
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-oswald: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --text-xs: 12px;
   --text-xs--line-height: 16px;
   --text-sm: 14px;
@@ -175,8 +175,8 @@ svg:not(.recharts-surface):not(.show-icon) { display: none !important; }
 .payment-history-status .ui-badge-error { background: #fee2e2; }
 
 .font-oswald {
-  font-family: 'Oswald', 'Inter', system-ui, sans-serif;
-  letter-spacing: 0.06em;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  letter-spacing: 0.01em;
 }
 
 html,
@@ -191,7 +191,7 @@ body,
 
 body {
   margin: 0;
-  font-family: Inter, system-ui, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   color: var(--ink);
   background: var(--canvas);
   -webkit-font-smoothing: antialiased;
@@ -204,7 +204,7 @@ textarea {
   font: inherit;
 }
 
-/* Global typography standardization across all portals, modals, tables and dialogs */
+/* Global unified typography standardization across all 5 roles (Customer, Staff, Manager, Business, Admin), portals, modals, tables and dialogs */
 body,
 button,
 input,
@@ -213,20 +213,27 @@ textarea,
 dialog,
 [role="dialog"],
 .modal,
+h1, h2, h3, h4, h5, h6,
+table, th, td,
 .customer-page,
 .customer-page *,
 .customer-role-layout,
-.customer-role-layout * {
+.customer-role-layout *,
+.staff-role-layout,
+.staff-role-layout *,
+.business-role-layout,
+.business-role-layout *,
+.admin-role-layout,
+.admin-role-layout * {
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
 }
 
-/* Monospace preservation for codes, IDs, dimensions, currency */
+/* Unified font for codes, IDs, dimensions, currency, and monospace utility classes */
 .font-mono,
 .font-mono-label,
-code,
-pre,
-kbd {
-  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+.eyebrow {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  font-feature-settings: 'tnum' on, 'cv05' on;
 }
 
 button:not(:disabled) { cursor: pointer; }
@@ -247,10 +254,10 @@ button:not(:disabled) { cursor: pointer; }
 }
 
 .font-mono-label {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: .08em;
+  letter-spacing: .04em;
   text-transform: uppercase;
 }
 
@@ -290,16 +297,22 @@ button:not(:disabled) { cursor: pointer; }
 
 .eyebrow {
   color: var(--amber-dark);
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 10px;
   font-weight: 600;
-  letter-spacing: .1em;
+  letter-spacing: .08em;
   text-transform: uppercase;
 }
 
-/* Customer portal uses one typeface consistently, including codes and labels. */
+/* All role layouts use one unified typeface consistently, including codes and labels. */
 .customer-role-layout,
-.customer-role-layout :where(*) {
+.customer-role-layout :where(*),
+.staff-role-layout,
+.staff-role-layout :where(*),
+.business-role-layout,
+.business-role-layout :where(*),
+.admin-role-layout,
+.admin-role-layout :where(*) {
   font-family: var(--font-sans) !important;
 }
 

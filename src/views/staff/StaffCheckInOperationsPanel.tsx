@@ -320,6 +320,7 @@ export default function StaffCheckInOperationsPanel({
   } | null>(null)
 
   const [submitting, setSubmitting] = useState(false)
+  const [showCustomerReadyModal, setShowCustomerReadyModal] = useState(false)
 
   useEffect(() => {
     const refreshCheckIns = () => setRefreshKey((value) => value + 1)
@@ -536,6 +537,7 @@ export default function StaffCheckInOperationsPanel({
     if (submitting) return
     setError(null)
     setCustomerWaitTarget(null)
+    setShowCustomerReadyModal(false)
     setHandoverTarget(null)
   }
 
@@ -1274,24 +1276,19 @@ export default function StaffCheckInOperationsPanel({
               {workflowStepLabels.map((label, index) => {
                 const step = index + 1
                 return (
-                  <button
+                  <div
                     key={label}
-                    type="button"
-                    disabled={submitting || step > workflowCurrentStep}
-                    onClick={() => {
-                      setError(null)
-                      setHandoverStep(step)
-                    }}
                     aria-current={handoverStep === step ? "step" : undefined}
-                    className={`rounded-lg border px-3 py-2 text-left text-xs transition ${
+                    className={`rounded-lg border px-3 py-2 text-left text-xs transition select-none cursor-default ${
                     handoverStep === step
                       ? "border-amber-500 bg-amber-50 font-semibold text-amber-950"
                       : workflowCurrentStep >= step
                         ? "border-emerald-300 bg-emerald-50 text-emerald-900"
-                        : "border-stone-200 bg-stone-50 text-stone-500"
-                    } ${step <= workflowCurrentStep ? "cursor-pointer hover:brightness-95" : "cursor-not-allowed opacity-70"}`}>
+                        : "border-stone-200 bg-stone-50 text-stone-500 opacity-70"
+                    }`}
+                  >
                     <span className="mr-1 font-bold">{step}.</span>{label}
-                  </button>
+                  </div>
                 )
               })}
             </div>
@@ -1303,7 +1300,7 @@ export default function StaffCheckInOperationsPanel({
                   <div><span className="text-stone-500">CCCD/CMND đã khai báo</span><p className="font-semibold">{declaredIdentityDocument || "Chưa có dữ liệu"}</p></div>
                   <Input label="CCCD/CMND trên giấy tờ gốc *" value={identityDocumentNumber} disabled={isReviewingCompletedStep} onChange={(event) => setIdentityDocumentNumber(event.target.value)} />
                 </div>
-                {identityMismatch && <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">Số giấy tờ không khớp với đơn đặt kho. Backend sẽ không cho chuyển sang bước ký hợp đồng.</p>}
+                {identityMismatch && <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">Số giấy tờ không khớp với đơn đặt kho. Vui lòng kiểm tra lại trước khi chuyển sang bước ký hợp đồng.</p>}
                 <div className="grid gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm sm:grid-cols-2">
                   <label className="flex items-center gap-2"><input type="checkbox" disabled={isReviewingCompletedStep} checked={checklist.identityVerified && checklist.reservationMatched} onChange={(event) => setChecklist((value) => ({ ...value, identityVerified: event.target.checked, reservationMatched: event.target.checked }))} />Đã kiểm tra giấy tờ gốc và đối chiếu khách hàng với đơn đặt kho *</label>
                 </div>
@@ -1546,7 +1543,7 @@ export default function StaffCheckInOperationsPanel({
                     Sau khi khách hàng hoàn tất việc chuyển đồ vào kho hoặc hết thời gian chuẩn bị miễn phí, nhân viên cơ sở sẽ tiến hành <b>Kiểm kê thực tế</b> (đo đạc kích thước kiện, cân nặng và chụp ảnh lưu hồ sơ).
                   </p>
                   <p className="text-xs text-stone-500">
-                    Khách hàng cần tự bấm <b>"Sẵn sàng để kiểm kê"</b> sau khi đã đưa và sắp xếp hàng hóa xong. Staff không thể tự bỏ qua bước xác nhận này.
+                    Bấm <b>"Xác nhận bàn giao"</b> khi khách hàng báo đã sắp xếp xong hoặc khi đến hạn kiểm kê.
                   </p>
                 </div>
                  </>
@@ -1608,10 +1605,29 @@ export default function StaffCheckInOperationsPanel({
               </div>
             )}
 
-            <div className="flex items-center justify-between gap-3 border-t border-stone-200 pt-4">
-               <Button variant="outline" onClick={closeHandover} disabled={submitting}>Đóng</Button>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 pt-4">
+              <Button variant="outline" onClick={closeHandover} disabled={submitting}>Đóng</Button>
               {isReviewingCompletedStep ? (
-                <span className="text-xs text-stone-500">Đang xem lại dữ liệu đã lưu, không thể thay đổi bước này.</span>
+                <div className="flex flex-wrap items-center justify-end gap-3">
+                  <span className="text-xs text-stone-500">Đang xem lại dữ liệu đã lưu, không thể thay đổi bước này.</span>
+                  {handoverStep > 1 && (
+                    <Button
+                      variant="outline"
+                      onClick={() => { setError(null); setHandoverStep((prev) => Math.max(1, prev - 1)); }}
+                      disabled={submitting}
+                    >
+                      Quay lại
+                    </Button>
+                  )}
+                  {handoverStep < workflowCurrentStep && (
+                    <Button
+                      onClick={() => { setError(null); setHandoverStep((prev) => Math.min(workflowCurrentStep, prev + 1)); }}
+                      disabled={submitting}
+                    >
+                      Tiếp tục
+                    </Button>
+                  )}
+                </div>
               ) : handoverStep === 5 ? (
                 <div className="flex flex-wrap items-center justify-end gap-3">
                   <span className="text-xs text-stone-600">
@@ -1622,16 +1638,57 @@ export default function StaffCheckInOperationsPanel({
                   <Button variant="outline" onClick={() => void refreshHandoverTarget()} disabled={submitting}>
                     Kiểm tra trạng thái
                   </Button>
+                  {handoverStep > 1 && (
+                    <Button
+                      variant="outline"
+                      onClick={() => { setError(null); setHandoverStep((prev) => Math.max(1, prev - 1)); }}
+                      disabled={submitting}
+                    >
+                      Quay lại
+                    </Button>
+                  )}
+                  <Button
+                    onClick={() => setShowCustomerReadyModal(true)}
+                    disabled={submitting || handoverTarget.checkInStatus === "handover_pending_receipt"}
+                  >
+                    {submitting
+                      ? "Đang xác nhận…"
+                      : handoverTarget.checkInStatus === "handover_pending_receipt"
+                        ? "Chờ khách xác nhận nhận kho"
+                        : "Xác nhận bàn giao"}
+                  </Button>
                 </div>
               ) : handoverStep < 6 ? (
-                <Button disabled={submitting ||
-                  (handoverStep === 1 && (!checklist.identityVerified || !checklist.reservationMatched || identityVerificationBlocked)) ||
-                  (handoverStep === 2 && (!contractFile || !!setupTermsKey && (confirmedSetupTerms !== setupTermsKey || handoverTarget.setupEarlyExitFee == null))) ||
-                  (handoverStep === 3 && (handoverTarget.dueAtCheckIn ?? 0) > 0 && !paymentEvidenceFile) ||
-                  (handoverStep === 4 && !emptyStorageHandoverReady)
-                } onClick={() => submitWorkflowStep()}>{submitting ? "Đang lưu…" : "Xác nhận và tiếp tục"}</Button>
+                <div className="flex flex-wrap items-center justify-end gap-3">
+                  {handoverStep > 1 && (
+                    <Button
+                      variant="outline"
+                      onClick={() => { setError(null); setHandoverStep((prev) => Math.max(1, prev - 1)); }}
+                      disabled={submitting}
+                    >
+                      Quay lại
+                    </Button>
+                  )}
+                  <Button disabled={submitting ||
+                    (handoverStep === 1 && (!checklist.identityVerified || !checklist.reservationMatched || identityVerificationBlocked)) ||
+                    (handoverStep === 2 && (!contractFile || !!setupTermsKey && (confirmedSetupTerms !== setupTermsKey || handoverTarget.setupEarlyExitFee == null))) ||
+                    (handoverStep === 3 && (handoverTarget.dueAtCheckIn ?? 0) > 0 && !paymentEvidenceFile) ||
+                    (handoverStep === 4 && !emptyStorageHandoverReady)
+                  } onClick={() => submitWorkflowStep()}>{submitting ? "Đang lưu…" : "Xác nhận và tiếp tục"}</Button>
+                </div>
               ) : (
-                <Button disabled={submitting || !allChecksComplete || !evidenceFiles.length || !initialCondition.trim() || !goodsCondition.trim() || !goodsCategory.trim() || (measurementVariance && (!varianceAccepted || !varianceReason.trim()))} onClick={() => submitHandover()}>{submitting ? "Đang hoàn tất…" : "Hoàn tất kiểm kê"}</Button>
+                <div className="flex flex-wrap items-center justify-end gap-3">
+                  {handoverStep > 1 && (
+                    <Button
+                      variant="outline"
+                      onClick={() => { setError(null); setHandoverStep((prev) => Math.max(1, prev - 1)); }}
+                      disabled={submitting}
+                    >
+                      Quay lại
+                    </Button>
+                  )}
+                  <Button disabled={submitting || !allChecksComplete || !evidenceFiles.length || !initialCondition.trim() || !goodsCondition.trim() || !goodsCategory.trim() || (measurementVariance && (!varianceAccepted || !varianceReason.trim()))} onClick={() => submitHandover()}>{submitting ? "Đang hoàn tất…" : "Hoàn tất kiểm kê"}</Button>
+                </div>
               )}
             </div>
           </div>
@@ -1662,6 +1719,69 @@ export default function StaffCheckInOperationsPanel({
               </Button>
               <Button onClick={() => setCustomerWaitTarget(null)} disabled={submitting}>
                 Đóng thông báo
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={showCustomerReadyModal}
+        onClose={() => { if (!submitting) setShowCustomerReadyModal(false); }}
+        title="Khách hàng sẵn sàng bàn giao"
+        size="md"
+      >
+        {handoverTarget && (
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 rounded-xl border border-violet-200 bg-violet-50 p-4 text-violet-950">
+              <div className="rounded-full bg-violet-100 p-2 text-violet-700 shrink-0">
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <div>
+                <p className="font-bold text-base text-violet-950">Khách hàng đã sẵn sàng bàn giao</p>
+                <p className="mt-1 text-xs text-violet-800 leading-relaxed">
+                  Khách hàng đã hoàn tất việc sắp xếp hàng hóa vào gian kho và xác nhận sẵn sàng để nhân viên cơ sở thực hiện kiểm kê thực tế.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-stone-500">Khách hàng:</span>
+                <span className="font-semibold text-stone-900">{handoverTarget.customerName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-stone-500">Mã đơn giữ kho:</span>
+                <span className="font-mono font-medium text-stone-900">{handoverTarget.reservationCode}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-stone-500">Gian kho bàn giao:</span>
+                <span className="font-mono font-bold text-amber-700">{handoverTarget.storageUnitCode}</span>
+              </div>
+            </div>
+
+            <p className="text-xs text-stone-600">
+              Sau khi xác nhận, hệ thống sẽ kết thúc thời gian chuẩn bị và chuyển hồ sơ sang <b>Bước 6: Kiểm kê hàng hóa</b> (đo đạc kích thước kiện, cân nặng và chụp ảnh lưu hồ sơ).
+            </p>
+
+            <div className="flex items-center justify-end gap-3 border-t border-stone-200 pt-3">
+              <Button
+                variant="outline"
+                disabled={submitting}
+                onClick={() => setShowCustomerReadyModal(false)}
+              >
+                Quay lại
+              </Button>
+              <Button
+                disabled={submitting}
+                onClick={async () => {
+                  setShowCustomerReadyModal(false)
+                  await submitWorkflowStep()
+                }}
+              >
+                {submitting ? "Đang xử lý…" : "Khách hàng sẵn sàng bàn giao"}
               </Button>
             </div>
           </div>

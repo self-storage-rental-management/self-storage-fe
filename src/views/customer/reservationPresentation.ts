@@ -13,7 +13,7 @@ export function paymentCountdown(deadline: string | null | undefined, now: numbe
 }
 
 export const reservationStatusLabels: Record<ReservationStatus, string> = {
-  AWAITING_EMAIL: 'Chờ xác minh email', AWAITING_REVIEW: 'Chờ duyệt hàng hóa',
+  AWAITING_EMAIL: 'Đang xử lý hồ sơ', AWAITING_REVIEW: 'Chờ duyệt hàng hóa',
   AWAITING_PAYMENT: 'Chờ thanh toán đặt cọc giữ chỗ', PAYMENT_GRACE: 'Chờ khiếu nại thanh toán',
   PAYMENT_REVIEW: 'Đang đối soát thanh toán', CONFIRMED: 'Đã xác nhận giữ kho',
   UNIT_RESERVED: 'Đã phân kho', READY_FOR_CHECKIN: 'Sẵn sàng nhận kho',
@@ -23,14 +23,14 @@ export const reservationStatusLabels: Record<ReservationStatus, string> = {
 
 export function reservationProgress(status: ReservationStatus): number | null {
   switch (status) {
-    case 'AWAITING_EMAIL': return 0
-    case 'AWAITING_REVIEW': return 1
-    case 'AWAITING_PAYMENT': case 'PAYMENT_GRACE': case 'PAYMENT_REVIEW': return 2
-    case 'CONFIRMED': return 3
-    case 'UNIT_RESERVED': case 'READY_FOR_CHECKIN': return 4
-    case 'AWAITING_CUSTOMER_RECEIPT': return 5
-    case 'PREPARING': return 5
-    case 'COMPLETED': return 6
+    case 'AWAITING_EMAIL':
+    case 'AWAITING_REVIEW': return 0
+    case 'AWAITING_PAYMENT': case 'PAYMENT_GRACE': case 'PAYMENT_REVIEW': return 1
+    case 'CONFIRMED': return 2
+    case 'UNIT_RESERVED': case 'READY_FOR_CHECKIN': return 3
+    case 'AWAITING_CUSTOMER_RECEIPT': return 4
+    case 'PREPARING': return 4
+    case 'COMPLETED': return 5
     default: return null
   }
 }

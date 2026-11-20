@@ -41,6 +41,7 @@ import {
 } from '../../services/authApi'
 import { roleColors, roleLabels, LockIcon, type AdminToast } from './adminPanelTypes'
 import { getPasswordValidationError, PASSWORD_MAX_LENGTH, PASSWORD_POLICY_HINT } from '../../utils/passwordPolicy'
+import { sanitizeFacilityStrings } from '../../store/StorageHubContext'
 
 type AccountStatus = 'active' | 'inactive' | 'suspended' | 'locked'
 type FormRole = Exclude<Role, 'customer'>
@@ -234,7 +235,7 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
           setTotalItems(userPage.pagination.totalItems)
           setTotalPages(userPage.pagination.totalPages)
         }
-        if (facilityPage) setFacilities(facilityPage.data)
+        if (facilityPage) setFacilities(facilityPage.data.map(sanitizeFacilityStrings))
       })
       .catch(reason => {
         if (!cancelled) setError(reason instanceof Error ? reason.message : 'Không thể tải danh sách tài khoản.')
@@ -287,7 +288,7 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
       showToast('Tài khoản quản trị viên được bảo vệ và không thể chỉnh sửa.')
       return
     }
-    listAdminFacilities().then(res => setFacilities(res.data)).catch(() => {})
+    listAdminFacilities().then(res => setFacilities(res.data.map(sanitizeFacilityStrings))).catch(() => {})
     const role = primaryRole(account.roles)
     const facilityId = Object.keys(account.facilityScopes || {})[0] || ''
     setSelected(account)

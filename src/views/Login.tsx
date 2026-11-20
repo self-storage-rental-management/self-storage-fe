@@ -1515,7 +1515,7 @@ function RecoveryFlow({
 
   return (
     <div>
-      <p className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-[.1em] text-[#F59E0B]">
+      <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#F59E0B]">
         {purpose === 'email-verification' ? 'XÁC MINH EMAIL' : 'KHÔI PHỤC TÀI KHOẢN'}
       </p>
       <h1 className="text-2xl font-bold text-stone-900">{copy.title}</h1>
