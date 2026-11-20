@@ -126,7 +126,7 @@ export default function RecoveryTaskOperationsPanel({ role, task, view, identity
           {!needsReconciliation && record.overdueSettlement && <div><dt className="text-stone-500">Phí quá hạn trong quyết toán</dt><dd className="font-semibold">{money(record.overdueSettlement.settlementAmount ?? 0)}</dd></div>}
         </dl>}
         {view.settlementStatus === 'awaiting_customer_confirmation' && <p>Đang chờ khách hàng xác nhận quyết toán tại hồ sơ trả kho.</p>}
-        {view.settlementStatus === 'disputed' && <p>Khách hàng đã khiếu nại quyết toán. Manager xử lý tại hồ sơ trả kho.</p>}
+        {view.settlementStatus === 'disputed' && <p>Khách hàng đã khiếu nại quyết toán. Quản lý cơ sở xử lý tại hồ sơ trả kho.</p>}
         {view.settlementStatus === 'completed' && <p>Quyết toán đã hoàn tất.</p>}
         {view.transactionReference && <p className="break-all">Mã biên nhận hoặc giao dịch: <span className="font-mono font-semibold">{view.transactionReference}</span></p>}
         <p className="break-all text-stone-500">Mã hồ sơ trả kho: {view.returnCaseId}</p>

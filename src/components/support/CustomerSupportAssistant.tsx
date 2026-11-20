@@ -104,10 +104,11 @@ export default function CustomerSupportAssistant({ actorId, active, onMeetStaff,
       </div>}
       {messages.length === 1 && !staffRequest && <div className="flex flex-wrap gap-2" aria-label="Gợi ý câu hỏi">
         {([
-          ['capacity', 'Chọn kho'], ['renewal', 'Gia hạn'], ['payment', 'Thanh toán'], ['return', 'Trả kho'],
+          ['capabilities', 'Bạn có thể làm gì?'], ['capacity', 'Chọn kho'],
+          ['renewal', 'Gia hạn'], ['payment', 'Thanh toán'], ['return', 'Trả kho'],
         ] as const).map(([id, label]) => <button key={id} type="button" onClick={() => {
-          const faq = SUPPORT_ASSISTANT_FAQS.find(item => item.id === id)
-          if (faq) ask(faq.question)
+          const question = id === 'capabilities' ? label : SUPPORT_ASSISTANT_FAQS.find(item => item.id === id)?.question
+          if (question) ask(question)
         }} className="min-h-9 rounded-full border border-[#dce8df] bg-white px-3 text-xs font-medium text-stone-600 transition-colors hover:border-[#a8cbb4] hover:bg-[#eff7f1] hover:text-[#335b44] focus-visible:outline-2 focus-visible:outline-[#659c7c]">{label}</button>)}
       </div>}
       {staffRequest}

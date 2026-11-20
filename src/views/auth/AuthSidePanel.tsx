@@ -132,7 +132,7 @@ export default function AuthSidePanel({ tab }: AuthSidePanelProps) {
                   3
                 </span>
                 <div>
-                  <h4 className="text-xs font-bold text-white">Check-in nhận mã PIN</h4>
+                  <h4 className="text-xs font-bold text-white">Nhận kho và nhận mã PIN</h4>
                   <p className="text-[12px] text-[#B6BDC8] mt-0.5">Nhận mã khóa điện tử bảo mật và bắt đầu tự do lưu trữ 24/7.</p>
                 </div>
               </div>

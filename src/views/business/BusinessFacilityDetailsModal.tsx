@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Badge, Button, Modal } from '../../components/ui'
+import { Button, Modal } from '../../components/ui'
 import { UNIT_SPECS } from '../../data/demoDatabase'
 import type { CustomerUnitType } from '../../services/customerReservationApi'
 import type { RackResult } from '../../services/rackLayoutApi'
 import type { Facility, FacilityCustomUnitSpec, StorageUnit } from '../../types/storageHub'
 import { formatVndAmount } from '../../i18n/currency'
+import { FacilityStatusTag } from './facility/FacilityFormFields'
 
 type DetailTab = 'overview' | 'unit-types' | 'policies'
 
@@ -66,10 +67,11 @@ const unitStatusLabels: Record<string, string> = {
   archived: 'Đã lưu trữ',
 }
 
-const statusVariant = (status?: string): 'success' | 'warning' | 'muted' => {
-  if (status === 'active') return 'success'
-  if (status === 'maintenance' || status === 'awaiting_pricing' || status === 'setup') return 'warning'
-  return 'muted'
+const unitTypeStatusColors = (status: string) => {
+  if (status === 'active') return 'bg-emerald-200 text-emerald-950'
+  if (status === 'awaiting_pricing' || status === 'maintenance') return 'bg-amber-200 text-amber-950'
+  if (status === 'draft' || status === 'setup') return 'bg-sky-200 text-sky-950'
+  return 'bg-stone-200 text-stone-900'
 }
 
 const valueOrMissing = (value: unknown) => {
@@ -284,9 +286,15 @@ export default function BusinessFacilityDetailsModal({
     .filter(price => Number.isFinite(price) && price > 0)
     .sort((left, right) => left - right)[0]
   const facilityPrice = minimumPrice ? priceValue(minimumPrice) : valueOrMissing(facility.price)
-  const facilityStatus = statusLabels[facility.status] || valueOrMissing(facility.status)
+  const facilityAddress = facility.address?.trim()
+  const facilityCity = facility.city?.trim()
+  const location = [facilityAddress, facilityCity && !facilityAddress?.toLowerCase().endsWith(facilityCity.toLowerCase()) ? facilityCity : null]
+    .filter(Boolean)
+    .join(' · ')
   const typeStatus = selectedUnitType?.status ? statusLabels[String(selectedUnitType.status)] || String(selectedUnitType.status) : MISSING
-  const typeStatusBadge = selectedUnitType?.status ? <Badge variant={statusVariant(String(selectedUnitType.status))}>{typeStatus}</Badge> : MISSING
+  const typeStatusBadge = selectedUnitType?.status
+    ? <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${unitTypeStatusColors(selectedUnitType.status)}`}>{typeStatus}</span>
+    : MISSING
   const typeAvailable = selectedUnitType?.availableCount ?? (selectedTypeUnits.length ? selectedTypeUnits.filter(unit => unit.status === 'available').length : undefined)
   const typeOccupied = selectedUnitType?.occupiedCount ?? (selectedTypeUnits.length ? selectedTypeUnits.filter(unit => unit.status === 'occupied' || (unit.status as string) === 'rented').length : undefined)
   const typeTotal = selectedUnitType?.totalCount ?? (selectedTypeUnits.length || undefined)
@@ -316,8 +324,11 @@ export default function BusinessFacilityDetailsModal({
         <header className="shrink-0 border-b border-stone-200 bg-white">
           <div className="flex items-start justify-between gap-4 px-4 pb-3 pt-4 sm:px-6 sm:pt-5">
             <div className="min-w-0">
-              <h2 id="modal-title" className="truncate text-base font-bold text-stone-900">Thông tin chi tiết cơ sở</h2>
-              <p className="mt-1 truncate text-xs text-stone-500">{facility.name} · {facility.code || facility.id}</p>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                <h2 id="modal-title" className="text-base font-bold text-stone-900">Thông tin chi tiết cơ sở</h2>
+                {activeTab === 'overview' && <FacilityStatusTag status={facility.status} lang="vi" />}
+              </div>
+              <p className="mt-1 break-words text-xs text-stone-600">{facility.name} · {facility.code || facility.id}</p>
             </div>
             <button type="button" aria-label="Đóng" onClick={onClose} className="shrink-0 rounded-lg p-1.5 text-stone-400 transition hover:bg-stone-100 hover:text-stone-700">
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -344,35 +355,45 @@ export default function BusinessFacilityDetailsModal({
           {activeTab === 'overview' && (
             <div className="space-y-5">
               <div className="overflow-hidden rounded-xl border border-stone-200">
-                <div className="grid gap-0 md:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
-                  {facilityImage ? <img src={facilityImage} alt={facility.name} className="h-48 w-full object-cover md:h-full md:min-h-56" /> : <div className="flex min-h-48 items-center justify-center bg-stone-50 text-sm text-stone-400">Chưa có ảnh cơ sở</div>}
-                  <div className="p-4 sm:p-5">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="font-mono text-xs font-semibold text-stone-500">{facility.code || facility.id}</p>
-                        <h3 className="mt-1 text-xl font-bold text-stone-900">{facility.name}</h3>
-                      </div>
-                      <Badge variant={statusVariant(facility.status)}>{facilityStatus}</Badge>
-                    </div>
-                    <PropertyTable rows={[
-                      ['Địa chỉ', `${valueOrMissing(facility.address)}${facility.city ? ` · ${facility.city}` : ''}`],
-                    ]} />
+                <div className="grid md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+                  <div className="relative min-h-44 bg-stone-50 sm:min-h-52">
+                    {facilityImage
+                      ? <img src={facilityImage} alt={facility.name} className="absolute inset-0 h-full w-full object-cover" />
+                      : <p className="absolute inset-0 grid place-items-center text-sm text-stone-600">Chưa có ảnh cơ sở</p>}
                   </div>
+                  <dl className="grid content-center gap-x-6 gap-y-4 p-4 sm:grid-cols-2 sm:p-5">
+                    <div className="min-w-0 sm:col-span-2">
+                      <dt className="text-sm text-stone-600">Địa chỉ</dt>
+                      <dd className="mt-1 break-words text-sm font-medium leading-relaxed text-stone-900">{valueOrMissing(location)}</dd>
+                    </div>
+                    {[
+                      ['Người quản lý', valueOrMissing(facility.manager)],
+                      ['Số điện thoại liên hệ', valueOrMissing(facility.phone)],
+                      ['Giờ mở cửa', valueOrMissing(facility.accessHours)],
+                      ['Giá thuê từ', facilityPrice === MISSING ? MISSING : `${facilityPrice}/tháng`],
+                    ].map(([label, value]) => <div key={label} className="min-w-0">
+                      <dt className="text-sm text-stone-600">{label}</dt>
+                      <dd className="mt-1 break-words text-sm font-medium text-stone-900">{value}</dd>
+                    </div>)}
+                  </dl>
                 </div>
               </div>
 
               <section>
                 <h3 className="mb-2 text-sm font-semibold text-stone-900">Thông tin tổng hợp</h3>
+                <dl className="grid grid-cols-2 gap-x-5 gap-y-4 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 md:grid-cols-4">
+                  {[
+                    ['Tổng số loại kho', numberValue(displayUnitTypes.length, 'loại')],
+                    ['Tổng số gian kho', numberValue(facilityTotalCount, 'gian')],
+                    ['Số gian còn trống', numberValue(facilityAvailableCount, 'gian')],
+                    ['Số gian đang sử dụng', numberValue(facilityOccupiedCount, 'gian')],
+                  ].map(([label, value]) => <div key={label}>
+                    <dt className="text-sm text-stone-600">{label}</dt>
+                    <dd className="mt-1 text-base font-semibold tabular-nums text-stone-900">{value}</dd>
+                  </div>)}
+                </dl>
                 <PropertyTable rows={[
-                  ['Tổng số loại kho', numberValue(displayUnitTypes.length, 'loại')],
-                  ['Tổng số gian kho', numberValue(facilityTotalCount, 'gian')],
-                  ['Số gian còn trống', numberValue(facilityAvailableCount, 'gian')],
-                  ['Số gian đang sử dụng', numberValue(facilityOccupiedCount, 'gian')],
                   ...otherFacilityStatuses.map(([status, count]) => [`${unitStatusLabels[status] || status}`, numberValue(count, 'gian')] as [string, ReactNode]),
-                  ['Người quản lý', valueOrMissing(facility.manager)],
-                  ['Hotline', valueOrMissing(facility.phone)],
-                  ['Giờ mở cửa', valueOrMissing(facility.accessHours)],
-                  ['Giá thuê từ', facilityPrice === MISSING ? MISSING : `${facilityPrice}/tháng`],
                   ['Tổng hạn mức khối lượng hàng', hasCargoLimit ? numberValue(totalCargoLimit, 'kg') : MISSING],
                 ]} />
               </section>

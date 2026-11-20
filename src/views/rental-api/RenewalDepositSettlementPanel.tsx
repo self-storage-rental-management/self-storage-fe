@@ -35,14 +35,14 @@ export default function RenewalDepositSettlementPanel({ id, role, revision, onLo
     && settlement.status === 'PREPARATION_BLOCKED'
   return <Card className="space-y-4 p-4">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><h3 className="font-semibold">Tiền thuê gia hạn trả trước</h3><p className="mt-1 text-sm text-stone-600">{settlement.status === 'PREPARATION_BLOCKED' ? 'Đã thu tiền, đang chờ xử lý bước chuẩn bị ký' : labels[settlement.status]}{settlement.environment === "SANDBOX" ? " (Sandbox)" : ""}</p></div>
+      <div><h3 className="font-semibold">Tiền thuê gia hạn trả trước</h3><p className="mt-1 text-sm text-stone-600">{settlement.status === 'PREPARATION_BLOCKED' ? 'Đã thu tiền, đang chờ xử lý bước chuẩn bị ký' : labels[settlement.status]}{settlement.environment === "SANDBOX" ? " (thử nghiệm)" : ""}</p></div>
       <p className="font-semibold">{rentalMoney(settlement.amount,settlement.currency)}</p>
     </div>
     {settlement.status === "REVIEW_REQUIRED" && <p className="text-sm text-stone-500">Cần xác minh sự cố và nguyên nhân trước khi quyết định xử lý tiền thuê trả trước.</p>}
     {settlement.status === 'PREPARATION_BLOCKED' && <p className="text-sm text-stone-600">Khoản thu đã được đối soát nhưng chưa chuẩn bị được ký gia hạn. Cơ sở cần kiểm tra khả năng tiếp tục hoặc duyệt hoàn tiền. Trường hợp này không được tự coi là khách không đến.</p>}
     {canResolve && <PreparationResolutionForm id={id} settlement={settlement} onLocked={onLocked} onChanged={() => { read.refresh();onChanged() }} />}
     {canRecord && <div className="space-y-3 border-t border-stone-100 pt-4">
-      <p className="text-sm text-stone-600">{settlement.environment === "SANDBOX" ? "Ghi nhận chứng từ hoàn tiền thuê trả trước Sandbox. Thao tác này không xác nhận chuyển tiền thật." : "Sau khi thực hiện khoản hoàn, tải chứng từ và xác nhận để ghi nhận kết quả."}</p>
+      <p className="text-sm text-stone-600">{settlement.environment === "SANDBOX" ? "Ghi nhận chứng từ hoàn khoản trả trước qua VNPay thử nghiệm. Thao tác này không xác nhận chuyển tiền thật." : "Sau khi thực hiện khoản hoàn, tải chứng từ và xác nhận để ghi nhận kết quả."}</p>
       <fieldset disabled={locked} className="space-y-3">
         <label className="block text-sm">Mã giao dịch hoàn tiền thuê trả trước<input className="mt-1 block w-full rounded-lg border border-stone-300 px-3 py-2" value={reference} maxLength={100} onChange={event => setReference(event.target.value)} /></label>
         <EvidenceUpload entityType="DUONG_RENEWAL_REFUND" entityId={id} value={file ? [file] : []} limit={1} disabled={locked} onChange={ids => setFile(ids[0] ?? "")} onBusy={uploadBusy} />

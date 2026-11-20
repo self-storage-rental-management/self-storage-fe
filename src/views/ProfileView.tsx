@@ -199,7 +199,7 @@ export const ROLE_NOTIFICATION_CONFIGS: Record<Role, RoleNotificationConfig> = {
   staff: {
     roleTitle: 'Chuyên Viên Vận Hành Cơ Sở',
     title: 'Kênh Tác Vụ Trực Tiếp & Phục Vụ Khách Hàng',
-    subtitle: 'Cập nhật phân công công việc từ quản lý, lịch hẹn đón khách check-in và hỗ trợ kỹ thuật tại cơ sở.',
+    subtitle: 'Cập nhật phân công công việc từ quản lý, lịch hẹn nhận kho và hỗ trợ kỹ thuật tại cơ sở.',
     channels: [
       {
         id: 'staff_new_assignments',
@@ -211,10 +211,10 @@ export const ROLE_NOTIFICATION_CONFIGS: Record<Role, RoleNotificationConfig> = {
       },
       {
         id: 'staff_checkin_appointments',
-        title: 'Lịch Hẹn Khách Hàng Check-in Trong Ngày',
+        title: 'Lịch nhận kho trong ngày',
         description: 'Nhắc nhở lịch hẹn khách thuê đến nhận kho để bạn chủ động chuẩn bị hợp đồng và hướng dẫn kích hoạt mã PIN mở cửa.',
         defaultEnabled: true,
-        badge: 'Check-in',
+        badge: 'Nhận kho',
         badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200'
       },
       {
@@ -879,10 +879,6 @@ setSavingProfile(true)
               <Button variant="outline" size="sm" onClick={() => showToast('API token chưa được bật cho tài khoản này.')}>Tạo token</Button>
             </div>
           </Card>
-          <Card className="p-6 xl:col-span-2">
-            <SectionTitle title="Nhật ký thao tác của tôi" description="Các thay đổi do tài khoản này thực hiện trên hệ thống." />
-            <p className="rounded-lg bg-stone-50 p-4 text-sm text-stone-600">Nhật ký cá nhân sẽ hiển thị khi backend cung cấp bộ lọc theo người thực hiện.</p>
-          </Card>
         </div>
       )
     }
@@ -944,7 +940,7 @@ setSavingProfile(true)
                   </div>
                 )
               })}
-              {apiMode && apiRentalsError && <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700 md:col-span-2">Không tải được hồ sơ thuê từ backend.</p>}
+              {apiMode && apiRentalsError && <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700 md:col-span-2">Không tải được hồ sơ thuê.</p>}
               {apiMode && !apiRentalsError && !visibleApiRentals.length && <p className="rounded-lg bg-stone-50 p-4 text-sm text-stone-600 md:col-span-2">Chưa có hồ sơ thuê đang hiệu lực.</p>}
               {!apiMode && !activeRentals.length && <p className="rounded-lg bg-stone-50 p-4 text-sm text-stone-600 md:col-span-2">Chưa có kho đang thuê trong dữ liệu tài khoản.</p>}
             </div>
@@ -982,12 +978,12 @@ setSavingProfile(true)
             <div className="space-y-2 text-sm">
               <InfoRow label="Mã nhân viên" value={`#STF-${user.id.slice(0, 8).toUpperCase()}`} />
               <InfoRow label="Cơ sở trực thuộc" value={roleFacilityName} />
-              <InfoRow label="Quản lý trực tiếp" value={apiMode ? 'Chưa có API thông tin quản lý' : currentFacility?.manager || 'Chưa có dữ liệu quản lý'} />
-              <InfoRow label="Hotline cơ sở" value={apiMode ? 'Chưa có API hotline cơ sở' : currentFacility?.phone || 'Chưa cập nhật'} />
+              <InfoRow label="Quản lý trực tiếp" value={apiMode ? 'Chưa có thông tin quản lý trực tiếp' : currentFacility?.manager || 'Chưa có dữ liệu quản lý'} />
+              <InfoRow label="Số điện thoại cơ sở" value={apiMode ? 'Chưa có số điện thoại cơ sở' : currentFacility?.phone || 'Chưa cập nhật'} />
             </div>
           </Card>
           <Card className="p-6">
-            <SectionTitle title="Ca trực & nhiệm vụ hôm nay" description="Công việc được phân công từ hệ thống vận hành." />
+            <SectionTitle title="Nhiệm vụ hôm nay" description="Công việc được phân công từ hệ thống vận hành." />
             {apiMode ? (
               apiMaintenanceError ? (
                 <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700">Không tải được nhiệm vụ vận hành từ backend.</p>
@@ -1001,13 +997,10 @@ setSavingProfile(true)
                 </>
               )
             ) : (
-              <>
-                <div className="grid grid-cols-2 gap-3">
-                  <MetricTile label="Đang xử lý" value={openTasks.length} />
-                  <MetricTile label="Tổng nhiệm vụ" value={assignedTasks.length} />
-                </div>
-                <p className="mt-4 rounded-lg bg-stone-50 p-3 text-xs text-stone-600">Lịch ca chi tiết sẽ hiển thị khi backend ca trực được kết nối.</p>
-              </>
+              <div className="grid grid-cols-2 gap-3">
+                <MetricTile label="Đang xử lý" value={openTasks.length} />
+                <MetricTile label="Tổng nhiệm vụ" value={assignedTasks.length} />
+              </div>
             )}
           </Card>
           {apiMode && <div className="xl:col-span-2"><StaffMaintenanceOperationsPanel showToast={showToast} /></div>}
@@ -1307,7 +1300,7 @@ setSavingProfile(true)
                   <h2 className="text-lg font-bold text-stone-900">Quản lý mật khẩu tài khoản nội bộ</h2>
                 </div>
                 <p className="text-sm text-stone-600">
-                  Tài khoản nhân sự nội bộ không tự đổi mật khẩu trên cổng này. Vui lòng liên hệ Quản trị viên (Admin) nếu cần đặt lại mật khẩu.
+                  Tài khoản nhân sự nội bộ không tự đổi mật khẩu trên cổng này. Vui lòng liên hệ Quản trị viên nếu cần đặt lại mật khẩu.
                 </p>
               </Card>
             ) : (

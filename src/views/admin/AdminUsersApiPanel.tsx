@@ -522,7 +522,7 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
         <StatCard
           title="Nhân sự nội bộ"
           value={stats.internal}
-          delta="Admin, Quản lý, Staff"
+          delta="Quản trị viên, Quản lý cơ sở, Ban điều hành, Nhân viên"
           deltaPositive
           icon={
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-700 ring-1 ring-amber-200">
@@ -611,10 +611,10 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
               className="h-10"
             >
               <option value="all">Tất cả nhân sự</option>
-              <option value="staff">Chuyên viên vận hành (Staff)</option>
-              <option value="manager">Giám đốc cơ sở (Manager)</option>
-              <option value="business">Đối tác kinh doanh (Business)</option>
-              <option value="admin">Quản trị viên (Admin)</option>
+              <option value="staff">Nhân viên vận hành</option>
+              <option value="manager">Quản lý cơ sở</option>
+              <option value="business">Ban điều hành</option>
+              <option value="admin">Quản trị viên</option>
             </Select>
           ) : (
             <Select
@@ -974,16 +974,16 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
                 }}
               >
                 {selectedRole === 'customer' && <option value="customer">Khách hàng</option>}
-                <option value="staff">Chuyên viên vận hành (Staff)</option>
-                <option value="manager">Quản lý cơ sở (Manager)</option>
-                <option value="business">Giám đốc kinh doanh (Business)</option>
-                <option value="admin">Quản trị viên (Admin)</option>
+                <option value="staff">Nhân viên vận hành</option>
+                <option value="manager">Quản lý cơ sở</option>
+                <option value="business">Ban điều hành</option>
+                <option value="admin">Quản trị viên</option>
               </Select>
             ) : (
               <div className="space-y-1">
                 <span className="text-sm font-medium text-stone-700">Vai Trò</span>
                 <div className="flex h-[38px] items-center rounded-lg border border-stone-200 bg-stone-50 px-3 text-sm text-stone-600">
-                  Khách hàng thuê kho (Customer)
+                  Khách hàng thuê kho
                 </div>
               </div>
             )}
@@ -1025,7 +1025,7 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
                   Phân công & Phân loại quản lý cơ sở
                 </span>
                 <span className="text-[11px] text-stone-500 font-medium">
-                  {form.role === 'manager' ? 'Dành cho Quản lý cơ sở (Manager)' : 'Dành cho Chuyên viên vận hành (Staff)'}
+                  {form.role === 'manager' ? 'Dành cho Quản lý cơ sở' : 'Dành cho Nhân viên vận hành'}
                 </span>
               </div>
 

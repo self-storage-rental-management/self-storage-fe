@@ -3,7 +3,8 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { expect, it } from 'vitest'
 import type { CompatibilityCheckResult, CustomerUnitType, PalletPlan, ReservationRecommendation } from '../../services/customerReservationApi'
 import { sampleRackPallet } from '../../services/rackLayoutApi'
-import { resolveWarehouseRecommendation } from './customerWarehouseRecommendation'
+import { bookingAvailabilityIssue, resolveWarehouseRecommendation } from './customerWarehouseRecommendation'
+import { ApiClientError } from '../../services/apiClient'
 import CustomerWarehouseSuggestion from './CustomerWarehouseSuggestion'
 
 const type: CustomerUnitType = {
@@ -28,6 +29,15 @@ const recommendation: ReservationRecommendation = {
   evaluatedUnitTypeIds: ['small', 'large'], incompatibleUnitTypeIds: ['small'], issues: [],
   checksByUnitType: { large: check },
 }
+
+it.each([
+  ['Facility is not available for reservations', 'chọn cơ sở khác đang hoạt động'],
+  ['Cơ sở hiện không nhận đơn đặt kho mới.', 'chọn cơ sở khác đang hoạt động'],
+  ['Unit type is not available for reservations', 'chọn loại kho khác'],
+  ['Rental package is not effective for the selected facility and date', 'chọn gói thuê hoặc ngày nhận kho khác'],
+])('hướng dẫn bước tiếp theo khi API trả %s', (message, expected) => {
+  expect(bookingAvailabilityIssue(new ApiClientError(message, { status: 409 }))).toContain(expected)
+})
 
 it('dùng kết quả còn gian của phép tính mới khi danh sách cũ báo hết gian', () => {
   expect(resolveWarehouseRecommendation(recommendation, 'facility', [type])).toEqual({ type, plan, check })
