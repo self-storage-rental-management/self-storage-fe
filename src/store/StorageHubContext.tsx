@@ -2664,7 +2664,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
               cancellationType: noShowCharge > 0 ? 'BEFORE_CHECKIN_EARLY_FEE' : undefined,
               cancellationChargeAmount: noShowCharge,
               cancellationRefundAmount: noShowRefund,
-              evidence: [...h.evidence, `EXPIRED · Quá hạn (${reason}). Giải phóng kho.${noShowCharge > 0 ? ` Giữ lại ${formatVnd(noShowCharge)}, hoàn ${formatVnd(noShowRefund)}.` : ''}`]
+              evidence: [...h.evidence, `EXPIRED · Quá hạn (${reason === 'NO_SHOW' ? 'Bỏ lịch nhận kho' : 'Quá hạn thanh toán cọc'}). Giải phóng kho.${noShowCharge > 0 ? ` Phí đặt cọc giữ chỗ ${formatVnd(noShowCharge)} không hoàn lại theo quy định.` : ''}`]
             }
           }
           return h

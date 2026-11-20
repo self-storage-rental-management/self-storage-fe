@@ -13,6 +13,7 @@ export interface NavItem {
   icon: ReactNode
   group?: string
   permission?: PermissionKey
+  badgeCount?: number
 }
 
 export interface LayoutNotification {
@@ -481,9 +482,16 @@ export default function Layout({
                 <button
                   onClick={() => { navigate(item.id); setSidebarOpen(false) }}
                   aria-current={currentPage === item.id ? 'page' : undefined}
-                  className={`sidebar-link w-full mb-0.5 ${currentPage === item.id ? 'active' : ''}`}
+                  className={`sidebar-link w-full mb-0.5 flex items-center justify-between ${currentPage === item.id ? 'active' : ''}`}
                 >
-                  <span>{getNavLabel(item)}</span>
+                  <span className="flex items-center gap-1.5 min-w-0 flex-1 text-left">
+                    <span className="truncate">{getNavLabel(item)}</span>
+                    {typeof item.badgeCount === 'number' && item.badgeCount > 0 && (
+                      <span className="inline-flex items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-extrabold text-white leading-none shrink-0 shadow-sm">
+                        {item.badgeCount}
+                      </span>
+                    )}
+                  </span>
                 </button>
               </Fragment>
             )
