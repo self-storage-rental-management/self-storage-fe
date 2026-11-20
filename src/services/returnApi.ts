@@ -378,28 +378,6 @@ export function confirmReturn(id: string, decision: 'accepted' | 'disputed', not
   if (note.length > 2000) throw new Error('Ghi chú quá dài.')
   return mutate(role, id, 'confirm', { decision, note })
 }
-export async function fastApproveReturn(id: string, role: ReturnRole = 'staff') {
-  const current = await getReturn(role, id)
-  if (['requested', 'scheduled'].includes(current.status)) {
-    await inspectReturn(id, {
-      damageFee: 0,
-      cleaningFee: 0,
-      lostItemFee: 0,
-      overdueFee: 0,
-      outstandingFee: 0,
-      inventoryMatch: 'match',
-      damageClassification: 'no_damage',
-      staffNotes: 'Nghiệm thu và cho trả kho nhanh tại quầy - Không phát sinh hư hại',
-      evidencePhotos: [],
-      returnedKey: true,
-      returnedCard: true,
-      returnedLock: true,
-      proposedUnitStatus: 'available',
-      unitVacated: true,
-    })
-  }
-  return confirmReturn(id, 'accepted', 'Nhân viên xác nhận quyết toán trả kho nhanh trực tiếp tại quầy', role)
-}
 export function paySettlement(id: string, paymentMethod: string, notes = '') {
   if (!paymentMethod.trim() || paymentMethod.length > 40) throw new Error('Nhập phương thức thanh toán hợp lệ.')
   if (notes.length > 1000) throw new Error('Ghi chú thanh toán quá dài.')

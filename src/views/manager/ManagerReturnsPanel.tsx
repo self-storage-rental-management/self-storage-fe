@@ -1,7 +1,7 @@
 import { isApiAuthenticated } from '../../services/authApi'
 import { useReturnRecords } from '../../hooks/useReturnRecords'
 import { returnScreenRecord } from '../../services/returnScreenAdapter'
-import { getReturn, reviewDispute, recordReturnSettlement, uploadReturnEvidence, returnError, confirmReturn, fastApproveReturn } from '../../services/returnApi'
+import { getReturn, reviewDispute, recordReturnSettlement, uploadReturnEvidence, returnError } from '../../services/returnApi'
 import React, { useEffect, useRef, useState } from 'react'
 import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Select, Avatar, Input, Tabs } from '../../components/ui'
 import { Icon } from '../../components/Layout'
@@ -268,12 +268,12 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
     if (useApi) {
       setApiBusy(true)
       try {
-        if (completeTarget.status === 'requested' || completeTarget.status === 'scheduled') {
-          await fastApproveReturn(completeTarget.id, 'manager')
-          showToast(`Đã nghiệm thu và cho trả kho ngay hồ sơ ${completeTarget.id}!`)
-        } else if (completeTarget.status === 'awaiting_customer_confirmation' || completeTarget.status === 'inspected') {
-          await confirmReturn(completeTarget.id, 'accepted', completeNotes || 'Quản lý duyệt quyết toán trực tiếp tại quầy', 'manager')
-          showToast(`Đã duyệt quyết toán cho hồ sơ ${completeTarget.id}!`)
+        if (completeTarget.status === 'requested' || completeTarget.status === 'scheduled' || completeTarget.status === 'inspected') {
+          showToast('Hồ sơ phải được nhân viên hoàn tất nghiệm thu trước khi gửi khách hàng xác nhận quyết toán.')
+          return
+        } else if (completeTarget.status === 'awaiting_customer_confirmation') {
+          showToast('Đang chờ khách hàng đồng ý quyết toán hoặc gửi yêu cầu xem xét lại.')
+          return
         } else if (completeTarget.status === 'disputed') {
           await reviewDispute(completeTarget.id, {
             damageFee: 0,

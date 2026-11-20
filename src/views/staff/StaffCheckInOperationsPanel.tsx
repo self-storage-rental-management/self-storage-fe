@@ -13,6 +13,7 @@ import {
   startCheckInSetup,
   uploadCheckInEvidence,
   verifyCheckInIdentity,
+  checkInEvidenceAssetIds,
   type CheckInCase,
   type CheckInChecklist,
   type CheckInInventoryLine,
@@ -830,8 +831,12 @@ export default function StaffCheckInOperationsPanel({
         errors.varianceReason = "Vui lòng nhập lý do chênh lệch khi hàng hóa khác đơn đặt"
       }
     }
-    const emptyStorageReferences = parseEmptyStorageHandover(handoverTarget?.readinessNote).evidenceReferences
-    if (!evidenceFiles.length && !evidenceReferences.some(reference => !emptyStorageReferences.includes(reference))) {
+    const emptyStorageReferences = checkInEvidenceAssetIds(
+      parseEmptyStorageHandover(handoverTarget?.readinessNote).evidenceReferences,
+    )
+    const inventoryEvidenceReferences = checkInEvidenceAssetIds(evidenceReferences)
+      .filter(reference => !emptyStorageReferences.includes(reference))
+    if (!evidenceFiles.length && !inventoryEvidenceReferences.length) {
       errors.evidenceFiles = "Cần tải lên ít nhất 1 ảnh hoặc tệp PDF bằng chứng kiểm kê"
     }
 
@@ -853,7 +858,14 @@ export default function StaffCheckInOperationsPanel({
     setSubmitting(true)
 
     try {
-      const uploadedEvidence = [...evidenceReferences]
+      // Older readiness notes can contain file names or paths. Completion accepts
+      // only uploaded FileAsset UUIDs and must not reuse empty-storage evidence as
+      // the required inventory evidence.
+      const emptyStorageReferences = checkInEvidenceAssetIds(
+        parseEmptyStorageHandover(handoverTarget.readinessNote).evidenceReferences,
+      )
+      const uploadedEvidence = checkInEvidenceAssetIds(evidenceReferences)
+        .filter(reference => !emptyStorageReferences.includes(reference))
 
       for (const file of evidenceFiles) {
         const asset = await uploadCheckInEvidence(
@@ -1005,7 +1017,7 @@ export default function StaffCheckInOperationsPanel({
         if (!emptyStorageHandoverReady) {
           throw new Error("Cần nhập mã ổ khóa, ghi nhận hiện trạng và chọn ít nhất một ảnh hoặc PDF bằng chứng kho trống.")
         }
-        const emptyStorageEvidence = [...evidenceReferences]
+        const emptyStorageEvidence = checkInEvidenceAssetIds(evidenceReferences)
         for (const file of evidenceFiles) {
           const asset = await uploadCheckInEvidence(handoverTarget.checkInId, file)
           emptyStorageEvidence.push(asset.id)

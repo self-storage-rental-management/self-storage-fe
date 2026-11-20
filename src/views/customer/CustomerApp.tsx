@@ -3204,7 +3204,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       )}
                       {returnCase.customerDecisionNote?.includes('Auto-Settlement SLA') && (
                         <div className="mt-2.5 rounded-lg border border-purple-200 bg-purple-50 p-2.5 text-xs text-purple-900 flex items-center gap-2">
-                          <span className="font-bold"> Tự động chốt quyết toán (SLA 72h):</span>
+                          <span className="font-bold"> Tự động chốt quyết toán:</span>
                           <span>Hồ sơ đã tự động được nghiệm thu và quyết toán sau 72 giờ không có phản hồi khiếu nại.</span>
                         </div>
                       )}
@@ -3213,7 +3213,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                           <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900 flex items-start gap-2">
 
                             <div>
-                              <p className="font-bold">Thời hạn phản hồi (SLA 72 giờ)</p>
+                              <p className="font-bold">Thời hạn phản hồi</p>
                               <p className="mt-0.5 text-amber-800">Quý khách vui lòng kiểm tra kỹ biên bản và phản hồi trong 72 giờ. Sau thời hạn này, hệ thống sẽ tự động chốt quyết toán theo biên bản nghiệm thu của nhân viên.</p>
                             </div>
                           </div>
