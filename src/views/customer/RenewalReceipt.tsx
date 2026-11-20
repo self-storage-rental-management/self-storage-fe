@@ -17,7 +17,7 @@ export default function RenewalReceipt({ id,paymentId,role='customer' }: { id: s
   if(!p)return <ApiReadState {...read} retry={read.refresh} />
   const remaining=p.kind==='REMAINING_RENT'
   const content=p.kind==='DEPOSIT'?'Thanh toán cọc gia hạn':p.kind==='INSTALLMENT'?'Thanh toán kỳ gia hạn':remaining?'Thanh toán tiền thuê còn lại và phí quá hạn nếu có':'Thanh toán toàn kỳ gia hạn'
-  const method=remaining ? paymentMethodLabel(p.paymentMethod) : p.paymentMethod && p.paymentMethod !== 'VNPAY' ? `VNPay (${p.paymentMethod})` : 'VNPay'
+  const method=paymentMethodLabel(remaining ? p.paymentMethod : p.paymentMethod || 'VNPAY', !remaining)
   const gatewayTime=p.gatewayPayDate && /^\d{14}$/.test(p.gatewayPayDate)
     ? `${p.gatewayPayDate.slice(8,10)}:${p.gatewayPayDate.slice(10,12)}:${p.gatewayPayDate.slice(12,14)} ${p.gatewayPayDate.slice(6,8)}/${p.gatewayPayDate.slice(4,6)}/${p.gatewayPayDate.slice(0,4)}`
     : rentalDate(p.paidAt)

@@ -211,7 +211,11 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
           </span>
         </label>
 
-        <p className="text-sm text-stone-600">Bạn sẽ được chuyển sang VNPay thử nghiệm. Sau khi thanh toán thành công, bạn có thể xem biên lai trong đơn hoặc qua email.</p>
+        <p className="text-sm text-stone-600">Bạn sẽ được chuyển sang VNPay thử nghiệm. Sau khi thanh toán thành công, biên lai được lưu trong đơn và gửi qua email tài khoản; hệ thống tự thử lại nếu gửi email tạm thời gặp lỗi.</p>
+        <div className="flex items-center gap-2 rounded-lg border-2 border-amber-500 bg-amber-50 p-3 text-xs font-semibold text-amber-950 shadow-xs">
+          <span className="text-base text-amber-600">⚠️</span>
+          <span><b>Quy định không hoàn tiền:</b> Phí đặt cọc giữ chỗ (5%) là khoản bảo đảm việc giữ loại kho đã chọn và không được hoàn lại trong trường hợp khách hàng tự ý hủy đơn hoặc bỏ lịch nhận kho.</span>
+        </div>
         <Button className="w-full" disabled={busy || countdown.expired || !acceptedNoRefund} onClick={() => pay()}>{busy ? 'Đang chuyển sang VNPay…' : `Thanh toán qua VNPay ${formatVnd(snapshot.reservationDepositAmount)}`}</Button>
       </div>
     </Modal>

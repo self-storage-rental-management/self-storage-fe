@@ -17,6 +17,7 @@ import ReturnSettlementReceipt from "./ReturnSettlementReceipt"
 import {
   paymentRecordLabel,
 } from "./paymentPresentation"
+import { paymentMethodLabel } from "./paymentLabels"
 
 export function paymentHistoryTimestamp(value: string | null) {
   if (!value || !Number.isFinite(Date.parse(value))) return "Chưa ghi nhận"
@@ -147,7 +148,7 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
         <Button variant={historyFilter === 'settlement' ? 'primary' : 'outline'} onClick={() => setHistoryFilter('settlement')}>Quyết toán</Button>
       </div>
       <Card>
-        <Table tableClassName="min-w-[1000px]">
+        <Table tableClassName="min-w-[1120px]">
           <Thead>
             <tr>
               <Th>Mã Giao Dịch</Th>
@@ -172,7 +173,7 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
                   <ShortCode value={entry.renewalId} />
                 </> : entry.reference.startsWith("RSV-") ? <span className="whitespace-nowrap font-semibold text-stone-900">{entry.reference}</span> : <span className="font-semibold text-stone-900">{entry.reference}</span>}</Td>
                 <Td>{paymentCategories[entry.category]}</Td>
-                <Td><span className="whitespace-nowrap text-xs text-stone-500">{entry.method || "Chưa có"}</span></Td>
+                <Td><span className="block min-w-28 max-w-40 text-xs leading-5 text-stone-600">{paymentMethodLabel(entry.method, entry.category === 'deposit' || entry.category === 'renewal')}</span></Td>
                 <Td className="text-right"><b className="whitespace-nowrap text-stone-950">{historyAmount(entry.amount)}</b>
                   {isRenewalHistoryEntry(entry) && entry.statusSource === 'RENEWAL_PROJECTION' && entry.refundedAmount != null && entry.refundedAmount > 0 && <p className="mt-1 text-xs text-stone-500">Đã hoàn: {historyAmount(entry.refundedAmount)}</p>}
                 </Td>
@@ -224,7 +225,7 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
                 ["Số tiền", historyAmount(receipt.amount)],
                 [
                   "Phương thức",
-                  receipt.method || "Chưa có thông tin",
+                  paymentMethodLabel(receipt.method, receipt.category === 'deposit' || receipt.category === 'renewal'),
                 ],
                 ["Trạng thái", statusLabel(receipt)],
               ].map(([label, value]) => (
