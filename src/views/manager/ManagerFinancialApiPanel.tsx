@@ -1,4 +1,3 @@
-import { userFacingError } from '../../presentation/userFacingError'
 import { useRef, useState, type FormEvent } from 'react'
 import { downloadPaymentReceipt } from '../../utils/downloadPaymentReceipt'
 import { getRenewalReceipt } from '../../services/renewalReceiptApi'
@@ -14,7 +13,6 @@ import ApiPager from '../rental-api/ApiPager'
 import { loadManagerPaymentHistory, managerApiIdentity, requireManagerRead } from './managerD1D5Api'
 import { managerDisplayError } from './managerPresentation'
 import { singleManagerFacility, managerFacilityNotice } from './managerFacilityUi'
-import { requestVnpayRefund } from '../../services/vnpayRefundApi'
 import { ApiClientError } from '../../services/apiClient'
 
 const typeLabels: Record<ManagerPaymentHistoryType, string> = {
@@ -75,13 +73,114 @@ function PaymentTime({ value }: { value: string }) {
   return <time dateTime={value} className="block whitespace-nowrap text-xs tabular-nums leading-5"><span className="block text-stone-700">{day}</span><span className="block text-[11px] text-stone-500">{time}</span></time>
 }
 
+function receiptTitle(item: ManagerPaymentHistoryItem): string {
+  switch (item.type) {
+    case 'RESERVATION_DEPOSIT':
+      return 'Biên lai đặt cọc giữ chỗ'
+    case 'RENTAL_BALANCE':
+      return 'Biên lai thanh toán phần còn lại khi nhận kho'
+    case 'RENEWAL':
+    case 'RENEWAL_INSTALLMENT':
+      return 'Biên lai tiền thuê gia hạn'
+    case 'RETURN_REFUND':
+      return 'Biên lai hoàn tiền'
+    case 'RETURN_SETTLEMENT':
+      return 'Biên lai quyết toán'
+    case 'MONTHLY_RENT':
+      return 'Biên lai tiền thuê hàng tháng'
+    default:
+      return 'Biên lai thanh toán'
+  }
+}
+
+function receiptStatus(item: ManagerPaymentHistoryItem): string {
+  if (item.status === 'PAID') {
+    switch (item.type) {
+      case 'RESERVATION_DEPOSIT':
+        return 'Đơn đã xác nhận cọc'
+      case 'RENTAL_BALANCE':
+        return 'Đã ghi nhận thanh toán nhận kho'
+      case 'RENEWAL':
+      case 'RENEWAL_INSTALLMENT':
+        return 'Khoản thu đã đối soát'
+      case 'RETURN_SETTLEMENT':
+        return 'Đã thanh toán'
+      default:
+        return statusLabels[item.status] || 'Đã thu'
+    }
+  }
+  if (item.status === 'REFUNDED') {
+    return 'Đã hoàn tiền'
+  }
+  return statusLabels[item.status] || item.status
+}
+
+function receiptFooter(item: ManagerPaymentHistoryItem): string {
+  if (item.type === 'RESERVATION_DEPOSIT' || item.type === 'RENTAL_BALANCE') {
+    return 'Biên lai được lưu cùng đơn giữ kho để đối chiếu thanh toán.'
+  }
+  if (item.type === 'RENEWAL' || item.type === 'RENEWAL_INSTALLMENT') {
+    return 'Biên lai được lưu cùng yêu cầu gia hạn để đối chiếu thanh toán.'
+  }
+  if (item.type === 'RETURN_REFUND' || item.type === 'RETURN_SETTLEMENT') {
+    return 'Biên lai được lưu cùng hồ sơ trả kho để đối chiếu thanh toán.'
+  }
+  return 'Thông tin giao dịch đã ghi nhận trong lịch sử thanh toán của cơ sở.'
+}
+
+function receiptReference(item: ManagerPaymentHistoryItem): string {
+  return item.reservationCode || item.transactionReference || item.id
+}
+
 function receiptFields(item: ManagerPaymentHistoryItem): [string, string][] {
-  return [
-    ['Mã giao dịch', item.transactionReference], ['Khách hàng', item.customerName],
-    ['Nội dung', typeLabels[item.type]], ['Phương thức thanh toán', paymentMethodLabel(item.paymentMethod)],
-    ['Số tiền', money(item.amount, item.currency)], ['Tiền tệ', item.currency],
-    ['Thời điểm ghi nhận', new Date(item.occurredAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })],
+  const isVnpay = item.paymentMethod?.toUpperCase().includes('VNPAY') || item.paymentMethod?.toUpperCase() === 'ONLINE_GATEWAY' || item.paymentMethod?.toUpperCase() === 'NCB'
+  const isRemainingRental = item.type === 'RENTAL_BALANCE'
+  const isDeposit = item.type === 'RESERVATION_DEPOSIT'
+
+  const content = isDeposit
+    ? 'Đặt cọc giữ chỗ đã được đơn xác nhận'
+    : isRemainingRental
+      ? 'Thanh toán phần còn lại khi nhận kho'
+      : typeLabels[item.type] || 'Thanh toán'
+
+  const date = new Date(item.occurredAt)
+  const formattedDate = Number.isNaN(date.getTime())
+    ? '-'
+    : new Intl.DateTimeFormat('vi-VN', {
+        timeZone: 'Asia/Ho_Chi_Minh',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hourCycle: 'h23',
+      }).format(date)
+
+  const fields: [string, string][] = [
+    ['Mã giao dịch StorageHub', item.id],
+    [isRemainingRental ? 'Mã tham chiếu thanh toán' : isVnpay ? 'Mã tham chiếu VNPay' : 'Mã tham chiếu giao dịch', item.transactionReference || '-'],
+    [isRemainingRental ? 'Mã phiếu thu hoặc giao dịch' : isVnpay ? 'Mã giao dịch VNPay' : 'Mã giao dịch', item.gatewayTransactionNo || item.transactionReference || '-'],
   ]
+
+  if (item.reservationCode) {
+    fields.push([isDeposit || isRemainingRental ? 'Đơn giữ kho' : 'Mã hồ sơ', item.reservationCode])
+  }
+
+  fields.push(
+    [isRemainingRental ? 'Thời điểm ghi nhận tại quầy' : isVnpay ? 'Thời điểm VNPay ghi nhận' : 'Thời điểm ghi nhận', formattedDate],
+    ['Thời điểm StorageHub xử lý', formattedDate],
+    ['Phương thức thanh toán', paymentMethodLabel(item.paymentMethod)],
+    ['Người ghi nhận', item.customerName || '-'],
+    ['Nội dung', content],
+    ['Số tiền', money(item.amount, item.currency)],
+    ['Tiền tệ', item.currency || 'VND'],
+    ['Số hóa đơn', item.invoiceNumber || '-'],
+    ['Trạng thái hóa đơn', item.invoiceStatus || 'DRAFT'],
+    ['Ngày phát hành hóa đơn', item.invoiceIssuedAt ? new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(item.invoiceIssuedAt)) : '-']
+  )
+
+  return fields
 }
 
 function canReadReceipt(item: ManagerPaymentHistoryItem) {
@@ -117,11 +216,6 @@ function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; 
   const [draft, setDraft] = useState('')
   const [search, setSearch] = useState('')
   const [receipt, setReceipt] = useState<ManagerPaymentHistoryItem>()
-  const [refundTarget, setRefundTarget] = useState<ManagerPaymentHistoryItem>()
-  const [refundAmount, setRefundAmount] = useState('')
-  const [refundReason, setRefundReason] = useState('')
-  const [refundBusy, setRefundBusy] = useState(false)
-  const [refundFeedback, setRefundFeedback] = useState('')
   const [downloading, setDownloading] = useState<string | null>(null)
   const [downloadError, setDownloadError] = useState<unknown>(null)
   const identity = managerApiIdentity(actor)
@@ -147,35 +241,16 @@ function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; 
     try {
       if (item.renewalId) await getRenewalReceipt('manager', item.renewalId, item.id)
       downloadPaymentReceipt({
-        title: item.type === 'RETURN_REFUND' ? 'Biên lai hoàn tiền' : 'Biên lai thanh toán',
-        reference: item.transactionReference || item.id,
-        status: paymentDisplayLabel(item),
+        title: receiptTitle(item),
+        reference: receiptReference(item),
+        status: receiptStatus(item),
         fields: receiptFields(item),
-        footer: 'Thông tin giao dịch đã ghi nhận trong lịch sử thanh toán của cơ sở.',
+        footer: receiptFooter(item),
       })
     } catch (error) {
       setDownloadError(error)
     } finally {
       setDownloading(null)
-    }
-  }
-
-  async function submitRefund(event: FormEvent) {
-    event.preventDefault()
-    if (!refundTarget) return
-    setRefundBusy(true)
-    setRefundFeedback('')
-    try {
-      await requestVnpayRefund(refundTarget.id, Number(refundAmount), refundReason)
-      setRefundFeedback('Đã gửi yêu cầu hoàn tiền VNPay. Nếu vượt hạn mức quản lý cơ sở, hồ sơ đã được chuyển sang quản lý vận hành duyệt.')
-      setRefundTarget(undefined)
-      setRefundAmount('')
-      setRefundReason('')
-      read.refresh()
-    } catch (error) {
-      setRefundFeedback(userFacingError(error))
-    } finally {
-      setRefundBusy(false)
     }
   }
 
@@ -227,7 +302,7 @@ function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; 
           <Th className="!pl-1 !pr-2 text-right">Số tiền</Th>
           <Th className="text-center">Trạng thái</Th>
           <Th className="!pl-2 !pr-1">Thời gian</Th>
-          <Th className="relative -left-[0.5cm] !px-1 text-center">Biên lai</Th>
+          <Th className="!px-2 text-center">Biên lai</Th>
         </tr></Thead>
         <Tbody>
           {result.data.map((item: ManagerPaymentHistoryItem) => <Tr key={item.id} className="transition-colors hover:bg-stone-50 focus-within:bg-stone-50">
@@ -244,17 +319,14 @@ function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; 
             </Td>
             <Td className="text-center"><span className="inline-flex whitespace-nowrap"><Badge variant={needsReconciliation(item) ? 'warning' : statusVariants[item.status]}>{paymentDisplayLabel(item)}</Badge></span></Td>
             <Td><PaymentTime value={item.occurredAt} /></Td>
-            <Td className="text-center">
-              {item.paymentMethod === 'VNPAY' && item.status === 'PAID' && canReadReceipt(item) && <Button type="button" size="sm" variant="outline" className="mb-2 whitespace-nowrap" onClick={() => { setRefundTarget(item); setRefundAmount(String(Math.max(0, item.amount - item.refundedAmount))); setRefundReason('Hoàn tiền theo quyết toán hồ sơ thuê.') }}>
-                Hoàn VNPay
-              </Button>}
+            <Td className="!px-2 text-center">
               {canReadReceipt(item) && item.receiptFileId
-                ? <EvidenceDownload id={item.receiptFileId} previewLabel="Xem trước" label="Tải xuống" compact />
+                ? <div className="flex items-center justify-center"><EvidenceDownload id={item.receiptFileId} previewLabel="Xem trước" label="Tải xuống" compact /></div>
                 : canReadReceipt(item)
-                  ? <span className="inline-flex flex-nowrap items-center gap-1">
+                  ? <div className="flex items-center justify-center gap-1">
                     <Button type="button" size="sm" variant="ghost" className={receiptActionClass} aria-label={`Xem biên lai ${item.transactionReference}`} onClick={() => setReceipt(item)}>Xem trước</Button>
                     <Button type="button" size="sm" variant="ghost" className={receiptActionClass} aria-label={`Tải biên lai ${item.transactionReference}`} disabled={!!downloading} onClick={() => void downloadReceipt(item)}>{downloading === item.id ? 'Đang tải…' : 'Tải xuống'}</Button>
-                  </span>
+                  </div>
                   : <span className="text-xs text-stone-400">Chưa có</span>}
             </Td>
           </Tr>)}
@@ -270,21 +342,12 @@ function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; 
         <ApiPager pagination={result.pagination} onPage={setPage} disabled={read.loading} />
       </div>
     </Card>}
-    {receipt && <Modal open title="Biên lai thanh toán" size="lg" onClose={() => setReceipt(undefined)}>
+    {receipt && <Modal open title="Chi tiết giao dịch" size="2xl" onClose={() => setReceipt(undefined)}>
       {receipt.renewalId
         ? <RenewalReceipt id={receipt.renewalId} paymentId={receipt.id} role="manager" />
-        : <PaymentReceiptCard title={receipt.type === 'RETURN_REFUND' ? 'Biên lai hoàn tiền' : 'Biên lai thanh toán'} reference={receipt.id}
-            status={statusLabels[receipt.status]} confirmed={receipt.status === 'PAID' || receipt.status === 'REFUNDED'}
-            fields={receiptFields(receipt)} footer="Thông tin giao dịch đã ghi nhận trong lịch sử thanh toán của cơ sở." />}
-    </Modal>}
-    {refundTarget && <Modal open title="Hoàn tiền qua VNPay" size="lg" onClose={() => { if (!refundBusy) setRefundTarget(undefined) }}>
-      <form onSubmit={submitRefund} className="space-y-4">
-        <p className="text-sm text-stone-600">Payment <span className="font-mono">{refundTarget.id}</span> · Số tiền gốc {money(refundTarget.amount, refundTarget.currency)} · Đã hoàn {money(refundTarget.refundedAmount, refundTarget.currency)}</p>
-        <label className="block text-sm font-medium text-stone-700">Số tiền hoàn<input required type="number" min="1" step="1" max={Math.max(0, refundTarget.amount - refundTarget.refundedAmount)} value={refundAmount} onChange={event => setRefundAmount(event.target.value)} className="mt-1 block w-full rounded-lg border border-stone-300 px-3 py-2" /></label>
-        <label className="block text-sm font-medium text-stone-700">Lý do<textarea required maxLength={1000} rows={3} value={refundReason} onChange={event => setRefundReason(event.target.value)} className="mt-1 block w-full rounded-lg border border-stone-300 px-3 py-2" /></label>
-        {refundFeedback && <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{refundFeedback}</p>}
-        <div className="flex justify-end gap-2"><Button type="button" variant="outline" disabled={refundBusy} onClick={() => setRefundTarget(undefined)}>Hủy</Button><Button type="submit" disabled={refundBusy}>{refundBusy ? 'Đang gửi…' : 'Gửi hoàn tiền'}</Button></div>
-      </form>
+        : <PaymentReceiptCard title={receiptTitle(receipt)} reference={receiptReference(receipt)}
+            status={receiptStatus(receipt)} confirmed={receipt.status === 'PAID' || receipt.status === 'REFUNDED'}
+            fields={receiptFields(receipt)} footer={receiptFooter(receipt)} />}
     </Modal>}
   </div>
 }
