@@ -1330,7 +1330,14 @@ export default function StaffCheckInOperationsPanel({
                     <FilePreviewList files={contractFile ? [contractFile] : []} onRemove={() => { setContractFile(null); setConfirmedSetupTerms(null) }} disabled={submitting || isReviewingCompletedStep} />
                     {setupTermsKey && <label className="flex items-start gap-2 text-sm text-blue-950">
                       <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-amber-600" checked={confirmedSetupTerms === setupTermsKey} disabled={submitting || isReviewingCompletedStep || !contractFile || handoverTarget.setupEarlyExitFee == null} onChange={event => setConfirmedSetupTerms(event.target.checked ? setupTermsKey : null)} />
-                      <span>Đã đối chiếu hợp đồng đã ký có điều khoản phí trả kho trong thời gian chuẩn bị một lần {handoverTarget.setupEarlyExitFee == null ? '(chưa xác định, cần đối soát)' : `${handoverTarget.setupEarlyExitFee.toLocaleString('vi-VN')} đồng`}, đúng điều khoản khách đã chấp nhận khi đặt kho.</span>
+                      <span>
+                        Tôi đã kiểm tra hợp đồng đã ký và xác nhận khoản phí khớp với điều khoản khách đồng ý khi đặt kho.
+                        <span className="mt-1 block">
+                          {handoverTarget.setupEarlyExitFee == null
+                            ? 'Chưa xác định được mức phí trả kho trong thời gian chuẩn bị. Cần đối soát trước khi tiếp tục.'
+                            : <>Nếu khách trả kho trong thời gian chuẩn bị, khoản phí áp dụng một lần là <strong>{handoverTarget.setupEarlyExitFee.toLocaleString('vi-VN')} đồng</strong>.</>}
+                        </span>
+                      </span>
                     </label>}
                   </>
                 )}
@@ -1502,10 +1509,7 @@ export default function StaffCheckInOperationsPanel({
                 {handoverTarget.checkInStatus === "handover_pending_receipt" ? (
                   <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 pb-3">
-                      <div>
-                        <p className="font-bold text-base">Đang chờ khách hàng sẵn sàng bàn giao</p>
-                        <p className="mt-0.5 text-xs text-amber-800">Staff đã ghi nhận kho trống và mã ra vào. Chưa thể chuyển sang kiểm kê khi khách chưa xác nhận trên cổng khách hàng.</p>
-                      </div>
+                      <p className="font-bold text-base">Đang chờ khách hàng sẵn sàng bàn giao</p>
                       <span className="rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-bold text-amber-900">Chờ khách xác nhận</span>
                     </div>
                     <p className="mt-3 text-sm">Vui lòng chờ khách hàng nhấn <b>“Sẵn sàng bàn giao”</b>. Hệ thống sẽ tự cập nhật bước tiếp theo.</p>
@@ -1710,13 +1714,7 @@ export default function StaffCheckInOperationsPanel({
                 Chưa thể chuyển sang kiểm kê hàng hóa ở bước này.
               </p>
             </div>
-            <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs leading-5 text-stone-600">
-              Khi khách xác nhận, hệ thống sẽ tự đóng thông báo này và chuyển hồ sơ sang thời gian chuẩn bị. Sau khi khách sắp xếp hàng xong và nhấn “Sẵn sàng để kiểm kê”, Staff mới có thể mở bước kiểm kê.
-            </div>
             <div className="flex flex-wrap justify-end gap-2">
-              <Button variant="outline" onClick={() => void refreshHandoverTarget()} disabled={submitting}>
-                Kiểm tra trạng thái
-              </Button>
               <Button onClick={() => setCustomerWaitTarget(null)} disabled={submitting}>
                 Đóng thông báo
               </Button>
