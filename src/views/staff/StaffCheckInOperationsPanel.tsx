@@ -516,8 +516,11 @@ export default function StaffCheckInOperationsPanel({
     refresh()
   }
 
-  const fail = (reason: unknown, fallback: string) =>
-    setError(staffErrorMessage(reason, fallback))
+  const fail = (reason: unknown, fallback: string) => {
+    const message = staffErrorMessage(reason, fallback)
+    setError(message)
+    showToast(message)
+  }
 
   const submitHandover = async () => {
     const hasKeyLock = Boolean(keyLockReference.trim())
@@ -973,7 +976,7 @@ export default function StaffCheckInOperationsPanel({
           </div>
         </div>
       </Card>
-      {error && (
+      {error && !handoverTarget && !rejectTarget && !noShowTarget && !detailTarget && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
           {error}
         </div>
@@ -1145,7 +1148,7 @@ export default function StaffCheckInOperationsPanel({
 
       <Modal
         open={Boolean(handoverTarget)}
-        onClose={() => { if (!submitting) setHandoverTarget(null) }}
+        onClose={() => { if (!submitting) { setError(null); setHandoverTarget(null) } }}
         title="Quy trình bàn giao, chuẩn bị và kiểm kê"
         size="3xl"
       >
@@ -1158,6 +1161,25 @@ export default function StaffCheckInOperationsPanel({
               ].map(([label, value]) => <div key={label}><dt className="text-xs text-stone-500">{label}</dt><dd className="mt-1 break-words font-semibold text-stone-900">{value || 'Chưa cập nhật'}</dd></div>)}
             </dl>
             <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">Hoàn tất bàn giao kho trống sẽ chuyển sang chờ khách hàng xác nhận nhận kho. Thời gian chuẩn bị chỉ bắt đầu sau xác nhận của khách; kiểm kê thực hiện khi khách báo đã chuẩn bị xong.</p>
+            {error && (
+              <div role="alert" className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800 flex items-start gap-3 shadow-sm">
+                <svg className="h-5 w-5 text-red-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div className="flex-1">
+                  <b className="font-semibold text-red-900">Không thể thực hiện thao tác:</b>
+                  <p className="mt-0.5 whitespace-pre-wrap">{error}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setError(null)}
+                  className="rounded px-1.5 py-0.5 text-xs font-bold text-red-500 hover:bg-red-100 hover:text-red-700"
+                  aria-label="Đóng lỗi"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
             <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-6" aria-label="Tiến độ check-in">
               {workflowStepLabels.map((label, index) => {
                 const step = index + 1
@@ -1166,7 +1188,10 @@ export default function StaffCheckInOperationsPanel({
                     key={label}
                     type="button"
                     disabled={submitting || step > workflowCurrentStep}
-                    onClick={() => setHandoverStep(step)}
+                    onClick={() => {
+                      setError(null)
+                      setHandoverStep(step)
+                    }}
                     aria-current={handoverStep === step ? "step" : undefined}
                     className={`rounded-lg border px-3 py-2 text-left text-xs transition ${
                     handoverStep === step
@@ -1387,32 +1412,73 @@ export default function StaffCheckInOperationsPanel({
 
             {handoverStep === 5 && (
               <div className="space-y-4">
-                <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 text-violet-950">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-violet-200/60 pb-3">
-                    <div>
-                      <p className="font-bold text-base text-violet-950">Khách hàng đang trong thời gian chuẩn bị (Setup)</p>
-                      <p className="text-xs text-violet-800 mt-0.5">Khách hàng đang chủ động đưa hàng hóa vào gian kho và sắp xếp kiện hàng.</p>
+                {handoverTarget.checkInStatus === "handover_pending_receipt" ? (
+                  <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950 space-y-3">
+                    <div className="flex items-center gap-2 font-bold text-amber-900">
+                      <svg className="h-5 w-5 text-amber-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      <span className="text-base">Đang chờ khách hàng xác nhận nhận kho</span>
+                      <span className="ml-auto rounded-full bg-amber-200/80 px-2.5 py-0.5 text-xs font-bold text-amber-900">
+                        Bước 5/6
+                      </span>
                     </div>
-                    <span className="rounded-full bg-violet-100 border border-violet-300 px-3 py-1 text-xs font-bold text-violet-900">
-                      Bước 5/6
-                    </span>
+                    <p className="text-xs text-amber-900 leading-relaxed">
+                      Nhân viên đã bàn giao kho trống và mã khóa. Theo quy trình hệ thống, <b>khách hàng cần đăng nhập vào Cổng khách hàng</b> (mục Đơn đặt giữ kho) và bấm <b>&quot;Kiểm tra và xác nhận nhận kho&quot;</b> để kích hoạt thời gian chuẩn bị hàng ({handoverTarget.freeSetupDays || 3} ngày miễn phí).
+                    </p>
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-white/90 p-3 text-xs">
+                      <span className="text-stone-600 font-medium">Khách hàng đã bấm xác nhận trên điện thoại hoặc cổng khách hàng?</span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const res = await listCheckIns({ q: handoverTarget.reservationCode, page: 0, pageSize: 5 })
+                            const updated = res.data.find(d => d.checkInId === handoverTarget.checkInId)
+                            if (updated) {
+                              setHandoverTarget(updated)
+                              setHandoverStep(stepForCheckIn(updated))
+                              setError(null)
+                              showToast(`Đã đồng bộ trạng thái: ${updated.checkInStatus || 'Cập nhật thành công'}`)
+                            }
+                          } catch {
+                            showToast("Chưa thể cập nhật trạng thái.")
+                          }
+                        }}
+                      >
+                        🔄 Làm mới trạng thái
+                      </Button>
+                    </div>
                   </div>
+                ) : (
+                  <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 text-violet-950">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-violet-200/60 pb-3">
+                      <div>
+                        <p className="font-bold text-base text-violet-950">Khách hàng đang trong thời gian chuẩn bị (Setup)</p>
+                        <p className="text-xs text-violet-800 mt-0.5">Khách hàng đang chủ động đưa hàng hóa vào gian kho và sắp xếp kiện hàng.</p>
+                      </div>
+                      <span className="rounded-full bg-violet-100 border border-violet-300 px-3 py-1 text-xs font-bold text-violet-900">
+                        Bước 5/6
+                      </span>
+                    </div>
 
-                  <div className="mt-3 grid gap-3 sm:grid-cols-3 text-xs">
-                    <div className="rounded-lg border border-violet-200 bg-white p-3">
-                      <span className="text-stone-500">Bắt đầu bàn giao:</span>
-                      <p className="font-bold text-stone-900 mt-0.5">{formatStaffDateTime(handoverTarget.setupStartedAt)}</p>
-                    </div>
-                    <div className="rounded-lg border border-violet-200 bg-white p-3">
-                      <span className="text-stone-500">Thời gian setup miễn phí:</span>
-                      <p className="font-bold text-emerald-700 mt-0.5">{handoverTarget.freeSetupDays} ngày</p>
-                    </div>
-                    <div className="rounded-lg border border-violet-200 bg-white p-3">
-                      <span className="text-stone-500">Tính cước kỳ thuê từ:</span>
-                      <p className="font-bold text-stone-900 mt-0.5">{handoverTarget.paidRentalStartsOn || `Bàn giao + ${handoverTarget.freeSetupDays} ngày`}</p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-3 text-xs">
+                      <div className="rounded-lg border border-violet-200 bg-white p-3">
+                        <span className="text-stone-500">Bắt đầu bàn giao:</span>
+                        <p className="font-bold text-stone-900 mt-0.5">{formatStaffDateTime(handoverTarget.setupStartedAt)}</p>
+                      </div>
+                      <div className="rounded-lg border border-violet-200 bg-white p-3">
+                        <span className="text-stone-500">Thời gian setup miễn phí:</span>
+                        <p className="font-bold text-emerald-700 mt-0.5">{handoverTarget.freeSetupDays} ngày</p>
+                      </div>
+                      <div className="rounded-lg border border-violet-200 bg-white p-3">
+                        <span className="text-stone-500">Tính cước kỳ thuê từ:</span>
+                        <p className="font-bold text-stone-900 mt-0.5">{handoverTarget.paidRentalStartsOn || `Bàn giao + ${handoverTarget.freeSetupDays} ngày`}</p>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 <div className="rounded-xl border border-stone-200 bg-white p-4 text-sm text-stone-700 space-y-2">
                   <p className="font-bold text-stone-900">Quy trình tiếp theo</p>
@@ -1420,7 +1486,7 @@ export default function StaffCheckInOperationsPanel({
                     Sau khi khách hàng hoàn tất việc chuyển đồ vào kho hoặc hết thời gian setup miễn phí, nhân viên cơ sở sẽ tiến hành <b>Kiểm kê thực tế</b> (đo đạc kích thước kiện, cân nặng và chụp ảnh lưu hồ sơ).
                   </p>
                   <p className="text-xs text-stone-500">
-                    Bấm <b>"Xác nhận setup xong, tiếp tục kiểm kê"</b> khi khách hàng báo đã sắp xếp xong hoặc khi đến hạn kiểm kê.
+                    Bấm <b>&quot;Xác nhận setup xong, tiếp tục kiểm kê&quot;</b> khi khách hàng báo đã sắp xếp xong hoặc khi đến hạn kiểm kê.
                   </p>
                 </div>
 
@@ -1463,15 +1529,43 @@ export default function StaffCheckInOperationsPanel({
               </div>
             )}
 
+            {error && (
+              <div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800 flex items-start gap-2 shadow-sm">
+                <svg className="h-5 w-5 text-red-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="flex-1 font-medium">{error}</span>
+                <button
+                  type="button"
+                  onClick={() => setError(null)}
+                  className="rounded px-1 text-xs font-bold text-red-500 hover:bg-red-100 hover:text-red-700"
+                  aria-label="Đóng lỗi"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
             <div className="flex items-center justify-between gap-3 border-t border-stone-200 pt-4">
-              <Button variant="outline" onClick={() => setHandoverTarget(null)} disabled={submitting}>Đóng</Button>
+              <Button variant="outline" onClick={() => { setError(null); setHandoverTarget(null); }} disabled={submitting}>Đóng</Button>
               {isReviewingCompletedStep ? (
                 <span className="text-xs text-stone-500">Đang xem lại dữ liệu đã lưu, không thể thay đổi bước này.</span>
               ) : handoverStep === 5 ? (
                 <div className="flex flex-wrap items-center justify-end gap-3">
-                  <span className="text-xs text-violet-800">Khách có thể bấm tự xác nhận trên cổng khách hàng hoặc nhân viên xác nhận tại đây.</span>
-                  <Button onClick={() => submitWorkflowStep()} disabled={submitting}>
-                    {submitting ? "Đang xác nhận…" : "Xác nhận setup xong, tiếp tục kiểm kê"}
+                  <span className="text-xs text-violet-800">
+                    {handoverTarget.checkInStatus === "handover_pending_receipt"
+                      ? "Chờ khách xác nhận nhận kho trên Cổng khách hàng trước khi bấm tiếp tục."
+                      : "Khách có thể bấm tự xác nhận trên cổng khách hàng hoặc nhân viên xác nhận tại đây."}
+                  </span>
+                  <Button
+                    onClick={() => submitWorkflowStep()}
+                    disabled={submitting || handoverTarget.checkInStatus === "handover_pending_receipt"}
+                  >
+                    {submitting
+                      ? "Đang xác nhận…"
+                      : handoverTarget.checkInStatus === "handover_pending_receipt"
+                        ? "Chờ khách xác nhận nhận kho"
+                        : "Xác nhận setup xong, tiếp tục kiểm kê"}
                   </Button>
                 </div>
               ) : handoverStep < 6 ? (
@@ -1492,7 +1586,10 @@ export default function StaffCheckInOperationsPanel({
       <Modal
         open={Boolean(noShowTarget)}
         onClose={() => {
-          if (!submitting) setNoShowTarget(null)
+          if (!submitting) {
+            setError(null)
+            setNoShowTarget(null)
+          }
         }}
         title="Đánh dấu khách không đến"
       >
@@ -1508,8 +1605,13 @@ export default function StaffCheckInOperationsPanel({
               maxLength={1000}
               onChange={(event) => setNoShowReason(event.target.value)}
             />
+            {error && (
+              <div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+                {error}
+              </div>
+            )}
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setNoShowTarget(null)}>
+              <Button variant="outline" onClick={() => { setError(null); setNoShowTarget(null); }}>
                 Đóng
               </Button>
               <Button
@@ -1527,7 +1629,10 @@ export default function StaffCheckInOperationsPanel({
       <Modal
         open={Boolean(rejectTarget)}
         onClose={() => {
-          if (!submitting) setRejectTarget(null)
+          if (!submitting) {
+            setError(null)
+            setRejectTarget(null)
+          }
         }}
         title="Từ chối nhận kho"
       >
@@ -1575,8 +1680,13 @@ export default function StaffCheckInOperationsPanel({
               kho cần kiểm tra, vệ sinh hoặc sửa chữa. Hệ thống sẽ không trả
               gian kho về trạng thái sẵn sàng.
             </div>
+            {error && (
+              <div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+                {error}
+              </div>
+            )}
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setRejectTarget(null)}>
+              <Button variant="outline" onClick={() => { setError(null); setRejectTarget(null); }}>
                 Đóng
               </Button>
               <Button

@@ -310,7 +310,7 @@ export default function CustomerUnitDetails({
 
       {/* ── 7. QUY TRÌNH 4 BƯỚC (STEPPER NGANG GỌN) ── */}
       <section className="rounded-xl border border-amber-200/70 bg-amber-50/40 p-3">
-        <h4 className="text-xs font-bold uppercase tracking-wider text-amber-900">3. Quy trình đặt kho và thanh toán</h4>
+        <h4 className="text-xs font-bold uppercase tracking-wider text-amber-900">Quy trình đặt kho và thanh toán</h4>
         <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[
             ['1. Chọn kho', 'Chọn loại kho phù hợp và kỳ thuê.'],
