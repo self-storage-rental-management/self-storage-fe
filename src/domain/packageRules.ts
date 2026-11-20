@@ -117,8 +117,98 @@ export function generateDefaultRentalPackages(
   })
 }
 
+function readConfiguredLocalDurationDiscounts(facilityId?: string): Array<{ months: number; discountPercent: number }> {
+  try {
+    const storage = typeof window !== 'undefined'
+      ? window.localStorage
+      : (typeof localStorage !== 'undefined' ? localStorage : null)
+    const raw = storage?.getItem('storagehub:durationDiscounts')
+    const list = raw ? JSON.parse(raw) : []
+    if (!Array.isArray(list)) return []
+
+    return list
+      .filter((item: any) => {
+        if (!item || item.status !== 'active' || typeof item.months !== 'number' || item.months <= 0) return false
+        if (
+          facilityId &&
+          item.scopeType === 'specific' &&
+          Array.isArray(item.facilityIds) &&
+          item.facilityIds.length > 0 &&
+          !item.facilityIds.includes(facilityId)
+        ) return false
+        return true
+      })
+      .map((item: any) => ({
+        months: Math.round(item.months),
+        discountPercent: Math.max(0, Math.min(100, Number(item.discountPercent) || 0)),
+      }))
+      .filter((item, index, items) => items.findIndex(candidate => candidate.months === item.months) === index)
+  } catch {
+    return []
+  }
+}
+
+function generateConfiguredRentalPackages(
+  facilityId: string = '',
+  unitTypeId: string = 'S',
+  monthlyPrice: number = 0,
+): RentalPackage[] {
+  const safeMonthlyPrice = Math.max(0, monthlyPrice)
+  const safeUnitType = unitTypeId || 'S'
+
+  return readConfiguredLocalDurationDiscounts(facilityId).map(({ months, discountPercent }) => {
+    const { packagePrice, monthlyEquivalentPrice } = calculatePackagePrice(
+      safeMonthlyPrice,
+      months,
+      discountPercent,
+    )
+    return {
+      id: `pkg-configured-${facilityId || 'all'}-${safeUnitType.toLowerCase()}-${months}m`,
+      facilityId: facilityId || undefined,
+      unitTypeId: safeUnitType,
+      months,
+      name: `Gói ${months} tháng`,
+      packagePrice,
+      monthlyEquivalentPrice,
+      discountPercent,
+      description: discountPercent > 0
+        ? `Tiết kiệm ${discountPercent}% khi thanh toán kỳ hạn ${months} tháng`
+        : `Gói thuê theo kỳ hạn ${months} tháng`,
+      status: 'active' as const,
+    }
+  })
+}
+
 /**
- * Lấy danh sách gói thuê của kho, nếu chưa có sẽ sinh tự động từ giá tháng
+ * Kiểm tra danh sách có đúng là bộ gói mặc định do phiên bản cũ tự sinh hay không.
+ * Các gói này không phải cấu hình do BO tạo nên không được công bố cho Customer.
+ */
+export function isGeneratedDefaultRentalPackageList(
+  packages?: RentalPackage[],
+  facilityId?: string,
+  unitTypeId?: string,
+): boolean {
+  if (!Array.isArray(packages) || packages.length !== DEFAULT_PACKAGE_DURATIONS.length) return false
+
+  const expectedMonths = new Set<number>(DEFAULT_PACKAGE_DURATIONS)
+  const safeUnitType = (unitTypeId || '').toLowerCase()
+  const prefix = facilityId ? `${facilityId}-` : ''
+
+  return packages.every((pkg) => {
+    if (!expectedMonths.has(pkg.months) || pkg.name !== `Gói ${pkg.months} tháng`) return false
+    if (pkg.id.startsWith('pkg-configured-')) return false
+
+    const exactGeneratedId = safeUnitType
+      ? `pkg-${prefix}${safeUnitType}-${pkg.months}m`
+      : undefined
+    const generatedIdPattern = /^pkg-(?:.+-)?[a-z0-9]+-\d+m$/i
+
+    return pkg.id === exactGeneratedId || generatedIdPattern.test(pkg.id)
+  })
+}
+
+/**
+ * Chỉ trả về các gói đã được cấu hình. Không tự tạo gói mặc định khi chưa có cấu hình.
  */
 export function resolveRentalPackagesForUnit(
   unitOrSpec?: {
@@ -131,14 +221,13 @@ export function resolveRentalPackagesForUnit(
   }
 ): RentalPackage[] {
   if (!unitOrSpec) return []
-
-  const price = unitOrSpec.monthlyPrice ?? unitOrSpec.price ?? 0
-  const size = unitOrSpec.sizeCode ?? unitOrSpec.size ?? 'S'
-  const facId = unitOrSpec.facilityId ?? ''
-
-  if (unitOrSpec.rentalPackages && unitOrSpec.rentalPackages.length > 0) {
+  if (Array.isArray(unitOrSpec.rentalPackages) && unitOrSpec.rentalPackages.length > 0) {
     return unitOrSpec.rentalPackages
   }
 
-  return generateDefaultRentalPackages(facId, size, price)
+  return generateConfiguredRentalPackages(
+    unitOrSpec.facilityId ?? '',
+    unitOrSpec.sizeCode ?? unitOrSpec.size ?? 'S',
+    unitOrSpec.monthlyPrice ?? unitOrSpec.price ?? 0,
+  )
 }
