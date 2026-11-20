@@ -189,7 +189,7 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
                 Quy định không hoàn tiền đặt cọc giữ chỗ
               </p>
               <p className="leading-relaxed text-rose-900 font-medium">
-                Khoản thanh toán ngay <b>{formatVnd(snapshot.reservationDepositAmount)}</b> là phí đặt cọc giữ chỗ (5%), là khoản bảo đảm việc giữ loại kho đã chọn và <b>không được hoàn lại trong trường hợp khách hàng tự ý hủy đơn hoặc bỏ lịch nhận kho</b>.
+                Khoản thanh toán ngay <b>{formatVnd(snapshot.reservationDepositAmount)}</b> là phí đặt cọc giữ chỗ, là khoản bảo đảm việc giữ loại kho đã chọn và <b>không được hoàn lại trong trường hợp khách hàng tự ý hủy đơn hoặc bỏ lịch nhận kho</b>.
               </p>
               <p className="text-[11px] leading-relaxed text-rose-800">
                 Toàn bộ số tiền này sẽ được <b>khấu trừ 100%</b> vào tổng nghĩa vụ tài chính khi quý khách đến cơ sở làm thủ tục nhận kho đúng hẹn.
@@ -207,7 +207,7 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
             onChange={(e) => setAcceptedNoRefund(e.target.checked)}
           />
           <span className="leading-tight">
-            Tôi xác nhận đã đọc, hiểu rõ và đồng ý: <b>Phí đặt cọc giữ chỗ (5%) là khoản bảo đảm việc giữ loại kho đã chọn và không được hoàn lại trong trường hợp khách hàng tự ý hủy đơn hoặc bỏ lịch nhận kho.</b>
+            Tôi xác nhận đã đọc, hiểu rõ và đồng ý: <b>Phí đặt cọc giữ chỗ là khoản bảo đảm việc giữ loại kho đã chọn và không được hoàn lại trong trường hợp khách hàng tự ý hủy đơn hoặc bỏ lịch nhận kho.</b>
           </span>
         </label>
 
