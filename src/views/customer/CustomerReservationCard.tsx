@@ -368,7 +368,9 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
               <p><b>Liên hệ:</b> {displayedFacility?.phone || 'Chưa cập nhật'}</p>
               <p><b>Giờ hoạt động:</b> {displayedFacility?.accessHours || 'Chưa cập nhật'}</p>
               {displayedUnitType && <>
-                <p><b>Kích thước kho:</b> {displayedUnitType.lengthM} × {displayedUnitType.widthM} × {displayedUnitType.heightM} m · {displayedUnitType.volumeM3} m³</p>
+                <p><b>Kích thước kho:</b> {displayedUnitType.lengthM != null && displayedUnitType.widthM != null && displayedUnitType.heightM != null
+                  ? `${displayedUnitType.lengthM} × ${displayedUnitType.widthM} × ${displayedUnitType.heightM} m` : 'Chưa cập nhật'}
+                  {displayedUnitType.volumeM3 != null && ` · ${displayedUnitType.volumeM3} m³`}</p>
                 {displayedUnitType.rackCount != null && <p><b>Khung:</b> {displayedUnitType.rackCount} khung{displayedUnitType.rackLengthM != null && displayedUnitType.rackWidthM != null && displayedUnitType.rackHeightM != null
                   ? ` · ${displayedUnitType.rackLengthM} × ${displayedUnitType.rackWidthM} × ${displayedUnitType.rackHeightM} m/khung` : ''}</p>}
                 {displayedUnitType.maxLoadKg != null && <p><b>Tải trọng:</b> {displayedUnitType.maxLoadKg.toLocaleString('vi-VN')} kg</p>}
