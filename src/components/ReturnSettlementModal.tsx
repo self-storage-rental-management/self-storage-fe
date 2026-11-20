@@ -3,6 +3,7 @@ import { Badge, Button, Card, Modal, Table, Thead, Tbody, Th, Td, Tr } from './u
 import { formatVnd as legacyMoney } from '../i18n/currency'
 import type { ApiReturn } from '../services/returnApi'
 import { EvidenceDownload } from '../views/rental-support-integration/EvidenceControls'
+import { formatHistoryPaymentMethod } from '../views/customer/paymentLabels'
 import type { ReturnCase, StoragePayment } from '../types/storageHub'
 
 export interface ReturnSettlementModalProps {
@@ -414,7 +415,7 @@ export default function ReturnSettlementModal({
                           {p.type === 'RENT' ? 'Tiền thuê định kỳ' : p.type === 'DAMAGE_FEE' ? 'Phí phát sinh' : p.type}
                         </Td>
                         <Td className="font-mono text-xs text-stone-500">{p.transactionReference || p.id}</Td>
-                        <Td className="text-xs">{p.paymentMethod || 'Chuyển khoản'}</Td>
+                        <Td className="text-xs">{formatHistoryPaymentMethod(p.paymentMethod)}</Td>
                         <Td className="text-right font-semibold text-stone-800">{formatVnd(p.amount)}</Td>
                         <Td><Badge variant={p.status === 'PAID' ? 'success' : 'warning'}>{p.status}</Badge></Td>
                       </Tr>

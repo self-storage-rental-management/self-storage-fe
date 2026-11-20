@@ -199,6 +199,17 @@ function isReturnPayment(value: unknown): value is ReturnPayment {
         (r.settlementReceipt.receiptFileId == null || isUuid(r.settlementReceipt.receiptFileId))))
   )
 }
+function normalizeHistoryMethod(method?: string | null): string | null {
+  if (!method) return null
+  const upper = method.trim().toUpperCase()
+  if (upper === 'CASH' || upper === 'TIEN_MAT' || upper.includes('TIỀN MẶT')) return 'Tiền mặt'
+  if (upper === 'BANK_TRANSFER' || upper === 'CHUYEN_KHOAN' || upper.includes('CHUYỂN KHOẢN')) return 'Chuyển khoản'
+  if (upper === 'DEPOSIT_OFFSET' || upper.includes('ĐỐI TRỪ') || upper.includes('KHẤU TRỪ')) return 'Đối trừ quyết toán'
+  if (upper === 'VNPAY' || upper === 'ONLINE_GATEWAY' || upper === 'NCB' || upper.startsWith('VNPAY')) return 'VNPay'
+  if (method === 'Chưa có' || method === 'Chưa có thông tin') return null
+  return method
+}
+
 export async function loadCustomerPaymentHistory(): Promise<{
   entries: HistoryEntry[]
   warnings: string[]
@@ -216,7 +227,7 @@ export async function loadCustomerPaymentHistory(): Promise<{
     updatedAt: payment.processedAt || payment.createdAt || null,
     status: payment.purpose === 'RENEWAL' ? 'UNKNOWN' : payment.paymentStatus,
     receiptAvailable: payment.purpose === 'RENEWAL' ? false : undefined,
-    method: payment.paymentMethod || null,
+    method: normalizeHistoryMethod(payment.paymentMethod),
     unitCode: payment.assignedUnitCode || payment.unitTypeName || undefined,
     facilityName: payment.facilityName || undefined,
     reservationPayment: payment,
@@ -262,7 +273,7 @@ export async function loadCustomerPaymentHistory(): Promise<{
                 status: 'UNKNOWN',
                 receiptAvailable: false,
                 refundedAmount: null,
-                method: cash ? data.paymentMethod === 'BANK_TRANSFER' ? 'Chuyển khoản' : 'Tiền mặt tại cơ sở' : 'VNPay',
+                method: cash ? data.paymentMethod === 'BANK_TRANSFER' ? 'Chuyển khoản' : 'Tiền mặt' : 'VNPay',
               } satisfies HistoryEntry]
             })
             const byId = new Map(latestPaymentRecords(metadata).map(entry => [entry.id, entry]))
@@ -288,7 +299,7 @@ export async function loadCustomerPaymentHistory(): Promise<{
                 statusSource: 'RENEWAL_PROJECTION',
                 receiptAvailable: transaction.receiptAvailable,
                 paymentReference: transaction.reference ?? original?.reservationPayment?.transactionReference ?? null,
-                method: event?.method ?? original?.method ?? null,
+                method: normalizeHistoryMethod(event?.method ?? original?.method ?? null),
               }
             })
             // Unmatched historical events remain visible, but never certify a successful payment.

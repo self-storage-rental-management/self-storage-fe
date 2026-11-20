@@ -46,6 +46,7 @@ interface Props {
 export default function CustomerReservationPayment({ reservation, facilityName, unitTypeName, paymentExpiresAt, now, onMessage, onRefresh }: Props) {
   const [payment, setPayment] = useState<ReservationPaymentResult | null>(null)
   const [payOpen, setPayOpen] = useState(false)
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false)
   const [receiptOpen, setReceiptOpen] = useState(false)
   const [returnFailure, setReturnFailure] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -149,7 +150,7 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
       <Button className="mt-2" size="sm" disabled={busy || countdown.expired} onClick={() => { setAcceptedNoRefund(false); setPayOpen(true) }}>Thanh toán đặt cọc giữ chỗ</Button>
     </div>}
     {payment?.paymentStatus === 'PAID' && <Button variant="outline" size="sm" className="reservation-action reservation-action-receipt min-h-10 w-full justify-center" onClick={() => setReceiptOpen(true)}>{bookingDepositAccepted(payment) ? 'Xem biên lai thanh toán' : 'Xem giao dịch cần đối soát'}</Button>}
-    <Modal size="2xl" open={payOpen} onClose={() => { if (!busy) { setPayOpen(false); setAcceptedNoRefund(false) } }} title="Thanh toán đặt cọc giữ chỗ">
+    <Modal size="2xl" open={payOpen} onClose={() => { if (!busy) { setPayOpen(false); setConfirmModalOpen(false); setAcceptedNoRefund(false) } }} title="Thanh toán đặt cọc giữ chỗ">
       <div className="space-y-4">
         <div className="grid gap-1 text-sm"><p>Đơn giữ kho: <b>{reservation.reservationCode}</b></p><p>Cơ sở: <b>{facilityName}</b></p><p>Loại kho: <b>{unitTypeName}</b></p><p>{reservation.rentalPeriodConfirmed ? 'Kỳ thuê đã chốt:' : 'Kỳ thuê dự kiến sau thời gian chuẩn bị:'} <b>{snapshot.startDate.split('-').reverse().join('/')} đến {rentalEndDateForDisplay(snapshot.endDate).split('-').reverse().join('/')}</b></p></div>
         <section className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm">
@@ -180,22 +181,26 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
           <p className="mt-1 text-xs text-stone-600">Đặt cọc giữ chỗ được trừ vào tổng chi phí phải thanh toán đã gồm tiền thuê và tiền cọc đảm bảo thuê.</p>
         </div>
         <div className="rounded-lg bg-red-700 p-3 text-center text-white"><p className="text-xs font-bold uppercase tracking-wide">Thời gian thanh toán còn lại</p><p className="mt-1 text-2xl font-extrabold tabular-nums">{countdown.text}</p></div>
-        {/* Thông báo không hoàn tiền trước khi thanh toán */}
+
+        <p className="text-sm text-stone-600">Bạn sẽ được chuyển sang VNPay thử nghiệm. Sau khi thanh toán thành công, bạn có thể xem biên lai trong đơn hoặc qua email.</p>
+        <Button className="w-full" disabled={busy || countdown.expired} onClick={() => { setAcceptedNoRefund(false); setConfirmModalOpen(true) }}>
+          {busy ? 'Đang chuyển sang VNPay…' : `Thanh toán qua VNPay ${formatVnd(snapshot.reservationDepositAmount)}`}
+        </Button>
+      </div>
+    </Modal>
+    <Modal size="lg" open={confirmModalOpen} onClose={() => { if (!busy) setConfirmModalOpen(false) }} title="Thông báo quan trọng">
+      <div className="space-y-4">
         <div className="rounded-xl border-2 border-rose-300 bg-rose-50 p-4 text-rose-950">
-          <div className="flex items-start gap-3">
-            
-            <div className="space-y-1.5 text-xs">
-              <p className="font-bold uppercase tracking-wider text-rose-900">
-                Quy định không hoàn tiền đặt cọc giữ chỗ
-              </p>
-              <p className="leading-relaxed text-rose-900 font-medium">
-                Khoản thanh toán ngay <b>{formatVnd(snapshot.reservationDepositAmount)}</b> là phí đặt cọc giữ chỗ, là khoản bảo đảm việc giữ loại kho đã chọn và <b>không được hoàn lại trong trường hợp khách hàng tự ý hủy đơn hoặc bỏ lịch nhận kho</b>.
-              </p>
-              <p className="text-[11px] leading-relaxed text-rose-800">
-                Toàn bộ số tiền này sẽ được <b>khấu trừ 100%</b> vào tổng nghĩa vụ tài chính khi quý khách đến cơ sở làm thủ tục nhận kho đúng hẹn.
-                {' '}Trường hợp lỗi thuộc StorageHub, thu trùng hoặc giao dịch chưa rõ kết quả phải được đối soát và xử lý riêng theo chứng từ; không tự động coi là mất cọc.
-              </p>
-            </div>
+          <div className="space-y-2 text-xs">
+            <p className="font-bold uppercase tracking-wider text-rose-900 text-sm">
+              Thông báo quan trọng: Quy định không hoàn phí giữ chỗ
+            </p>
+            <p className="leading-relaxed text-rose-900 font-medium">
+              Khoản thanh toán ngay <b>{formatVnd(snapshot.reservationDepositAmount)}</b> là cọc giữ chỗ, được trừ vào tổng nghĩa vụ phải thanh toán. Theo điều khoản đã chấp nhận, khoản này <b>không hoàn khi khách tự ý hủy hoặc không nhận kho đúng hạn</b>.
+            </p>
+            <p className="text-[11px] leading-relaxed text-rose-800">
+              Toàn bộ số tiền này sẽ được <b>khấu trừ 100%</b> vào tổng nghĩa vụ tài chính khi quý khách đến cơ sở làm thủ tục nhận kho đúng hẹn.
+            </p>
           </div>
         </div>
 
@@ -207,16 +212,25 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
             onChange={(e) => setAcceptedNoRefund(e.target.checked)}
           />
           <span className="leading-tight">
-            Tôi xác nhận đã đọc, hiểu rõ và đồng ý: <b>Phí đặt cọc giữ chỗ là khoản bảo đảm việc giữ loại kho đã chọn và không được hoàn lại trong trường hợp khách hàng tự ý hủy đơn hoặc bỏ lịch nhận kho.</b>
+            Tôi xác nhận đã đọc, hiểu rõ và đồng ý rằng <b>khoản phí giữ chỗ sẽ không được hoàn lại nếu tôi tự ý hủy đơn hoặc không đến nhận kho đúng hạn</b>.
           </span>
         </label>
 
-        <p className="text-sm text-stone-600">Bạn sẽ được chuyển sang VNPay thử nghiệm. Sau khi thanh toán thành công, biên lai được lưu trong đơn và gửi qua email tài khoản; hệ thống tự thử lại nếu gửi email tạm thời gặp lỗi.</p>
-        <div className="flex items-center gap-2 rounded-lg border-2 border-amber-500 bg-amber-50 p-3 text-xs font-semibold text-amber-950 shadow-xs">
-          <span className="text-base text-amber-600">⚠️</span>
-          <span><b>Quy định không hoàn tiền:</b> Phí đặt cọc giữ chỗ (5%) là khoản bảo đảm việc giữ loại kho đã chọn và không được hoàn lại trong trường hợp khách hàng tự ý hủy đơn hoặc bỏ lịch nhận kho.</span>
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={() => setConfirmModalOpen(false)}
+          >
+            Quay lại
+          </Button>
+          <Button
+            disabled={busy || countdown.expired || !acceptedNoRefund}
+            onClick={() => void pay()}
+          >
+            {busy ? 'Đang chuyển sang VNPay…' : 'Xác nhận & Chuyển sang VNPay'}
+          </Button>
         </div>
-        <Button className="w-full" disabled={busy || countdown.expired || !acceptedNoRefund} onClick={() => pay()}>{busy ? 'Đang chuyển sang VNPay…' : `Thanh toán qua VNPay ${formatVnd(snapshot.reservationDepositAmount)}`}</Button>
       </div>
     </Modal>
     <Modal size="3xl" open={receiptOpen} onClose={() => setReceiptOpen(false)} title={payment && bookingDepositAccepted(payment) ? 'Biên lai thanh toán' : 'Chi tiết giao dịch'}>

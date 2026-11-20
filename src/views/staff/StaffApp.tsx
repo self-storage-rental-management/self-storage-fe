@@ -48,14 +48,13 @@ import {
   type CredentialAlert,
 } from "../../services/checkInApi"
 import { listReturns, type ApiReturn } from "../../services/returnApi"
-import { listStaffActiveReservations, type StaffReservationProgress } from "../../services/staffReservationApi"
+import { listStaffActiveReservations, listStaffReservationReviews, type ReservationReview, type StaffReservationProgress } from "../../services/staffReservationApi"
 import {
   loadStaffDailyOperations,
   type StaffDailyOperation,
 } from "../../services/staffDailyOperationsApi"
 
 import ProfileView from "../ProfileView"
-import StaffReservationReviews from './StaffReservationReviews'
 import ReturnSettlementModal from '../../components/ReturnSettlementModal'
 import { canApiActor, isApiAuthenticated } from '../../services/authApi'
 import { listNotifications, markNotificationRead, type ApiNotification } from '../../services/notificationApi'
@@ -820,6 +819,13 @@ export default function StaffApp({
 }) {
   const hub = useStorageHub()
 
+  const [apiOverviewCounts, setApiOverviewCounts] = useState({
+    depositWaiting: 0,
+    upcomingCheckins: 0,
+    returnsToProcess: 0,
+    pendingReviews: 0,
+  })
+
   const nav: NavItem[] = [
     {
       id: "dashboard",
@@ -918,12 +924,6 @@ export default function StaffApp({
   const [apiDailyOperationsError, setApiDailyOperationsError] = useState<string | null>(null)
 
   const [apiDailyOperationsRefresh, setApiDailyOperationsRefresh] = useState(0)
-
-  const [apiOverviewCounts, setApiOverviewCounts] = useState({
-    depositWaiting: 0,
-    upcomingCheckins: 0,
-    returnsToProcess: 0,
-  })
 
   const [apiOverviewLoading, setApiOverviewLoading] = useState(false)
 
@@ -1254,7 +1254,7 @@ export default function StaffApp({
 
   useEffect(() => {
     if (!isApiAuthenticated()) {
-      setApiOverviewCounts({ depositWaiting: 0, upcomingCheckins: 0, returnsToProcess: 0 })
+      setApiOverviewCounts({ depositWaiting: 0, upcomingCheckins: 0, returnsToProcess: 0, pendingReviews: 0 })
       setApiOverviewLoading(false)
       return
     }
@@ -1267,6 +1267,7 @@ export default function StaffApp({
         listStaffActiveReservations({ page: 0, size: 100 }),
         listCheckIns({ page: 0, pageSize: 100 }),
         listReturns("staff", 0, 100),
+        listStaffReservationReviews(0, 100),
       ])
 
       if (!active) return
@@ -1280,6 +1281,9 @@ export default function StaffApp({
       const returns = results[2].status === "fulfilled"
         ? results[2].value.data as ApiReturn[]
         : []
+      const reviews = results[3].status === "fulfilled"
+        ? results[3].value.data as ReservationReview[]
+        : []
 
       const waitingStatuses = new Set([
         "CONFIRMED",
@@ -1292,6 +1296,7 @@ export default function StaffApp({
         depositWaiting: reservations.filter((item) => waitingStatuses.has(item.status)).length,
         upcomingCheckins: checkIns.filter((item) => !["completed", "no_show", "cancelled", "rejected"].includes(item.checkInStatus ?? "")).length,
         returnsToProcess: returns.filter((item) => item.status !== "completed").length,
+        pendingReviews: reviews.filter((item) => item.goodsReviewStatus === "PENDING").length,
       })
       setApiOverviewLoading(false)
     }
@@ -1894,7 +1899,7 @@ export default function StaffApp({
 
         priority: "high",
 
-        page: "reservations",
+        page: "checkin",
       })),
 
     ...reservations
@@ -1916,7 +1921,7 @@ export default function StaffApp({
 
         priority: "medium",
 
-        page: "reservations",
+        page: "checkin",
       })),
 
     ...eligibleCheckins
@@ -2203,7 +2208,7 @@ export default function StaffApp({
     if (type === "RENEWAL") return "renewal-signing"
     if (type === "OVERDUE") return "dashboard"
     if (type === "PAYMENT") return "checkin"
-    if (type === "RESERVATION") return "reservations"
+    if (type === "RESERVATION") return "checkin"
     if (type === "SYSTEM") return "tasks"
     return "dashboard"
   }
@@ -2690,8 +2695,8 @@ export default function StaffApp({
         )}
       </Modal>
 
-      {/* ── RESERVATIONS ──────────────────────────────────────── */}
-      {page === "reservations" && isApiAuthenticated() && <StaffReservationReviews canApprove={canApiActor(user, 'reservations:approve')} facilityNames={user.facilityNames} />}
+      {/* ── RESERVATIONS (Redirect to checkin) ───────────────── */}
+      {page === "reservations" && <StaffCheckInOperationsPanel showToast={showToast} />}
       {page === "reservations" && !isApiAuthenticated() && (
         <div className="fade-in">
           <SectionHeader
