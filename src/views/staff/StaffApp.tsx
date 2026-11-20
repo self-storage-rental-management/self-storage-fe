@@ -49,6 +49,7 @@ import {
 } from "../../services/checkInApi"
 import { listReturns, type ApiReturn } from "../../services/returnApi"
 import { listStaffActiveReservations, listStaffReservationReviews, type ReservationReview, type StaffReservationProgress } from "../../services/staffReservationApi"
+import StaffReservationReviews from "./StaffReservationReviews"
 import {
   loadStaffDailyOperations,
   type StaffDailyOperation,
@@ -849,6 +850,18 @@ export default function StaffApp({
       group: "Vận hành",
 
       permission: "checkins:read",
+    },
+
+    {
+      id: "reservations",
+
+      label: "Đơn đặt giữ kho",
+
+      icon: Icon.calendar,
+
+      group: "Vận hành",
+
+      permission: "reservations:read",
     },
 
     {
@@ -2200,7 +2213,9 @@ export default function StaffApp({
     page: "dashboard",
   }))
 
-  const notificationPage = (type: ApiNotification["type"]) => {
+  const notificationPage = (notification: ApiNotification) => {
+    if (notification.title === "Khách hàng đã cập nhật lịch nhận kho") return "reservations"
+    const type = notification.type
     if (type === "CHECKIN") return "checkin"
     if (type === "SUPPORT") return "support"
     if (type === "RETURN") return "return"
@@ -2217,7 +2232,7 @@ export default function StaffApp({
     title: notification.title,
     message: notification.content,
     date: notification.createdAt,
-    page: notificationPage(notification.type),
+    page: notificationPage(notification),
     targetId: notification.relatedEntityId ?? undefined,
     isRead: notification.isRead,
   }))
@@ -2694,8 +2709,12 @@ export default function StaffApp({
         )}
       </Modal>
 
-      {/* ── RESERVATIONS (Redirect to checkin) ───────────────── */}
-      {page === "reservations" && <StaffCheckInOperationsPanel showToast={showToast} />}
+      {/* ── RESERVATIONS ─────────────────────────────────────── */}
+      {page === "reservations" && isApiAuthenticated() && (
+        <StaffReservationReviews
+          canApprove={canApiActor(user, "reservations:approve")}
+        />
+      )}
       {page === "reservations" && !isApiAuthenticated() && (
         <div className="fade-in">
           <SectionHeader
