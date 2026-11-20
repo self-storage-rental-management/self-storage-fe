@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Button, Card, Modal } from '../../components/ui'
 import VietnameseDateInput from '../../components/VietnameseDateInput'
 import { formatVndAmount as formatVnd } from '../../i18n/currency'
-import { confirmCustomerReceipt, downloadBookingDocument, downloadCustomerCheckInDocument, downloadCustomerReservationGoodsImage, generateBookingDocument, getBookingDocument, getCustomerCheckInDocuments, getCustomerReservation, setCustomerCheckInAppointment, updateSetupGoods, type BookingDocument, type CheckInDocument, type CustomerFacility, type CustomerReservation, type CustomerReservationDetail, type CustomerUnitType, type GoodsItemInput, type ReservationPaymentResult } from '../../services/customerReservationApi'
+import { confirmCustomerReceipt, downloadBookingDocument, downloadCustomerCheckInDocument, downloadCustomerReservationGoodsImage, generateBookingDocument, getBookingDocument, getCustomerCheckInDocuments, getCustomerReservation, markCustomerPreparationComplete, setCustomerCheckInAppointment, updateSetupGoods, type BookingDocument, type CheckInDocument, type CustomerFacility, type CustomerReservation, type CustomerReservationDetail, type CustomerUnitType, type GoodsItemInput, type ReservationPaymentResult } from '../../services/customerReservationApi'
 import { paymentCountdown, reservationProgress, reservationStatusLabels } from './reservationPresentation'
 import { ApiClientError } from '../../services/apiClient'
 import CustomerPaymentComplaint from './CustomerPaymentComplaint'
@@ -71,6 +71,8 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const [busy, setBusy] = useState(false)
   const [confirmingReceipt, setConfirmingReceipt] = useState(false)
   const receiptLock = useRef(false)
+  const [confirmingPreparation, setConfirmingPreparation] = useState(false)
+  const preparationLock = useRef(false)
   const [bookingDocument, setBookingDocument] = useState<BookingDocument | null>(null)
   const [bookingDocumentOpen, setBookingDocumentOpen] = useState(false)
   const [handoverDocuments, setHandoverDocuments] = useState<CheckInDocument[]>([])
@@ -217,6 +219,20 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     }
     finally { receiptLock.current = false; setConfirmingReceipt(false) }
   }
+  const confirmPreparation = async () => {
+    if (preparationLock.current) return
+    preparationLock.current = true
+    setConfirmingPreparation(true); setMessage(null)
+    try {
+      await markCustomerPreparationComplete(r.id, 'Khách hàng đã sắp xếp hàng và sẵn sàng để nhân viên kiểm kê.')
+      setMessage('Đã báo sẵn sàng để kiểm kê. Nhân viên sẽ thực hiện kiểm kê hàng hóa.')
+      try { await onRefresh() } catch { /* The preparation command has already succeeded. */ }
+    } catch (error) {
+      setMessage(userFacingError(error, 'Không thể báo đã chuẩn bị xong.'))
+      try { await onRefresh() } catch { /* Preserve the command error if readback is also unavailable. */ }
+    }
+    finally { preparationLock.current = false; setConfirmingPreparation(false) }
+  }
   const documentAvailable = ['CONFIRMED', 'UNIT_RESERVED', 'READY_FOR_CHECKIN', 'AWAITING_CUSTOMER_RECEIPT', 'COMPLETED'].includes(r.status)
   const handoverDocumentsAvailable = ['AWAITING_CUSTOMER_RECEIPT', 'COMPLETED'].includes(r.status)
   const saveAppointment = async () => {
@@ -346,7 +362,8 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         {r.status === 'AWAITING_EMAIL' && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-right text-xs text-amber-950"><p className="font-bold">Cần xác minh email</p><p className="mt-1">Thời gian giữ đơn còn lại</p><p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{countdown.text}</p><Button className="mt-2" size="sm" disabled={countdown.expired} onClick={onVerify}>Xác minh email</Button></div>}
         {r.status === 'AWAITING_REVIEW' && <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950"><p className="font-bold">Đang chờ nhân viên cơ sở duyệt hàng hóa</p><p className="mt-1">Thời gian giữ hồ sơ còn lại</p><p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{countdown.text}</p><p className="mt-1">Tối đa 24 giờ từ khi xác minh email.</p></div>}
         <CustomerReservationPayment reservation={r} facilityName={displayedFacilityName} unitTypeName={displayedUnitTypeName} paymentExpiresAt={detail?.paymentExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />
-        {r.status === 'AWAITING_CUSTOMER_RECEIPT' && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-right text-xs text-amber-950"><p className="font-bold">Nhân viên đã hoàn tất bàn giao</p><p className="mt-1">Vui lòng xác nhận bạn đã nhận kho và mã ra vào.</p><Button type="button" className="mt-2" size="sm" disabled={confirmingReceipt} onClick={() => void confirmReceipt()}>{confirmingReceipt ? 'Đang xác nhận…' : 'Xác nhận đã nhận kho'}</Button></div>}
+        {r.status === 'AWAITING_CUSTOMER_RECEIPT' && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-right text-xs text-amber-950"><p className="font-bold">Nhân viên đã hoàn tất bàn giao</p><p className="mt-1">Vui lòng kiểm tra kho và mã ra vào, sau đó nhấn nút để báo đã sẵn sàng bàn giao.</p><Button type="button" className="mt-2" size="sm" disabled={confirmingReceipt} onClick={() => void confirmReceipt()}>{confirmingReceipt ? 'Đang xác nhận…' : 'Sẵn sàng bàn giao'}</Button></div>}
+        {r.status === 'PREPARING' && <div className="rounded-lg border border-violet-300 bg-violet-50 p-3 text-right text-xs text-violet-950"><p className="font-bold">Đang chuẩn bị hàng hóa</p><p className="mt-1">Sau khi đưa và sắp xếp hàng hóa xong, nhấn nút để Staff chuyển sang kiểm kê.</p><Button type="button" className="mt-2" size="sm" disabled={confirmingPreparation} onClick={() => void confirmPreparation()}>{confirmingPreparation ? 'Đang gửi…' : 'Sẵn sàng để kiểm kê'}</Button></div>}
         {documentAvailable && <Button variant="outline" size="sm" className="reservation-action reservation-action-document min-h-10 w-full justify-center" disabled={busy} onClick={() => void prepareBookingDocument()}>{busy ? 'Đang chuẩn bị…' : 'Xem phiếu giữ kho'}</Button>}
         {handoverDocumentsAvailable && <Button variant="outline" size="sm" className="min-h-10 w-full justify-center" disabled={busy} onClick={() => void loadHandoverDocuments()}>{busy ? 'Đang tải…' : 'Xem hợp đồng đã ký'}</Button>}
         {onRequestSupport && <Button type="button" variant="outline" size="sm" className="min-h-10 w-full justify-center" onClick={onRequestSupport}>Hỗ trợ đơn này</Button>}
