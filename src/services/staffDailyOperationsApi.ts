@@ -97,26 +97,32 @@ const checkInTask = (item: CheckInCase): StaffDailyOperation => {
   }
 }
 
-const returnTask = (item: ApiReturn): StaffDailyOperation => ({
-  id: `return-${item.id}`,
-  title: `Kiểm tra trả kho ${item.unitNumber}`,
-  customer: item.customerName,
-  time: item.scheduledDate,
-  dueAt: `${item.scheduledDate}T23:59:59`,
-  sla:
-    item.status === "refund_pending"
-      ? "Cần chuyển hoàn cọc cho khách hàng"
-      : item.status === "payment_due"
-        ? "Chờ khách hàng thanh toán thêm"
-        : item.status === "disputed"
-          ? "Quản lý đang xem xét yêu cầu tính lại"
-          : "Khách cần trả kho hôm nay",
-  priority:
-    item.status === "refund_pending" || item.status === "payment_due"
-      ? "high"
-      : "medium",
-  page: "return",
-})
+const returnTask = (item: ApiReturn): StaffDailyOperation => {
+  const today = new Date().toISOString().slice(0, 10)
+  const isOverdue = item.scheduledDate ? item.scheduledDate < today : false
+  return {
+    id: `return-${item.id}`,
+    title: `Trả kho ${item.unitNumber}`,
+    customer: item.customerName,
+    time: item.scheduledDate,
+    dueAt: item.scheduledDate ? `${item.scheduledDate}T23:59:59` : new Date().toISOString(),
+    sla:
+      item.status === "refund_pending"
+        ? "Cần chuyển hoàn cọc cho khách hàng"
+        : item.status === "payment_due"
+          ? "Chờ khách hàng thanh toán thêm"
+          : item.status === "disputed"
+            ? "Quản lý đang xem xét yêu cầu tính lại"
+            : item.status === "requested"
+              ? isOverdue ? "Quá hạn hẹn - Khách đã yêu cầu trả kho" : "Khách đã yêu cầu trả kho - Cần nghiệm thu"
+              : isOverdue ? "Quá hạn trả kho - Cần nghiệm thu" : "Khách cần trả kho hôm nay",
+    priority:
+      item.status === "refund_pending" || item.status === "payment_due" || isOverdue
+        ? "high"
+        : "medium",
+    page: "return",
+  }
+}
 
 const supportTask = (item: SupportTicket): StaffDailyOperation => {
   const dueAt =
@@ -225,15 +231,14 @@ export async function loadStaffDailyOperations(
       .map(credentialTask),
     ...(checkIns?.data || [])
       .filter(isOpenCheckIn)
-      .filter(
-        (item) =>
-          dayOf(item.appointmentAt || item.scheduledAt || item.startDate) ===
-          date,
-      )
+      .filter((item) => {
+        const checkDate = dayOf(item.appointmentAt || item.scheduledAt || item.startDate)
+        return !checkDate || checkDate <= date
+      })
       .map(checkInTask),
     ...(returns?.data || [])
       .filter(isOpenReturn)
-      .filter((item) => item.scheduledDate === date)
+      .filter((item) => !item.scheduledDate || item.scheduledDate <= date)
       .map(returnTask),
     ...(support?.data || [])
       .filter(isOpenSupport)
