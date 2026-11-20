@@ -1043,6 +1043,10 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
           onChanged={onRecoveryChanged}
         />
       )}
+      {!recovery && record.status === 'completed' && record.settlementReceipt?.direction === 'COLLECTION' &&
+        record.settlementReceipt.paymentMethod === 'CASH' && (
+          <p className="break-all text-sm text-stone-700">Mã biên lai <b>{record.settlementReceipt.transactionReference}</b></p>
+      )}
       {recovery && (role === 'staff' || role === 'manager') && record.recoveryTaskId && <RecoveryTaskLink role={role} taskId={record.recoveryTaskId} facilityId={record.facilityId} disabled={busy || recoveryLocked} onChanged={onRecoveryChanged} />}
       {write && recovery && role === 'staff' && ['payment_due', 'refund_pending'].includes(record.status) && <RecoveryReturnSettlement role={role} record={record} busy={busy} onLocked={onRecoveryLocked} onChanged={onRecoveryChanged} />}
       {role === 'customer' && record.status === 'awaiting_customer_confirmation' && (
