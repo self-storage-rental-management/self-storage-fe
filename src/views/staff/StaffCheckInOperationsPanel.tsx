@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react"
 
 import {
   completeCheckIn,
-  completeCheckInSetup,
   confirmCheckInPayment,
   downloadCheckInEvidence,
   listCheckIns,
@@ -231,6 +230,8 @@ export default function StaffCheckInOperationsPanel({
   const [refreshKey, setRefreshKey] = useState(0)
 
   const [handoverTarget, setHandoverTarget] = useState<CheckInCase | null>(null)
+
+  const [customerWaitTarget, setCustomerWaitTarget] = useState<"receipt" | "preparation" | null>(null)
 
   const [handoverStep, setHandoverStep] = useState(1)
 
@@ -468,6 +469,76 @@ export default function StaffCheckInOperationsPanel({
 
   const refresh = () => setRefreshKey((value) => value + 1)
 
+  const refreshHandoverTarget = async () => {
+    if (!handoverTarget?.checkInId) return
+
+    try {
+      const response = await listCheckIns({
+        page: 0,
+        pageSize: 100,
+        q: handoverTarget.reservationCode,
+      })
+      const latest = response.data.find((item) => item.checkInId === handoverTarget.checkInId)
+      if (!latest) return
+
+      setHandoverTarget(latest)
+      setHandoverStep(stepForCheckIn(latest))
+      if (latest.checkInStatus === "handover_pending_receipt") setCustomerWaitTarget("receipt")
+      else if (latest.checkInStatus === "setup_in_progress") setCustomerWaitTarget("preparation")
+      else setCustomerWaitTarget(null)
+    } catch (reason) {
+      fail(reason, "Không thể cập nhật trạng thái bàn giao.")
+    }
+  }
+
+  useEffect(() => {
+    if (!customerWaitTarget || !handoverTarget?.checkInId) return
+
+    let active = true
+    const pollCustomerReceipt = async () => {
+      try {
+        const response = await listCheckIns({
+          page: 0,
+          pageSize: 100,
+          q: handoverTarget.reservationCode,
+        })
+        const latest = response.data.find((item) => item.checkInId === handoverTarget.checkInId)
+        if (!active || !latest) return
+
+        setHandoverTarget(latest)
+        setHandoverStep(stepForCheckIn(latest))
+        if (latest.checkInStatus === "handover_pending_receipt") {
+          setCustomerWaitTarget("receipt")
+        } else if (latest.checkInStatus === "setup_in_progress") {
+          if (customerWaitTarget === "receipt") {
+            showToast("Khách hàng đã xác nhận sẵn sàng bàn giao. Đang chờ khách chuẩn bị hàng để kiểm kê.")
+          }
+          setCustomerWaitTarget("preparation")
+        } else {
+          if (customerWaitTarget === "preparation" && latest.checkInStatus === "setup_completed") {
+            showToast("Khách hàng đã báo sẵn sàng kiểm kê. Bước kiểm kê hàng hóa đã được mở.")
+          }
+          setCustomerWaitTarget(null)
+        }
+      } catch {
+        // Keep the waiting popup open. The next poll can recover from a temporary read error.
+      }
+    }
+
+    const timer = window.setInterval(() => void pollCustomerReceipt(), 3000)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
+  }, [customerWaitTarget, handoverTarget?.checkInId, handoverTarget?.reservationCode, showToast])
+
+  const closeHandover = () => {
+    if (submitting) return
+    setError(null)
+    setCustomerWaitTarget(null)
+    setHandoverTarget(null)
+  }
+
   const applyFilters = () => {
     if (
       scheduledFromInput &&
@@ -623,6 +694,7 @@ export default function StaffCheckInOperationsPanel({
         `Đã hoàn tất bàn giao ${handoverTarget.storageUnitCode}. Hồ sơ vẫn được lưu trong Nhận kho & bàn giao để xem lại.`,
       )
 
+      setCustomerWaitTarget(null)
       setHandoverTarget(null)
 
       refresh()
@@ -691,11 +763,22 @@ export default function StaffCheckInOperationsPanel({
           evidenceReferences: emptyStorageEvidence,
         })
         setChecklist((current) => ({ ...current, accessHandedOver: true, unitWalkthrough: true }))
+        if (updated.checkInStatus === "handover_pending_receipt") {
+          setCustomerWaitTarget("receipt")
+        }
       } else if (handoverStep === 5) {
-        updated = await completeCheckInSetup(handoverTarget.checkInId, "Xác nhận hoàn tất chuẩn bị hàng, chuyển sang kiểm kê thực tế")
+        if (handoverTarget.checkInStatus === "handover_pending_receipt") {
+          setCustomerWaitTarget("receipt")
+          throw new Error("Đang chờ khách hàng nhấn Sẵn sàng bàn giao trên cổng khách hàng.")
+        }
+        throw new Error("Chỉ khách hàng được xác nhận đã chuẩn bị xong. Staff chỉ có thể kiểm kê sau khi khách báo sẵn sàng.")
       }
-      if (updated) setHandoverTarget(updated)
-      setHandoverStep((current) => Math.min(6, current + 1))
+      if (updated) {
+        setHandoverTarget(updated)
+        setHandoverStep(stepForCheckIn(updated))
+      } else {
+        setHandoverStep((current) => Math.min(6, current + 1))
+      }
       refresh()
     } catch (reason) {
       fail(reason, "Không thể hoàn tất bước nhận kho này.")
@@ -802,6 +885,13 @@ export default function StaffCheckInOperationsPanel({
   const openHandover = (item: CheckInCase) => {
     setError(null)
     setHandoverTarget(item)
+    setCustomerWaitTarget(
+      item.checkInStatus === "handover_pending_receipt"
+        ? "receipt"
+        : item.checkInStatus === "setup_in_progress"
+          ? "preparation"
+          : null,
+    )
 
     setHandoverStep(stepForCheckIn(item))
 
@@ -1148,7 +1238,7 @@ export default function StaffCheckInOperationsPanel({
 
       <Modal
         open={Boolean(handoverTarget)}
-        onClose={() => { if (!submitting) { setError(null); setHandoverTarget(null) } }}
+        onClose={closeHandover}
         title="Quy trình bàn giao, chuẩn bị và kiểm kê"
         size="3xl"
       >
@@ -1413,72 +1503,42 @@ export default function StaffCheckInOperationsPanel({
             {handoverStep === 5 && (
               <div className="space-y-4">
                 {handoverTarget.checkInStatus === "handover_pending_receipt" ? (
-                  <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950 space-y-3">
-                    <div className="flex items-center gap-2 font-bold text-amber-900">
-                      <svg className="h-5 w-5 text-amber-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                      </svg>
-                      <span className="text-base">Đang chờ khách hàng xác nhận nhận kho</span>
-                      <span className="ml-auto rounded-full bg-amber-200/80 px-2.5 py-0.5 text-xs font-bold text-amber-900">
-                        Bước 5/6
-                      </span>
+                  <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 pb-3">
+                      <div>
+                        <p className="font-bold text-base">Đang chờ khách hàng sẵn sàng bàn giao</p>
+                        <p className="mt-0.5 text-xs text-amber-800">Staff đã ghi nhận kho trống và mã ra vào. Chưa thể chuyển sang kiểm kê khi khách chưa xác nhận trên cổng khách hàng.</p>
+                      </div>
+                      <span className="rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-bold text-amber-900">Chờ khách xác nhận</span>
                     </div>
-                    <p className="text-xs text-amber-900 leading-relaxed">
-                      Nhân viên đã bàn giao kho trống và mã khóa. Theo quy trình hệ thống, <b>khách hàng cần đăng nhập vào Cổng khách hàng</b> (mục Đơn đặt giữ kho) và bấm <b>&quot;Kiểm tra và xác nhận nhận kho&quot;</b> để kích hoạt thời gian chuẩn bị hàng ({handoverTarget.freeSetupDays || 3} ngày miễn phí).
-                    </p>
-                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-white/90 p-3 text-xs">
-                      <span className="text-stone-600 font-medium">Khách hàng đã bấm xác nhận trên điện thoại hoặc cổng khách hàng?</span>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        type="button"
-                        onClick={async () => {
-                          try {
-                            const res = await listCheckIns({ q: handoverTarget.reservationCode, page: 0, pageSize: 5 })
-                            const updated = res.data.find(d => d.checkInId === handoverTarget.checkInId)
-                            if (updated) {
-                              setHandoverTarget(updated)
-                              setHandoverStep(stepForCheckIn(updated))
-                              setError(null)
-                              showToast(`Đã đồng bộ trạng thái: ${updated.checkInStatus || 'Cập nhật thành công'}`)
-                            }
-                          } catch {
-                            showToast("Chưa thể cập nhật trạng thái.")
-                          }
-                        }}
-                      >
-                        Làm mới trạng thái
-                      </Button>
-                    </div>
+                    <p className="mt-3 text-sm">Vui lòng chờ khách hàng nhấn <b>“Sẵn sàng bàn giao”</b>. Hệ thống sẽ tự cập nhật bước tiếp theo.</p>
                   </div>
                 ) : (
+                  <>
                   <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 text-violet-950">
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-violet-200/60 pb-3">
-                      <div>
-                        <p className="font-bold text-base text-violet-950">Khách hàng đang trong thời gian chuẩn bị</p>
-                        <p className="text-xs text-violet-800 mt-0.5">Khách hàng đang chủ động đưa hàng hóa vào gian kho và sắp xếp kiện hàng.</p>
-                      </div>
-                      <span className="rounded-full bg-violet-100 border border-violet-300 px-3 py-1 text-xs font-bold text-violet-900">
-                        Bước 5/6
-                      </span>
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-violet-200/60 pb-3">
+                    <div>
+                      <p className="font-bold text-base text-violet-950">Khách hàng đang trong thời gian chuẩn bị</p>
+                      <p className="text-xs text-violet-800 mt-0.5">Khách hàng đang chủ động đưa hàng hóa vào gian kho và sắp xếp kiện hàng.</p>
                     </div>
+                    <span className="rounded-full bg-violet-100 border border-violet-300 px-3 py-1 text-xs font-bold text-violet-900">Bước 5/6</span>
+                  </div>
 
-                    <div className="mt-3 grid gap-3 sm:grid-cols-3 text-xs">
-                      <div className="rounded-lg border border-violet-200 bg-white p-3">
-                        <span className="text-stone-500">Bắt đầu bàn giao:</span>
-                        <p className="font-bold text-stone-900 mt-0.5">{formatStaffDateTime(handoverTarget.setupStartedAt)}</p>
-                      </div>
-                      <div className="rounded-lg border border-violet-200 bg-white p-3">
-                        <span className="text-stone-500">Thời gian chuẩn bị miễn phí:</span>
-                        <p className="font-bold text-emerald-700 mt-0.5">{handoverTarget.freeSetupDays} ngày</p>
-                      </div>
-                      <div className="rounded-lg border border-violet-200 bg-white p-3">
-                        <span className="text-stone-500">Tính cước kỳ thuê từ:</span>
-                        <p className="font-bold text-stone-900 mt-0.5">{handoverTarget.paidRentalStartsOn || `Bàn giao + ${handoverTarget.freeSetupDays} ngày`}</p>
-                      </div>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-3 text-xs">
+                    <div className="rounded-lg border border-violet-200 bg-white p-3">
+                      <span className="text-stone-500">Bắt đầu bàn giao:</span>
+                      <p className="font-bold text-stone-900 mt-0.5">{formatStaffDateTime(handoverTarget.setupStartedAt)}</p>
+                    </div>
+                    <div className="rounded-lg border border-violet-200 bg-white p-3">
+                      <span className="text-stone-500">Thời gian chuẩn bị miễn phí:</span>
+                      <p className="font-bold text-emerald-700 mt-0.5">{handoverTarget.freeSetupDays} ngày</p>
+                    </div>
+                    <div className="rounded-lg border border-violet-200 bg-white p-3">
+                      <span className="text-stone-500">Tính cước kỳ thuê từ:</span>
+                      <p className="font-bold text-stone-900 mt-0.5">{handoverTarget.paidRentalStartsOn || `Bàn giao + ${handoverTarget.freeSetupDays} ngày`}</p>
                     </div>
                   </div>
-                )}
+                  </div>
 
                 <div className="rounded-xl border border-stone-200 bg-white p-4 text-sm text-stone-700 space-y-2">
                   <p className="font-bold text-stone-900">Quy trình tiếp theo</p>
@@ -1486,9 +1546,11 @@ export default function StaffCheckInOperationsPanel({
                     Sau khi khách hàng hoàn tất việc chuyển đồ vào kho hoặc hết thời gian chuẩn bị miễn phí, nhân viên cơ sở sẽ tiến hành <b>Kiểm kê thực tế</b> (đo đạc kích thước kiện, cân nặng và chụp ảnh lưu hồ sơ).
                   </p>
                   <p className="text-xs text-stone-500">
-                    Bấm <b>"Xác nhận đã chuẩn bị xong và tiếp tục kiểm kê"</b> khi khách hàng báo đã sắp xếp xong hoặc khi đến hạn kiểm kê.
+                    Khách hàng cần tự bấm <b>"Sẵn sàng để kiểm kê"</b> sau khi đã đưa và sắp xếp hàng hóa xong. Staff không thể tự bỏ qua bước xác nhận này.
                   </p>
                 </div>
+                 </>
+                )}
 
               </div>
             )}
@@ -1547,25 +1609,18 @@ export default function StaffCheckInOperationsPanel({
             )}
 
             <div className="flex items-center justify-between gap-3 border-t border-stone-200 pt-4">
-              <Button variant="outline" onClick={() => { setError(null); setHandoverTarget(null); }} disabled={submitting}>Đóng</Button>
+               <Button variant="outline" onClick={closeHandover} disabled={submitting}>Đóng</Button>
               {isReviewingCompletedStep ? (
                 <span className="text-xs text-stone-500">Đang xem lại dữ liệu đã lưu, không thể thay đổi bước này.</span>
               ) : handoverStep === 5 ? (
                 <div className="flex flex-wrap items-center justify-end gap-3">
-                  <span className="text-xs text-violet-800">
+                  <span className="text-xs text-stone-600">
                     {handoverTarget.checkInStatus === "handover_pending_receipt"
-                      ? "Chờ khách xác nhận nhận kho trên Cổng khách hàng trước khi bấm tiếp tục."
-                      : "Khách có thể bấm tự xác nhận trên cổng khách hàng hoặc nhân viên xác nhận tại đây."}
+                      ? "Đang chờ khách nhấn Sẵn sàng bàn giao."
+                      : "Đang chờ khách nhấn Sẵn sàng để kiểm kê sau khi sắp xếp hàng hóa xong."}
                   </span>
-                  <Button
-                    onClick={() => submitWorkflowStep()}
-                    disabled={submitting || handoverTarget.checkInStatus === "handover_pending_receipt"}
-                  >
-                    {submitting
-                      ? "Đang xác nhận…"
-                      : handoverTarget.checkInStatus === "handover_pending_receipt"
-                        ? "Chờ khách xác nhận nhận kho"
-                        : "Xác nhận đã chuẩn bị xong và tiếp tục kiểm kê"}
+                  <Button variant="outline" onClick={() => void refreshHandoverTarget()} disabled={submitting}>
+                    Kiểm tra trạng thái
                   </Button>
                 </div>
               ) : handoverStep < 6 ? (
@@ -1578,6 +1633,36 @@ export default function StaffCheckInOperationsPanel({
               ) : (
                 <Button disabled={submitting || !allChecksComplete || !evidenceFiles.length || !initialCondition.trim() || !goodsCondition.trim() || !goodsCategory.trim() || (measurementVariance && (!varianceAccepted || !varianceReason.trim()))} onClick={() => submitHandover()}>{submitting ? "Đang hoàn tất…" : "Hoàn tất kiểm kê"}</Button>
               )}
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={customerWaitTarget === "receipt" && Boolean(handoverTarget)}
+        onClose={() => setCustomerWaitTarget(null)}
+        title="Đang chờ khách hàng sẵn sàng bàn giao"
+        size="md"
+      >
+        {handoverTarget && (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+              <p className="font-bold">Staff đã xác nhận bàn giao kho trống</p>
+              <p className="mt-2 leading-6">
+                Đơn <b>{handoverTarget.reservationCode}</b> đang chờ khách hàng nhấn <b>“Sẵn sàng bàn giao”</b> trên cổng khách hàng.
+                Chưa thể chuyển sang kiểm kê hàng hóa ở bước này.
+              </p>
+            </div>
+            <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs leading-5 text-stone-600">
+              Khi khách xác nhận, hệ thống sẽ tự đóng thông báo này và chuyển hồ sơ sang thời gian chuẩn bị. Sau khi khách sắp xếp hàng xong và nhấn “Sẵn sàng để kiểm kê”, Staff mới có thể mở bước kiểm kê.
+            </div>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button variant="outline" onClick={() => void refreshHandoverTarget()} disabled={submitting}>
+                Kiểm tra trạng thái
+              </Button>
+              <Button onClick={() => setCustomerWaitTarget(null)} disabled={submitting}>
+                Đóng thông báo
+              </Button>
             </div>
           </div>
         )}

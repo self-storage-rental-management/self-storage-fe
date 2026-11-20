@@ -52,12 +52,13 @@ describe('VNPay history nullable processing timestamp', () => {
     expect(html).toContain('Phương thức thanh toán')
     expect(html).not.toContain('Hệ thống tự động qua VNPay')
     expect(html).not.toContain('>VNPay<')
-    expect(html).toMatch(/Phương thức thanh toán<\/dt><dd[^>]*>-<\/dd>/)
+    expect(html).toMatch(/Phương thức thanh toán<\/dt><dd[^>]*>Chưa có thông tin<\/dd>/)
     expect(html).toMatch(/Người ghi nhận<\/dt><dd[^>]*>-<\/dd>/)
   })
-  it('shows the bank returned by VNPay', () => {
+  it('shows a consistent Vietnamese method for a bank returned by VNPay', () => {
     const html = renderToStaticMarkup(<ReservationReceipt payment={{ ...paid, paymentMethod: 'NCB' }} reservationCode="RSV-TEST" />)
-    expect(html).toContain('>NCB<')
+    expect(html).toContain('>Thanh toán trực tuyến<')
+    expect(html).not.toContain('>NCB<')
   })
   it('keeps the counter payment method and employee on the remaining rental receipt', () => {
     const html = renderToStaticMarkup(<ReservationReceipt payment={{ ...paid, purpose: 'RENTAL_BALANCE', paymentMethod: 'Tiền mặt', initiatedByName: 'Nhân viên cơ sở' }} reservationCode="RSV-TEST" />)

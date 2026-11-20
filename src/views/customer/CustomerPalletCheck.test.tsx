@@ -9,7 +9,7 @@ const check: CompatibilityCheckResult = {
   rackUtilizationRate: 0, usableVolumePerRackM3: 0, requiredRackCount: 1, unitRackCount: 1, availableUnitCount: 1,
   staffReviewRequired: false, issues: [],
   palletPlan: {
-    palletLengthCm: 120, palletWidthCm: 80, palletHeightCm: 14.4, emptyPalletKg: 25,
+    palletLengthCm: 120, palletWidthCm: 80, palletHeightCm: 14.4, emptyPalletKg: 25, palletMaxPayloadKg: 500,
     requiredPallets: 1, availableSlots: 12, totalLoadedWeightKg: 100,
     items: [{ itemNumber: 1, quantity: 15, requiredPallets: 1, maxPiecesOnOnePallet: 15, allowedStackLayers: 3 }],
     racks: [{
@@ -27,7 +27,6 @@ it('explains the actual plan returned by the backend', () => {
   }
   expect(html).not.toContain('80%')
 })
-
 it('does not count a shared pallet twice when two goods lines use one compartment', () => {
   const capacity = {
     maxLoadedKg: 100, cargoWeightLimitKg: 60, piecesPerLayer: 4, usableLayers: 1,
@@ -82,9 +81,84 @@ it('explains the weight limit and displays the actual split of nine items', () =
     },
   }} />)
   for (const expected of ['Kho nhỏ', '108 / 600 kg', '60 kiện', '6 kiện',
-    'Giới hạn quyết định trong trường hợp này là', 'khối lượng hàng hóa', 'Khung 1 · Khoang 1', '2 tấm kê', '108/75 kg', '108 kg']) {
+    'Kích thước tấm kê (D × R × C)', '120 × 80 × 14,4 cm', 'Khối lượng tấm kê rỗng',
+    '25 kg/tấm kê',
+    'Khung 1 · Khoang 1', '2 tấm kê', '108/75 kg', '108 kg']) {
     expect(html).toContain(expected)
   }
+})
+
+it('does not render a second condition table for a partial final pallet', () => {
+  const firstCapacity = {
+    maxLoadedKg: 100, cargoWeightLimitKg: 75, piecesPerLayer: 5, usableLayers: 1,
+    maxPiecesByDimensions: 5, maxPiecesByWeight: 5, maxPieces: 5,
+    placementLengthCm: 12, placementWidthCm: 12, placementHeightCm: 1,
+  }
+  const partialCapacity = { ...firstCapacity, piecesPerLayer: 2 }
+  const html = renderToStaticMarkup(<CustomerPalletCheck goodsItems={[{
+    category: 'FURNITURE', lengthCm: 12, widthCm: 12, heightCm: 1, quantity: 7, weightPerItemKg: 12,
+    fragile: false, stackable: true,
+  }]} check={{
+    ...check, totalGoodsWeightKg: 84, palletPlan: {
+      ...check.palletPlan!, requiredPallets: 2, totalLoadedWeightKg: 124,
+      racks: check.palletPlan!.racks.map(rack => ({ ...rack, maxCargoHeightCm: 97 })),
+      items: [{
+        itemNumber: 1, quantity: 7, requiredPallets: 2, maxPiecesOnOnePallet: 5, allowedStackLayers: 97,
+        weightPerItemKg: 12,
+        allocations: [
+          { rackCode: 'R01', compartmentNumber: 1, palletCount: 1, piecesPerPallet: 5, loadedWeightKg: 100, capacity: firstCapacity },
+          { rackCode: 'R01', compartmentNumber: 2, palletCount: 1, piecesPerPallet: 2, loadedWeightKg: 64, capacity: partialCapacity },
+        ],
+      }],
+    },
+  }} />)
+  expect(html.match(/<th[^>]*>Điều kiện lưu trữ/gu)).toHaveLength(1)
+  expect(html).toContain('Số kiện có thể xếp theo số lớp và tải trọng')
+  expect(html).toContain('5 kiện/tấm kê')
+  expect(html).not.toContain('Khả năng chịu tải của tấm kê')
+  expect(html).toContain('Số lớp cần dùng theo phương án')
+  expect(html).toContain('Tải tổng tối đa tại vị trí xếp (tấm kê + hàng)')
+  expect(html).toContain('Giới hạn hàng sau khi trừ tấm kê')
+  expect(html).not.toContain('Số kiện tối đa theo kích thước')
+  expect(html).not.toContain('Số kiện tối đa theo khối lượng')
+  expect(html).not.toContain('Số kiện tối đa mỗi tấm kê')
+  expect(html).not.toContain('Quy tắc xếp chồng')
+  expect(html).not.toContain('Số lớp tối đa có thể xếp')
+  expect(html).not.toContain('Phương án lưu trữ:')
+  expect(html).not.toContain('Giới hạn quyết định trong trường hợp này là')
+})
+
+it('renders every layer returned by the three-dimensional packing plan', () => {
+  const capacity = {
+    maxLoadedKg: 100, cargoWeightLimitKg: 75, piecesPerLayer: 2, usableLayers: 2,
+    maxPiecesByDimensions: 4, maxPiecesByWeight: 15, maxPieces: 4,
+    placementLengthCm: 100, placementWidthCm: 80, placementHeightCm: 40,
+  }
+  const html = renderToStaticMarkup(<CustomerPalletCheck goodsItems={[{
+    category: 'FURNITURE', lengthCm: 100, widthCm: 80, heightCm: 40, quantity: 3, weightPerItemKg: 5,
+    fragile: false, stackable: true,
+  }]} check={{
+    ...check, totalGoodsWeightKg: 15, palletPlan: {
+      ...check.palletPlan!, requiredPallets: 1, totalLoadedWeightKg: 55,
+      items: [{
+        itemNumber: 1, quantity: 3, requiredPallets: 1, maxPiecesOnOnePallet: 3, allowedStackLayers: 2,
+        weightPerItemKg: 5,
+        allocations: [{ rackCode: 'R01', compartmentNumber: 1, palletCount: 1, piecesPerPallet: 3, loadedWeightKg: 55, capacity }],
+      }],
+      pallets: [{
+        palletNumber: 1, rackCode: 'R01', compartmentNumber: 1, compartmentCargoLimitKg: 75,
+        cargoWeightKg: 15, loadedWeightKg: 55,
+        items: [{ itemNumber: 1, quantity: 3, layers: 2, cargoWeightKg: 15 }],
+        placements: [
+          { itemNumber: 1, boxNumber: 1, layer: 1, xCm: 0, yCm: 0, zCm: 0, lengthCm: 100, widthCm: 80, heightCm: 40 },
+          { itemNumber: 1, boxNumber: 2, layer: 1, xCm: 100, yCm: 0, zCm: 0, lengthCm: 100, widthCm: 80, heightCm: 40 },
+          { itemNumber: 1, boxNumber: 3, layer: 2, xCm: 0, yCm: 0, zCm: 40, lengthCm: 100, widthCm: 80, heightCm: 40 },
+        ],
+      }],
+    },
+  }} />)
+  expect(html).toContain('Lớp 2')
+  expect(html).toContain('1 kiện')
 })
 
 it('giải thích khi kiện được xoay và đặt nằm ngang để vừa kho', () => {
@@ -107,8 +181,8 @@ it('giải thích khi kiện được xoay và đặt nằm ngang để vừa kh
     },
   }} />)
   expect(html).toContain('Kích thước sau khi đặt')
-  expect(html).toContain('xoay kiện hàng và đặt nằm ngang')
   expect(html).toContain('12 × 123 × 12 cm')
+  expect(html).not.toContain('Phương án lưu trữ:')
 })
 
 it('chỉ hiển thị lý do đơn vượt giới hạn khối lượng của gian', () => {

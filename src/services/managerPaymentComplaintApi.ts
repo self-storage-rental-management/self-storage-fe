@@ -6,7 +6,6 @@ interface ApiEnvelope<T> { data: T }
 export async function listManagerPaymentComplaints(page = 0, size = 20) {
   return apiRequest<PageResponse<PaymentComplaint>>(`/api/manager/payment-complaints?page=${page}&size=${size}`)
 }
-
 export async function getManagerPaymentComplaint(complaintId: string) {
   const response = await apiRequest<ApiEnvelope<PaymentComplaint>>(`/api/manager/payment-complaints/${complaintId}`)
   return response.data
@@ -28,4 +27,3 @@ export async function downloadComplaintImage(fileId: string) {
     fileName: result.fileName,
   }
 }
-
