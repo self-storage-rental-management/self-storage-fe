@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useState } from "react"
 
 import {
   completeCheckIn,
+  completeCheckInSetup,
   confirmCheckInPayment,
   downloadCheckInEvidence,
   listCheckIns,
@@ -1025,9 +1026,12 @@ export default function StaffCheckInOperationsPanel({
       } else if (handoverStep === 5) {
         if (handoverTarget.checkInStatus === "handover_pending_receipt") {
           setCustomerWaitTarget("receipt")
-          throw new Error("Đang chờ khách hàng nhấn Sẵn sàng bàn giao trên cổng khách hàng.")
+          throw new Error("Đang chờ khách hàng xác nhận nhận kho trên cổng khách hàng.")
         }
-        throw new Error("Chỉ khách hàng được xác nhận đã chuẩn bị xong. Nhân viên có thể kiểm kê sau khi khách báo sẵn sàng.")
+        updated = await completeCheckInSetup(
+          handoverTarget.checkInId,
+          "Nhân viên xác nhận khách hàng đã sẵn sàng bàn giao để kiểm kê hàng hóa",
+        )
       }
       if (updated) {
         setHandoverTarget(updated)
