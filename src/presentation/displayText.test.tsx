@@ -54,6 +54,21 @@ describe('câu hiển thị', () => {
     expect(link.children).toBe('category, material')
   })
 
+  it('hiển thị nhãn trạng thái bo tròn và giữ nguyên giá trị lựa chọn', () => {
+    const source = '[published]'
+    const html = renderToStaticMarkup(<p>{source} · [PRESERVED] · [RESERVED]</p>)
+    expect(html).toContain('rounded-full')
+    expect(html).toContain('bg-emerald-100 text-emerald-900">Đã công bố</span>')
+    expect(html).toContain('bg-blue-100 text-blue-900">Đã bảo lưu</span>')
+    expect(html).toContain('bg-amber-100 text-amber-900">Đã giữ chỗ</span>')
+    expect(html).not.toContain('border')
+    expect(html).not.toContain('[Đã')
+    const option = displayProps('option', { value: source, children: source }) as Record<string, string>
+    expect(option.value).toBe(source)
+    expect(option.children).toBe('[Đã công bố]')
+    expect(displayText('PUBLISHED')).toBe('PUBLISHED')
+  })
+
   it('không đưa chi tiết kỹ thuật hoặc lỗi tiếng Anh lên giao diện', () => {
     const error = new ApiClientError('Request body is malformed: java.lang.IllegalArgumentException', { status: 400 })
     expect(userFacingError(error)).toBe('Thông tin chưa hợp lệ. Vui lòng kiểm tra lại các mục đã nhập.')
