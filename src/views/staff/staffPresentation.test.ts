@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   compareStaffTaskSchedule,
   formatStaffDate,
+  parseEmptyStorageHandover,
   staffCheckInStatusLabel,
   staffErrorMessage,
   staffGoodsCategoryLabel,
@@ -9,6 +10,16 @@ import {
 } from "./staffPresentation"
 
 describe("trình bày dữ liệu cho giao diện nhân viên", () => {
+  it("giữ mã tệp bàn giao khi khách thêm ghi chú có dấu phẩy", () => {
+    const first = "84ec5e47-685e-4ff5-abc5-76d81be44742"
+    const last = "23ca7b74-54ff-4b46-811c-a98dd06516b6"
+    const handover = `Tình trạng kho trống: Kho sạch | Bằng chứng: ${first}, ${last}`
+    const expected = { condition: "Kho sạch", evidenceReferences: [first, last] }
+
+    expect(parseEmptyStorageHandover(handover)).toEqual(expected)
+    expect(parseEmptyStorageHandover(`${handover} | Ghi chú khách: Đã xếp xong, còn một kiện rỗng`)).toEqual(expected)
+  })
+
   it("dùng cùng tên loại hàng với giao diện khách hàng", () => {
     expect(staffGoodsCategoryLabel("DOCUMENTS")).toBe("Sách & hồ sơ")
     expect(staffGoodsCategoryLabel("CAMERA_EQUIPMENT")).toBe("Máy ảnh & máy quay")
@@ -31,6 +42,12 @@ describe("trình bày dữ liệu cho giao diện nhân viên", () => {
   })
 
   it("không đưa thông báo kỹ thuật từ máy chủ lên giao diện", () => {
+    expect(
+      staffErrorMessage(
+        { status: 400, message: "Every evidence reference must be a file asset ID" },
+        "Không thể hoàn tất kiểm kê.",
+      ),
+    ).toBe("Mã tệp bằng chứng không hợp lệ. Vui lòng mở lại hồ sơ và thử lại.")
     expect(
       staffErrorMessage(
         { status: 409, code: "OPTIMISTIC_LOCK", message: "version mismatch" },

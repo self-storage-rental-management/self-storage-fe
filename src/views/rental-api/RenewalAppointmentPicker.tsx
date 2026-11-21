@@ -71,7 +71,7 @@ export default function RenewalAppointmentPicker({
         <div className="relative">
           <Input id={`${inputId}-date`} aria-label="Ngày ký" type="date" required disabled={disabled} value={date}
             min={earliest?.slice(0, 10) ?? today} max={latest?.slice(0, 10)}
-            className="!h-14 !rounded-full !border-stone-300 !px-4 !text-base"
+            className="!h-14 !rounded-lg !border-stone-300 !px-4 !text-base"
             onChange={e => {
               setDate(e.target.value); setTime(""); onChange(""); onReadyChange(false)
             }} />
@@ -86,7 +86,7 @@ export default function RenewalAppointmentPicker({
         <label htmlFor={`${inputId}-time`} className="block text-sm font-semibold text-stone-600">Khung giờ</label>
         <div className="relative">
           <select id={`${inputId}-time`} aria-label="Khung giờ" required disabled={disabled || read.loading || !date || availableTimes.length === 0}
-            value={time} className="h-14 w-full rounded-2xl border border-stone-300 bg-white px-4 pr-11 text-base text-stone-800 transition focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-200 disabled:cursor-not-allowed disabled:bg-stone-50 disabled:text-stone-400"
+            value={time} className="h-14 w-full !rounded-lg border border-stone-300 bg-white px-4 pr-11 text-base text-stone-800 transition focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-200 disabled:cursor-not-allowed disabled:bg-stone-50 disabled:text-stone-400"
             onChange={e => {
               setTime(e.target.value)
               onChange(e.target.value ? `${date}T${e.target.value}` : "")

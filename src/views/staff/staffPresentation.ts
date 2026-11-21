@@ -1,3 +1,5 @@
+import { isUuid } from "../../services/renewalOperationsApi"
+
 export const STAFF_GOODS_CATEGORY_LABELS: Record<string, string> = {
   FURNITURE: "Nội thất",
   KITCHENWARE: "Đồ dùng nhà bếp",
@@ -88,6 +90,24 @@ export function staffGoodsCategoryLabel(value: string) {
   return STAFF_GOODS_CATEGORY_LABELS[value] ?? value
 }
 
+export function parseEmptyStorageHandover(note: string | null | undefined) {
+  const prefix = "Tình trạng kho trống:"
+  const evidenceMarker = " | Bằng chứng:"
+  if (!note?.startsWith(prefix)) return { condition: "", evidenceReferences: [] }
+
+  const handover = note.slice(prefix.length).split(" | Ghi chú khách:", 1)[0]
+  const markerIndex = handover.lastIndexOf(evidenceMarker)
+  if (markerIndex < 0) return { condition: handover.trim(), evidenceReferences: [] }
+
+  return {
+    condition: handover.slice(0, markerIndex).trim(),
+    evidenceReferences: handover.slice(markerIndex + evidenceMarker.length)
+      .split(",")
+      .map(reference => reference.trim())
+      .filter(isUuid),
+  }
+}
+
 export function staffCheckInStatusLabel(
   checkInStatus: string | null,
   reservationStatus: string,
@@ -176,12 +196,14 @@ export function staffErrorMessage(error: unknown, fallback: string) {
     if (message.includes("Evidence can only be uploaded"))
       return "Chỉ được tải bằng chứng khi đang thực hiện quy trình nhận kho. Vui lòng mở lại hồ sơ và tiếp tục từ bước hiện tại."
     if (message.includes("lock reference"))
-      return "Mã ổ khóa không khớp với credential đã kích hoạt. Vui lòng kiểm tra lại mã ổ khóa."
+      return "Mã ổ khóa không khớp với thông tin ra vào đã kích hoạt. Vui lòng kiểm tra lại mã ổ khóa."
     return "Hồ sơ vừa thay đổi trạng thái. Vui lòng tải lại danh sách rồi tiếp tục nhận kho."
   }
   if (status === 413)
     return "Tệp tải lên vượt quá dung lượng cho phép."
   if (status === 422 || status === 400) {
+    if (message === "Every evidence reference must be a file asset ID")
+      return "Mã tệp bằng chứng không hợp lệ. Vui lòng mở lại hồ sơ và thử lại."
     if (message.includes("varianceReason is required"))
       return "Cần nhập lý do chênh lệch khi kích thước hoặc khối lượng hàng hóa khác với đơn đặt kho."
     if (message.includes("dimensions do not fit"))
