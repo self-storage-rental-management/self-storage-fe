@@ -41,6 +41,7 @@ export default function CustomerUnitDetails({
 }: CustomerUnitDetailsProps) {
   const size = t.code.match(/(?:^|[-_])(XL|S|M|L)(?:$|[-_])/i)?.[1]?.toUpperCase() || t.name.match(/\b(XL|S|M|L)\b/i)?.[1]?.toUpperCase()
     || ({ small: 'S', medium: 'M', large: 'L', 'extra large': 'XL' } as Record<string, string>)[t.name.toLowerCase()]
+  const securityDepositAmount = Number(t.monthlyPrice) > 0 ? t.monthlyPrice : t.securityDepositAmount
   if (!isApiAuthenticated()) {
     facilityName = customerFacilityName(facilityCode || '', facilityName)
     address = customerFacilityAddress(facilityCode || '', facilityName, address || '')
@@ -145,7 +146,7 @@ export default function CustomerUnitDetails({
       ['Xe đẩy hỗ trợ', t.trolleyType || 'Chưa cập nhật'],
       ['Tải trọng tối đa', `${t.maxLoadKg.toLocaleString('vi-VN')} kg`],
       ['Giá thuê mỗi tháng', formatVndAmount(t.monthlyPrice)],
-      ['Tiền cọc đảm bảo kho', formatVndAmount(t.securityDepositAmount)],
+      ['Tiền cọc đảm bảo kho', formatVndAmount(securityDepositAmount)],
     ].map(([label, value]) => <li key={label} className="grid gap-1 px-4 py-3 sm:grid-cols-[220px_1fr]"><span className="text-stone-500">{label}</span><b>{value}</b></li>)}</ul>
     <CustomerRackLayout key={t.id} facilityId={t.facilityId} unitTypeId={t.id} />
     <section className="rounded-xl border border-stone-200 p-5"><h4 className="font-bold">Kỳ thuê và chi phí</h4><p className="mt-2 text-sm">Chọn thời gian thuê và khai báo hàng hóa ở bước đặt kho. Báo giá sẽ hiển thị tiền thuê, ưu đãi, phí giữ chỗ, tiền cọc đảm bảo kho và số tiền còn lại. Không áp dụng ưu đãi minh họa để tính tiền.</p><h4 className="mt-4 font-bold">Hàng hóa cần xét duyệt</h4><p className="mt-2 text-sm">Hàng thuộc nhóm “Khác” cần nhập tên, chất liệu, mô tả, kích thước và cân nặng. Nhân viên tại cơ sở sẽ xét duyệt sau khi xác minh email.</p></section>

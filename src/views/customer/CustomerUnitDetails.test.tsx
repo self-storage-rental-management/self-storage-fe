@@ -41,6 +41,13 @@ it('hiển thị thông số và gói thuê từ backend, không chèn tiện í
   expect(html).not.toContain('Sức chứa thùng tham khảo')
 })
 
+it('hiển thị tiền cọc bằng giá thuê tháng khi backend còn lưu cọc bằng 0', () => {
+  const html = renderToStaticMarkup(<CustomerUnitDetails unitType={{ ...unit, securityDepositAmount: 0 }} facilityName="Test facility"
+    availableCount={2} onReserve={() => {}} onClose={() => {}} />)
+
+  expect(html).toMatch(/Tiền cọc đảm bảo kho<\/span><b>5\.500\.000 ₫<\/b>/)
+})
+
 it.each([
   [{ isRecommended: true }, 'Kho hệ thống đề xuất', 'Chọn kho đề xuất này'],
   [{ isUserSelected: true }, 'Kho bạn tự chọn', 'Chọn kho hệ thống đề xuất'],
