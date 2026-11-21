@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { clearAuthTokens } from './apiClient'
-import { completeCheckIn, completeCheckInSetup, confirmCheckInPayment, downloadCheckInEvidence, listCheckIns, listStaffAccessCredentials, markCheckInNoShow, rejectCheckIn, reissueAccessCredential, scheduleCheckIn, signCheckInContract, startCheckInSetup, uploadCheckInEvidence, verifyCheckInIdentity } from './checkInApi'
+import { checkInEvidenceAssetIds, completeCheckIn, completeCheckInSetup, confirmCheckInPayment, downloadCheckInEvidence, listCheckIns, listStaffAccessCredentials, markCheckInNoShow, rejectCheckIn, reissueAccessCredential, scheduleCheckIn, signCheckInContract, startCheckInSetup, uploadCheckInEvidence, verifyCheckInIdentity } from './checkInApi'
 
 const responseCase = {
   checkInId: 'checkin-1',
@@ -22,6 +22,11 @@ describe('checkInApi', () => {
   afterEach(() => {
     clearAuthTokens()
     vi.unstubAllGlobals()
+  })
+
+  it('keeps only unique file asset IDs from legacy evidence references', () => {
+    const id = '0d29e3dd-67a8-4c8c-bccd-d54e374f50b0'
+    expect(checkInEvidenceAssetIds([id, 'image_0.jpg', 'uploads/check-in/photo.jpg', id])).toEqual([id])
   })
 
   it('lists operational check-in cases', async () => {

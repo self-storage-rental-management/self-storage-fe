@@ -147,6 +147,14 @@ export interface CheckInEvidenceAsset {
   status: string
 }
 
+export const isCheckInEvidenceAssetId = (value: unknown): value is string =>
+  typeof value === 'string'
+  && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+
+export function checkInEvidenceAssetIds(references: readonly unknown[]) {
+  return Array.from(new Set(references.filter(isCheckInEvidenceAssetId)))
+}
+
 export type AccessCredentialType = 'PIN' | 'CARD' | 'KEY' | 'LOCK'
 export type AccessCredentialStatus = 'ACTIVE' | 'REVOKED'
 
