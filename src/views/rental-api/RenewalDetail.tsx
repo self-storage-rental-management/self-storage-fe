@@ -17,6 +17,9 @@ import {
 import RenewalReceipt from "../customer/RenewalReceipt"
 import RenewalStatusPanel from './RenewalStatusPanel'
 import { reconciledRenewalPayment, renewalPaymentDisplayLabel, renewalPaymentDisplayStatus, renewalProgress, renewalWorkflowLabel } from './renewalStatusPresentation'
+
+const renewalStepCardClass = "rounded-xl border border-amber-200 bg-amber-50/40 p-3.5 text-sm"
+
 export default function RenewalDetail({
   renewal: r,
   role,
@@ -259,8 +262,8 @@ export default function RenewalDetail({
         </div>
       )}
       {isCustomer && canOpenPayment && !paymentExpired && !customerHasPaid && appointmentSelection && (
-        <details className="rounded-xl border border-amber-200 bg-amber-50/40 p-3.5 text-sm" open>
-          <summary className="cursor-pointer font-semibold text-amber-900 hover:text-amber-950 select-none flex items-center justify-between">
+        <details className={renewalStepCardClass} open>
+          <summary className="flex cursor-pointer select-none flex-wrap items-center justify-between gap-x-3 gap-y-1 font-semibold text-amber-950">
             <span>Bước 1: Chọn &amp; lưu lịch hẹn ký gia hạn tại cơ sở</span>
             <span className="text-xs font-normal text-amber-700">Bấm để thu gọn / mở rộng</span>
           </summary>
@@ -272,32 +275,30 @@ export default function RenewalDetail({
       {paymentExpired ? (
         <p className="text-sm text-stone-600">Hạn thanh toán đã qua. Hệ thống đang kiểm tra kết quả VNPay, khi xác nhận chưa thu tiền, yêu cầu sẽ được đóng để bạn có thể gửi yêu cầu gia hạn mới.</p>
       ) : canOpenPayment ? (
-        <div className="rounded-xl border-2 border-emerald-500 bg-emerald-50/80 p-4 shadow-sm space-y-3">
+        <div className={renewalStepCardClass}>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <div>
-                <p className="font-bold text-emerald-950 text-base">
-                  {payment?.paymentStatus === "PAID"
-                    ? "Đã ghi nhận thanh toán qua VNPay"
-                    : hasDeposit
-                    ? "Bước 2: Thanh toán trả trước 20% qua VNPay thử nghiệm"
-                    : "Thanh toán gia hạn trực tuyến qua VNPay thử nghiệm"}
-                </p>
-                <p className="text-xs text-emerald-800">
-                  {payment?.paymentStatus === "PAID"
-                    ? "Khoản thanh toán đã được ghi nhận thành công."
-                    : hasDeposit
-                    ? "Khoản trả trước 20% nhằm bảo đảm việc gia hạn kho. 80% còn lại sẽ thanh toán khi bạn đến cơ sở ký phụ lục hợp đồng."
-                    : "Hỗ trợ quét mã VNPAY-QR hoặc thẻ ATM / Internet Banking nội địa. Sau khi thanh toán, vui lòng theo dõi lịch ký tại cơ sở."}
-                </p>
-              </div>
+            <div>
+              <p className="font-semibold text-amber-950">
+                {payment?.paymentStatus === "PAID"
+                  ? "Đã ghi nhận thanh toán qua VNPay"
+                  : hasDeposit
+                  ? "Bước 2: Thanh toán trả trước 20% qua VNPay"
+                  : "Thanh toán gia hạn trực tuyến qua VNPay"}
+              </p>
+              <p className="mt-1 text-xs text-amber-900">
+                {payment?.paymentStatus === "PAID"
+                  ? "Khoản thanh toán đã được ghi nhận thành công."
+                  : hasDeposit
+                  ? "Khoản trả trước 20% nhằm bảo đảm việc gia hạn kho. 80% còn lại sẽ thanh toán khi bạn đến cơ sở ký phụ lục hợp đồng."
+                  : "Hỗ trợ quét mã VNPAY-QR hoặc thẻ ATM / Internet Banking nội địa. Sau khi thanh toán, vui lòng theo dõi lịch ký tại cơ sở."}
+              </p>
             </div>
-            <span className="rounded-full bg-emerald-200 px-3 py-1 text-xs font-bold text-emerald-900">Cổng VNPay</span>
+            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-900">Cổng VNPay</span>
           </div>
-          <div className="pt-1">
+          <div className="mt-3 border-t border-amber-200/60 pt-3">
             <Button
               variant="primary"
-              className="w-full sm:w-auto !bg-emerald-600 hover:!bg-emerald-700 text-white font-bold text-sm px-6 py-2.5 shadow-md flex items-center justify-center gap-2 disabled:opacity-60"
+              className="w-full sm:w-auto"
               disabled={operationsLocked || paymentBusy || paymentExpired || payment?.paymentStatus === "PAID"}
               onClick={openRenewalPayment}
             >
