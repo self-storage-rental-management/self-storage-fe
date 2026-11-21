@@ -1117,7 +1117,7 @@ export default function BusinessApp({
       })
       setDurationDiscounts([...grouped.values()])
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Không thể tải gói thuê từ backend.')
+      showToast(error instanceof Error ? error.message : 'Không thể tải danh sách gói thuê.')
     }
   }, [])
 
@@ -4168,7 +4168,7 @@ export default function BusinessApp({
             <div className="mt-4 flex flex-wrap gap-4">
               <label className="text-sm font-medium text-stone-700">Trạng thái
                 <select className="mt-1 block rounded-lg border border-stone-300 bg-white px-3 py-2" value={packageStatusFilter} onChange={e => setPackageStatusFilter(e.target.value)}>
-                  <option value="all">Tất cả</option><option value="active">Đang áp dụng</option><option value="inactive">Tạm dừng</option>
+                  <option value="all">Tất cả</option><option value="active">Đang hiệu lực</option><option value="inactive">Tạm dừng</option>
                 </select>
               </label>
               <label className="text-sm font-medium text-stone-700">Sắp xếp
@@ -5474,8 +5474,8 @@ export default function BusinessApp({
               value={formCreateDurationStatus}
               onChange={(e) => setFormCreateDurationStatus(e.target.value as "active" | "inactive")}
             >
-              <option value="active">{lang === "vi" ? "Đang áp dụng (Có hiệu lực)" : "Active"}</option>
-              <option value="inactive">{lang === "vi" ? "Tạm dừng (Chưa kích hoạt)" : "Inactive"}</option>
+              <option value="active">{lang === "vi" ? "Đang hiệu lực" : "Active"}</option>
+              <option value="inactive">{lang === "vi" ? "Tạm dừng" : "Inactive"}</option>
             </Select>
           </div>
 
@@ -5721,8 +5721,8 @@ export default function BusinessApp({
                 value={formDurationStatus}
                 onChange={(e) => setFormDurationStatus(e.target.value as "active" | "inactive")}
               >
-                <option value="active">Đang áp dụng (Có hiệu lực)</option>
-                <option value="inactive">Tạm dừng (Không chiết khấu)</option>
+                <option value="active">Đang hiệu lực</option>
+                <option value="inactive">Tạm dừng</option>
               </Select>
             </div>
 
