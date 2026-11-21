@@ -311,7 +311,7 @@ function SizeCategoryCard({ facility, unitType, apiSpec, availableCount, onReser
         <span className="absolute top-3 left-3 rounded-full bg-black/75 px-2.5 py-0.5 text-[11px] font-semibold text-amber-300 backdrop-blur-sm shadow flex items-center gap-1">
            {facility.name}
         </span>
-        <span className="absolute bottom-3 left-4 rounded-full bg-black/65 px-3 py-1 text-xs font-bold text-white backdrop-blur-sm">Kho size {sizeCode}</span>
+        <span className="absolute bottom-3 left-4 rounded-full bg-black/65 px-3 py-1 text-xs font-bold text-white backdrop-blur-sm">Cỡ kho {sizeCode}</span>
       </div>
       <div className="flex flex-col p-5">
         <div className="flex min-w-0 items-start justify-between gap-3">
@@ -2378,7 +2378,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             title={'Hệ Thống Cơ Sở Lưu Kho'}
             action={
               <label className="relative block w-full sm:w-72">
-                <span className="sr-only">Search facilities</span>
+                <span className="sr-only">Tìm cơ sở</span>
                 <input
                   value={searchFacility}
                   onChange={event => setSearchFacility(event.target.value)}
@@ -2468,10 +2468,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 <div className="flex flex-wrap items-center gap-2">
                   <Select value={sizeFilter} onChange={event => setSizeFilter(event.target.value)} className="w-full sm:w-56">
                     <option value="All">{'Tất cả kích thước'}</option>
-                    <option value="S">{'Size S'}</option>
-                    <option value="M">{'Size M'}</option>
-                    <option value="L">{'Size L'}</option>
-                    <option value="XL">{'Size XL'}</option>
+                    <option value="S">Cỡ S</option>
+                    <option value="M">Cỡ M</option>
+                    <option value="L">Cỡ L</option>
+                    <option value="XL">Cỡ XL</option>
                     {Array.from(new Set(CUSTOMER_CATALOG_UNITS.map(u => u.sizeCode?.toUpperCase()).filter(Boolean))).filter(code => !['S', 'M', 'L', 'XL'].includes(code)).map(code => (
                       <option key={code} value={code}>{`Size ${code}`}</option>
                     ))}
@@ -3409,7 +3409,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               </div>
               <div className="mt-2 flex flex-col gap-0.5 text-sm sm:flex-row sm:justify-between sm:gap-2">
                 <span className="text-stone-700">Kích thước & Sức chịu tải:</span>
-                <span className="font-medium text-stone-900">{selectedUnit.dimensions.lengthM}m × {selectedUnit.dimensions.widthM}m × {selectedUnit.dimensions.heightM}m (~{selectedUnit.volumeM3} m³) · Max {selectedUnit.maxLoadKg} kg</span>
+                <span className="font-medium text-stone-900">{selectedUnit.dimensions.lengthM}m × {selectedUnit.dimensions.widthM}m × {selectedUnit.dimensions.heightM}m (~{selectedUnit.volumeM3} m³) · Tải trọng tối đa {selectedUnit.maxLoadKg} kg</span>
               </div>
             </div>}
 
