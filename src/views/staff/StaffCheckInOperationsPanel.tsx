@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useState } from "react"
 
 import {
   completeCheckIn,
+  completeCheckInSetup,
   confirmCheckInPayment,
   downloadCheckInEvidence,
   listCheckIns,
@@ -40,6 +41,7 @@ import {
 import {
   extractStaffFieldErrors,
   formatStaffDateTime,
+  parseEmptyStorageHandover,
   staffCheckInStatusLabel,
   staffErrorMessage,
   staffStorageUnitStatusLabel,
@@ -112,19 +114,6 @@ function localDateBoundary(date: string, nextDay = false) {
   if (nextDay) boundary.setDate(boundary.getDate() + 1)
 
   return boundary.toISOString()
-}
-
-function parseEmptyStorageHandover(note: string | null | undefined) {
-  const prefix = "Tình trạng kho trống:"
-  const evidenceMarker = " | Bằng chứng:"
-  if (!note?.startsWith(prefix)) return { condition: "", evidenceReferences: [] as string[] }
-  const body = note.slice(prefix.length).trim()
-  const markerIndex = body.indexOf(evidenceMarker)
-  if (markerIndex < 0) return { condition: body, evidenceReferences: [] as string[] }
-  return {
-    condition: body.slice(0, markerIndex).trim(),
-    evidenceReferences: body.slice(markerIndex + evidenceMarker.length).split(",").map(value => value.trim()).filter(Boolean),
-  }
 }
 
 function HandoverWorkflowHelp() {
@@ -1038,9 +1027,12 @@ export default function StaffCheckInOperationsPanel({
       } else if (handoverStep === 5) {
         if (handoverTarget.checkInStatus === "handover_pending_receipt") {
           setCustomerWaitTarget("receipt")
-          throw new Error("Đang chờ khách hàng nhấn Sẵn sàng bàn giao trên cổng khách hàng.")
+          throw new Error("Đang chờ khách hàng xác nhận nhận kho trên cổng khách hàng.")
         }
-        throw new Error("Chỉ khách hàng được xác nhận đã chuẩn bị xong. Staff chỉ có thể kiểm kê sau khi khách báo sẵn sàng.")
+        updated = await completeCheckInSetup(
+          handoverTarget.checkInId,
+          "Nhân viên xác nhận khách hàng đã sẵn sàng bàn giao để kiểm kê hàng hóa",
+        )
       }
       if (updated) {
         setHandoverTarget(updated)
@@ -1275,7 +1267,7 @@ export default function StaffCheckInOperationsPanel({
     <div className="fade-in space-y-5">
       <SectionHeader
         title="Nhận kho & bàn giao"
-        subtitle="Xác minh, ký hợp đồng, thu tiền và ghi nhận bàn giao kho trống. Sau khi khách báo đã chuẩn bị hàng xong, Staff mới kiểm kê hàng hóa."
+        subtitle="Xác minh, ký hợp đồng, thu tiền và ghi nhận bàn giao kho trống. Nhân viên kiểm kê sau khi khách báo đã chuẩn bị hàng xong."
       />
       <Card className="border-stone-200/80 bg-white p-4 shadow-sm sm:p-5">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -2313,7 +2305,7 @@ export default function StaffCheckInOperationsPanel({
         {handoverTarget && (
           <div className="space-y-4">
             <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-              <p className="font-bold">Staff đã xác nhận bàn giao kho trống</p>
+              <p className="font-bold">Nhân viên đã xác nhận bàn giao kho trống</p>
               <p className="mt-2 leading-6">
                 Đơn <b>{handoverTarget.reservationCode}</b> đang chờ khách hàng nhấn <b>“Sẵn sàng bàn giao”</b> trên cổng khách hàng.
                 Chưa thể chuyển sang kiểm kê hàng hóa ở bước này.
