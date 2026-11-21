@@ -55,7 +55,7 @@ export default function ManagerUnitAssignmentPanel({ showToast, embedded = false
   const [storageUnitId, setStorageUnitId] = useState('')
   const [loadingUnits, setLoadingUnits] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [flow, setFlow] = useState<'select' | 'suggested' | 'confirm' | 'change'>('select')
+  const [flow, setFlow] = useState<'select' | 'confirm' | 'change'>('select')
   const [changeReason, setChangeReason] = useState('')
 
   useEffect(() => {
@@ -195,9 +195,8 @@ export default function ManagerUnitAssignmentPanel({ showToast, embedded = false
         <div className="flex flex-wrap items-center gap-2 text-xs">
           {[
             ['select', '1. Chọn kho'],
-            ['suggested', '2. Xem gợi ý'],
-            ['confirm', '3. Xác nhận'],
-            ...(selected.assignedStorageUnitId ? [['change', '4. Đổi khi không phù hợp']] : []),
+            ['confirm', '2. Xác nhận'],
+            ...(selected.assignedStorageUnitId ? [['change', '3. Đổi khi không phù hợp']] : []),
           ].map(([key, label]) => <button type="button" key={key} disabled={key === 'confirm' && !storageUnitId} onClick={() => setFlow(key as typeof flow)} className={`rounded-full border px-2 py-1 ${flow === key ? 'border-amber-400 bg-amber-50 font-semibold text-amber-900' : 'border-stone-200 text-stone-500'} disabled:cursor-not-allowed disabled:opacity-60`}>{label}</button>)}
         </div>
         {selected.assignedStorageUnitId && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
@@ -237,7 +236,7 @@ export default function ManagerUnitAssignmentPanel({ showToast, embedded = false
         </div>
         <div className="flex justify-end gap-2">
           <Button variant="outline" disabled={submitting} onClick={() => setSelected(null)}>Đóng</Button>
-          <Button disabled={submitting || loadingUnits || !storageUnitId || flow === 'suggested' || (flow === 'change' && !changeReason.trim())} onClick={() => void submitAssignment()}>
+          <Button disabled={submitting || loadingUnits || !storageUnitId || (flow === 'change' && !changeReason.trim())} onClick={() => void submitAssignment()}>
             {submitting ? 'Đang lưu…' : selected.assignedStorageUnitId ? 'Xác nhận đổi kho' : 'Xác nhận phân kho'}
           </Button>
         </div>
