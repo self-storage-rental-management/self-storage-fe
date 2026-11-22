@@ -1,3 +1,5 @@
+import ReturnPolicyNotice from '../../components/ReturnPolicyNotice'
+import EmergencyContactsPanel from '../../components/EmergencyContactsPanel'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '../../components/ui'
 import { FilePreviewList } from '../staff/StaffFileUpload'
@@ -298,6 +300,7 @@ function ReturnWorkspace({
           }
           void run(() => editing ? updateReturnRequest(editing, date, notes) : requestReturn(rentalId, date, notes))
         }} className="space-y-4 rounded-xl border border-stone-200 bg-stone-50 p-4">
+          <ReturnPolicyNotice />
           <div>
             <VietnameseDateInput label="Ngày trả kho" value={date} min={today} onChange={setDate} />
             {date && date < today && (
@@ -523,10 +526,10 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
   const actor = getAuthenticatedActor()
   const [note, setNote] = useState('')
   const [fees, setFees] = useState<ReturnFees>({ damageFee: 0, cleaningFee: 0, lostItemFee: 0, overdueFee: 0, outstandingFee: 0 })
-  const [inventory, setInventory] = useState<InspectionInput['inventoryMatch']>('match')
+  const [goodsLeft, setGoodsLeft] = useState(false)
   const [damage, setDamage] = useState<InspectionInput['damageClassification']>('no_damage')
   const [unit, setUnit] = useState<'available' | 'maintenance'>('available')
-  const [returned, setReturned] = useState({ returnedKey: false, returnedCard: false, returnedLock: false })
+  const [returnedLock, setReturnedLock] = useState(false)
   const [vacatedReturnId, setVacatedReturnId] = useState<string | null>(null)
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([])
   const initialized = useRef(false)
@@ -550,7 +553,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
         : record.status === 'refund_pending' ? 'Cơ sở thực hiện hoàn tiền và ghi nhận biên lai quyết toán. Thu hồi kho được hoàn tất riêng sau đó.' : null
   const submitInspection = async () => {
     const unitVacated = vacatedReturnId === id
-    if (record.setupExitRequested && (!unitVacated || damage === 'abandoned_goods')) {
+    if (record.setupExitRequested && (!unitVacated || goodsLeft)) {
       throw new Error('Cần xác nhận khách đã đưa hết hàng ra và bàn giao kho trống trước khi nghiệm thu trả kho trong thời gian chuẩn bị.')
     }
     const evidencePhotos: string[] = []
@@ -558,12 +561,13 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       const asset = await uploadReturnEvidence(id, file, role)
       evidencePhotos.push(asset.id)
     }
-    return inspectReturn(id, { ...sanitizeFees(fees), inventoryMatch: inventory, damageClassification: damage, staffNotes: note, evidencePhotos, ...returned, proposedUnitStatus: unit, unitVacated })
+    return inspectReturn(id, { ...sanitizeFees(fees), inventoryMatch: 'match', damageClassification: goodsLeft ? 'abandoned_goods' : damage, staffNotes: note, evidencePhotos, returnedKey: false, returnedCard: false, returnedLock, proposedUnitStatus: unit, unitVacated })
   }
 
   return (
     <section className="space-y-4" aria-label="Xử lý trả kho">
-      <ReturnSummary record={record} hideTerminationFee={role === 'customer'} />
+      <ReturnSummary record={record} hideTerminationFee={false} />
+      {role !== 'customer' && <EmergencyContactsPanel key={record.rentalId} rentalId={record.rentalId} />}
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
         <p className="font-semibold">Bước tiếp theo</p>
         <p className="mt-1">{recoveryNextStep ?? { requested: 'Yêu cầu đã được gửi. Cơ sở sẽ sắp xếp lịch và thực hiện nghiệm thu trước khi quyết toán.', scheduled: 'Đến cơ sở theo ngày hẹn để trả kho và bàn giao cho nhân viên nghiệm thu.', inspected: 'Nghiệm thu đã được ghi nhận. Chờ cơ sở gửi kết quả quyết toán để khách hàng xác nhận.', awaiting_business_review: 'Hồ sơ cũ chưa có bảng giá trả sớm đã lưu. Chờ Ban điều hành xem xét.', awaiting_customer_confirmation: 'Kiểm tra các khoản phí bên dưới, sau đó đồng ý quyết toán hoặc yêu cầu xem xét lại.', disputed: 'Hồ sơ đang có khiếu nại từ khách hàng. Cần Ban điều hành hoặc Quản lý cơ sở giải quyết trước khi tiếp tục.', payment_due: 'Thanh toán khoản quyết toán còn thiếu để tiếp tục hoàn tất trả kho.', refund_pending: 'Cơ sở đang xử lý hoàn cọc. Hồ sơ chỉ hoàn tất khi khoản hoàn tiền được ghi nhận.', completed: 'Hồ sơ trả kho và quyết toán đã hoàn tất.' }[record.status]}</p>
@@ -588,7 +592,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
           <dl className="divide-y divide-stone-100 text-sm">
             {!recovery && record.setupEarlyExit && <>
               <div className="flex justify-between gap-3 py-2"><dt className="text-stone-500">Tiền thuê thực thu được quyết toán</dt><dd className="shrink-0 font-medium">{record.rentalRefundCredit == null ? 'Chưa xác định' : rentalMoney(record.rentalRefundCredit, 'VND')}</dd></div>
-              {role !== 'customer' && <div className="flex justify-between gap-3 py-2"><dt className="text-stone-500">Phí chấm dứt sớm một lần</dt><dd className="shrink-0 font-medium">{record.earlyTerminationFee == null ? 'Chưa xác định' : rentalMoney(record.earlyTerminationFee, 'VND')}</dd></div>}
+              {<div className="flex justify-between gap-3 py-2"><dt className="text-stone-500">Phí chấm dứt sớm một lần</dt><dd className="shrink-0 font-medium">{record.earlyTerminationFee == null ? 'Chưa xác định' : rentalMoney(record.earlyTerminationFee, 'VND')}</dd></div>}
             </>}
             {feeKeys.map((key, index) => <div key={key} className="flex justify-between gap-3 py-2"><dt className="text-stone-500">{['Phí hư hỏng', 'Phí vệ sinh', 'Phí mất đồ', 'Phí quá hạn', 'Phí còn thiếu'][index]}</dt><dd className="shrink-0 font-medium">{rentalMoney(record[key], 'VND')}</dd></div>)}
             <div className="flex justify-between gap-3 py-3 font-bold"><dt>Tổng phí ghi nhận</dt><dd>{rentalMoney(record.totalDeductions, 'VND')}</dd></div>
@@ -638,23 +642,22 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                       <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-xs space-y-3">
                         <div className="flex items-center justify-between border-b border-stone-100 pb-2.5">
                           <h4 className="text-sm font-bold text-stone-900 flex items-center gap-2">
-                            <span>1. Thu hồi phụ kiện & chìa khóa</span>
+                            <span>1. Thu hồi khóa đã bàn giao</span>
                           </h4>
                           <span className="text-[11px] font-medium text-stone-500">Chạm để đổi trạng thái</span>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        <div className="grid grid-cols-1 gap-2.5">
                           {([
-                            { key: 'returnedKey' as const, label: 'Chìa khóa cơ', desc: 'Chìa mở cửa gian kho' },
-                            { key: 'returnedCard' as const, label: 'Thẻ từ ra vào', desc: 'Thẻ quét cổng an ninh' },
-                            { key: 'returnedLock' as const, label: 'Ổ khóa cơ sở', desc: 'Khóa do cơ sở cấp' },
+                            { key: 'returnedLock' as const, label: 'Ổ khóa / Chìa khóa đã bàn giao', desc: 'Đối chiếu mã khóa trong hồ sơ nhận kho và thu lại bộ khóa đã cấp' },
                           ]).map((item) => {
-                            const isReturned = returned[item.key]
+                            const isReturned = returnedLock
                             return (
                               <button
                                 key={item.key}
                                 type="button"
                                 disabled={busy}
-                                onClick={() => setReturned((prev) => ({ ...prev, [item.key]: !prev[item.key] }))}
+                                aria-pressed={isReturned}
+                                onClick={() => setReturnedLock((prev) => !prev)}
                                 className={`flex flex-col items-start p-3 rounded-xl border text-left transition cursor-pointer select-none ${
                                   isReturned
                                     ? 'border-emerald-400 bg-emerald-50/70 text-emerald-950 shadow-xs ring-1 ring-emerald-400'
@@ -666,7 +669,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                                   <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
                                     isReturned ? 'bg-emerald-600 text-white' : 'bg-stone-200 text-stone-600'
                                   }`}>
-                                    {isReturned ? 'Đã thu' : 'Chưa nhận'}
+                                    {isReturned ? 'Đã thu hồi' : 'Chưa thu hồi'}
                                   </span>
                                 </div>
                                 <span className="mt-2 text-xs font-bold">{item.label}</span>
@@ -675,6 +678,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                             )
                           })}
                         </div>
+                        <p className="text-xs text-stone-500">Chỉ thu hồi bộ khóa đã cấp khi nhận kho. Quyền ra vào được hệ thống thu hồi khi ghi nhận nghiệm thu.</p>
                         {record.setupExitRequested && (
                           <div className="pt-2 border-t border-stone-100">
                             <label className={`flex items-center gap-3 p-3 rounded-xl border transition cursor-pointer select-none ${
@@ -685,7 +689,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                               <input
                                 type="checkbox"
                                 checked={vacatedReturnId === id}
-                                disabled={busy || damage === 'abandoned_goods'}
+                                disabled={busy || goodsLeft}
                                 onChange={(e) => setVacatedReturnId(e.target.checked ? id : null)}
                                 className="h-4 w-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
                               />
@@ -702,28 +706,28 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                       <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-xs space-y-4">
                         <div className="border-b border-stone-100 pb-2.5">
                           <h4 className="text-sm font-bold text-stone-900 flex items-center gap-2">
-                            <span>2. Hiện trạng kho & Kiểm kê hàng hóa</span>
+                            <span>2. Hiện trạng kho và hàng hóa</span>
                           </h4>
                         </div>
 
                         {/* Đối chiếu hàng hóa */}
                         <div className="space-y-1.5">
                           <label className="text-xs font-semibold text-stone-700 block">
-                            Đối chiếu hàng hóa lúc bàn giao
+                            Hàng hóa trong kho lúc trả
                           </label>
-                          <div className="grid grid-cols-3 gap-2">
+                          <div className="grid grid-cols-2 gap-2">
                             {([
-                              { id: 'match', label: 'Khớp khai báo' },
-                              { id: 'missing', label: 'Thiếu hàng' },
-                              { id: 'excess', label: 'Dư thừa' },
+                              { id: false, label: 'Đã dọn sạch' },
+                              { id: true, label: 'Còn hàng trong kho' },
                             ] as const).map((opt) => (
                               <button
-                                key={opt.id}
+                                key={String(opt.id)}
                                 type="button"
                                 disabled={busy}
-                                onClick={() => setInventory(opt.id)}
+                                aria-pressed={goodsLeft === opt.id}
+                                onClick={() => { setGoodsLeft(opt.id); setVacatedReturnId(null) }}
                                 className={`rounded-xl border py-2.5 px-2 text-center text-xs transition cursor-pointer ${
-                                  inventory === opt.id
+                                  goodsLeft === opt.id
                                     ? 'border-emerald-500 bg-emerald-50 text-emerald-950 ring-1 ring-emerald-500 font-bold shadow-xs'
                                     : 'border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100'
                                 }`}
@@ -740,12 +744,11 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                           <label className="text-xs font-semibold text-stone-700 block">
                             Mức độ hư hại gian kho (Trần, Vách, Sàn, Cửa)
                           </label>
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                             {([
                               { id: 'no_damage', label: 'Không hư hại', desc: 'Kho nguyên vẹn' },
                               { id: 'minor_damage', label: 'Hư hại nhẹ', desc: 'Trầy xước/bẩn' },
                               { id: 'major_damage', label: 'Hư hại nặng', desc: 'Móp méo/vỡ' },
-                              { id: 'abandoned_goods', label: 'Bỏ lại hàng', desc: 'Còn đồ bên trong' },
                             ] as const).map((opt) => (
                               <button
                                 key={opt.id}
@@ -812,8 +815,30 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
 
                     {canInspect && (
                       <div className="space-y-2.5">
+                        <p className="text-xs font-semibold text-stone-700">Ảnh hiện trường theo khu vực</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {(['Trần', 'Vách', 'Sàn', 'Cửa'] as const).map((area) => (
+                            <label key={area} className="relative cursor-pointer rounded-xl border border-dashed border-stone-300 bg-stone-50 p-3 text-center text-xs font-semibold text-stone-700 hover:border-emerald-500 hover:bg-emerald-50">
+                              Thêm ảnh {area.toLowerCase()}
+                              <input
+                                type="file"
+                                multiple
+                                accept="image/*"
+                                disabled={busy}
+                                aria-label={`Ảnh hiện trạng ${area.toLowerCase()}`}
+                                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                                onChange={(event) => {
+                                  const files = Array.from(event.target.files ?? []).map((file) => new File([file], `${area} - ${file.name}`, { type: file.type, lastModified: file.lastModified }))
+                                  setEvidenceFiles((current) => [...current, ...files])
+                                  event.target.value = ''
+                                }}
+                              />
+                            </label>
+                          ))}
+                        </div>
+                        <p className="text-[11px] text-stone-500">Đối chiếu với ảnh và hiện trạng kho trống trong hồ sơ nhận kho.</p>
                         <label className="text-xs font-semibold text-stone-700 block">
-                          Tải ảnh chụp kho / Biên bản đối chứng
+                          Biên bản đối chứng / Tài liệu khác
                         </label>
                         <div className="relative rounded-xl border-2 border-dashed border-stone-300 bg-stone-50/70 p-4 text-center hover:border-emerald-500 hover:bg-emerald-50/30 transition cursor-pointer group">
                           <input
@@ -888,7 +913,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                     <div className="space-y-2">
                       <FeeInputRow label="Phí hư hỏng" value={fees.damageFee} onChange={(v) => setFees((f) => ({ ...f, damageFee: v }))} disabled={busy} />
                       <FeeInputRow label="Phí vệ sinh" value={fees.cleaningFee} onChange={(v) => setFees((f) => ({ ...f, cleaningFee: v }))} disabled={busy} />
-                      <FeeInputRow label="Phí mất đồ / chìa khóa" value={fees.lostItemFee} onChange={(v) => setFees((f) => ({ ...f, lostItemFee: v }))} disabled={busy} />
+                      <FeeInputRow label="Phí mất khóa đã bàn giao" value={fees.lostItemFee} onChange={(v) => setFees((f) => ({ ...f, lostItemFee: v }))} disabled={busy} />
                       <FeeInputRow label="Phí quá hạn" value={fees.overdueFee} onChange={(v) => setFees((f) => ({ ...f, overdueFee: v }))} disabled={busy} />
                       <FeeInputRow label="Phí còn thiếu (Công nợ)" value={fees.outstandingFee} onChange={(v) => setFees((f) => ({ ...f, outstandingFee: v }))} readOnly disabled={busy} />
                     </div>
@@ -943,7 +968,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                       <Button
                         type="submit"
                         variant="primary"
-                        disabled={busy || (canReview && !note.trim()) || (canInspect && !!record.setupExitRequested && (vacatedReturnId !== id || damage === 'abandoned_goods'))}
+                        disabled={busy || (canReview && !note.trim()) || (canInspect && !!record.setupExitRequested && (vacatedReturnId !== id || goodsLeft))}
                         className="w-full !bg-emerald-600 hover:!bg-emerald-700 text-white font-bold py-3 text-sm shadow-md flex items-center justify-center gap-2 cursor-pointer"
                       >
                         <span>{canInspect ? 'Ghi nhận kết quả nghiệm thu' : 'Ghi nhận xem xét khiếu nại'}</span>

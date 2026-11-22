@@ -1,3 +1,4 @@
+import { validateCccd, normalizeCccd, maskCccd } from '../../domain/cccd'
 import { useEffect, useId, useMemo, useState } from "react"
 import { isCheckInHandoverExpired, staffCheckInActions } from "../../domain/reservationCheckInPolicy"
 
@@ -15,6 +16,7 @@ import {
   startCheckInSetup,
   uploadCheckInEvidence,
   verifyCheckInIdentity,
+  correctCheckInIdentity,
   checkInEvidenceAssetIds,
   type CheckInCase,
   type CheckInGroup,
@@ -521,6 +523,7 @@ export default function StaffCheckInOperationsPanel({
     })
   }
 
+  const [adulthoodConfirmed, setAdulthoodConfirmed] = useState(false)
   const [identityDocumentNumber, setIdentityDocumentNumber] = useState("")
 
   const [verificationNotes, setVerificationNotes] = useState("")
@@ -966,8 +969,8 @@ export default function StaffCheckInOperationsPanel({
     const providedIdentity = normalizeIdentityDocument(identityDocumentNumber)
     if (!providedIdentity) {
       errors.identityDocumentNumber = "Số CCCD/CMND không được để trống"
-    } else if (!/^(?:\d{9}|\d{12})$/.test(providedIdentity)) {
-      errors.identityDocumentNumber = "CCCD/CMND phải gồm đúng 9 hoặc 12 chữ số"
+    } else if (!validateCccd(providedIdentity).ok) {
+      errors.identityDocumentNumber = validateCccd(providedIdentity).error || "Vui lòng nhập CCCD 12 số."
     }
 
     if (Object.keys(errors).length > 0) {
@@ -1094,15 +1097,16 @@ export default function StaffCheckInOperationsPanel({
       let updated: CheckInCase | null = null
       if (handoverStep === 1) {
         const normalized = normalizeIdentityDocument(identityDocumentNumber)
-        if (!normalized || !/^(?:\d{9}|\d{12})$/.test(normalized)) {
-          setFieldErrors({ identityDocumentNumber: "CCCD/CMND phải gồm đúng 9 hoặc 12 chữ số." })
-          setError("Số CCCD/CMND trên giấy tờ gốc không hợp lệ. Vui lòng nhập đúng 9 hoặc 12 chữ số.")
+        if (!validateCccd(normalized).ok) {
+          setFieldErrors({ identityDocumentNumber: validateCccd(normalized).error || "Vui lòng nhập CCCD 12 số." })
+          setError(validateCccd(normalized).error || "Vui lòng nhập CCCD 12 số.")
           setSubmitting(false)
           return
         }
         updated = await verifyCheckInIdentity(handoverTarget.checkInId, {
           identityDocumentNumber: identityDocumentNumber.trim(),
           note: verificationNotes.trim() || undefined,
+          adulthoodConfirmed,
         })
         setChecklist((current) => ({ ...current, identityVerified: true, reservationMatched: true }))
       } else if (handoverStep === 2) {
@@ -1302,6 +1306,7 @@ export default function StaffCheckInOperationsPanel({
     setIdentityDocumentNumber(item.identityDocumentNumber || "")
 
     setVerificationNotes("")
+    setAdulthoodConfirmed(false)
 
     setEvidenceFiles([])
 
@@ -1664,7 +1669,7 @@ export default function StaffCheckInOperationsPanel({
                   <div><span className="text-stone-500">Khách hàng</span><p className="font-semibold">{handoverTarget.customerName}</p></div>
                   <div>
                     <span className="text-stone-500">CCCD/CMND đã khai báo</span>
-                    <p className="font-semibold">{declaredIdentityDocument || "Chưa có dữ liệu"}</p>
+                    <p className="font-semibold">{declaredIdentityDocument ? maskCccd(declaredIdentityDocument) : "Chưa có dữ liệu"}</p>
                     {identityMismatch && !isReviewingCompletedStep && (
                       <button
                         type="button"
@@ -1682,8 +1687,9 @@ export default function StaffCheckInOperationsPanel({
                     label="CCCD/CMND trên giấy tờ gốc *"
                     error={fieldErrors.identityDocumentNumber}
                     value={identityDocumentNumber}
-                    disabled={isReviewingCompletedStep}
+                    disabled={submitting}
                     onChange={(event) => {
+                      setAdulthoodConfirmed(false)
                       clearFieldError("identityDocumentNumber")
                       setIdentityDocumentNumber(event.target.value)
                     }}
@@ -1692,17 +1698,29 @@ export default function StaffCheckInOperationsPanel({
                 {identityMismatch && (
                   <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
                     <p className="font-semibold flex items-center gap-1.5">
-                      <span>⚠️</span> Số giấy tờ gốc khác với thông tin đã khai báo ban đầu ({declaredIdentityDocument || "chưa khai báo"}).
+                      <span>⚠️</span> Số giấy tờ gốc khác với thông tin đã khai báo ban đầu ({declaredIdentityDocument ? maskCccd(declaredIdentityDocument) : "chưa khai báo"}).
                     </p>
                     <p className="mt-1 text-xs text-amber-900 leading-relaxed">
-                      Nhân viên đã đối chiếu giấy tờ gốc thực tế. Khi bấm <b>Xác nhận và tiếp tục</b>, hệ thống sẽ tự động cập nhật số CCCD/CMND mới ({identityDocumentNumber.trim()}) vào hồ sơ đơn hàng và lưu lịch sử xác minh.
+                      Nhân viên đã đối chiếu giấy tờ gốc thực tế. Khi bấm <b>Xác nhận và tiếp tục</b>, hệ thống sẽ tự động cập nhật số CCCD/CMND mới ({maskCccd(identityDocumentNumber)}) vào hồ sơ đơn hàng và lưu lịch sử xác minh.
                     </p>
                   </div>
                 )}
                 <div className="grid gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm sm:grid-cols-2">
                   <label className="flex items-center gap-2"><input type="checkbox" disabled={isReviewingCompletedStep} checked={checklist.identityVerified && checklist.reservationMatched} onChange={(event) => setChecklist((value) => ({ ...value, identityVerified: event.target.checked, reservationMatched: event.target.checked }))} />Đã kiểm tra giấy tờ gốc và đối chiếu khách hàng với đơn đặt kho *</label>
                 </div>
-                <Input label="Ghi chú xác minh" value={verificationNotes || handoverTarget.identityVerificationNote || ""} disabled={isReviewingCompletedStep} maxLength={1000} onChange={(event) => setVerificationNotes(event.target.value)} />
+                {validateCccd(identityDocumentNumber).warning && <label className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm"><input type="checkbox" checked={adulthoodConfirmed} onChange={event => setAdulthoodConfirmed(event.target.checked)} />Đã đối chiếu ngày sinh trên CCCD gốc và xác nhận khách đã đủ 18 tuổi *</label>}
+                {isReviewingCompletedStep && <Button disabled={submitting || !verificationNotes.trim() || !validateCccd(identityDocumentNumber).ok || (!!validateCccd(identityDocumentNumber).warning && !adulthoodConfirmed)} onClick={async () => {
+                  if (!handoverTarget.checkInId) return
+                  setSubmitting(true)
+                  try {
+                    const updated = await correctCheckInIdentity(handoverTarget.checkInId, { identityDocumentNumber: normalizeCccd(identityDocumentNumber), note: verificationNotes.trim(), adulthoodConfirmed })
+                    setHandoverTarget(updated)
+                    refresh()
+                    setError(null)
+                  } catch (reason) { fail(reason, 'Không thể sửa CCCD.') }
+                  finally { setSubmitting(false) }
+                }}>Sửa CCCD sau khi đối chiếu lại giấy tờ gốc</Button>}
+                <Input label="Ghi chú xác minh" value={verificationNotes} disabled={submitting} maxLength={1000} onChange={(event) => setVerificationNotes(event.target.value)} />
               </div>
             )}
 
