@@ -144,7 +144,10 @@ describe("Customer payment history", () => {
   })
   it("combines reservation, renewal deposit, signing cash and recorded return payments", async () => {
     vi.mocked(listRenewals).mockResolvedValue(
-      page([{ id: "renewal", rentalId: "rental", storageUnit: { code: "A1" }, facility: { name: "Q1" } }]) as never,
+      page([{
+        id: "renewal", rentalId: "rental", rentalDisplayCode: "SH-184033", renewalSequence: 2,
+        storageUnit: { code: "A1" }, facility: { name: "Q1" },
+      }]) as never,
     )
     vi.mocked(listRenewalOperationEvents).mockResolvedValue(
       page([
@@ -196,6 +199,9 @@ describe("Customer payment history", () => {
       "renewal",
       "deposit",
     ])
+    expect(result.entries.filter((entry) => entry.renewalId).map((entry) => entry.reference))
+      .toEqual(["SH-184033 · Gia hạn lần 2", "SH-184033 · Gia hạn lần 2"])
+    expect(result.entries.map((entry) => entry.reference)).not.toContain("Gia hạn renewal")
     expect(result.warnings).toEqual([])
   })
   it("preserves other payment history and reports a missing renewal source", async () => {
