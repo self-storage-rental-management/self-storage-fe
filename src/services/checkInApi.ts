@@ -47,6 +47,7 @@ export interface CompleteCheckInRequest {
   goodsCondition: string
   packageCount: number
   goodsCategory: string
+  goodsMaterial: string
   evidenceReferences: string[]
   handedOverItems: string[]
   notes: string
@@ -58,6 +59,8 @@ export interface CheckInCase {
     id: string
     code: string | null
     name: string | null
+    categoryName?: string | null
+    materialName?: string | null
     quantity: number
     lengthCm: number | null
     widthCm: number | null

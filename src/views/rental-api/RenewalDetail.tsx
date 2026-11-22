@@ -40,6 +40,8 @@ export default function RenewalDetail({
   operationsLocked?: boolean
 }) {
   const [receiptPaymentId, setReceiptPaymentId] = useState<string | null>(null)
+  const [paymentConfirmationOpen, setPaymentConfirmationOpen] = useState(false)
+  const [noRefundAccepted, setNoRefundAccepted] = useState(false)
   const { manager, copy, explain } = useManagerPresentation()
   const actor = getAuthenticatedActor()
   const terms = r.acceptedTerms
@@ -58,6 +60,9 @@ export default function RenewalDetail({
   const paymentExpired = r.status === "accepted" && !!paymentDeadline && Date.parse(paymentDeadline) <= Date.now() && payment?.paymentStatus !== "PAID"
   const paymentStatusLabel = payment ? renewalPaymentDisplayLabel(payment) : ''
   const paymentDisplayStatus = payment ? renewalPaymentDisplayStatus(payment) : null
+  const paymentAmount = payment?.amount ?? (hasDeposit ? terms?.renewalDepositAmount : terms?.totalAfterDiscount) ?? r.amount
+  const paymentCurrency = terms?.currency ?? r.currency
+  const paymentAmountLabel = hasDeposit ? 'khoản trả trước gia hạn' : 'toàn bộ tiền gia hạn'
   const paymentDetail = payment?.settlementStage
     ? ({ AWAITING_PAYMENT: "Chờ VNPay xác nhận giao dịch.", VERIFIED_AWAITING_ALLOCATION: "Đang cập nhật khoản thanh toán vào hồ sơ.", ALLOCATED_AWAITING_SIGNING: "Đang kiểm tra điều kiện ký hợp đồng.", AWAITING_SIGNING: "Tiếp theo: đến cơ sở hoàn tất ký.", COMPLETED: "Đã hoàn tất xử lý khoản thanh toán.", RECONCILIATION_REQUIRED: "Giao dịch cần được cơ sở kiểm tra." }[payment.settlementStage])
     : payment?.message
@@ -114,6 +119,16 @@ export default function RenewalDetail({
             ? [{ action: "ACCEPT_REVISED_QUOTE" as const, label: "Lấy báo giá và xác nhận lại" }]
             : []),
         ]
+  const openPaymentConfirmation = () => {
+    if (operationsLocked || paymentBusy || paymentExpired || payment?.paymentStatus === "PAID") return
+    setNoRefundAccepted(false)
+    setPaymentConfirmationOpen(true)
+  }
+  const confirmPayment = () => {
+    if (!noRefundAccepted || operationsLocked || paymentBusy || paymentExpired || payment?.paymentStatus === "PAID") return
+    setPaymentConfirmationOpen(false)
+    return openRenewalPayment()
+  }
   return (
     <Card className="p-4 space-y-3">
       {r.status !== "completed" && <RenewalRiskNotice renewalId={r.id} role={role} revision={r.version} facilityId={r.facility.id} />}
@@ -295,18 +310,66 @@ export default function RenewalDetail({
             </div>
             <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-900">Cổng VNPay</span>
           </div>
+          {payment?.paymentStatus !== "PAID" && <p className="mt-3 rounded border border-amber-300/60 bg-amber-500/10 px-2 py-1.5 text-[11px] font-semibold text-amber-950">
+            ⚠️ {paymentAmountLabel[0].toUpperCase() + paymentAmountLabel.slice(1)} {rentalMoney(paymentAmount, paymentCurrency)} không được hoàn lại nếu khách tự ý hủy hoặc không tiếp tục gia hạn sau khi thanh toán.
+          </p>}
           <div className="mt-3 border-t border-amber-200/60 pt-3">
             <Button
               variant="primary"
               className="w-full sm:w-auto"
               disabled={operationsLocked || paymentBusy || paymentExpired || payment?.paymentStatus === "PAID"}
-              onClick={openRenewalPayment}
+              onClick={openPaymentConfirmation}
             >
               {paymentBusy ? "Đang mở cổng VNPay..." : payment && ["PENDING", "PROCESSING", "NOT_RECEIVED"].includes(payment.paymentStatus) ? "Tiếp tục thanh toán qua VNPay" : hasDeposit ? "Thanh toán trả trước qua VNPay" : "Thanh toán toàn kỳ qua VNPay"}
             </Button>
           </div>
         </div>
       ) : null}
+      <Modal size="lg" open={paymentConfirmationOpen} onClose={() => { if (!paymentBusy) setPaymentConfirmationOpen(false) }} title="Thông báo quan trọng">
+        <div className="space-y-4">
+          <div className="rounded-xl border-2 border-rose-300 bg-rose-50 p-4 text-rose-950">
+            <div className="space-y-2 text-xs">
+              <p className="text-sm font-bold uppercase tracking-wider text-rose-900">
+                Thông báo quan trọng: Quy định không hoàn tiền gia hạn
+              </p>
+              <p className="font-medium leading-relaxed text-rose-900">
+                Khoản thanh toán ngay <b>{rentalMoney(paymentAmount, paymentCurrency)}</b> là {paymentAmountLabel}. Sau khi thanh toán, khoản này <b>không được hoàn lại nếu khách tự ý hủy hoặc không tiếp tục gia hạn</b>.
+              </p>
+              <p className="text-[11px] leading-relaxed text-rose-800">
+                Vui lòng kiểm tra kỹ kỳ gia hạn, số tiền và lịch ký trước khi xác nhận. Giao dịch lỗi, thu trùng hoặc trường hợp được xử lý theo chính sách của StorageHub sẽ được đối soát theo hồ sơ giao dịch.
+              </p>
+            </div>
+          </div>
+
+          <label className="flex cursor-pointer select-none items-start gap-2.5 rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs text-stone-800 transition hover:bg-stone-100">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 cursor-pointer rounded border-stone-300 text-amber-600 focus:ring-amber-500"
+              checked={noRefundAccepted}
+              onChange={(event) => setNoRefundAccepted(event.target.checked)}
+            />
+            <span className="leading-tight">
+              Tôi xác nhận đã đọc, hiểu rõ và đồng ý rằng <b>{paymentAmountLabel} không được hoàn lại nếu tôi tự ý hủy hoặc không tiếp tục gia hạn sau khi thanh toán</b>.
+            </span>
+          </label>
+
+          <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+            <Button
+              variant="outline"
+              disabled={paymentBusy}
+              onClick={() => setPaymentConfirmationOpen(false)}
+            >
+              Quay lại
+            </Button>
+            <Button
+              disabled={operationsLocked || paymentBusy || paymentExpired || payment?.paymentStatus === "PAID" || !noRefundAccepted}
+              onClick={confirmPayment}
+            >
+              {paymentBusy ? "Đang chuyển sang VNPay…" : "Xác nhận & Chuyển sang VNPay"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
       <div className="flex flex-wrap gap-2">
         {actions
           .filter((a) => r.allowedActions.includes(a.action))
