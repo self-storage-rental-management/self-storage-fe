@@ -124,6 +124,7 @@ describe('customerReservationApi', () => {
       identityDocumentNumber: '079203009988',
       goodsCondition: 'Packed',
       notes: 'FE integration',
+      appointmentAt: '2026-11-24T03:00:00Z',
       goodsItems: [{
         category: 'FURNITURE' as const,
         quantity: 1,

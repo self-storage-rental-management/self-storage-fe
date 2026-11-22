@@ -379,7 +379,7 @@ export interface CreateReservationInput {
   goodsCondition?: string | null
   notes?: string | null
   goodsItems: GoodsItemInput[]
-  appointmentAt?: string | null
+  appointmentAt: string
   acceptedTerms: boolean
 }
 
