@@ -14,6 +14,7 @@ export interface RentalApiPage<T> {
 }
 export interface RentalApiRecord {
   id: string
+  displayCode?: string | null
   customer: {
     id: string
     fullName: string

@@ -580,7 +580,7 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
       setError('')
       setNotice(challenge.debugCode
         ? 'Mã khôi phục development đã được tạo. Nhập mã hiển thị bên dưới để tiếp tục.'
-        : `Mã đặt lại mật khẩu đã được gửi đến ${recoveryAccount.trim()}. Hãy kiểm tra hộp thư đến hoặc thư rác.`)
+        : `Yêu cầu đặt lại mật khẩu đã được tiếp nhận. Nếu ${recoveryAccount.trim()} đủ điều kiện khôi phục, mã sẽ được gửi qua email.`)
     } catch (recoveryError) {
       setNotice('')
       setError(formatAuthError(recoveryError, 'Không thể tạo yêu cầu khôi phục.'))
