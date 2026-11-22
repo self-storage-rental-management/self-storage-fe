@@ -76,6 +76,7 @@ export interface CheckInCase {
   identityVerificationNote: string | null
   contractSignedAt: string | null
   contractEvidenceReference: string | null
+  paymentEvidenceReference: string | null
   paymentCollectedAt: string | null
   setupStartedAt: string | null
   setupDueAt: string | null

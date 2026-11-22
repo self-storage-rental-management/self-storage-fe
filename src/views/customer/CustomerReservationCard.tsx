@@ -72,6 +72,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const [confirmingReceipt, setConfirmingReceipt] = useState(false)
   const receiptLock = useRef(false)
   const [confirmingPreparation, setConfirmingPreparation] = useState(false)
+  const [preparationConfirmed, setPreparationConfirmed] = useState(false)
   const preparationLock = useRef(false)
   const [bookingDocument, setBookingDocument] = useState<BookingDocument | null>(null)
   const [bookingDocumentOpen, setBookingDocumentOpen] = useState(false)
@@ -223,13 +224,15 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     setConfirmingPreparation(true); setMessage(null)
     try {
       await markCustomerPreparationComplete(r.id, 'Khách hàng đã sắp xếp hàng và sẵn sàng để nhân viên kiểm kê.')
+      setPreparationConfirmed(true)
       setMessage('Đã báo sẵn sàng để kiểm kê. Nhân viên sẽ thực hiện kiểm kê hàng hóa.')
       try { await onRefresh() } catch { /* The preparation command has already succeeded. */ }
     } catch (error) {
       setMessage(userFacingError(error, 'Không thể báo đã chuẩn bị xong.'))
       try { await onRefresh() } catch { /* Preserve the command error if readback is also unavailable. */ }
+      preparationLock.current = false
     }
-    finally { preparationLock.current = false; setConfirmingPreparation(false) }
+    finally { setConfirmingPreparation(false) }
   }
   const documentAvailable = ['CONFIRMED', 'UNIT_RESERVED', 'READY_FOR_CHECKIN', 'AWAITING_CUSTOMER_RECEIPT', 'COMPLETED'].includes(r.status)
   const handoverDocumentsAvailable = ['AWAITING_CUSTOMER_RECEIPT', 'COMPLETED'].includes(r.status)
@@ -353,9 +356,9 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         <div className="reservation-card-actions flex w-full min-w-0 flex-col items-end gap-2 md:w-64 md:shrink-0">
         <div className="text-right"><p className="text-xs text-stone-500">Tổng thu cả kỳ (gồm tiền cọc đảm bảo kho)</p><p className="text-xl font-bold text-stone-900">{(r.totalInitialObligation == null ? "Chưa xác định" : formatVnd(r.totalInitialObligation))}</p><p className="text-xs text-amber-800">Trả lúc giữ chỗ: {(r.reservationDepositAmount == null ? "Chưa xác định" : formatVnd(r.reservationDepositAmount))}</p></div>
         {r.status === 'AWAITING_REVIEW' && <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950"><p className="font-bold">Đang chờ nhân viên cơ sở duyệt hàng hóa</p><p className="mt-1">Hạn giữ hồ sơ chờ duyệt (giờ:phút:giây)</p><p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{countdown.text}</p><p className="mt-1">Thời hạn duyệt theo hồ sơ đã lưu; đây không phải hạn thanh toán.</p></div>}
-        <CustomerReservationPayment reservation={r} facilityName={displayedFacilityName} unitTypeName={displayedUnitTypeName} paymentExpiresAt={detail?.paymentExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />
+        <CustomerReservationPayment reservation={r} facilityName={displayedFacilityName} unitTypeName={displayedUnitTypeName} paymentStartedAt={detail?.paymentStartedAt} paymentExpiresAt={detail?.paymentExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />
         {r.status === 'AWAITING_CUSTOMER_RECEIPT' && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-right text-xs text-amber-950"><p className="font-bold">Nhân viên đã hoàn tất bàn giao</p><p className="mt-1">Vui lòng kiểm tra kho và mã ra vào, sau đó nhấn nút để báo đã sẵn sàng bàn giao.</p><Button type="button" className="mt-2" size="sm" disabled={confirmingReceipt} onClick={() => void confirmReceipt()}>{confirmingReceipt ? 'Đang xác nhận…' : 'Sẵn sàng bàn giao'}</Button></div>}
-        {r.status === 'PREPARING' && <div className="rounded-lg border border-violet-300 bg-violet-50 p-3 text-right text-xs text-violet-950"><p className="font-bold">Đang chuẩn bị hàng hóa</p><p className="mt-1">Sau khi đưa và sắp xếp hàng hóa xong, nhấn nút để Staff chuyển sang kiểm kê.</p><Button type="button" className="mt-2" size="sm" disabled={confirmingPreparation} onClick={() => void confirmPreparation()}>{confirmingPreparation ? 'Đang gửi…' : 'Sẵn sàng để kiểm kê'}</Button></div>}
+        {r.status === 'PREPARING' && !preparationConfirmed && <div className="rounded-lg border border-violet-300 bg-violet-50 p-3 text-right text-xs text-violet-950"><p className="font-bold">Đang chuẩn bị hàng hóa</p><p className="mt-1">Sau khi đưa và sắp xếp hàng hóa xong, nhấn nút để Staff chuyển sang kiểm kê.</p><Button type="button" className="mt-2" size="sm" disabled={confirmingPreparation} onClick={() => void confirmPreparation()}>{confirmingPreparation ? 'Đang gửi…' : 'Sẵn sàng để kiểm kê'}</Button></div>}
         {documentAvailable && <Button variant="outline" size="sm" className="reservation-action reservation-action-document min-h-10 w-full justify-center" disabled={busy} onClick={() => void prepareBookingDocument()}>{busy ? 'Đang chuẩn bị…' : 'Xem phiếu giữ kho'}</Button>}
         {handoverDocumentsAvailable && <Button variant="outline" size="sm" className="min-h-10 w-full justify-center" disabled={busy} onClick={() => void loadHandoverDocuments()}>{busy ? 'Đang tải…' : 'Xem hợp đồng đã ký'}</Button>}
         {onRequestSupport && <Button type="button" variant="outline" size="sm" className="min-h-10 w-full justify-center" onClick={onRequestSupport}>Hỗ trợ đơn này</Button>}
