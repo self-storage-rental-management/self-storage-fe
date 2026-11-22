@@ -1642,7 +1642,10 @@ export default function StaffCheckInOperationsPanel({
                 <div><p className="font-semibold text-blue-950">Ký và lưu hợp đồng</p><p className="text-sm text-blue-800">Tệp hợp đồng được lưu vào đúng hồ sơ bàn giao.</p></div>
                 {handoverTarget.contractEvidenceReference && isReviewingCompletedStep ? (
                   <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
-                    Hợp đồng đã ký được lưu. Mã bằng chứng: <b className="font-mono">{handoverTarget.contractEvidenceReference}</b>
+                    <p>Hợp đồng đã ký được lưu. Mã bằng chứng: <b className="font-mono">{handoverTarget.contractEvidenceReference}</b></p>
+                    <Button className="mt-2" size="sm" variant="outline" disabled={downloadingEvidence === handoverTarget.contractEvidenceReference} onClick={() => void previewEvidenceFile(handoverTarget.contractEvidenceReference!)}>
+                      {downloadingEvidence === handoverTarget.contractEvidenceReference ? 'Đang tải…' : 'Xem lại hợp đồng đã lưu'}
+                    </Button>
                   </div>
                 ) : (
                   <>
@@ -1690,7 +1693,7 @@ export default function StaffCheckInOperationsPanel({
                       setPaymentEvidenceFile(selected)
                     }} /></label>
                   </div>
-                ) : <p className="text-sm">{isReviewingCompletedStep ? `Đã ghi nhận lúc ${formatStaffDateTime(handoverTarget.paymentCollectedAt)}.` : "Đơn không còn khoản phải thu. Xác nhận để chuyển sang bàn giao kho."}</p>}
+                ) : <div className="space-y-2 text-sm">{isReviewingCompletedStep ? <><p>Đã ghi nhận lúc {formatStaffDateTime(handoverTarget.paymentCollectedAt)}.</p>{handoverTarget.paymentEvidenceReference && <Button size="sm" variant="outline" disabled={downloadingEvidence === handoverTarget.paymentEvidenceReference} onClick={() => void previewEvidenceFile(handoverTarget.paymentEvidenceReference!)}>{downloadingEvidence === handoverTarget.paymentEvidenceReference ? 'Đang tải…' : 'Xem lại biên lai đã lưu'}</Button>}</> : <p>Đơn không còn khoản phải thu. Xác nhận để chuyển sang bàn giao kho.</p>}</div>}
                 {!isReviewingCompletedStep && <FilePreviewList files={paymentEvidenceFile ? [paymentEvidenceFile] : []} onRemove={() => setPaymentEvidenceFile(null)} disabled={submitting} />}
               </div>
             )}
