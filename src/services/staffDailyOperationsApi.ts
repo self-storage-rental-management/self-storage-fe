@@ -4,6 +4,7 @@ import {
   type CredentialAlert,
 } from "./checkInApi"
 import {
+  formatMaintenanceTaskTitle,
   listStaffMaintenanceTasks,
   type MaintenanceTaskApi,
 } from "./maintenanceApi"
@@ -88,10 +89,7 @@ const checkInTask = (item: CheckInCase): StaffDailyOperation => {
     customer: item.customerName,
     time: dueAt || "",
     dueAt: dueAt || new Date().toISOString(),
-    sla:
-      item.checkInStatus === "scheduled"
-        ? "Khách cần nhận kho hôm nay"
-        : "Cần tiếp nhận",
+    sla: item.checkInStatus === "scheduled" ? "" : "Cần tiếp nhận",
     priority: item.checkInStatus === "scheduled" ? "medium" : "high",
     page: "checkin",
   }
@@ -141,8 +139,8 @@ const supportTask = (item: SupportTicket): StaffDailyOperation => {
 
 const maintenanceTask = (item: MaintenanceTaskApi): StaffDailyOperation => ({
   id: `maintenance-${item.id}`,
-  title: `${item.title} · ${item.unitCode}`,
-  customer: item.facilityName,
+  title: formatMaintenanceTaskTitle(item),
+  customer: item.customerName?.trim() || "—",
   time: item.dueAt || item.createdAt,
   dueAt: item.dueAt || item.createdAt,
   sla: "Nhiệm vụ bảo trì được phân công",

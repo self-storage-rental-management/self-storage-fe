@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { RenewalApiRecord } from '../../types/renewalApi'
 import { Button } from '../../components/ui'
-import { rentalDate, renewalLabels } from './presentation'
+import { rentalDate, renewalDisplayLabel, renewalLabels } from './presentation'
 import { renewalWorkflowLabel } from './renewalStatusPresentation'
 import ManagerContractPreview from './ManagerContractPreview'
 
@@ -13,6 +13,7 @@ const shortLabels: Record<RenewalApiRecord['status'], string> = {
 }
 // Failed/expired payments can still require action: they are not completed records.
 const terminal = new Set<RenewalApiRecord['status']>(['completed', 'cancelled', 'rejected'])
+const isFinished = (row: RenewalApiRecord) => terminal.has(row.status) || row.statusSummary?.workflowStatus === 'NO_SHOW'
 
 export default function CustomerRenewalGroups({ rows, onDetail }: {
   rows: RenewalApiRecord[]; onDetail: (id: string) => void
@@ -21,10 +22,10 @@ export default function CustomerRenewalGroups({ rows, onDetail }: {
   const [search, setSearch] = useState('')
   const [pages, setPages] = useState<Record<string, number>>({})
   const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').toLowerCase()
-  const matched = rows.filter(row => normalize([row.displayCode, row.id, row.storageUnit.code, row.facility.name].join(' ')).includes(normalize(search.trim())))
+  const matched = rows.filter(row => normalize([renewalDisplayLabel(row), row.rentalDisplayCode, row.displayCode, row.id, row.storageUnit.code, row.facility.name].join(' ')).includes(normalize(search.trim())))
   const groups = [
-    { id: 'ongoing', title: 'Đang diễn ra', subtitle: 'Các yêu cầu gia hạn đang được xử lý.', rows: matched.filter(row => !terminal.has(row.status)), active: true },
-    { id: 'finished', title: 'Hồ sơ hoàn tất', subtitle: 'Bao gồm hồ sơ hoàn tất, đã hủy hoặc đã đóng.', rows: matched.filter(row => terminal.has(row.status)), active: false },
+    { id: 'ongoing', title: 'Đang diễn ra', subtitle: 'Các yêu cầu gia hạn đang được xử lý.', rows: matched.filter(row => !isFinished(row)), active: true },
+    { id: 'finished', title: 'Hồ sơ hoàn tất', subtitle: 'Bao gồm hồ sơ hoàn tất, khách không đến, đã hủy hoặc đã đóng.', rows: matched.filter(isFinished), active: false },
   ]
   return <div className="space-y-5">
     <label className="block rounded-xl border border-stone-200 bg-white p-4 text-sm font-medium text-stone-700">Tìm kiếm hồ sơ gia hạn
@@ -42,19 +43,29 @@ export default function CustomerRenewalGroups({ rows, onDetail }: {
         </div>
         <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${group.active ? 'bg-amber-50 text-amber-800' : 'bg-stone-100 text-stone-600'}`}>{group.rows.length} hồ sơ</span>
       </header>
-      {group.rows.length ? <div className="overflow-x-auto"><table className="w-full min-w-[920px] text-left text-sm">
+      {group.rows.length ? <div className="overflow-x-auto"><table className="w-full min-w-[1080px] table-fixed text-left text-sm">
         <caption className="sr-only">Yêu cầu gia hạn - {group.title}</caption>
+        <colgroup>
+          <col className="w-[17%]" />
+          <col className="w-[10%]" />
+          <col className="w-[16%]" />
+          <col className="w-[20%]" />
+          <col className="w-[11%]" />
+          <col className="w-[13%]" />
+          <col className="w-[13%]" />
+        </colgroup>
         <thead className="bg-stone-50 text-xs text-stone-500"><tr>
-          {['Mã hồ sơ', 'Trạng thái', 'Gian kho / Cơ sở', 'Thời hạn', 'Hợp đồng', 'Thao tác'].map(label => <th key={label} className={`px-4 py-3 font-medium ${label === 'Trạng thái' || label === 'Hợp đồng' ? 'text-center' : ''} ${label === 'Thao tác' ? 'text-right' : ''}`}>{label}</th>)}
+          {['Hồ sơ thuê', 'Lần gia hạn', 'Trạng thái', 'Gian kho / Cơ sở', 'Thời hạn', 'Hợp đồng', 'Thao tác'].map(label => <th key={label} className={`px-4 py-3 font-medium ${['Lần gia hạn', 'Trạng thái', 'Hợp đồng', 'Thao tác'].includes(label) ? 'text-center' : ''}`}>{label}</th>)}
         </tr></thead>
         <tbody className="divide-y divide-stone-100">{group.rows.slice(page * 5, (page + 1) * 5).map(row => <tr key={row.id} id={`rental-api-record-${row.id}`} tabIndex={-1} className="transition-colors hover:bg-stone-50/70">
-          <td className="px-4 py-4"><span title={row.id} className="font-mono text-xs text-stone-600">{row.displayCode || row.id}</span></td>
-          <td className="px-4 py-4"><span title={renewalLabels[row.status]} className={`mx-auto flex min-h-8 w-[95%] items-center justify-center rounded-full px-2 text-center text-xs font-medium ${row.status === 'completed' ? 'bg-emerald-50 text-emerald-800' : terminal.has(row.status) ? 'bg-stone-100 text-stone-600' : row.status === 'payment_failed' || row.status === 'payment_expired' ? 'bg-rose-50 text-rose-800' : 'bg-amber-50 text-amber-800'}`}>{row.statusSummary ? renewalWorkflowLabel(row) : shortLabels[row.status]}</span></td>
+          <td className="px-4 py-4"><span title={row.rentalDisplayCode || 'Hồ sơ thuê'} className="text-sm font-semibold text-stone-800">{row.rentalDisplayCode || 'Hồ sơ thuê'}</span></td>
+          <td className="px-4 py-4 text-center"><span className="font-semibold text-stone-700">{row.renewalSequence ? `Lần ${row.renewalSequence}` : 'Gia hạn'}</span></td>
+          <td className="px-4 py-4"><span title={row.statusSummary ? renewalWorkflowLabel(row) : renewalLabels[row.status]} className={`mx-auto flex min-h-8 w-[95%] items-center justify-center rounded-full px-2 text-center text-xs font-medium ${row.status === 'completed' ? 'bg-emerald-50 text-emerald-800' : row.statusSummary?.workflowStatus === 'NO_SHOW' ? 'bg-rose-50 text-rose-800' : terminal.has(row.status) ? 'bg-stone-100 text-stone-600' : row.status === 'payment_failed' || row.status === 'payment_expired' ? 'bg-rose-50 text-rose-800' : 'bg-amber-50 text-amber-800'}`}>{row.statusSummary ? renewalWorkflowLabel(row) : shortLabels[row.status]}</span></td>
           <td className="max-w-[300px] px-4 py-4"><p className="break-words font-medium text-stone-800">{row.storageUnit.code}</p><p className="mt-1 text-xs text-stone-500">{row.facility.name}</p></td>
           <td className="whitespace-nowrap px-4 py-4 text-stone-700">{rentalDate(row.newEndDate)}</td>
-          <td className="px-4 py-4 text-center"><button type="button" className="mx-auto inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-2 text-sm font-medium text-amber-800 hover:bg-amber-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-500" aria-label={`Xem trước hợp đồng gia hạn ${row.displayCode || row.id}`} onClick={() => setPreviewId(row.id)}>Xem trước</button></td>
-          <td className="px-4 py-4 text-right">
-            <Button size="sm" variant="outline" onClick={() => onDetail(row.id)}>Chi tiết</Button>
+          <td className="px-4 py-4 text-center"><button type="button" className="mx-auto inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-lg border-0 bg-orange-100 px-3 text-sm font-extrabold text-orange-800 transition-colors hover:bg-orange-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-700" aria-label={`Xem trước hợp đồng ${renewalDisplayLabel(row)}`} onClick={() => setPreviewId(row.id)}>Xem trước</button></td>
+          <td className="px-4 py-4 text-center">
+            <button type="button" className="mx-auto inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-lg border-0 bg-amber-200 px-3 text-sm font-extrabold text-amber-900 transition-colors hover:bg-amber-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700" aria-label={`Xem chi tiết ${renewalDisplayLabel(row)}`} onClick={() => onDetail(row.id)}>Chi tiết</button>
           </td>
         </tr>)}</tbody>
       </table></div> : <p className="px-4 py-8 text-center text-sm text-stone-500">{group.active ? 'Không có yêu cầu gia hạn đang diễn ra.' : 'Chưa có hồ sơ gia hạn đã kết thúc.'}</p>}

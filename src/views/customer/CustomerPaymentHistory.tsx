@@ -46,6 +46,28 @@ export function visibleCustomerPaymentWarnings(warnings: readonly string[]) {
   return warnings.filter(warning => warning !== reservationHistoryWarning)
 }
 
+export function PaymentHistoryDossier({
+  entry,
+  onOpenRentals,
+}: {
+  entry: HistoryEntry
+  onOpenRentals?: (rentalId: string) => void
+}) {
+  if (entry.renewalId) {
+    return <button
+      type="button"
+      className="block text-left font-semibold text-stone-900 hover:underline"
+      onClick={() => { if (entry.rentalId) onOpenRentals?.(entry.rentalId) }}
+      disabled={!entry.rentalId || !onOpenRentals}
+    >
+      {entry.reference}
+    </button>
+  }
+  return entry.reference.startsWith("RSV-")
+    ? <span className="whitespace-nowrap font-semibold text-stone-900">{entry.reference}</span>
+    : <span className="font-semibold text-stone-900">{entry.reference}</span>
+}
+
 export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRentals?: (rentalId: string) => void }) {
   const [entries, setEntries] = useState<HistoryEntry[]>([])
   const [loading, setLoading] = useState(true)
@@ -168,11 +190,7 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
                   <ShortCode value={entry.paymentReference || entry.reservationPayment?.transactionReference || entry.id} />
                   <p className="mt-0.5 text-[10px] text-stone-400">{paymentHistoryTimestamp(entry.timestamp)}</p>
                 </Td>
-                <Td>{entry.renewalId ? <>
-                  <button type="button" className="block text-left font-semibold text-stone-900 hover:underline" onClick={() => { if (entry.rentalId) onOpenRentals?.(entry.rentalId) }} disabled={!entry.rentalId || !onOpenRentals}>{entry.unitCode || "Hồ sơ gia hạn"}</button>
-                  {entry.facilityName && <span className="block text-xs text-stone-500">{entry.facilityName}</span>}
-                  <ShortCode value={entry.renewalId} />
-                </> : entry.reference.startsWith("RSV-") ? <span className="whitespace-nowrap font-semibold text-stone-900">{entry.reference}</span> : <span className="font-semibold text-stone-900">{entry.reference}</span>}</Td>
+                <Td><PaymentHistoryDossier entry={entry} onOpenRentals={onOpenRentals} /></Td>
                 <Td>{paymentCategories[entry.category]}</Td>
                 <Td><span className="whitespace-nowrap text-xs text-stone-600">{formatHistoryPaymentMethod(entry.method)}</span></Td>
                 <Td className="text-right"><b className="whitespace-nowrap text-stone-950">{historyAmount(entry.amount)}</b>

@@ -16,6 +16,7 @@ export interface FacilityUnitSpecInput {
 
 export interface CreateFacilityInput {
   code: string
+  autoCode?: boolean
   name: string
   address: string
   city: string

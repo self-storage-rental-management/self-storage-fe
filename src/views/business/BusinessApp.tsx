@@ -78,6 +78,7 @@ import {
 import { resolveBusinessFacilityIds } from "../../domain/businessFacilityIds"
 import {
   FacilityGeneralInfo,
+  generateFacilityCode,
   FacilityOperations,
   FacilityImageManager,
   FacilityStatusTag,
@@ -2349,6 +2350,7 @@ export default function BusinessApp({
   // Form thêm / sửa cơ sở
 
   const [formFacCode, setFormFacCode] = useState<string>("HN-F01")
+  const [formFacAutoCode, setFormFacAutoCode] = useState(true)
 
   const [formFacName, setFormFacName] = useState<string>("")
 
@@ -2616,6 +2618,7 @@ export default function BusinessApp({
   // Mở modal thêm cơ sở mới với thông tin nhận diện để trống cho BO khai báo.
 
   const handleOpenCreateFacility = () => {
+    setFormFacAutoCode(true)
     const apiMode = isApiAuthenticated()
     setFormFacCode("")
     setFormFacName("")
@@ -2686,7 +2689,9 @@ export default function BusinessApp({
   }
 
   const handleCreateFacility = async () => {
-    const code = formFacCode.trim().toUpperCase()
+    let code = formFacAutoCode
+      ? generateFacilityCode(formFacName, formFacCity, facilitiesList)
+      : formFacCode.trim().toUpperCase()
 
     if (!code) {
       showToast(
@@ -2791,6 +2796,7 @@ export default function BusinessApp({
     try {
       const apiRes = await createFacilityApi({
         code,
+        autoCode: formFacAutoCode,
         name: formFacName.trim(),
         address: formFacAddress.trim(),
         city: formFacCity.trim(),
@@ -2801,6 +2807,7 @@ export default function BusinessApp({
         securityDescription: formFacSecurity.trim() || null,
       })
       if (apiRes?.id) {
+        code = apiRes.code
         backendFacilityId = apiRes.id
         backendFacilityStatus = apiRes.status
       }
@@ -5980,6 +5987,8 @@ export default function BusinessApp({
                   isEditing={false}
                   code={formFacCode}
                   onChangeCode={setFormFacCode}
+                  autoCode={formFacAutoCode}
+                  onChangeAutoCode={setFormFacAutoCode}
                   city={formFacCity}
                   onChangeCity={setFormFacCity}
                   name={formFacName}

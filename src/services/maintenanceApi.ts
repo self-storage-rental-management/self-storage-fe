@@ -13,6 +13,7 @@ export interface MaintenanceTaskApi {
   storageUnitId: string
   unitCode: string
   rentalId?: string | null
+  customerName?: string | null
   returnCaseId: string | null
   title: string
   taskType?: MaintenanceTaskType
@@ -31,6 +32,12 @@ export interface MaintenanceTaskApi {
   evidencePhotos: string[]
   createdAt: string
   updatedAt: string
+}
+
+export function formatMaintenanceTaskTitle({ title, unitCode }: Pick<MaintenanceTaskApi, 'title' | 'unitCode'>) {
+  const name = title.trim()
+  const code = unitCode.trim()
+  return name === code || name.endsWith(` · ${code}`) ? name : `${name} · ${code}`
 }
 
 export interface MaintenanceStaffOption {
@@ -59,6 +66,7 @@ function isMaintenanceTask(value: unknown): value is MaintenanceTaskApi {
   return isUuidLike(value.id) && isUuidLike(value.facilityId) && isText(value.facilityName) &&
     isUuidLike(value.storageUnitId) && isText(value.unitCode) && isText(value.title) && isText(value.reason) &&
     (value.rentalId === undefined || value.rentalId === null || isUuidLike(value.rentalId)) &&
+    (value.customerName === undefined || isNullableText(value.customerName)) &&
     (value.taskType === undefined || value.taskType === 'maintenance' || value.taskType === 'inventory_check') &&
     ['low', 'medium', 'high'].includes(String(value.priority)) &&
     ['open', 'in_progress', 'completed', 'cancelled'].includes(String(value.status)) &&

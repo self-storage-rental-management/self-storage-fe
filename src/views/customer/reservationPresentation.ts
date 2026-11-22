@@ -1,4 +1,11 @@
-import type { ReservationStatus } from '../../services/customerReservationApi'
+import type { CustomerReservation, ReservationStatus } from '../../services/customerReservationApi'
+
+export const goodsReviewLabels: Record<CustomerReservation['goodsReviewStatus'], string> = {
+  NOT_REQUIRED: 'Hàng hóa đủ điều kiện thanh toán cọc trực tiếp',
+  PENDING: 'Chờ nhân viên cơ sở duyệt hàng hóa',
+  APPROVED: 'Nhân viên cơ sở đã duyệt hàng hóa',
+  REJECTED: 'Nhân viên cơ sở đã từ chối hàng hóa',
+}
 
 export function paymentCountdown(deadline: string | null | undefined, now: number) {
   const timestamp = deadline ? Date.parse(deadline) : NaN

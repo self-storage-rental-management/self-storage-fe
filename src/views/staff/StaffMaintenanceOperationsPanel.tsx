@@ -5,6 +5,7 @@ import { useRentalApiResource } from '../../hooks/useRentalApiResource'
 import {
   completeMaintenanceTask,
   listStaffMaintenanceTasks,
+  formatMaintenanceTaskTitle,
   startMaintenanceTask,
   uploadMaintenanceEvidence,
   type MaintenanceTaskApi,
@@ -119,7 +120,7 @@ function MaintenanceWorkspace({ actorId, identity, taskId, showToast }: {
           <div key={task.id} className="rounded border border-stone-200 p-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="font-semibold text-stone-900">{task.title} · {task.unitCode}</p>
+                <p className="font-semibold text-stone-900">{formatMaintenanceTaskTitle(task)}</p>
                 <p className="mt-1 text-sm text-stone-600">{task.reason}</p>
                 <p className="mt-1 text-xs text-stone-500">
                   {task.facilityName} · Hạn: {task.dueAt || 'Không đặt hạn'} · Cập nhật: {formatStaffDateTime(task.updatedAt)}
@@ -142,7 +143,7 @@ function MaintenanceWorkspace({ actorId, identity, taskId, showToast }: {
 
       {selected && (
         <div className="space-y-3 rounded border border-stone-300 bg-stone-50 p-4" aria-label="Hoàn thành nhiệm vụ bảo trì">
-          <div><p className="font-semibold">Hoàn thành: {selected.title} · {selected.unitCode}</p><p className="text-xs text-stone-500">Mã nhiệm vụ: {selected.id}</p></div>
+          <div><p className="font-semibold">Hoàn thành: {formatMaintenanceTaskTitle(selected)}</p><p className="text-xs text-stone-500">Mã nhiệm vụ: {selected.id}</p></div>
           <label className="block text-sm font-medium text-stone-700">
             Báo cáo kết quả
             <textarea className="mt-1 block min-h-24 w-full rounded border border-stone-300 bg-white p-2" maxLength={4000} disabled={busy} required value={resultReport} onChange={(event) => setResultReport(event.target.value)} placeholder="Mô tả hạng mục đã kiểm tra, sửa chữa và kết quả nghiệm thu…" />
