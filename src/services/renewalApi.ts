@@ -140,7 +140,8 @@ export async function getRenewalOptions(rentalId: string) {
             (o.pricingPackageName === undefined || o.pricingPackageName === null || typeof o.pricingPackageName === "string") &&
           (o.signingWindowDays == null || (Number.isInteger(o.signingWindowDays) && o.signingWindowDays >= 1 && o.signingWindowDays <= 14)) &&
           Number.isInteger(o.rentalMonths) &&
-          o.rentalMonths > 0,
+          o.rentalMonths > 0 &&
+          (o.discountRate == null || typeof o.discountRate === "number"),
       ),
   )
 }

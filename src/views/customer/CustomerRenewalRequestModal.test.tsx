@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { renderToStaticMarkup } from "react-dom/server"
-import CustomerRenewalRequestModal from "./CustomerRenewalRequestModal"
+import CustomerRenewalRequestModal, { formatRenewalOptionLabel } from "./CustomerRenewalRequestModal"
 import { ApiClientError } from "../../services/apiClient"
 
 const commandState = vi.hoisted(() => ({
@@ -101,7 +101,52 @@ describe("CustomerRenewalRequestModal UI improvement", () => {
     expect(html).toContain("Hủy")
     expect(html).toContain("Xác nhận và xem yêu cầu")
 
+    // Dropdown contains package name with 'Gói gia hạn' and accurate discount percent
+    expect(html).toContain("Gói gia hạn 1 tháng (Giảm 0%)")
+    expect(html).not.toContain("Gói thuê")
+
     // No conflict alert card
     expect(html).not.toContain("Gian kho này đã có yêu cầu gia hạn đang mở")
+  })
+
+  describe("formatRenewalOptionLabel", () => {
+    it("converts 'Gói thuê' into 'Gói gia hạn' and displays discount percentage", () => {
+      const label = formatRenewalOptionLabel({
+        pricingPackageCode: "PKG_3M",
+        pricingPackageName: "Gói thuê 3 tháng",
+        rentalMonths: 3,
+        discountRate: 0.03,
+      })
+      expect(label).toBe("Gói gia hạn 3 tháng (Giảm 3%)")
+      expect(label).not.toContain("Gói thuê")
+    })
+
+    it("converts 'Gói X tháng' into 'Gói gia hạn X tháng' with discount rate", () => {
+      const label = formatRenewalOptionLabel({
+        pricingPackageCode: "PKG_6M",
+        pricingPackageName: "Gói 6 tháng",
+        rentalMonths: 6,
+        discountRate: 0.05,
+      })
+      expect(label).toBe("Gói gia hạn 6 tháng (Giảm 5%)")
+    })
+
+    it("falls back to default discount percent when discountRate is not provided", () => {
+      const label = formatRenewalOptionLabel({
+        pricingPackageCode: "PKG_12M",
+        rentalMonths: 12,
+      })
+      expect(label).toBe("Gói gia hạn 12 tháng (Giảm 8%)")
+    })
+
+    it("displays Giảm 0% for 1 month package without discount", () => {
+      const label = formatRenewalOptionLabel({
+        pricingPackageCode: "PKG_1M",
+        pricingPackageName: "Gói 1 tháng",
+        rentalMonths: 1,
+        discountRate: 0,
+      })
+      expect(label).toBe("Gói gia hạn 1 tháng (Giảm 0%)")
+    })
   })
 })

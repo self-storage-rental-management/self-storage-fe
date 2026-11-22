@@ -50,6 +50,7 @@ export interface RenewalApiOption {
   pricingPackageName?: string | null
   signingWindowDays?: number | null
   rentalMonths: number
+  discountRate?: number | null
 }
 export interface RenewalVnpayPaymentResponse {
   paymentId: string

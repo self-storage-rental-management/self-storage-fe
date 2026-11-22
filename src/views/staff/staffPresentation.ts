@@ -181,6 +181,8 @@ export function staffErrorMessage(error: unknown, fallback: string) {
       return "Các bước nhận kho đã thay đổi. Vui lòng tải lại hồ sơ để tiếp tục từ bước hiện tại."
     if (message.includes("Customer identity"))
       return "CCCD/CMND không khớp với thông tin đã khai báo trong đơn."
+    if (message.includes("Khoản trả trước khi đặt kho") || message.includes("chưa được xác minh đã thanh toán"))
+      return "Khoản trả trước khi đặt kho chưa được xác minh đã thanh toán hoặc cần đối soát; chưa thể check-in."
     if (message.includes("not ready to record the remaining payment"))
       return "Hồ sơ chưa sẵn sàng ghi nhận khoản thu còn lại. Vui lòng tải lại và kiểm tra bước ký hợp đồng."
     if (message.includes("Credentials can only be activated"))
@@ -197,6 +199,8 @@ export function staffErrorMessage(error: unknown, fallback: string) {
       return "Chỉ được tải bằng chứng khi đang thực hiện quy trình nhận kho. Vui lòng mở lại hồ sơ và tiếp tục từ bước hiện tại."
     if (message.includes("lock reference"))
       return "Mã ổ khóa không khớp với thông tin ra vào đã kích hoạt. Vui lòng kiểm tra lại mã ổ khóa."
+    if (/[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(message))
+      return message
     return "Hồ sơ vừa thay đổi trạng thái. Vui lòng tải lại danh sách rồi tiếp tục nhận kho."
   }
   if (status === 413)

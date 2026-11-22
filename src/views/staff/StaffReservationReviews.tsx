@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 
 import { Badge, Button, Card, Input, SectionHeader, Select } from "../../components/ui"
+import StaffPagination from "./StaffPagination"
 
 import {
   decideStaffReservationReview,
@@ -56,6 +57,7 @@ export default function StaffReservationReviews({
   const [page, setPage] = useState(0)
 
   const [totalPages, setTotalPages] = useState(0)
+  const [totalItems, setTotalItems] = useState(0)
 
   const [revision, setRevision] = useState(0)
 
@@ -88,6 +90,7 @@ export default function StaffReservationReviews({
         if (!disposed) {
           setRows(result.data)
           setTotalPages(result.pagination.totalPages)
+          setTotalItems(result.pagination.totalItems)
         }
       } catch (error) {
         if (!disposed)
@@ -316,25 +319,12 @@ export default function StaffReservationReviews({
         </Card>
       ))}
       {totalPages > 1 && (
-        <div className="flex justify-end gap-3">
-          <Button
-            variant="outline"
-            disabled={loading || page === 0}
-            onClick={() => setPage((value) => value - 1)}
-          >
-            Trước
-          </Button>
-          <p>
-            Trang {page + 1}/{totalPages}
-          </p>
-          <Button
-            variant="outline"
-            disabled={loading || page + 1 >= totalPages}
-            onClick={() => setPage((value) => value + 1)}
-          >
-            Sau
-          </Button>
-        </div>
+        <StaffPagination
+          page={page + 1}
+          pageCount={totalPages}
+          total={totalItems}
+          onPageChange={(next) => setPage(next - 1)}
+        />
       )}
 
       <div className="border-t border-stone-300 pt-6">
@@ -378,11 +368,14 @@ export default function StaffReservationReviews({
           </div>
         </Card>
       })}
-      {activeTotalPages > 1 && <div className="flex items-center justify-end gap-3">
-        <Button variant="outline" disabled={activeLoading || activePage === 0} onClick={() => setActivePage(value => value - 1)}>Trước</Button>
-        <span className="text-sm">Trang {activePage + 1}/{activeTotalPages}</span>
-        <Button variant="outline" disabled={activeLoading || activePage + 1 >= activeTotalPages} onClick={() => setActivePage(value => value + 1)}>Sau</Button>
-      </div>}
+      {activeTotalPages > 1 && (
+        <StaffPagination
+          page={activePage + 1}
+          pageCount={activeTotalPages}
+          total={activeTotalItems}
+          onPageChange={(next) => setActivePage(next - 1)}
+        />
+      )}
     </div>
   )
 }

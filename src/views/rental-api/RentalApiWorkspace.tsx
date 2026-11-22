@@ -2,7 +2,7 @@ import { parseVietnamDate, vietnamDateInput } from '../../utils/vietnamTime'
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { singleManagerFacility, managerFacilityNotice } from "../manager/managerFacilityUi"
 import { Fragment, useCallback, useEffect, useRef, useState } from "react"
-import { RentalDeadlineBanner, rentalDeadlineState, rentalDaysUntilDeadline } from "./RentalDeadlineNotice"
+import { RentalDeadlineBanner, rentalDeadlineState, rentalDaysUntilDeadline, getRentalRenewalEligibility } from "./RentalDeadlineNotice"
 import { Badge, Button, Card, Modal } from "../../components/ui"
 import { getAuthenticatedActor } from "../../services/authApi"
 import { downloadCheckInEvidence } from "../../services/checkInApi"
@@ -326,6 +326,14 @@ function WorkspaceData({
       ]
     },
   )
+  const customerRenewals = useRentalApiResource(
+    `${identity}:customer-open-renewals`,
+    async () => {
+      if (role !== "customer") return []
+      const res = await listRenewals("customer", { size: 100 })
+      return res.data
+    },
+  )
   const change = (patch: RentalApiQuery | RenewalApiQuery) => {
     if (tab === "rental") setRq({ ...rq, ...patch, page: 0 } as RentalApiQuery)
     else setNq({ ...nq, ...patch, page: 0 } as RenewalApiQuery)
@@ -333,6 +341,7 @@ function WorkspaceData({
   const refresh = () => {
     read.refresh()
     counts.refresh()
+    customerRenewals.refresh()
   }
   const success = () => {
     setAction(undefined)
@@ -495,7 +504,34 @@ function WorkspaceData({
                   <div className="px-3 text-xs font-bold text-stone-900">{row.monthlyPrice == null ? 'Chưa xác định' : rentalMoney(row.monthlyPrice, row.currency)}</div>
                   <div className="flex flex-wrap items-center justify-end gap-2 whitespace-nowrap px-3 [&>button]:shrink-0">
                     <Button size="sm" variant="outline" onClick={() => setDetail({ kind: 'rental', id: row.id })}>{row.canConfirmRentalStart ? 'Xem & xác nhận' : 'Chi tiết hồ sơ'}</Button>
-                    <Button size="sm" variant="outline" className="!border-emerald-600 !bg-emerald-600 !text-white hover:!bg-emerald-700" disabled={row.status !== 'active'} title={row.status === 'active' ? undefined : 'Chỉ có thể gia hạn khi kỳ thuê đã bắt đầu.'} onClick={() => setAction({ kind: 'request', rentalId: row.id })}>Gia hạn</Button>
+                    {(() => {
+                      const eligibility = getRentalRenewalEligibility(row, customerRenewals.data || [])
+                      return eligibility.hasOpenRenewal ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="!border-amber-400 !bg-amber-50 !text-amber-800 hover:!bg-amber-100"
+                          title="Hợp đồng này đã có yêu cầu gia hạn đang được xử lý. Bấm để xem chi tiết."
+                          onClick={() => {
+                            setTab('renewal')
+                            setDetail({ kind: 'renewal', id: eligibility.openRenewal!.id })
+                          }}
+                        >
+                          Đang xử lý gia hạn
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="!border-emerald-600 !bg-emerald-600 !text-white hover:!bg-emerald-700 disabled:opacity-50"
+                          disabled={!eligibility.canRenew}
+                          title={eligibility.reason}
+                          onClick={() => setAction({ kind: 'request', rentalId: row.id })}
+                        >
+                          Gia hạn
+                        </Button>
+                      )
+                    })()}
                     <Button size="sm" variant="primary" disabled={row.status === 'completed'} onClick={() => setReturnRental({ id: row.id, active: row.status === 'active' || row.status === 'setup' })}>Trả kho</Button>
                     {onRequestSupport && <Button size="sm" variant="outline" onClick={() => onRequestSupport(row.id, row.storageUnit.code)}>Hỗ trợ hồ sơ</Button>}
                   </div>
@@ -575,7 +611,34 @@ function WorkspaceData({
                         Chi tiết
                       </Button>
                       {role === 'customer' && 'contractEndDate' in row && <>
-                        <Button size="sm" variant="outline" className="!border-emerald-600 !bg-emerald-600 !text-white hover:!bg-emerald-700" disabled={row.status !== 'active'} title={row.status === 'active' ? undefined : 'Chỉ có thể gia hạn khi kỳ thuê đã bắt đầu.'} onClick={() => setAction({ kind: 'request', rentalId: row.id })}>Gia hạn</Button>
+                        {(() => {
+                          const eligibility = getRentalRenewalEligibility(row, customerRenewals.data || [])
+                          return eligibility.hasOpenRenewal ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="!border-amber-400 !bg-amber-50 !text-amber-800 hover:!bg-amber-100"
+                              title="Hợp đồng này đã có yêu cầu gia hạn đang được xử lý. Bấm để xem chi tiết."
+                              onClick={() => {
+                                setTab('renewal')
+                                setDetail({ kind: 'renewal', id: eligibility.openRenewal!.id })
+                              }}
+                            >
+                              Đang xử lý gia hạn
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="!border-emerald-600 !bg-emerald-600 !text-white hover:!bg-emerald-700 disabled:opacity-50"
+                              disabled={!eligibility.canRenew}
+                              title={eligibility.reason}
+                              onClick={() => setAction({ kind: 'request', rentalId: row.id })}
+                            >
+                              Gia hạn
+                            </Button>
+                          )
+                        })()}
                         <Button size="sm" variant="primary" disabled={!['setup', 'active', 'return_requested', 'return_inspection', 'closing'].includes(row.status)}
                           onClick={() => setReturnRental({ id: row.id, active: row.status === 'active' || row.status === 'setup' })}>Trả kho</Button>
                       </>}
