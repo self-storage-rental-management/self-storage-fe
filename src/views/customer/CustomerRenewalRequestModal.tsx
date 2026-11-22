@@ -9,7 +9,8 @@ import {
 } from "../../services/renewalApi"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import { useRenewalCommand } from "../../hooks/useRenewalCommand"
-import type { RenewalApiQuote, RenewalApiRecord } from "../../types/renewalApi"
+import type { RenewalApiOption, RenewalApiQuote, RenewalApiRecord } from "../../types/renewalApi"
+import { DEFAULT_PACKAGE_DISCOUNTS } from "../../domain/packageRules"
 import ApiReadState from "../rental-api/ApiReadState"
 import RenewalRiskNotice from "../rental-api/RenewalRiskNotice"
 import {
@@ -28,6 +29,28 @@ function isOpenRenewalConflict(error: unknown): boolean {
     msg.includes("open renewal") ||
     msg.includes("đã có yêu cầu gia hạn")
   )
+}
+
+export function formatRenewalOptionLabel(option: RenewalApiOption): string {
+  let name = option.pricingPackageName?.trim() || `Gói gia hạn ${option.rentalMonths} tháng`
+  if (/^gói\s+thuê(?:\s+|$)/i.test(name)) {
+    name = name.replace(/^gói\s+thuê(?:\s+|$)/i, "Gói gia hạn ")
+  } else if (/^gói(?:\s+|$)/i.test(name) && !/^gói\s+gia\s+hạn(?:\s+|$)/i.test(name)) {
+    name = name.replace(/^gói(?:\s+|$)/i, "Gói gia hạn ")
+  }
+  name = name.trim().replace(/gói\s+thuê/gi, "gói gia hạn")
+
+  let discountPercent = 0
+  if (option.discountRate !== undefined && option.discountRate !== null) {
+    discountPercent = option.discountRate <= 1 ? Math.round(option.discountRate * 100) : Math.round(option.discountRate)
+  } else {
+    discountPercent = DEFAULT_PACKAGE_DISCOUNTS[option.rentalMonths] ?? 0
+  }
+
+  if (!name.includes("%")) {
+    return `${name} (Giảm ${discountPercent}%)`
+  }
+  return name
 }
 
 export default function CustomerRenewalRequestModal({
@@ -144,7 +167,7 @@ export default function CustomerRenewalRequestModal({
                 <option value="">Chọn gói gia hạn</option>
                 {options.data.map((o) => (
                   <option key={o.pricingPackageCode} value={o.pricingPackageCode}>
-                    {o.pricingPackageName?.trim() || `Gói thuê ${o.rentalMonths} tháng`}
+                    {formatRenewalOptionLabel(o)}
                   </option>
                 ))}
               </select>
@@ -193,7 +216,7 @@ export default function CustomerRenewalRequestModal({
         {options.data?.length === 0 && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-950 space-y-2">
             <p className="font-semibold text-sm text-amber-900">
-              Cơ sở hiện chưa có gói thuê còn hiệu lực để gia hạn.
+              Cơ sở hiện chưa có gói gia hạn còn hiệu lực để gia hạn.
             </p>
             <p className="text-xs text-amber-800 leading-relaxed">
               Kho này hiện chưa có gói ưu đãi gia hạn trực tuyến nào còn hiệu lực. Vui lòng liên hệ hotline cơ sở hoặc nhắn tin qua mục <b>Hỗ trợ</b> để được gán gói gia hạn phù hợp.

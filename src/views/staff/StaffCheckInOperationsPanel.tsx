@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useState } from "react"
 
 import {
+  archiveCompletedCheckIn,
   completeCheckIn,
   completeCheckInSetup,
   confirmCheckInPayment,
@@ -46,6 +47,7 @@ import {
   staffStorageUnitStatusLabel,
 } from "./staffPresentation"
 import { FilePreviewList } from "./StaffFileUpload"
+import StaffPagination from "./StaffPagination"
 
 const checklistLabels: Array<[keyof CheckInChecklist, string]> = [
   ["identityVerified", "Đã đối chiếu giấy tờ tùy thân"],
@@ -421,6 +423,7 @@ export default function StaffCheckInOperationsPanel({
     useState<string[]>([])
 
   const [detailTarget, setDetailTarget] = useState<CheckInCase | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<CheckInCase | null>(null)
 
   const [downloadingEvidence, setDownloadingEvidence] = useState<string | null>(
     null,
@@ -514,6 +517,33 @@ export default function StaffCheckInOperationsPanel({
   const totalPackages = lineInventory
     ? inventoryRows.reduce((sum, { comparison }) => sum + (comparison.quantity || 0), 0)
     : Number(packageCount)
+
+  const lineDiscrepancies = useMemo(() => {
+    if (!lineInventory) return []
+    return inventoryRows.flatMap(({ line, entry, comparison }, index) => {
+      const lineName = line.name || `Hàng hóa #${index + 1}`
+      const diffs: string[] = []
+      if (comparison.badges[0].matches === false) {
+        diffs.push(`Số kiện: Thực tế ${comparison.quantity} kiện vs Khai báo ${line.quantity} kiện`)
+      }
+      if (comparison.badges[1].matches === false) {
+        diffs.push(`Khối lượng chênh lệch`)
+      }
+      if (comparison.badges[2].matches === false) {
+        diffs.push(`Thể tích chênh lệch`)
+      }
+      if (comparison.badges[3].matches === false) {
+        diffs.push(`Kích thước khác khai báo`)
+      }
+      if (entry.condition === "DAMAGED") {
+        diffs.push(`Tình trạng: Có hư hỏng`)
+      } else if (entry.condition === "NOT_PRESENT") {
+        diffs.push(`Không có kiện nào`)
+      }
+      return diffs.map((d) => `${lineName} (${d})`)
+    })
+  }, [lineInventory, inventoryRows])
+
   const allChecksComplete = checklistLabels.every(([key]) =>
     lineInventory && (key === "measurementVerified" || key === "conditionRecorded") ? inventoryLinesComplete : checklist[key],
   )
@@ -587,6 +617,26 @@ export default function StaffCheckInOperationsPanel({
       ),
     }
   }, [handoverTarget, heightCm, lengthCm, packageCount, volumeM3, weightKg, widthCm])
+
+  const singleDiscrepancies = useMemo(() => {
+    if (lineInventory || !checkInComparison) return []
+    const diffs: string[] = []
+    if (checkInComparison.packageCountMatches === false) {
+      diffs.push(`Số kiện: Thực tế ${packageCount} kiện vs Khai báo ${handoverTarget?.declaredPackageCount ?? 0} kiện`)
+    }
+    if (checkInComparison.weightMatches === false) {
+      diffs.push(`Khối lượng: Thực tế ${weightKg} kg vs Khai báo ${handoverTarget?.declaredGoodsWeightKg ?? 0} kg`)
+    }
+    if (checkInComparison.volumeMatches === false) {
+      diffs.push(`Thể tích: Thực tế ${volumeM3} m³ vs Khai báo ${handoverTarget?.declaredGoodsVolumeM3 ?? 0} m³`)
+    }
+    if (checkInComparison.dimensionMatches === false) {
+      diffs.push(`Kích thước thực tế khác khai báo`)
+    }
+    return diffs
+  }, [lineInventory, checkInComparison, packageCount, weightKg, volumeM3, handoverTarget])
+
+  const activeDiscrepancies = lineInventory ? lineDiscrepancies : singleDiscrepancies
 
   const packageCountValid = Number.isInteger(totalPackages) && totalPackages > 0 && totalPackages <= 2147483647
   const updateInventoryLine = (line: DeclaredInventoryLine, changes: Partial<InventoryDraft>) => {
@@ -922,6 +972,11 @@ export default function StaffCheckInOperationsPanel({
         ],
 
         notes: [
+          `Kết quả đối chiếu hàng hóa: ${
+            activeDiscrepancies.length === 0
+              ? "Trùng khớp hoàn toàn giữa hàng hóa khai báo và thực tế kiểm kê."
+              : `Có chênh lệch (${activeDiscrepancies.join("; ")}).`
+          }`,
           verificationNotes.trim()
             ? `Ghi chú xác minh: ${verificationNotes.trim()}`
             : "",
@@ -1453,6 +1508,13 @@ export default function StaffCheckInOperationsPanel({
                         >
                           Xem biên bản
                         </Button>
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          onClick={() => setDeleteTarget(item)}
+                        >
+                          Xóa đơn
+                        </Button>
                       </>
                     )}
                   </div>
@@ -1482,27 +1544,12 @@ export default function StaffCheckInOperationsPanel({
           </Tbody>
         </Table>
         {totalPages > 1 && (
-          <div className="flex items-center justify-end gap-2 border-t border-stone-200 p-4 text-sm text-stone-500">
-            <span>
-              {totalItems} hồ sơ · Trang {page + 1}/{totalPages}
-            </span>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={page === 0}
-              onClick={() => setPage((value) => value - 1)}
-            >
-              Trước
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={page + 1 >= totalPages}
-              onClick={() => setPage((value) => value + 1)}
-            >
-              Sau
-            </Button>
-          </div>
+          <StaffPagination
+            page={page + 1}
+            pageCount={totalPages}
+            total={totalItems}
+            onPageChange={(next) => setPage(next - 1)}
+          />
         )}
       </Card>
 
@@ -1880,6 +1927,38 @@ export default function StaffCheckInOperationsPanel({
             {handoverStep === 6 && (
               <div className="space-y-4">
                 <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-950"><b>Kiểm kê hàng hóa</b><p className="mt-1 text-xs">Chỉ đối chiếu số kiện, khối lượng, thể tích, kích thước và tình trạng hàng hóa sau khi khách đã sắp xếp xong. Hiện trạng kho trống đã được ghi nhận ở bước bàn giao.</p>{handoverTarget.inventoryDueAt && <p className="mt-1 text-xs">Hạn kiểm kê: <b>{formatStaffDateTime(handoverTarget.inventoryDueAt)}</b></p>}</div>
+                <div className={`rounded-xl border p-4 text-sm transition ${
+                  activeDiscrepancies.length === 0
+                    ? "border-emerald-300 bg-emerald-50 text-emerald-950"
+                    : "border-amber-300 bg-amber-50 text-amber-950"
+                }`}>
+                  <div className="flex items-center gap-2">
+                    <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${
+                      activeDiscrepancies.length === 0 ? "bg-emerald-600" : "bg-amber-600"
+                    }`}>
+                      {activeDiscrepancies.length === 0 ? "✓" : "!"}
+                    </span>
+                    <b className={`font-semibold ${activeDiscrepancies.length === 0 ? "text-emerald-900" : "text-amber-900"}`}>
+                      {activeDiscrepancies.length === 0
+                        ? "Kết quả đối chiếu: Hàng hóa thực tế TRÙNG KHỚP HOÀN TOÀN với khai báo của khách hàng"
+                        : `Kết quả đối chiếu: Phát hiện ${activeDiscrepancies.length} điểm CHÊNH LỆCH giữa hàng hóa thực tế và khai báo`}
+                    </b>
+                  </div>
+                  {activeDiscrepancies.length === 0 ? (
+                    <p className="mt-1.5 pl-8 text-xs text-emerald-800 leading-relaxed">
+                      Toàn bộ số kiện, kích thước, khối lượng, thể tích và tình trạng hàng hóa kiểm kê thực tế trùng khớp với thông tin khách hàng đã khai báo.
+                    </p>
+                  ) : (
+                    <div className="mt-2 pl-8">
+                      <p className="text-xs font-medium text-amber-900">Chi tiết các mục chênh lệch cần ghi nhận:</p>
+                      <ul className="mt-1 list-disc list-inside space-y-0.5 text-xs text-amber-800">
+                        {activeDiscrepancies.map((diff, index) => (
+                          <li key={index}>{diff}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
                 {lineInventory ? (
                   <div className="space-y-5">
                     {inventoryRows.map(({ line, entry, comparison }, index) => {
@@ -2631,6 +2710,19 @@ export default function StaffCheckInOperationsPanel({
                 </div>
               </div>
             </div>
+            <div className="rounded-lg border border-stone-200 bg-stone-50 p-3">
+              <b className="block text-xs uppercase tracking-wide text-stone-500">Kết quả đối chiếu hàng hóa</b>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                {detailTarget.handover.varianceReason || detailTarget.handover.actualMeasurements.varianceAccepted ? (
+                  <Badge variant="warning">Có chênh lệch so với khai báo</Badge>
+                ) : (
+                  <Badge variant="success">Trùng khớp hoàn toàn</Badge>
+                )}
+                {detailTarget.handover.varianceReason && (
+                  <span className="text-xs text-stone-600">({detailTarget.handover.varianceReason})</span>
+                )}
+              </div>
+            </div>
             {detailTarget.handover.varianceReason && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
                 <b>Chênh lệch đã xác nhận:</b>{" "}
@@ -2739,6 +2831,52 @@ export default function StaffCheckInOperationsPanel({
         {previewEvidence?.contentType.startsWith("image/")
           ? <img src={previewEvidence.url} alt={previewEvidence.fileName} className="max-h-[70vh] w-full object-contain" />
           : previewEvidence && <iframe title={previewEvidence.fileName} src={previewEvidence.url} className="h-[70vh] w-full" />}
+      </Modal>
+      <Modal
+        open={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        title="Xóa đơn bàn giao hoàn tất"
+        size="md"
+      >
+        {deleteTarget && (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+              <p className="font-bold text-amber-900">Xác nhận xóa đơn (Soft Delete)</p>
+              <p className="mt-2 leading-relaxed text-stone-700">
+                Bạn có chắc chắn muốn xóa đơn bàn giao của khách hàng <b>{deleteTarget.customerName}</b> (Mã đơn: <b>{deleteTarget.reservationCode}</b> - Gian kho: <b>{deleteTarget.storageUnitCode}</b>) khỏi danh sách vận hành?
+              </p>
+              <p className="mt-2 text-xs text-amber-800">
+                ℹ️ <b>Lưu ý:</b> Thao tác này sử dụng <b>Soft Delete</b> và ghi nhận lịch sử kiểm toán hệ thống. Dữ liệu không bị xóa vật lý khỏi cơ sở dữ liệu.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-stone-200 pt-3">
+              <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={submitting}>Hủy bỏ</Button>
+              <Button
+                variant="danger"
+                disabled={submitting}
+                onClick={async () => {
+                  setSubmitting(true)
+                  try {
+                    if (!deleteTarget.checkInId) {
+                      setError("Không tìm thấy mã phiên nhận kho.")
+                      return
+                    }
+                    await archiveCompletedCheckIn(deleteTarget.checkInId)
+                    showToast(`Đã xóa đơn ${deleteTarget.reservationCode} (đã lưu trữ và ghi nhận lịch sử).`)
+                    setDeleteTarget(null)
+                    refresh()
+                  } catch (err) {
+                    setError(staffErrorMessage(err, "Không thể xóa đơn bàn giao."))
+                  } finally {
+                    setSubmitting(false)
+                  }
+                }}
+              >
+                {submitting ? "Đang xử lý…" : "Xác nhận xóa đơn"}
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   )

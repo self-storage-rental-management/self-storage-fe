@@ -2923,6 +2923,20 @@ export default function StaffApp({
                         >
                           {"Xem"}
                         </Button>
+                        {r.status === "COMPLETED" && (
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            onClick={() => {
+                              if (window.confirm(`Xác nhận xóa đơn ${r.id} của khách hàng ${r.customer}? Hệ thống sẽ lưu trữ hồ sơ và không xóa vật lý dữ liệu.`)) {
+                                setReservations((current) => current.filter((item) => item.id !== r.id))
+                                showToast(`Đã xóa đơn ${r.id} (đã lưu trữ và ghi nhận lịch sử).`)
+                              }
+                            }}
+                          >
+                            {"Xóa đơn"}
+                          </Button>
+                        )}
                         {r.status === "AWAITING_REVIEW" && (
                           <Button
                             variant="primary"
