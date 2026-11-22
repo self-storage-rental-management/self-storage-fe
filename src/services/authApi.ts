@@ -1,4 +1,4 @@
-import { PERMISSION_KEYS, type PermissionKey, type Role, type User } from '../types'
+import { PERMISSION_KEYS, type PermissionKey, type Role, type User, type CustomerProfileDetails } from '../types'
 import { ApiClientError, apiRequest, clearAuthTokens, getAccessToken, getRefreshToken, hasAccessToken, setAccessToken, setRefreshToken } from './apiClient'
 import { waitForChatSessionSaves } from './chatSessionSaveQueue'
 
@@ -7,6 +7,7 @@ export type ApiUserStatus = 'ACTIVE' | 'SUSPENDED' | 'INACTIVE' | 'LOCKED' | 'DI
 export type ApiFacilityScopeLevel = 'READ' | 'OPERATE' | 'MANAGE'
 
 export interface ApiActor {
+  profileDetails?: CustomerProfileDetails
   id: string
   email: string
   fullName: string
@@ -138,6 +139,7 @@ export function actorToUser(actor: ApiActor): User {
     permanentAddress: actor.permanentAddress || undefined,
     emergencyContactName: actor.emergencyContactName || undefined,
     emergencyContactPhone: actor.emergencyContactPhone || undefined,
+    profileDetails: actor.profileDetails,
     avatar: actor.avatarUrl || undefined,
     role: primaryRole(actor.roles),
     facility: assignedFacilityNames.join(', ') || undefined,
@@ -236,6 +238,7 @@ export async function updateCurrentProfileWithApi(input: {
   emergencyContactName?: string
   emergencyContactPhone?: string
   avatarUrl?: string
+  profileDetails?: CustomerProfileDetails
 }): Promise<ApiActor> {
   const response = await apiRequest<ApiEnvelope<ApiActor>>('/api/auth/me', {
     method: 'PUT',
@@ -261,6 +264,12 @@ export async function verifyEmailWithApi(email: string | undefined, codeOrToken:
   })
   if (!response?.data) throw new Error('Backend trả về dữ liệu xác minh không hợp lệ.')
   return response.data
+}
+
+export async function resendEmailVerificationWithApi(email: string) {
+  return apiRequest<ApiEnvelope<ApiChallengeResponse>>('/api/auth/verify-email/resend', {
+    method: 'POST', body: JSON.stringify({ email }), skipAuth: true,
+  })
 }
 
 export async function requestPasswordResetWithApi(email: string) {
