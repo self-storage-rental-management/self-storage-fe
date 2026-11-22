@@ -1,3 +1,4 @@
+import EmergencyContactsPanel from '../../components/EmergencyContactsPanel'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Badge, Button, Card, Input, Modal, SectionHeader, Select, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import { getAuthenticatedActor } from '../../services/authApi'
@@ -288,7 +289,7 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
               <Tr key={task.id}>
                 <Td><p className="font-semibold text-stone-900">{task.title}</p><p className="text-xs text-stone-500">{task.id} · {taskPriorityLabel[task.priority]}</p><p className="mt-1 text-xs text-stone-500">{task.reason}</p></Td>
                 <Td><Badge variant="muted">Bảo trì</Badge></Td>
-                <Td>{task.unitCode}</Td>
+                <Td>{task.unitCode}<EmergencyContactsPanel key={task.storageUnitId} unitId={task.storageUnitId} /></Td>
                 <Td>
                   {task.status === 'completed' || task.status === 'cancelled'
                     ? (task.assignedStaffName || 'Chưa phân công')

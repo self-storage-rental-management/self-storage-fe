@@ -1,3 +1,4 @@
+import ReturnPolicyNotice from '../../components/ReturnPolicyNotice'
 import { useReturnRecords } from '../../hooks/useReturnRecords'
 import LocalizedDateInput from '../../components/LocalizedDateInput'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -1012,6 +1013,8 @@ export default function BusinessReturnsPanel({ user }: Props) {
 
   return (
     <div className="space-y-6">
+      <ReturnPolicyNotice business />
+
       {/* ── THỐNG KÊ TỔNG QUAN KPI TRẢ KHO & QUYẾT TOÁN ── */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
         <Card className="p-4 bg-white border border-[#cfcdc1] shadow-2xs">
