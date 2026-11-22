@@ -165,6 +165,34 @@ function ComparisonBadge({ matches }: { matches: boolean | null }) {
   )
 }
 
+function normalizeGoodsLabel(value: string | null | undefined) {
+  return value?.trim().replace(/\s+/g, " ").toLocaleLowerCase("vi-VN") || ""
+}
+
+function uniqueGoodsLabels(values: Array<string | null | undefined>) {
+  const labels = new Map<string, string>()
+  values.forEach(value => {
+    const label = value?.trim()
+    const normalized = normalizeGoodsLabel(label)
+    if (label && normalized && !labels.has(normalized)) labels.set(normalized, label)
+  })
+  return Array.from(labels.values())
+}
+
+function declaredGoodsCategoryValues(lines: CheckInCase["declaredGoodsLines"] | undefined) {
+  return uniqueGoodsLabels(lines?.map(line => line.categoryName || line.name) ?? [])
+}
+
+function declaredGoodsMaterialValues(lines: CheckInCase["declaredGoodsLines"] | undefined) {
+  return uniqueGoodsLabels(lines?.map(line => line.materialName) ?? [])
+}
+
+function compareGoodsLabel(actual: string, declared: string[]) {
+  const normalizedActual = normalizeGoodsLabel(actual)
+  if (!normalizedActual || declared.length === 0) return null
+  return declared.some(value => normalizeGoodsLabel(value) === normalizedActual)
+}
+
 type InventoryDraft = {
   quantity: string
   condition: CheckInInventoryLine["condition"] | ""
@@ -248,13 +276,11 @@ const validateUploadFile = (file: File | null, label: string, onError: (msg: str
   return true
 }
 
-type MeasurementComparisonKey = "packageCount" | "weight" | "volume" | "dimensions"
+type MeasurementComparisonKey = "packageCount" | "weight" | "volume" | "dimensions" | "goodsCategory" | "goodsMaterial"
 
 const emptyMeasurementChecks = (): Record<MeasurementComparisonKey, boolean> => ({
-  packageCount: false,
-  weight: false,
-  volume: false,
-  dimensions: false,
+  packageCount: false, weight: false, volume: false, dimensions: false,
+  goodsCategory: false, goodsMaterial: false,
 })
 
 function formatVolume(value: number) {
@@ -380,7 +406,9 @@ export default function StaffCheckInOperationsPanel({
   const [packageCount, setPackageCount] = useState("1")
   const [inventoryDraft, setInventoryDraft] = useState<Record<string, InventoryDraft>>({})
 
-  const [goodsCategory, setGoodsCategory] = useState("Hàng hóa đã khai báo")
+  const [goodsCategory, setGoodsCategory] = useState("")
+
+  const [goodsMaterial, setGoodsMaterial] = useState("")
 
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([])
 
@@ -486,6 +514,17 @@ export default function StaffCheckInOperationsPanel({
   }, [page, query, refreshKey, scheduledFrom, scheduledTo, status])
 
   const declaredLines = handoverTarget?.declaredGoodsLines ?? []
+  const declaredCategoryValues = useMemo(
+    () => declaredGoodsCategoryValues(declaredLines),
+    [declaredLines],
+  )
+  const declaredMaterialValues = useMemo(
+    () => declaredGoodsMaterialValues(declaredLines),
+    [declaredLines],
+  )
+  const goodsCategoryMatches = compareGoodsLabel(goodsCategory, declaredCategoryValues)
+  const goodsMaterialMatches = compareGoodsLabel(goodsMaterial, declaredMaterialValues)
+  const goodsDeclarationVariance = goodsCategoryMatches === false || goodsMaterialMatches === false
   const lineInventory = declaredLines.length > 0 && (
     handoverTarget?.checkInStatus !== "completed" || Boolean(handoverTarget.handover?.inventoryLines?.some(line => line.measurements))
   )
@@ -598,7 +637,7 @@ export default function StaffCheckInOperationsPanel({
     }))
     setVarianceAccepted(false)
   }
-  const measurementVariance = lineInventory
+  const measurementVariance = goodsDeclarationVariance || (lineInventory
     ? inventoryRows.some(({ comparison }) => comparison.badges.some(badge => badge.matches === false))
       || (inventoryLinesComplete && packageCountValid && (totalPackages !== handoverTarget?.declaredPackageCount
         || hasMaterialVariance(String(actualWeight), handoverTarget?.declaredGoodsWeightKg ?? NaN, 0.1)
@@ -606,7 +645,7 @@ export default function StaffCheckInOperationsPanel({
         || dimensionsMatch([actualDimensions[0], actualDimensions[1], actualDimensions[2]], [
           handoverTarget?.declaredGoodsLengthCm ?? null, handoverTarget?.declaredGoodsWidthCm ?? null, handoverTarget?.declaredGoodsHeightCm ?? null,
         ]) === false))
-    : checkInComparison?.hasVariance ?? false
+    : checkInComparison?.hasVariance ?? false)
   const hasEmptyStorageEvidence = evidenceFiles.length > 0 || evidenceReferences.length > 0
   const emptyStorageHandoverReady = Boolean(keyLockReference.trim() && initialCondition.trim() && hasEmptyStorageEvidence)
 
@@ -807,6 +846,7 @@ export default function StaffCheckInOperationsPanel({
       errors.packageCount = "Tổng số kiện thực tế phải là số nguyên từ 1 đến 2.147.483.647"
     }
     if (!goodsCategory.trim()) errors.goodsCategory = "Vui lòng nhập loại hàng"
+    if (!goodsMaterial.trim()) errors.goodsMaterial = "Vui lòng nhập chất liệu chính"
     if (!initialCondition.trim()) errors.initialCondition = "Cần ghi nhận hiện trạng kho ở bước bàn giao"
     if (!keyLockReference.trim()) errors.lockReference = "Cần ghi nhận mã ổ khóa hoặc chìa khóa ở bước bàn giao"
     if ((!lineInventory || inventoryLinesComplete) && !allChecksComplete && !Object.keys(errors).length) {
@@ -913,6 +953,8 @@ export default function StaffCheckInOperationsPanel({
         })) : [],
 
         goodsCategory: goodsCategory.trim(),
+
+        goodsMaterial: goodsMaterial.trim(),
 
         evidenceReferences: uploadedEvidence,
 
@@ -1190,6 +1232,11 @@ export default function StaffCheckInOperationsPanel({
     setPaymentMethod("CASH")
 
     setHandedOverItems("Biên nhận bàn giao")
+
+    const declaredCategories = declaredGoodsCategoryValues(item.declaredGoodsLines)
+    const declaredMaterials = declaredGoodsMaterialValues(item.declaredGoodsLines)
+    setGoodsCategory(item.handover?.goodsCategory?.trim() || (declaredCategories.length === 1 ? declaredCategories[0] : ""))
+    setGoodsMaterial(item.handover?.goodsMaterial?.trim() || (item.checkInStatus === "completed" ? "" : declaredMaterials.length === 1 ? declaredMaterials[0] : ""))
 
     setLengthCm(formatInputNumber(item.declaredGoodsLengthCm))
 
@@ -1643,11 +1690,6 @@ export default function StaffCheckInOperationsPanel({
                       <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-amber-600" checked={confirmedSetupTerms === setupTermsKey} disabled={submitting || isReviewingCompletedStep || !contractFile || handoverTarget.setupEarlyExitFee == null} onChange={event => setConfirmedSetupTerms(event.target.checked ? setupTermsKey : null)} />
                       <span>
                         Tôi đã kiểm tra hợp đồng đã ký và xác nhận khoản phí khớp với điều khoản khách đồng ý khi đặt kho.
-                        <span className="mt-1 block">
-                          {handoverTarget.setupEarlyExitFee == null
-                            ? 'Chưa xác định được mức phí trả kho trong thời gian chuẩn bị. Cần đối soát trước khi tiếp tục.'
-                            : <>Nếu khách trả kho trong thời gian chuẩn bị, khoản phí áp dụng một lần là <strong>{handoverTarget.setupEarlyExitFee.toLocaleString('vi-VN')} đồng</strong>.</>}
-                        </span>
                       </span>
                     </label>}
                   </>
@@ -1879,7 +1921,7 @@ export default function StaffCheckInOperationsPanel({
 
             {handoverStep === 6 && (
               <div className="space-y-4">
-                <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-950"><b>Kiểm kê hàng hóa</b><p className="mt-1 text-xs">Chỉ đối chiếu số kiện, khối lượng, thể tích, kích thước và tình trạng hàng hóa sau khi khách đã sắp xếp xong. Hiện trạng kho trống đã được ghi nhận ở bước bàn giao.</p>{handoverTarget.inventoryDueAt && <p className="mt-1 text-xs">Hạn kiểm kê: <b>{formatStaffDateTime(handoverTarget.inventoryDueAt)}</b></p>}</div>
+                <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-950"><b>Kiểm kê hàng hóa</b><p className="mt-1 text-xs">Đối chiếu số kiện, khối lượng, thể tích, kích thước, loại hàng, chất liệu chính và tình trạng hàng hóa sau khi khách đã sắp xếp xong. Hiện trạng kho trống đã được ghi nhận ở bước bàn giao.</p>{handoverTarget.inventoryDueAt && <p className="mt-1 text-xs">Hạn kiểm kê: <b>{formatStaffDateTime(handoverTarget.inventoryDueAt)}</b></p>}</div>
                 {lineInventory ? (
                   <div className="space-y-5">
                     {inventoryRows.map(({ line, entry, comparison }, index) => {
@@ -1894,6 +1936,8 @@ export default function StaffCheckInOperationsPanel({
                           </legend>
                           <p className="text-sm text-stone-600">
                             Khai báo {line.quantity} kiện
+                            {(line.categoryName || line.name) && ` · Loại: ${line.categoryName || line.name}`}
+                            {line.materialName && ` · Chất liệu: ${line.materialName}`}
                             {line.lengthCm != null && line.widthCm != null && line.heightCm != null && ` · ${line.lengthCm} × ${line.widthCm} × ${line.heightCm} cm/kiện`}
                             {line.weightPerPackageKg != null && ` · ${line.weightPerPackageKg} kg/kiện`}
                           </p>
@@ -2038,10 +2082,12 @@ export default function StaffCheckInOperationsPanel({
                             weight: event.target.checked,
                             volume: event.target.checked,
                             dimensions: event.target.checked,
+                          goodsCategory: event.target.checked,
+                          goodsMaterial: event.target.checked,
                           })
                         }}
                       />
-                      Đã đối chiếu đủ số kiện, khối lượng, thể tích và kích thước *
+                      Đã đối chiếu đủ số kiện, khối lượng, thể tích, kích thước, loại hàng và chất liệu chính *
                     </label>
                     {fieldErrors.measurementChecks && (
                       <p className="text-xs text-red-600 font-medium pl-2">{fieldErrors.measurementChecks}</p>
@@ -2081,16 +2127,40 @@ export default function StaffCheckInOperationsPanel({
                   </div>
                 )}
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Input
-                    label="Loại hàng *"
-                    error={fieldErrors.goodsCategory}
-                    disabled={isReviewingCompletedStep}
-                    value={goodsCategory}
-                    onChange={(event) => {
-                      clearFieldError("goodsCategory")
-                      setGoodsCategory(event.target.value)
-                    }}
-                  />
+                  <div className="space-y-1">
+                    <Input
+                      label="Loại hàng thực tế *"
+                      error={fieldErrors.goodsCategory}
+                      disabled={isReviewingCompletedStep}
+                      value={goodsCategory}
+                      onChange={(event) => {
+                        clearFieldError("goodsCategory")
+                        setGoodsCategory(event.target.value)
+                        setVarianceAccepted(false)
+                      }}
+                    />
+                    <div className="flex items-center justify-between gap-2 px-1 text-xs text-stone-600">
+                      <span>Đã khai báo: {declaredCategoryValues.join(", ") || "Chưa có dữ liệu"}</span>
+                      <ComparisonBadge matches={goodsCategoryMatches} />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Input
+                      label="Chất liệu chính thực tế *"
+                      error={fieldErrors.goodsMaterial}
+                      disabled={isReviewingCompletedStep}
+                      value={goodsMaterial}
+                      onChange={(event) => {
+                        clearFieldError("goodsMaterial")
+                        setGoodsMaterial(event.target.value)
+                        setVarianceAccepted(false)
+                      }}
+                    />
+                    <div className="flex items-center justify-between gap-2 px-1 text-xs text-stone-600">
+                      <span>Đã khai báo: {declaredMaterialValues.join(", ") || "Chưa có dữ liệu"}</span>
+                      <ComparisonBadge matches={goodsMaterialMatches} />
+                    </div>
+                  </div>
                   <div className={`rounded-lg border ${fieldErrors.initialCondition || fieldErrors.initialUnitCondition ? 'border-red-400 bg-red-50/30' : 'border-stone-200 bg-stone-50'} px-3 py-2 text-sm`}>
                     <span className="text-stone-500">Tình trạng kho trống đã ghi nhận</span>
                     <b className="mt-1 block">{initialCondition || 'Chưa ghi nhận'}</b>
@@ -2525,6 +2595,7 @@ export default function StaffCheckInOperationsPanel({
                     <div key={line.goodsItemId} className="space-y-1 p-3">
                       <p className="font-medium">{declared?.name || `Hàng hóa ${index + 1}`}{declared?.code && ` · ${declared.code}`}</p>
                       <p className="text-stone-700">{declared && `Khai báo ${declared.quantity} kiện · `}Thực tế {line.actualQuantity} kiện · {condition}</p>
+                      {declared && (declared.categoryName || declared.materialName) && <p className="text-stone-700">{declared.categoryName && `Loại: ${declared.categoryName}`}{declared.categoryName && declared.materialName && " · "}{declared.materialName && `Chất liệu: ${declared.materialName}`}</p>}
                       {line.measurements && <p className="text-stone-700">{line.measurements.lengthCm} × {line.measurements.widthCm} × {line.measurements.heightCm} cm/kiện · {line.measurements.weightKg} kg cả dòng</p>}
                       {line.note && <p className="break-words text-stone-700">{line.note}</p>}
                     </div>
@@ -2582,13 +2653,29 @@ export default function StaffCheckInOperationsPanel({
                 <span className="text-stone-500">Hàng hóa</span>
                 <p className="mt-1 font-semibold">
                   {detailTarget.handover.packageCount} kiện ·{" "}
-                  {detailTarget.handover.goodsCategory}
+                  {detailTarget.handover.goodsCategory} · {detailTarget.handover.goodsMaterial || "Chưa cập nhật chất liệu"}
                 </p>
               </div>
             </div>
             <div className="space-y-3 rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-indigo-950">
               <b>Đối chiếu với thông tin khách đã khai báo</b>
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <div className="rounded-md border border-indigo-100 bg-white p-3">
+                  <span className="text-xs text-stone-500">Loại hàng</span>
+                  <p className="mt-1 text-xs">Khai báo: {uniqueGoodsLabels(detailTarget.declaredGoodsLines?.map(item => item.categoryName || item.name) ?? []).join(", ") || "Chưa có dữ liệu"}</p>
+                  <p className="text-xs">Thực tế: {detailTarget.handover.goodsCategory || "Chưa cập nhật"}</p>
+                  <div className="mt-2">
+                    <ComparisonBadge matches={compareGoodsLabel(detailTarget.handover.goodsCategory, uniqueGoodsLabels(detailTarget.declaredGoodsLines?.map(item => item.categoryName || item.name) ?? []))} />
+                  </div>
+                </div>
+                <div className="rounded-md border border-indigo-100 bg-white p-3">
+                  <span className="text-xs text-stone-500">Chất liệu chính</span>
+                  <p className="mt-1 text-xs">Khai báo: {uniqueGoodsLabels(detailTarget.declaredGoodsLines?.map(item => item.materialName) ?? []).join(", ") || "Chưa có dữ liệu"}</p>
+                  <p className="text-xs">Thực tế: {detailTarget.handover.goodsMaterial || "Chưa cập nhật"}</p>
+                  <div className="mt-2">
+                    <ComparisonBadge matches={compareGoodsLabel(detailTarget.handover.goodsMaterial, uniqueGoodsLabels(detailTarget.declaredGoodsLines?.map(item => item.materialName) ?? []))} />
+                  </div>
+                </div>
                 <div className="rounded-md border border-indigo-100 bg-white p-3">
                   <span className="text-xs text-stone-500">Số kiện</span>
                   <p className="mt-1 text-xs">Khai báo: {detailTarget.declaredPackageCount ?? "Chưa có dữ liệu"}</p>

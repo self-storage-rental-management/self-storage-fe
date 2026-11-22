@@ -97,6 +97,7 @@ describe('checkInApi', () => {
       packageCount: 2,
       inventoryLines,
       goodsCategory: 'Đồ gia dụng',
+      goodsMaterial: 'Gỗ',
       evidenceReferences: ['evidence.jpg'],
       handedOverItems: ['Ổ khóa LOCK-TEST', 'Biên nhận'],
       notes: '',
@@ -107,7 +108,10 @@ describe('checkInApi', () => {
     await markCheckInNoShow('checkin-1', 'Khách không đến')
 
     expect(fetchMock.mock.calls[0][0]).toContain('/checkin-1/complete')
-    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body)).inventoryLines).toEqual(inventoryLines)
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual(expect.objectContaining({
+      inventoryLines,
+      goodsMaterial: 'Gỗ',
+    }))
     expect(completed.handover?.inventoryLines).toEqual(inventoryLines)
     expect(fetchMock.mock.calls[1][0]).toContain('/checkin-1/no-show')
   })
