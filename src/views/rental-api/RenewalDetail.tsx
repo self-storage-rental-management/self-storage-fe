@@ -1,3 +1,4 @@
+import { invoiceNumberLabel } from '../customer/paymentLabels'
 import { useManagerPresentation } from "../manager/managerPresentation"
 import RenewalRiskNotice from "./RenewalRiskNotice"
 import { Button, Card, Modal } from "../../components/ui"
@@ -11,6 +12,7 @@ import {
   hasRenewalAction,
   rentalDate,
   rentalMoney,
+  renewalDisplayLabel,
   renewalLabels,
   unknown,
 } from "./presentation"
@@ -49,8 +51,8 @@ export default function RenewalDetail({
   const hasDeposit = !!terms && terms.renewalDepositAmount > 0
   const isManager = role === "manager"
   const canOpenPayment = role === "customer" && r.status === "accepted" && r.acceptedRevision !== null
-    && !['ON_HOLD', 'SIGNING_EXPIRED', 'PAYMENT_WINDOW_EXPIRED'].includes(r.statusSummary?.workflowStatus ?? '')
-  const { payment, busy: paymentBusy, error: paymentError, pay: openRenewalPayment } = useRenewalPayment(
+    && !['ON_HOLD', 'NO_SHOW', 'SIGNING_EXPIRED', 'PAYMENT_WINDOW_EXPIRED'].includes(r.statusSummary?.workflowStatus ?? '')
+  const { payment, busy: paymentBusy, error: paymentError, pay: openRenewalPayment, appointmentSelected } = useRenewalPayment(
     r, role === "customer", onPaymentChange,
   )
   const canViewReceipt = reconciledRenewalPayment(payment)
@@ -97,7 +99,8 @@ export default function RenewalDetail({
         : 1
     : renewalProgress(r, payment)
 
-  const renewalTerminalMessage = r.statusSummary?.workflowStatus === 'SIGNING_EXPIRED' ? 'Hạn ký gia hạn đã hết. Khoản đã thu được theo dõi riêng để đối soát và xử lý theo chính sách.'
+  const renewalTerminalMessage = r.statusSummary?.workflowStatus === 'NO_SHOW' ? 'Cơ sở đã ghi nhận khách không đến lịch ký. Gian kho đang thuê vẫn giữ nguyên; khoản đã thu được theo dõi riêng để đối soát theo chính sách.'
+    : r.statusSummary?.workflowStatus === 'SIGNING_EXPIRED' ? 'Hạn ký gia hạn đã hết. Khoản đã thu được theo dõi riêng để đối soát và xử lý theo chính sách.'
     : r.statusSummary?.workflowStatus === 'ON_HOLD' ? 'Hồ sơ đang tạm dừng xử lý. Vui lòng kiểm tra điều kiện, điều khoản hoặc khoản hoàn trước khi tiếp tục.'
     : r.status === "rejected" ? "Yêu cầu bị từ chối. Xem lý do quyết định bên dưới."
     : r.status === "cancelled" ? "Yêu cầu đã hủy. Các khoản đã thu cần được đối soát theo giao dịch."
@@ -120,7 +123,7 @@ export default function RenewalDetail({
       <div className="flex flex-wrap items-start justify-between gap-3 rounded-lg bg-stone-50 p-3">
         <div>
           <p className="font-semibold text-stone-900">{r.storageUnit.code}</p>
-          {r.displayCode && <p className="mt-1 font-mono text-xs text-stone-500">{r.displayCode}</p>}
+          <p className="mt-1 text-sm font-semibold text-stone-700">{renewalDisplayLabel(r)}</p>
           <p className="text-sm text-stone-600">{r.facility.name.replace(/[--]/g, "-")}, {r.customer.fullName}</p>
         </div>
         <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800" aria-label="Trạng thái hồ sơ gia hạn">{workflowStatusLabel}</span>
@@ -132,7 +135,7 @@ export default function RenewalDetail({
             <p className="text-xs text-stone-500">Đã hoàn thành {renewalProgressIndex}/{renewalProgressSteps.length} bước</p>
           </div>
           {renewalTerminalMessage
-            ? <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">Đang tạm dừng</span>
+            ? <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">{r.statusSummary?.workflowStatus === 'NO_SHOW' ? 'Khách không đến' : 'Đang tạm dừng'}</span>
             : renewalProgressIndex === renewalProgressSteps.length
               ? <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">Gia hạn hoàn tất</span>
               : <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">Đang thực hiện: {renewalProgressSteps[renewalProgressIndex]?.label}</span>}
@@ -175,7 +178,7 @@ export default function RenewalDetail({
               <div className="min-w-0">
                 <p className="text-xl font-bold tracking-tight text-stone-900">{rentalMoney(payment.amount, payment.currency)}</p>
                 {payment.paidAt && <p className="mt-1 text-xs text-stone-500">Thanh toán lúc {rentalDate(payment.paidAt)}</p>}
-                {payment.invoiceNumber && <p className="mt-1 text-xs text-stone-500">Hóa đơn {payment.invoiceNumber}, {payment.invoiceStatus}</p>}
+                <p className="mt-1 text-xs text-stone-500">Số hóa đơn: {invoiceNumberLabel(payment.invoiceNumber)}{payment.invoiceNumber?.trim() && `, ${payment.invoiceStatus}`}</p>
               </div>
               {canViewReceipt && <Button type="button" size="sm" variant="outline" className="shrink-0 self-start sm:self-auto" onClick={() => setReceiptPaymentId(payment.paymentId)}>Xem biên lai</Button>}
             </div>
@@ -210,24 +213,13 @@ export default function RenewalDetail({
             </section>
             <section aria-label="Kế hoạch thanh toán">
               <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Kế hoạch thanh toán</h4>
-              {isCustomer ? (
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-                  <dt className="text-emerald-900 font-medium">Thanh toán trực tuyến</dt>
-                  <dd className="mt-1 text-lg font-bold text-emerald-950">{rentalMoney(terms.totalAfterDiscount, terms.currency)}</dd>
-                  <p className="mt-1 text-xs text-emerald-800">Thanh toán qua cổng VNPay. Hợp đồng tự động có hiệu lực ngay sau khi thanh toán thành công.</p>
-                </div>
-              ) : (
-                <>
-                  <dl className="grid gap-2 sm:grid-cols-2">
-                    {hasDeposit ? <>
-                      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3"><dt className="text-amber-900">Tiền thuê gia hạn trả trước</dt><dd className="mt-1 text-lg font-semibold text-amber-950">{rentalMoney(terms.renewalDepositAmount, terms.currency)}</dd></div>
-                      <div className="rounded-lg border border-stone-200 p-3"><dt className="text-stone-600">Tiền thuê còn lại khi ký</dt><dd className="mt-1 text-lg font-semibold text-stone-900">{rentalMoney(terms.remainingRentalAmount, terms.currency)}</dd></div>
-                    </> : <div className="rounded-lg border border-amber-200 bg-amber-50 p-3"><dt className="text-amber-900">Tiền cần thanh toán</dt><dd className="mt-1 text-lg font-semibold text-amber-950">{rentalMoney(terms.totalAfterDiscount, terms.currency)}</dd></div>}
-                  </dl>
-                  <p className="mt-2 text-xs leading-5 text-stone-600">{hasDeposit && 'Tiền thuê gia hạn trả trước được trừ vào tiền thuê kỳ mới. '}Không thu lại cọc bảo đảm kho đang giữ. Phí quá hạn và phí phát sinh hợp lệ, nếu có, được ghi riêng trong bảng kê thanh toán.</p>
-                </>
-              )}
-
+              <dl className="grid gap-2 sm:grid-cols-2">
+                {hasDeposit ? <>
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3"><dt className="text-amber-900">Tiền thuê gia hạn trả trước</dt><dd className="mt-1 text-lg font-semibold text-amber-950">{rentalMoney(terms.renewalDepositAmount, terms.currency)}</dd></div>
+                  <div className="rounded-lg border border-stone-200 p-3"><dt className="text-stone-600">Tiền thuê còn lại khi ký</dt><dd className="mt-1 text-lg font-semibold text-stone-900">{rentalMoney(terms.remainingRentalAmount, terms.currency)}</dd></div>
+                </> : <div className="rounded-lg border border-amber-200 bg-amber-50 p-3"><dt className="text-amber-900">Tiền cần thanh toán</dt><dd className="mt-1 text-lg font-semibold text-amber-950">{rentalMoney(terms.totalAfterDiscount, terms.currency)}</dd></div>}
+              </dl>
+              <p className="mt-2 text-xs leading-5 text-stone-600">{hasDeposit && 'Tiền thuê gia hạn trả trước được trừ vào tiền thuê kỳ mới. '}Tiền bảo đảm kho được giữ sang kỳ mới. Phí quá hạn và các phí phát sinh hợp lệ được ghi trong bảng kê thanh toán.</p>
             </section>
             {isManager && <p className="rounded-lg bg-stone-50 p-3 text-xs text-stone-600">Đây là số tiền theo báo giá, chưa xác nhận đã phát sinh nghĩa vụ hoặc đã thu tiền.</p>}
           </div>
@@ -282,14 +274,14 @@ export default function RenewalDetail({
                 {payment?.paymentStatus === "PAID"
                   ? "Đã ghi nhận thanh toán qua VNPay"
                   : hasDeposit
-                  ? "Bước 2: Thanh toán trả trước 20% qua VNPay"
+                  ? "Bước 2: Thanh toán khoản trả trước qua VNPay"
                   : "Thanh toán gia hạn trực tuyến qua VNPay"}
               </p>
               <p className="mt-1 text-xs text-amber-900">
                 {payment?.paymentStatus === "PAID"
                   ? "Khoản thanh toán đã được ghi nhận thành công."
                   : hasDeposit
-                  ? "Khoản trả trước 20% nhằm bảo đảm việc gia hạn kho. 80% còn lại sẽ thanh toán khi bạn đến cơ sở ký phụ lục hợp đồng."
+                  ? "Vui lòng thanh toán khoản trả trước trong thời gian VNPay hiển thị, tối đa 15 phút. Phần còn lại thanh toán tại cơ sở khi ký phụ lục."
                   : "Hỗ trợ quét mã VNPAY-QR hoặc thẻ ATM / Internet Banking nội địa. Sau khi thanh toán, vui lòng theo dõi lịch ký tại cơ sở."}
               </p>
             </div>
@@ -299,7 +291,7 @@ export default function RenewalDetail({
             <Button
               variant="primary"
               className="w-full sm:w-auto"
-              disabled={operationsLocked || paymentBusy || paymentExpired || payment?.paymentStatus === "PAID"}
+              disabled={operationsLocked || paymentBusy || !appointmentSelected || payment?.paymentStatus === "PAID"}
               onClick={openRenewalPayment}
             >
               {paymentBusy ? "Đang mở cổng VNPay..." : payment && ["PENDING", "PROCESSING", "NOT_RECEIVED"].includes(payment.paymentStatus) ? "Tiếp tục thanh toán qua VNPay" : hasDeposit ? "Thanh toán trả trước qua VNPay" : "Thanh toán toàn kỳ qua VNPay"}

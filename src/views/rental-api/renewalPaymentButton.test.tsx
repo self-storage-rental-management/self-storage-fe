@@ -36,13 +36,18 @@ it("clicks the actual payment button, binds Renewal, shows loading and blocks ra
   expect(h.create.mock.calls[0][1]).toBeTruthy();expect(pay(render()).props.disabled).toBe(true);
   resolve(payment);await first;expect(h.assign).toHaveBeenCalledWith(payment.paymentUrl);expect(pay(render()).props.disabled).toBe(false);
 })
-it("allows rent prepayment without requiring a prior physical signing appointment", async () => {
+it.each([
+  { label: "missing", appointmentRef: null, appointmentStart: null },
+  { label: "past", appointmentRef: "appointment-1", appointmentStart: "2026-10-07T03:00:00Z" },
+])("keeps prepayment disabled for a $label signing appointment", async ({ appointmentRef, appointmentStart }) => {
   vi.clearAllTimers();
   h.slots = [];
-  h.operations.mockResolvedValue({ appointmentRef: null, appointmentStart: null });
+  h.operations.mockResolvedValue({ appointmentRef, appointmentStart });
   render(record, true);
   await vi.advanceTimersByTimeAsync(0);
-  expect(pay(render()).props.disabled).toBe(false);
+  expect(pay(render()).props.disabled).toBe(true);
+  await pay(render()).props.onClick();
+  expect(h.create).not.toHaveBeenCalled();
 })
 it("keeps the same idempotency key on uncertain retries",async()=>{
   h.create.mockRejectedValueOnce(new ApiClientError("network",{code:"NETWORK_ERROR"}));await pay(render()).props.onClick();

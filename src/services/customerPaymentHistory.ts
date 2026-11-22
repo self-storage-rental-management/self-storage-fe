@@ -6,6 +6,7 @@ import { listRenewalOperationEvents } from "./renewalOperationsApi"
 import { isOverdueSettlement, type OverdueSettlement } from "./returnApi"
 import { isUuid } from "./renewalOperationsApi"
 import { isRenewalTransactionStatus, renewalTransactionLabels } from '../types/renewalStatus'
+import { renewalDisplayLabel } from '../presentation/renewalIdentity'
 import {
   listCustomerPaymentHistory,
   type ReservationPaymentResult,
@@ -242,6 +243,7 @@ export async function loadCustomerPaymentHistory(): Promise<{
       return (
         await Promise.all(
           renewals.map(async (renewal) => {
+            const dossierReference = renewalDisplayLabel(renewal)
             const events = await allPages((page) =>
               listRenewalOperationEvents(
                 "customer",
@@ -260,7 +262,7 @@ export async function loadCustomerPaymentHistory(): Promise<{
               const recordedAt = cash ? data.receivedAt : data.paidAt
               return [{
                 id: paymentId,
-                reference: `Gia hạn ${renewal.id}`,
+                reference: dossierReference,
                 renewalId: renewal.id,
                 rentalId: renewal.rentalId,
                 unitCode: renewal.storageUnit.code,
@@ -284,7 +286,7 @@ export async function loadCustomerPaymentHistory(): Promise<{
               const original = originalPayments.get(transaction.paymentId)
               return {
                 id: transaction.paymentId,
-                reference: `Gia hạn ${renewal.id}`,
+                reference: dossierReference,
                 renewalId: renewal.id,
                 rentalId: renewal.rentalId,
                 unitCode: renewal.storageUnit.code,

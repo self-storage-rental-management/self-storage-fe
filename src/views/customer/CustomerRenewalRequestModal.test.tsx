@@ -22,9 +22,13 @@ vi.mock("../../hooks/useRentalApiResource", () => ({
     data: [
       {
         pricingPackageCode: "PKG_1M",
-        pricingPackageName: "Gói 1 tháng",
+        pricingPackageName: "Gói thuê 1 tháng",
         rentalMonths: 1,
+        discountRate: 0,
       },
+      { pricingPackageCode: "LOYAL", pricingPackageName: "Khách thân thiết", rentalMonths: 6, discountRate: 0.0725 },
+      { pricingPackageCode: "PKG_6M", pricingPackageName: "  ", rentalMonths: 6, discountRate: 0.105 },
+      { pricingPackageCode: "LEGACY", rentalMonths: 12 },
     ],
     loading: false,
     error: undefined,
@@ -103,5 +107,16 @@ describe("CustomerRenewalRequestModal UI improvement", () => {
 
     // No conflict alert card
     expect(html).not.toContain("Gian kho này đã có yêu cầu gia hạn đang mở")
+  })
+
+  it("shows each package's own discount and renewal name before a quote is selected", () => {
+    const html = renderToStaticMarkup(
+      <CustomerRenewalRequestModal actorId="cust-1" rentalId="rent-1" onClose={vi.fn()} onSuccess={vi.fn()} />,
+    )
+    expect(html).toContain('<option value="PKG_1M">Gói gia hạn 1 tháng – giảm 0%</option>')
+    expect(html).toContain('<option value="LOYAL">Khách thân thiết – giảm 7,25%</option>')
+    expect(html).toContain('<option value="PKG_6M">Gói gia hạn 6 tháng – giảm 10,5%</option>')
+    expect(html).toContain('<option value="LEGACY">Gói gia hạn 12 tháng</option>')
+    expect(html).not.toContain("Gói thuê")
   })
 })

@@ -38,6 +38,7 @@ describe('checkInApi', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     await listCheckIns({
+      group: 'ONGOING',
       q: 'RSV-001',
       status: 'scheduled',
       scheduledFrom: '2026-10-08T17:00:00.000Z',
@@ -45,7 +46,7 @@ describe('checkInApi', () => {
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:8080/api/staff/check-ins?page=0&pageSize=20&q=RSV-001&status=scheduled&scheduledFrom=2026-10-08T17%3A00%3A00.000Z&scheduledTo=2026-10-09T17%3A00%3A00.000Z',
+      'http://localhost:8080/api/staff/check-ins?page=0&pageSize=20&q=RSV-001&group=ONGOING&status=scheduled&scheduledFrom=2026-10-08T17%3A00%3A00.000Z&scheduledTo=2026-10-09T17%3A00%3A00.000Z',
       expect.objectContaining({ headers: expect.any(Headers) }),
     )
   })

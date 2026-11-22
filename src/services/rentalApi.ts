@@ -106,6 +106,7 @@ export function isRentalRecord(value: unknown): boolean {
   return (
     !!r &&
     typeof r.id === "string" &&
+    (r.displayCode == null || (typeof r.displayCode === "string" && /^SH-\d{6}$/.test(r.displayCode))) &&
     !!r.customer?.id &&
     typeof r.customer.fullName === "string" &&
     !!r.facility?.id &&

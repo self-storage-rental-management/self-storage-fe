@@ -128,6 +128,10 @@ export function formatHistoryPaymentMethod(value?: string | null): string {
   return trimmed
 }
 
+export function invoiceNumberLabel(number?: string | null): string {
+  return number?.trim() || 'Chưa cấp'
+}
+
 export function paymentCurrencyLabel(value?: string | null): string {
   return value === 'VND' ? 'Đồng Việt Nam' : value || '-'
 }
