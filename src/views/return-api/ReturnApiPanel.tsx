@@ -247,6 +247,8 @@ function ReturnWorkspace({
       const urgency = (item: ApiReturn) => item.status === 'recovery_required' ? 0 : item.status !== 'completed' && item.scheduledDate < today ? 1 : item.status === 'completed' ? 3 : 2
       return urgency(left) - urgency(right) || left.scheduledDate.localeCompare(right.scheduledDate)
     })
+  const editRemovalDeadline = rows.find(record => record.id === editing)?.inventoryRemovalDeadlineAt
+  const maxEditReturnDate = editRemovalDeadline ? vietnamDateInput(Date.parse(editRemovalDeadline) - 1) : undefined
   const readable = actor?.status === 'ACTIVE' && (
     actor.roles.includes(role.toUpperCase() as 'CUSTOMER' | 'STAFF' | 'MANAGER') ||
     (role === 'manager' && (actor.roles.includes('BUSINESS') || actor.roles.includes('ADMIN')))
@@ -335,20 +337,25 @@ function ReturnWorkspace({
             setFeedback('Ngày trả kho không được ở quá khứ.')
             return
           }
+          if (editRemovalDeadline && (Date.now() >= Date.parse(editRemovalDeadline)
+            || (maxEditReturnDate && date > maxEditReturnDate))) {
+            setFeedback('Ngày trả kho phải nằm trong thời hạn đưa hàng ra khỏi kho.')
+            return
+          }
           void run(() => editing ? updateReturnRequest(editing, date, notes) : requestReturn(rentalId, date, notes))
         }} className="space-y-4 rounded-xl border border-stone-200 bg-stone-50 p-4">
           {rows.some(record => record.id === editing && record.returnType === 'INVENTORY_MISMATCH')
             ? <div className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-950"><p className="font-semibold">Trả kho do hàng hóa sai khai báo</p><ul className="mt-1 list-disc space-y-1 pl-5"><li>Tính tiền từ ngày xác nhận nhận kho đến ngày hẹn trả kho dự kiến.</li><li>Manager lập quyết toán, khách xác nhận trước khi hoàn tiền hoặc thu thêm.</li></ul></div>
             : <ReturnPolicyNotice />}
           <div>
-            <VietnameseDateInput label="Ngày trả kho" value={date} min={today} onChange={setDate} />
+            <VietnameseDateInput label="Ngày trả kho" value={date} min={today} max={maxEditReturnDate} onChange={setDate} />
             {date && date < today && (
               <p className="mt-1 text-xs font-semibold text-rose-600">Ngày trả kho không được ở quá khứ.</p>
             )}
           </div>
           <label className="block text-sm font-medium text-stone-700">Lý do<textarea required rows={3} placeholder="Nhập lý do trả kho…" value={notes} maxLength={2000} disabled={busy} onChange={(event) => setNotes(event.target.value)} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white p-3 font-normal" /></label>
           <div className="flex flex-wrap gap-3">
-            <Button type="submit" disabled={busy || !date || date < today || !notes.trim() || read.loading}>{editing ? 'Lưu chỉnh sửa' : 'Gửi yêu cầu trả kho'}</Button>
+            <Button type="submit" disabled={busy || !date || date < today || Boolean(maxEditReturnDate && date > maxEditReturnDate) || !notes.trim() || read.loading}>{editing ? 'Lưu chỉnh sửa' : 'Gửi yêu cầu trả kho'}</Button>
             {editing && <Button type="button" variant="outline" disabled={busy} onClick={() => setEditing(null)}>Hủy chỉnh sửa</Button>}
           </div>
         </form>
@@ -396,8 +403,13 @@ function ReturnWorkspace({
                   </span>
                 )}
                 <span className="text-xs text-stone-500">
-                  Hạn trả: <strong className="text-stone-700">{rentalDate(record.scheduledDate)}</strong>
+                  Ngày hẹn trả: <strong className="text-stone-700">{rentalDate(record.scheduledDate)}</strong>
                 </span>
+                {record.inventoryRemovalDeadlineAt && (
+                  <span className="text-xs text-stone-600">
+                    Hạn đưa hàng ra <strong>{new Date(record.inventoryRemovalDeadlineAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</strong>
+                  </span>
+                )}
               </div>
 
               <div className="flex items-center gap-2.5 ml-auto">
@@ -454,7 +466,10 @@ function ReturnWorkspace({
                     onChanged?.()
                   }}
                 />
-                {role === 'customer' && record.status === 'requested' && editing !== record.id && (
+                {role === 'customer' && (record.status === 'requested'
+                  || (record.status === 'scheduled' && Boolean(record.inventoryRemovalDeadlineAt)))
+                  && (!record.inventoryRemovalDeadlineAt || Date.now() < Date.parse(record.inventoryRemovalDeadlineAt))
+                  && editing !== record.id && (
                   <div className="mt-3 flex justify-end border-t border-stone-100 pt-3">
                     <Button
                       type="button"

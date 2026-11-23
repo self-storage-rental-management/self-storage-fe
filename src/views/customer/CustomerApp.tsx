@@ -1,7 +1,8 @@
 import BookingArrivalDetails from './BookingArrivalDetails'
 import CustomerTransactionTerms from './CustomerTransactionTerms'
 import BookingPersonalDetails from './BookingPersonalDetails'
-import { validateCccd, normalizeCccd, maskCccd } from '../../domain/cccd'
+import { maskCccd } from '../../domain/cccd'
+import { normalizeRentalIdentity, validateRentalIdentity } from '../../domain/rentalIdentity'
 import { CustomerProfileReminder } from '../../components/CustomerProfileFields'
 import CustomerCatalogStatus, { catalogLoadError, type CatalogLoadError } from './CustomerCatalogStatus'
 import { matchesReservationSearch, reservationPage } from './reservationList'
@@ -130,7 +131,7 @@ const uniqueRentalPackagesByDuration = (packages: ReservationRentalPackage[]) =>
 }
 
 const isIdentityDocumentFormatValid = (value: string) =>
-  validateCccd(value).ok
+  validateRentalIdentity(value).ok
 
 const customerTrolleyVi = (sizeCode?: string, originalTrolley?: string): string => {
   if (!originalTrolley || originalTrolley === 'Chưa cập nhật') return 'Chưa cập nhật'
@@ -1904,7 +1905,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       ? new Date(`${moveInDate}T00:00:00+07:00`)
       : null
 
-    if (effectiveBookingIdentity.trim() && !isIdentityDocumentFormatValid(effectiveBookingIdentity)) errors.identity = validateCccd(effectiveBookingIdentity).error || 'Vui lòng nhập CCCD 12 số.'
+    if (effectiveBookingIdentity.trim() && !isIdentityDocumentFormatValid(effectiveBookingIdentity)) errors.identity = validateRentalIdentity(effectiveBookingIdentity).error || 'Vui lòng nhập CCCD hoặc hộ chiếu.'
     if (customerPhone.trim() && !isVietnamesePhone(customerPhone)) errors.phone = VIETNAMESE_PHONE_ERROR_MESSAGE
 
     goodsItems.forEach((item, index) => {
@@ -1960,8 +1961,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   const personalDetailsIssue = !user.name.trim() || !customerEmail.trim()
     ? 'Vui lòng cập nhật họ tên và email trong hồ sơ trước khi đặt kho.'
-    : effectiveBookingIdentity.trim() && !validateCccd(effectiveBookingIdentity).ok
-      ? validateCccd(effectiveBookingIdentity).error
+    : effectiveBookingIdentity.trim() && !validateRentalIdentity(effectiveBookingIdentity).ok
+      ? validateRentalIdentity(effectiveBookingIdentity).error
       : customerPhone.trim() && !isVietnamesePhone(customerPhone) ? VIETNAMESE_PHONE_ERROR_MESSAGE : null
 
   const cancelBookingForm = () => {
@@ -1975,7 +1976,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   const continueFromPersonalDetails = () => {
     const errors: Record<string, string> = {}
-    if (effectiveBookingIdentity.trim() && !isIdentityDocumentFormatValid(effectiveBookingIdentity)) errors.identity = validateCccd(effectiveBookingIdentity).error || 'Vui lòng nhập CCCD 12 số.'
+    if (effectiveBookingIdentity.trim() && !isIdentityDocumentFormatValid(effectiveBookingIdentity)) errors.identity = validateRentalIdentity(effectiveBookingIdentity).error || 'Vui lòng nhập CCCD hoặc hộ chiếu.'
     if (customerPhone.trim() && !isVietnamesePhone(customerPhone)) errors.phone = VIETNAMESE_PHONE_ERROR_MESSAGE
 
     if (!user.name.trim() || !customerEmail.trim()) errors.account = 'Vui lòng cập nhật họ tên và email trong hồ sơ.'
@@ -2122,7 +2123,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       const reservation = await createCustomerReservation({
         quoteId: serverQuote.quoteId,
         acceptedSetupEarlyExitPolicyVersion: serverQuote.setupEarlyExitPolicyVersion,
-        identityDocumentNumber: normalizeCccd(effectiveBookingIdentity),
+        identityDocumentNumber: normalizeRentalIdentity(effectiveBookingIdentity),
         customerPhone: customerPhone.trim(),
         customerAddress: customerAddress.trim(),
         goodsCondition: goodsCondition.trim(),
@@ -3698,18 +3699,18 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 <Button
                   disabled={
                     reservationSubmitting ||
+                    !!goodsContinueIssue ||
                     (isApiAuthenticated() && (rentalPackagesLoading || (!selectedBackendRentalPackage && backendRentalPackages.length === 0)))
                   }
-                  aria-disabled={!!goodsContinueIssue}
                   title={goodsContinueIssue || undefined}
-                  className={goodsContinueIssue ? 'opacity-50' : ''}
-                  onClick={() => { if (goodsContinueIssue) { showToast(goodsContinueIssue); setBookingErrors({ goods: goodsContinueIssue }); return }; void confirmReservation() }}
+                  className="booking-confirm-button"
+                  onClick={() => void confirmReservation()}
                 >
                   {reservationSubmitting ? 'Đang kiểm tra...' : 'Tiếp tục xem báo giá'}
                 </Button>
               )}
-              {bookingStep === 3 && <div className="space-y-1 text-right"><Button aria-disabled={!termsAccepted} className={!termsAccepted ? 'opacity-50' : ''} onClick={() => { if (getAuthenticatedActor()?.status === 'PENDING_VERIFICATION') { showToast('Vui lòng xác minh email trước khi tiếp tục.'); return }; if (!termsAccepted) { showToast('Vui lòng tick xác nhận đồng ý báo giá và điều khoản trước khi chọn lịch nhận kho.'); return }; setBookingStep(4) }}>Tiếp theo: Chọn lịch nhận kho</Button>{!termsAccepted && <p className="text-xs text-amber-800">Cần xác nhận đồng ý báo giá và điều khoản.</p>}</div>}
-              {bookingStep === 4 && <Button disabled={reservationSubmitting || !termsAccepted || !arrivalTermsAccepted} onClick={() => void confirmReservation()}>{reservationSubmitting ? 'Đang xử lý...' : hasOtherGoods ? 'Gửi yêu cầu nhân viên cơ sở duyệt' : 'Xác nhận đặt kho'}</Button>}
+              {bookingStep === 3 && <div className="space-y-1 text-right"><Button disabled={!termsAccepted} className="booking-confirm-button" onClick={() => { if (getAuthenticatedActor()?.status === 'PENDING_VERIFICATION') { showToast('Vui lòng xác minh email trước khi tiếp tục.'); return }; setBookingStep(4) }}>Tiếp theo: Chọn lịch nhận kho</Button>{!termsAccepted && <p className="text-xs text-amber-800">Cần xác nhận đồng ý báo giá và điều khoản.</p>}</div>}
+              {bookingStep === 4 && <Button className="booking-confirm-button" disabled={reservationSubmitting || !termsAccepted || !arrivalTermsAccepted || (isApiAuthenticated() && (!serverQuote || !serverQuote.setupEarlyExitPolicyVersion || serverQuote.setupEarlyExitFee == null || acceptedSetupQuoteId !== serverQuote.quoteId))} onClick={() => void confirmReservation()}>{reservationSubmitting ? 'Đang xử lý...' : hasOtherGoods ? 'Gửi yêu cầu nhân viên cơ sở duyệt' : 'Xác nhận đặt kho'}</Button>}
             </div>
           </div>
         )}

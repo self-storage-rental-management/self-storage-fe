@@ -14,6 +14,7 @@ import ReservationReceipt from './ReservationReceipt'
 import { paymentMethodLabel } from './paymentLabels'
 import { formatPolicyDateTime, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyDateTimeInput, policyTimeInput, STAFF_REVIEW_HOURS } from '../../domain/reservationCheckInPolicy'
 import ReservationQuoteSummary from './ReservationQuoteSummary'
+import InventoryAppointmentPanel, { inventoryDeadlineText } from './InventoryAppointmentPanel'
 import type { Facility, UnitType } from '../../types/storageHub'
 import { totalGoodsVolumeM3, formatGoodsVolume } from '../../domain/goodsMeasurements'
 
@@ -83,7 +84,7 @@ export function ReservationPreparationNotice({ checkInStatus, submitting, onRead
             <>
               <p className="mt-1">Sau khi sắp xếp hàng hóa xong, nhấn nút để báo nhân viên có thể kiểm kê.</p>
               <Button type="button" className="mt-2" size="sm" disabled={submitting} onClick={onReady}>
-                {submitting ? 'Đang gửi…' : 'Sẵn sàng để kiểm kê'}
+                {submitting ? 'Đang gửi…' : 'Đã setup xong'}
               </Button>
             </>
           )}
@@ -91,18 +92,6 @@ export function ReservationPreparationNotice({ checkInStatus, submitting, onRead
       )}
     </div>
   )
-}
-
-function inventoryDeadlineText(value: string | null | undefined, now: number) {
-  if (!value) return null
-  const remaining = new Date(value).getTime() - now
-  if (!Number.isFinite(remaining)) return null
-  if (remaining <= 0) return 'Đã quá hạn xử lý'
-  const minutes = Math.ceil(remaining / 60_000)
-  const days = Math.floor(minutes / 1_440)
-  const hours = Math.floor((minutes % 1_440) / 60)
-  const rest = minutes % 60
-  return `Còn ${days > 0 ? `${days} ngày ` : ''}${hours > 0 ? `${hours} giờ ` : ''}${rest} phút`
 }
 
 function receiptConfirmationCountdown(value: string | null | undefined, now: number) {
@@ -165,12 +154,20 @@ function InventoryResolutionNotice({ detail, now, submitting, onResolve }: {
   const comparison = inventoryComparison(detail.inventoryMismatchJson)
   const displayValue = (value: unknown) => value == null || value === '' ? 'Chưa ghi nhận' : String(value)
   const today = policyDateInput(new Date())
+  const removalDeadline = detail.inventoryRemovalDeadlineAt
+  const removalDeadlineMs = removalDeadline ? Date.parse(removalDeadline) : null
+  const maxReturnDate = removalDeadlineMs == null ? undefined : policyDateInput(new Date(removalDeadlineMs - 1))
+  const inventoryExpired = Boolean(detail.inventoryEscalatedAt)
+    || Boolean(detail.inventoryFinalDeadlineAt && Date.parse(detail.inventoryFinalDeadlineAt) <= now)
+    || (removalDeadlineMs != null && removalDeadlineMs <= now)
+  const canPlanReturn = !detail.inventoryEscalatedAt
+    && (removalDeadlineMs == null ? !inventoryExpired : now < removalDeadlineMs)
   const [returnDate, setReturnDate] = useState(today)
   const [returnPlannerOpen, setReturnPlannerOpen] = useState(false)
   const [returnDateError, setReturnDateError] = useState('')
   if (!['PENDING_CUSTOMER', 'PARTIAL_ACCEPTED', 'RETURN_REQUESTED'].includes(detail.inventoryResolutionStatus || '')) return null
   const confirmInventoryReturn = () => {
-    if (!returnDate || returnDate < today) {
+    if (!canPlanReturn || !returnDate || returnDate < today || (maxReturnDate && returnDate > maxReturnDate)) {
       setReturnDateError('Vui lòng chọn ngày trả kho hợp lệ.')
       return
     }
@@ -184,7 +181,7 @@ function InventoryResolutionNotice({ detail, now, submitting, onResolve }: {
       <p className="mt-1">{partialAccepted
         ? 'Bạn đã chọn nhận phần hàng có thể xếp. Vui lòng đưa phần còn lại ra khỏi gian kho và chờ Staff xác nhận bằng chứng.'
         : returnRequested
-          ? 'Cơ sở đã tiếp nhận yêu cầu trả kho. Ngày bạn chọn là ngày hẹn kiểm kê và là mốc cuối để Manager lập quyết toán; nếu bạn không đến và không hẹn lại, hồ sơ chuyển sang quy trình khách không đến.'
+          ? 'Cơ sở đã tiếp nhận yêu cầu trả kho. Bạn có thể đổi lịch trong hạn đưa hàng ra. Khi hết hạn, hồ sơ chưa trả kho sẽ chuyển sang chờ thu hồi.'
         : `Nhân viên đã ghi nhận sai lệch giữa hàng thực tế và thông tin đặt kho. ${detail.inventoryMismatchSummary || 'Vui lòng chọn phương án xử lý.'}`}</p>
       {returnRequested && detail.reservation.setupReturnScheduledDate && <p className="mt-1 font-semibold">Ngày hẹn trả kho: {formatDisplayDate(detail.reservation.setupReturnScheduledDate)}</p>}
       {detail.inventorySuggestedPackageCount != null && <p className="mt-1">Số kiện có thể tiếp nhận theo phương án xếp: <b>{detail.inventorySuggestedPackageCount}</b></p>}
@@ -202,20 +199,23 @@ function InventoryResolutionNotice({ detail, now, submitting, onResolve }: {
         </ul>
         {detail.reservation.monthlyPrice != null && <p className="mt-1 font-semibold">Đơn giá tham chiếu: {formatVnd(detail.reservation.monthlyPrice)} / tháng.</p>}
       </div>}
-      {detail.inventoryFinalDeadlineAt && <p className="mt-1 font-bold">{countdown || 'Hạn xử lý'} · {formatCustomerDateTime(new Date(detail.inventoryFinalDeadlineAt))}</p>}
+      {removalDeadline
+        ? <p className="mt-1 font-bold">Hạn đưa hàng ra · {formatCustomerDateTime(new Date(removalDeadline))}</p>
+        : detail.inventoryFinalDeadlineAt && <p className="mt-1 font-bold">{countdown || 'Hạn kiểm kê'} · {formatCustomerDateTime(new Date(detail.inventoryFinalDeadlineAt))}</p>}
+      {detail.inventoryEscalatedAt && <p className="mt-1 font-bold">Đang chờ thu hồi. Vui lòng liên hệ cơ sở để xử lý.</p>}
       {!partialAccepted && !returnRequested && !returnPlannerOpen && <div className="mt-3 flex flex-wrap justify-end gap-2">
-        {detail.inventoryFullFit && <Button size="sm" disabled={submitting} onClick={() => onResolve('ACCEPT_FULL')}>Nhận toàn bộ hàng</Button>}
-        {detail.inventoryPartialFitAvailable && <Button size="sm" variant="outline" disabled={submitting} onClick={() => onResolve('ACCEPT_PARTIAL')}>Nhận phần có thể xếp</Button>}
-        <Button size="sm" variant="danger" disabled={submitting} onClick={() => setReturnPlannerOpen(true)}>Yêu cầu trả kho</Button>
+        {detail.inventoryFullFit && <Button size="sm" disabled={submitting || inventoryExpired} onClick={() => onResolve('ACCEPT_FULL')}>Nhận toàn bộ hàng</Button>}
+        {detail.inventoryPartialFitAvailable && <Button size="sm" variant="outline" disabled={submitting || inventoryExpired} onClick={() => onResolve('ACCEPT_PARTIAL')}>Nhận phần có thể xếp</Button>}
+        <Button size="sm" variant="danger" disabled={submitting || !canPlanReturn} onClick={() => setReturnPlannerOpen(true)}>Yêu cầu trả kho</Button>
       </div>}
       {!partialAccepted && !returnRequested && returnPlannerOpen && <div className="mt-3 space-y-3 rounded-lg border border-red-300 bg-white p-3">
         <p className="font-bold text-red-950">Chọn ngày trả kho dự kiến</p>
-        <VietnameseDateInput label="Ngày hẹn trả kho" value={returnDate} min={today} onChange={(value) => { setReturnDate(value); setReturnDateError('') }} />
+        <VietnameseDateInput label="Ngày hẹn trả kho" value={returnDate} min={today} max={maxReturnDate} onChange={(value) => { setReturnDate(value); setReturnDateError('') }} />
         {returnDateError && <p role="alert" className="font-semibold text-red-700">{returnDateError}</p>}
         <p className="text-red-950">Ngày này là mốc hẹn để cơ sở cùng bạn kiểm kê và nhận lại kho. Tiền sử dụng được tính theo ngày lịch từ ngày bạn xác nhận nhận kho đến ngày hẹn này; Manager sẽ chốt bảng kê và bạn xác nhận quyết toán.</p>
         <div className="flex flex-wrap justify-end gap-2">
           <Button size="sm" variant="outline" disabled={submitting} onClick={() => setReturnPlannerOpen(false)}>Hủy</Button>
-          <Button size="sm" variant="danger" disabled={submitting || !returnDate} onClick={confirmInventoryReturn}>{submitting ? 'Đang gửi…' : 'Xác nhận yêu cầu trả kho'}</Button>
+          <Button size="sm" variant="danger" disabled={submitting || !returnDate || !canPlanReturn} onClick={confirmInventoryReturn}>{submitting ? 'Đang gửi…' : 'Xác nhận yêu cầu trả kho'}</Button>
         </div>
       </div>}
     </div>
@@ -574,11 +574,14 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
           <p className="mt-1">Vui lòng kiểm tra kho và mã ra vào, sau đó xác nhận đã nhận kho để bắt đầu thời gian chuẩn bị.</p>
           {detail?.handoverCompletedAt && <p className="mt-1">Bàn giao lúc: <b>{formatCustomerDateTime(new Date(detail.handoverCompletedAt))}</b></p>}
           {detail?.receiptConfirmationDueAt && <p className="mt-1 font-bold">{receiptCountdown.text} · Hạn xác nhận: {formatCustomerDateTime(new Date(detail.receiptConfirmationDueAt))}</p>}
-          {receiptRelease.text && <p className={`mt-1 font-semibold ${receiptRelease.eligible ? 'text-red-700' : 'text-amber-800'}`}>{receiptRelease.text} · Chỉ Manager được thao tác giải phóng.</p>}
+          {receiptRelease.eligible && <p className="mt-1 font-semibold text-red-700">Chỉ Manager được giải phóng kho sau khi hết hạn.</p>}
           {receiptCountdown.expired && <p className="mt-1 font-semibold">Hồ sơ đang chờ cơ sở xử lý tiếp. Bạn vẫn có thể xác nhận nhận kho hoặc liên hệ cơ sở để được hỗ trợ.</p>}
           <Button type="button" className="mt-2" size="sm" disabled={confirmingReceipt} onClick={() => void confirmReceipt()}>{confirmingReceipt ? 'Đang xác nhận…' : 'Xác nhận đã nhận kho'}</Button>
         </div>}
-        {r.status === 'PREPARING' && <ReservationPreparationNotice checkInStatus={checkInStatus} submitting={confirmingPreparation} onReady={() => void confirmPreparation()} />}
+        {r.status === 'PREPARING' && checkInStatus !== 'setup_completed' && !detail?.inventoryEscalatedAt && <ReservationPreparationNotice checkInStatus={checkInStatus} submitting={confirmingPreparation} onReady={() => void confirmPreparation()} />}
+        {checkInStatus === 'setup_completed' && !detail?.inventoryMismatchJson && detail?.inventoryFinalDeadlineAt && (
+          <InventoryAppointmentPanel detail={detail} now={now} onSaved={setDetail} />
+        )}
         {detail && <PackagingInspectionResult detail={detail} />}
         {detail && <InventoryResolutionNotice detail={detail} now={now} submitting={resolvingInventory} onResolve={(decision, scheduledDate) => void resolveInventoryDecision(decision, scheduledDate)} />}
         {documentAvailable && <Button variant="outline" size="sm" className="reservation-action reservation-action-document min-h-10 w-full justify-center" disabled={busy} onClick={() => void prepareBookingDocument()}>{busy ? 'Đang chuẩn bị…' : 'Xem phiếu giữ kho'}</Button>}

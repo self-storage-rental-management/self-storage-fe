@@ -48,7 +48,7 @@ describe('independent renewal states', () => {
   it('shows a partial invoice independently of a successful prepayment and signing workflow', () => {
     expect(isRenewalStatusSummary(summary)).toBe(true)
     const html = renderToStaticMarkup(<RenewalStatusPanel summary={summary} onReceipt={() => {}} />)
-    expect(html).toContain('Đã thanh toán cọc gia hạn')
+    expect(html).toContain('Đã thanh toán một phần')
     expect(html).toContain('Thanh toán thành công')
     expect(html).toContain('4.000.000 đ')
     expect(html).not.toContain('trả theo tháng')

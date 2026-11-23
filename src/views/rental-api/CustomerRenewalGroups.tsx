@@ -6,8 +6,8 @@ import { renewalWorkflowLabel } from './renewalStatusPresentation'
 import ManagerContractPreview from './ManagerContractPreview'
 
 const shortLabels: Record<RenewalApiRecord['status'], string> = {
-  pending: 'Đang kiểm tra', accepted: 'Chờ thanh toán', deposit_paid: 'Đã thanh toán',
-  full_rent_paid: 'Đã thanh toán', approved: 'Mở thanh toán', appointment_scheduled: 'Đang xử lý',
+  pending: 'Đang kiểm tra', accepted: 'Chờ thanh toán', deposit_paid: 'Đã thanh toán trả trước',
+  full_rent_paid: 'Đã thanh toán đủ', approved: 'Mở thanh toán', appointment_scheduled: 'Đang xử lý',
   payment_processing: 'Chờ kết quả thanh toán', payment_failed: 'Chờ thanh toán lại',
   payment_expired: 'Hết hạn', rejected: 'Đã đóng', cancelled: 'Đã hủy', completed: 'Hoàn tất',
 }

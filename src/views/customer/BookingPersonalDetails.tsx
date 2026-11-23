@@ -2,7 +2,8 @@ import { useState } from 'react'
 import type { User } from '../../types'
 import { contactErrors } from '../../components/CustomerProfileFields'
 import { isVietnamesePhone } from '../../domain/vietnamesePhone'
-import { maskCccd, normalizeCccd, validateCccd } from '../../domain/cccd'
+import { maskCccd } from '../../domain/cccd'
+import { normalizeRentalIdentity, validateRentalIdentity } from '../../domain/rentalIdentity'
 
 interface Props {
   user: User
@@ -25,7 +26,7 @@ export default function BookingPersonalDetails({ user, identity, phone, address,
   const second = contactErrors({ ...user, phone }, true)
   const checks = [
     { label: 'Số điện thoại', ok: isVietnamesePhone(phone), id: 'booking-contact-phone' },
-    { label: 'Giấy tờ tùy thân', ok: !!identity && validateCccd(identity).ok, id: 'booking-identity-number' },
+    { label: 'Giấy tờ tùy thân', ok: !!identity && validateRentalIdentity(identity).ok, id: 'booking-identity-number' },
     { label: 'Người liên hệ khẩn cấp', ok: !Object.keys(first).some(key => key !== 'consent') && !Object.keys(second).some(key => key !== 'consent') },
     { label: 'Đồng ý thông báo cho người liên hệ', ok: !first.consent && !second.consent },
   ]
@@ -52,7 +53,7 @@ export default function BookingPersonalDetails({ user, identity, phone, address,
     <div>
       <label className={label} htmlFor="booking-renter-name">Họ và tên người thuê<span className={badge}>Lấy từ hồ sơ</span></label>
       <input id="booking-renter-name" className={`${input} bg-stone-50`} value={user.name} readOnly />
-      <p className="mt-1.5 text-xs text-stone-500">Đúng như trên CCCD để khớp lúc nhận kho. Sửa họ tên tại Hồ sơ.</p>
+      <p className="mt-1.5 text-xs text-stone-500">Nhập họ tên như trên CCCD hoặc hộ chiếu. Sửa họ tên tại Hồ sơ.</p>
     </div>
     <div className="grid gap-4 sm:grid-cols-2">
       <div><label className={label} htmlFor="booking-login-email">Email<span className={badge}>Dùng để đăng nhập</span></label><input id="booking-login-email" className={`${input} bg-stone-50`} value={user.email} readOnly /></div>
@@ -61,16 +62,15 @@ export default function BookingPersonalDetails({ user, identity, phone, address,
     <div>
       <label className={label} htmlFor="booking-identity-number">Giấy tờ tùy thân của người thuê<span className={badge}>Cần trước thanh toán cọc</span></label>
       <div className="flex flex-wrap items-start gap-2 sm:flex-nowrap">
-        <div className={`${input} w-full shrink-0 bg-stone-50 sm:w-32`} aria-label="Loại giấy tờ">CCCD</div>
-        <input id="booking-identity-number" className={`${input} flex-1`} value={!identity || editing || visible ? identity : maskCccd(identity)} placeholder="12 chữ số" inputMode="numeric" autoComplete="off"
+        <input id="booking-identity-number" className={`${input} flex-1`} value={!identity || editing || visible ? identity : maskCccd(identity)} placeholder="Số CCCD hoặc hộ chiếu" autoComplete="off"
           readOnly={locked || (!!identity && !editing)} aria-describedby="booking-identity-hint"
-          onChange={event => { setEditing(true); onIdentityChange(normalizeCccd(event.target.value)) }}
+          onChange={event => { setEditing(true); onIdentityChange(normalizeRentalIdentity(event.target.value)) }}
           onBlur={() => { setEditing(false); setVisible(false) }} />
         {!!identity && <button type="button" className="rounded-lg border border-stone-300 px-3 py-2.5 text-sm" onClick={() => setVisible(!visible)}>{visible ? 'Ẩn' : 'Xem'}</button>}
         {!!identity && !locked && <button type="button" className="rounded-lg border border-stone-300 px-3 py-2.5 text-sm" onClick={() => { setEditing(true); document.getElementById('booking-identity-number')?.focus() }}>Sửa</button>}
       </div>
-      <p id="booking-identity-hint" className="mt-1.5 text-xs text-stone-500">Mang CCCD gốc của người thuê để đối chiếu khi nhận kho.{identityFromProfile && identity ? ' Lấy từ hồ sơ.' : ''}{locked ? ' Đã đối chiếu; liên hệ Staff nếu cần sửa.' : ''}</p>
-      {!!identity && !validateCccd(identity).ok && <p role="alert" className="mt-1 text-xs text-red-700">{validateCccd(identity).error}</p>}
+      <p id="booking-identity-hint" className="mt-1.5 text-xs text-stone-500">Mang giấy tờ gốc để đối chiếu khi nhận kho và kiểm kê.{identityFromProfile && identity ? ' Lấy từ hồ sơ.' : ''}{locked ? ' Đã đối chiếu. Liên hệ Staff nếu cần sửa.' : ''}</p>
+      {!!identity && !validateRentalIdentity(identity).ok && <p role="alert" className="mt-1 text-xs text-red-700">{validateRentalIdentity(identity).error}</p>}
     </div>
     <div><label className={label} htmlFor="booking-customer-address">Địa chỉ<span className={badge}>Không bắt buộc khi đặt giữ kho</span></label><input id="booking-customer-address" className={input} value={address} onChange={event => onAddressChange(event.target.value)} /></div>
     <p className="text-xs leading-5 text-stone-500">Thay đổi ở đây chỉ lưu cho đơn đặt mới. Hồ sơ và các đơn cũ giữ nguyên.</p>

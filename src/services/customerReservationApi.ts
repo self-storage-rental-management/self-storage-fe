@@ -533,6 +533,12 @@ export interface CustomerReservationDetail {
   rentalStatus?: string | null
   inventoryDueAt?: string | null
   inventoryFinalDeadlineAt?: string | null
+  inventoryRemovalDeadlineAt?: string | null
+  inventoryEscalatedAt?: string | null
+  setupCompletedAt?: string | null
+  inventoryAppointmentAt?: string | null
+  inventoryArrivedAt?: string | null
+  inventoryIdentityVerifiedAt?: string | null
   inventoryResolutionStatus?: InventoryResolutionStatus | null
   inventoryFullFit?: boolean
   inventoryPartialFitAvailable?: boolean
@@ -852,6 +858,14 @@ export async function updateSetupGoods(
     { method: 'POST', body: JSON.stringify(input) },
   )
   return checkedReservationDetail(response.data)
+}
+
+export async function setCustomerInventoryAppointment(reservationId: string, appointmentAt: string, reason?: string) {
+  const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
+    `/api/customer/reservations/${encodeURIComponent(reservationId)}/inventory-appointment`,
+    { method: 'POST', body: JSON.stringify({ appointmentAt, reason }) },
+  )
+  return response.data
 }
 
 export async function markCustomerPreparationComplete(reservationId: string, note?: string) {

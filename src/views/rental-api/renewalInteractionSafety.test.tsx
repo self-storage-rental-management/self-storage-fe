@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { ReactElement } from "react"
 import RenewalOperationsPanel from "./RenewalOperationsPanel"
 import RenewalDepositSettlementPanel from "./RenewalDepositSettlementPanel"
@@ -269,6 +269,8 @@ function detailElement(role: "customer" | "manager") {
 }
 
 describe("D3 upload synchronously protects its owning modal", () => {
+  beforeEach(() => vi.stubGlobal("document", { body: { style: { overflow: "" } } }))
+  afterEach(() => vi.unstubAllGlobals())
   it.each(["customer", "manager", "staff"] as const)("%s operation/upload lock blocks stale modal callbacks; confirmed file is retained when uploaded", async role => {
     h.actor = operationsActor(role)
     let ownerSlots: any[] = [], owner: () => ReactElement<any>, panelElement: ReactElement<any>
