@@ -3,7 +3,8 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { renewal } from '../../../tests/rentalApiFixtures'
 import { isRenewalStatusSummary, type RenewalStatusSummary } from '../../types/renewalStatus'
 import { reconciledRenewalPayment, renewalPaymentDisplayLabel, renewalProgress } from './renewalStatusPresentation'
-import type { RenewalVnpayPaymentResponse } from '../../types/renewalApi'
+import type { RenewalApiRecord, RenewalVnpayPaymentResponse } from '../../types/renewalApi'
+import RenewalDetail from './RenewalDetail'
 import RenewalStatusPanel from './RenewalStatusPanel'
 
 export const summary: RenewalStatusSummary = {
@@ -18,14 +19,54 @@ const payment: RenewalVnpayPaymentResponse = { paymentId: 'p1', renewalId: renew
   message: '', paymentUrl: null, invoiceNumber: null, invoiceStatus: 'DRAFT', invoiceIssuedAt: null,
   settlementStage: 'VERIFIED_AWAITING_ALLOCATION', transactionStatus: 'RECONCILIATION_REQUIRED', receiptAvailable: false }
 
+const renderDetail = (record: Partial<RenewalApiRecord>, role: 'customer' | 'staff' = 'customer') =>
+  renderToStaticMarkup(<RenewalDetail role={role} renewal={{ ...renewal, ...record }} onAction={() => {}} />)
+
+describe('renewal detail progress', () => {
+  it.each([
+    ['rejected', 'REJECTED', 'Yêu cầu bị từ chối'],
+    ['cancelled', 'CANCELLED', 'Yêu cầu đã hủy'],
+    ['payment_expired', 'PAYMENT_WINDOW_EXPIRED', 'Đã hết hạn thanh toán'],
+    ['payment_expired', 'AWAITING_RECONCILIATION', 'Đã hết hạn thanh toán'],
+    ['deposit_paid', 'SIGNING_EXPIRED', 'Đã hết hạn ký'],
+    ['deposit_paid', 'NO_SHOW', 'Khách không đến'],
+    ['pending', 'ON_HOLD', 'Tạm dừng xử lý'],
+  ] as const)('shows %s / %s without an active step', (status, workflowStatus, label) => {
+    for (const role of ['customer', 'staff'] as const) {
+      const html = renderDetail({ status, statusSummary: { ...summary, workflowStatus } }, role)
+      expect(html).toContain(`aria-label="Trạng thái hồ sơ gia hạn">${label}</span>`)
+      expect(html).not.toContain('aria-current="step"')
+      expect(html).not.toContain('Đang thực hiện:')
+      if (workflowStatus === 'AWAITING_RECONCILIATION') {
+        expect(html).toContain('Cơ sở đang đối soát thanh toán.')
+      }
+      if (workflowStatus === 'SIGNING_EXPIRED' || workflowStatus === 'NO_SHOW') {
+        expect(html).toContain(role === 'customer' ? 'Đã hoàn thành 2/3 bước' : 'Đã hoàn thành 4/5 bước')
+        expect(html).toContain(workflowStatus === 'NO_SHOW' ? '>Khách không đến</span>' : '>Hết hạn</span>')
+      }
+    }
+  })
+
+  it('keeps the active step while signing and completes all steps when the renewal is finalized', () => {
+    const signing = renderDetail({ status: 'deposit_paid', statusSummary: summary })
+    expect(signing.match(/aria-current="step"/g)).toHaveLength(1)
+    expect(signing).toContain('Đã hoàn thành 2/3 bước')
+
+    const completed = renderDetail({ status: 'completed', statusSummary: { ...summary, workflowStatus: 'COMPLETED' } })
+    expect(completed).toContain('Đã hoàn thành 3/3 bước')
+    expect(completed).not.toContain('aria-current="step"')
+  })
+})
+
 describe('independent renewal states', () => {
-  it('keeps calculation and transaction references in collapsed details', () => {
+  it('keeps calculation details while hiding transaction references', () => {
     const html = renderToStaticMarkup(<RenewalStatusPanel summary={summary} onReceipt={() => {}} />)
     expect(html).toContain('Thanh toán gia hạn')
     expect(html).toContain('Tổng phải trả')
     expect(html).toContain('Còn lại')
     expect(html).toMatch(/<details[^>]*><summary[^>]*>Chi tiết tính tiền/)
-    expect(html).toMatch(/<details[^>]*><summary[^>]*>Mã giao dịch/)
+    expect(html).not.toContain('Mã giao dịch')
+    expect(html).not.toContain('Số hóa đơn')
     expect(html).not.toContain('<details open')
     expect(html).toContain('Xem biên lai')
   })

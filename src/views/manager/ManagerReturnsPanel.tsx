@@ -1,10 +1,10 @@
 import { isApiAuthenticated } from '../../services/authApi'
 import { useReturnRecords } from '../../hooks/useReturnRecords'
 import { returnScreenRecord } from '../../services/returnScreenAdapter'
+import { getRental } from '../../services/rentalApi'
 import { approveInventoryMismatch, getReturn, reviewDispute, recordReturnSettlement, uploadReturnEvidence, returnError } from '../../services/returnApi'
 import React, { useEffect, useRef, useState } from 'react'
-import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Select, Avatar, Input, Tabs } from '../../components/ui'
-import { Icon } from '../../components/Layout'
+import { Badge, Button, Card, Table, Thead, Tbody, Th, Td, Tr, Modal, Select, Input } from '../../components/ui'
 import { formatVndAmount as formatVnd } from '../../i18n/currency'
 import { useStorageHub } from '../../store/StorageHubContext'
 import type { User } from '../../types'
@@ -20,6 +20,19 @@ import ManagerActionNotice from './ManagerActionNotice'
 import ManagerPagination from './ManagerPagination'
 import { formatManagerDate, formatManagerDateTime, formatManagerMoney as legacyManagerMoney, managerDateValue, matchesManagerSearch, normalizeManagerMoney, paginateManagerItems } from './managerList'
 import useManagerSoftDelete from './useManagerSoftDelete'
+
+function RentalDisplayCode({ rentalId, useApi }: { rentalId: string; useApi: boolean }) {
+  const [code, setCode] = useState<string | null>(null)
+  useEffect(() => {
+    let active = true
+    setCode(null)
+    if (useApi) void getRental('manager', rentalId).then(record => {
+      if (active) setCode(record.displayCode ?? null)
+    }).catch(() => { if (active) setCode(null) })
+    return () => { active = false }
+  }, [rentalId, useApi])
+  return <span className="font-semibold text-stone-900">{code ?? 'Chưa xác định mã hồ sơ'}</span>
+}
 
 interface ManagerReturnsPanelProps {
   user: User
@@ -502,97 +515,48 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
     <div className="fade-in space-y-6">
       {useApi && apiRead.loading && <p role="status">Đang tải hồ sơ trả kho…</p>}
       {useApi && apiRead.error && <p role="alert">{apiRead.error} <Button variant="outline" size="sm" onClick={() => void apiRead.refresh()}>Thử lại</Button></p>}
-      <SectionHeader
-        eyebrow="Vận hành cơ sở"
-        title={'Quản Lý Trả Kho & Nghiệm Thu Hiện Trường'}
-        subtitle={'Điều phối nhân viên nghiệm thu, kiểm tra biên bản hiện trường, xử lý bảo trì hỏng hóc và đóng hồ sơ trả kho.'}
-      />
-
-      {/* Bento Grid Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title={'Tổng yêu cầu trả kho'}
-          value={scopedReturns.length}
-          icon={Icon.box}
-          iconBg="bg-blue-50 text-blue-700"
-        />
-        <StatCard
-          title={'Chờ nghiệm thu hiện trường'}
-          value={awaitingInspectionCount}
-          delta={awaitingInspectionCount > 0 ? ("Cần phân công nhân viên") : undefined}
-          deltaPositive={awaitingInspectionCount === 0}
-          icon={Icon.tasks}
-          iconBg={awaitingInspectionCount > 0 ? 'bg-amber-50 text-amber-700 ring-2 ring-amber-200' : 'bg-stone-50 text-stone-600'}
-        />
-        <StatCard
-          title={'Đã kiểm tra hiện trường'}
-          value={inspectedCount}
-          delta={'Chờ quản lý nghiệm thu'}
-          deltaPositive
-          icon={Icon.check}
-          iconBg="bg-emerald-50 text-emerald-700"
-        />
-        <StatCard
-          title={'Phát hiện hư hại / Bảo trì'}
-          value={needsMaintenanceCount}
-          delta={needsMaintenanceCount > 0 ? ("Cần lập phiếu sửa chữa") : undefined}
-          deltaPositive={needsMaintenanceCount === 0}
-          icon={Icon.alert}
-          iconBg={needsMaintenanceCount > 0 ? 'bg-rose-50 text-rose-700 ring-2 ring-rose-200' : 'bg-stone-50 text-stone-600'}
-        />
-      </div>
-
-      <ManagerActionNotice tone={awaitingInspectionCount || needsMaintenanceCount ? 'warning' : 'info'}>
-        Quản lý cơ sở phân công nhân viên kiểm tra nghiệm thu hiện trường, xem xét báo cáo hư hỏng để kích hoạt sửa chữa bảo trì kho, và xác nhận hoàn tất giải phóng gian kho về trạng thái khả dụng.
-      </ManagerActionNotice>
+      <header>
+        <h1 className="text-2xl font-bold text-stone-900">Trả kho và nghiệm thu</h1>
+        <p className="mt-1 text-sm text-stone-500">Theo dõi nghiệm thu hiện trường, biên bản và quyết toán hồ sơ trả kho.</p>
+      </header>
 
       {/* Filter Tabs & Search Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        <Tabs
-          tabs={[
-            `Tất cả (${facilityReturns.length})`,
-            `Chờ nghiệm thu (${awaitingInspectionCount})`,
-            `Đã kiểm tra (${inspectedCount})`,
-            `Cần bảo trì (${needsMaintenanceCount})`,
-            `Khiếu nại (${disputedCount})`,
-            `Đã hoàn tất (${completedCount})`
-          ]}
-          active={
-            returnTab === 'All' ? `Tất cả (${facilityReturns.length})` :
-            returnTab === 'awaiting_inspection' ? `Chờ nghiệm thu (${awaitingInspectionCount})` :
-            returnTab === 'inspected' ? `Đã kiểm tra (${inspectedCount})` :
-            returnTab === 'needs_maintenance' ? `Cần bảo trì (${needsMaintenanceCount})` :
-            returnTab === 'disputed' ? `Khiếu nại (${disputedCount})` :
-            returnTab === 'completed' ? `Đã hoàn tất (${completedCount})` : `Tất cả (${facilityReturns.length})`
-          }
-          onChange={val => {
-            if (val.startsWith('Tất cả')) setReturnTab('All')
-            else if (val.startsWith('Chờ nghiệm thu')) setReturnTab('awaiting_inspection')
-            else if (val.startsWith('Đã kiểm tra')) setReturnTab('inspected')
-            else if (val.startsWith('Cần bảo trì')) setReturnTab('needs_maintenance')
-            else if (val.startsWith('Khiếu nại')) setReturnTab('disputed')
-            else if (val.startsWith('Đã hoàn tất')) setReturnTab('completed')
-          }}
-        />
-        <div className="w-full sm:w-72">
+        <div className="flex flex-wrap items-center gap-x-5 border-b border-stone-200" aria-label="Trạng thái trả kho">
+          {[
+            ['All', `Tất cả ${facilityReturns.length}`],
+            ['awaiting_inspection', `Chờ nghiệm thu ${awaitingInspectionCount}`],
+            ['inspected', `Đã kiểm tra ${inspectedCount}`],
+            ['needs_maintenance', `Cần bảo trì ${needsMaintenanceCount}`],
+            ['disputed', `Khiếu nại ${disputedCount}`],
+            ['completed', `Hoàn tất ${completedCount}`],
+          ].map(([value, label]) => <button key={value} type="button" aria-pressed={returnTab === value}
+            className={`border-b-2 px-1 py-3 text-sm ${returnTab === value ? 'border-amber-700 font-semibold text-stone-900' : 'border-transparent text-stone-500 hover:text-stone-900'}`}
+            onClick={() => setReturnTab(value)}>{label}</button>)}
+        </div>
+        <div className="flex w-full items-center gap-2 sm:w-auto">
           <input
             type="text"
             placeholder={'Tìm theo mã, khách, gian kho...'}
             value={returnSearch}
             onChange={e => setReturnSearch(e.target.value)}
-            className="w-full border border-stone-300 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-sm"
+            className="min-w-0 flex-1 border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 sm:w-72"
           />
-        </div>
-      </div>
-      <Card className="p-4">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <details className="relative shrink-0">
+            <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 rounded-lg border border-stone-300 bg-white px-3 text-sm font-medium text-stone-700 hover:bg-stone-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700">
+              <svg aria-hidden="true" className="show-icon h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 6h16M7 12h10M10 18h4" /></svg>
+              Lọc
+            </summary>
+            <div className="absolute right-0 top-full z-20 mt-2 grid w-[min(90vw,24rem)] gap-3 rounded-xl border border-stone-200 bg-white p-4 shadow-lg">
           <Select label="Mức hư hại" value={damageFilter} onChange={event => setDamageFilter(event.target.value)}><option value="all">Tất cả mức độ</option><option value="no_damage">Không hư hại</option><option value="minor_damage">Hư hại nhẹ</option><option value="major_damage">Hư hại nặng</option><option value="abandoned_goods">Bỏ lại hàng hóa</option></Select>
           <Select label="Kết quả quyết toán" value={settlementFilter} onChange={event => setSettlementFilter(event.target.value)}><option value="all">Tất cả kết quả</option><option value="refund">Có tiền hoàn khách</option><option value="customer_due">Khách phải nộp thêm</option><option value="balanced">Không phát sinh</option></Select>
           <Input label="Từ ngày hẹn" type="date" value={dateFrom} onChange={event => setDateFrom(event.target.value)} />
           <Input label="Đến ngày hẹn" type="date" value={dateTo} onChange={event => setDateTo(event.target.value)} />
           <Select label="Sắp xếp" value={sortBy} onChange={event => setSortBy(event.target.value)}><option value="priority">Cần xử lý trước</option><option value="date-asc">Ngày hẹn gần nhất</option><option value="date-desc">Ngày hẹn xa nhất</option><option value="amount-desc">Giá trị quyết toán lớn nhất</option></Select>
+            </div>
+          </details>
         </div>
-      </Card>
+      </div>
 
       {hiddenFacilityCount > 0 && (
         <ManagerActionNotice tone="info">
@@ -604,11 +568,11 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
       )}
 
       {/* Returns Table */}
-      <Card className="overflow-hidden border border-stone-200/80 shadow-sm">
-        <Table>
+      <Card className="overflow-hidden !border-0 !bg-transparent !shadow-none">
+        <Table tableClassName="manager-return-table">
           <Thead>
             <tr>
-              <Th>{'Mã Trả Kho / HĐ'}</Th>
+              <Th>{'Mã hồ sơ thuê'}</Th>
               <Th>{'Khách Hàng'}</Th>
               <Th>{'Gian Kho'}</Th>
               <Th>{'Ngày Hẹn / Nghiệm Thu'}</Th>
@@ -648,12 +612,10 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                     }
                   >
                     <Td>
-                      <span className="font-mono text-xs font-bold text-stone-800">{ret.id}</span>
-                      <p className="text-[11px] text-stone-400 font-mono">Hồ sơ thuê: {ret.rentalId}</p>
+                      <RentalDisplayCode rentalId={ret.rentalId} useApi={useApi} />
                     </Td>
                     <Td>
                       <div className="flex items-center gap-2">
-                        <Avatar name={ret.customerName} size="sm" />
                         <div>
                           <p className="font-medium text-sm text-stone-900">{ret.customerName}</p>
                           <p className="text-xs text-stone-400">{ret.customerPhone || ret.customerEmail}</p>
@@ -661,7 +623,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                       </div>
                     </Td>
                     <Td>
-                      <span className="font-mono font-bold text-stone-900 bg-stone-100 px-2 py-0.5 rounded text-xs">
+                      <span className="font-mono font-medium text-stone-900 text-xs">
                         {ret.unitId}
                       </span>
                     </Td>

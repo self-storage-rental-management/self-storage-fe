@@ -19,6 +19,7 @@ import type { RenewalApiQuery, RenewalApiRecord } from "../../types/renewalApi"
 import type { RenewalOperationEvent } from "../../types/renewalOperationsApi"
 import ApiReadState from "./ApiReadState"
 import CustomerRenewalGroups from './CustomerRenewalGroups'
+import { renewalPrimaryClass, RenewalSearch } from './renewalListStyles'
 import ManagerRentalGroups from './ManagerRentalGroups'
 import RentalDetail from "./RentalDetail"
 import RenewalDetail from "./RenewalDetail"
@@ -378,32 +379,25 @@ function WorkspaceData({
       {counts.error ? (
         <ApiReadState {...counts} retry={counts.refresh} />
       ) : null}
-      <div className="grid grid-cols-2 gap-2 rounded-2xl border border-stone-200 bg-stone-100/90 p-1.5 shadow-sm">
-        <Button
-          variant={tab === "rental" ? "primary" : "outline"}
-          className={`h-11 rounded-xl text-sm font-semibold transition-all duration-150 ${
-            tab === "rental"
-              ? "!border-amber-600 !bg-amber-600 !text-white shadow-md font-bold"
-              : "!border !border-stone-300 !bg-white !text-stone-700 shadow-sm hover:!bg-stone-50 hover:!text-stone-950 hover:!border-stone-400"
-          }`}
-          onClick={() => setTab("rental")}
-        >
-          Hồ sơ thuê
-        </Button>
-        <Button
-          variant={tab === "renewal" ? "primary" : "outline"}
-          className={`h-11 rounded-xl text-sm font-semibold transition-all duration-150 ${
-            tab === "renewal"
-              ? "!border-amber-600 !bg-amber-600 !text-white shadow-md font-bold"
-              : "!border !border-stone-300 !bg-white !text-stone-700 shadow-sm hover:!bg-stone-50 hover:!text-stone-950 hover:!border-stone-400"
-          }`}
-          onClick={() => setTab("renewal")}
-        >
-          Yêu cầu gia hạn
-        </Button>
+      <div className="grid grid-cols-2 gap-2 rounded-2xl border border-stone-200 bg-white p-1.5">
+        {([["rental", "Hồ sơ thuê"], ["renewal", "Yêu cầu gia hạn"]] as const).map(([value, label]) => (
+          <Button key={value} type="button" aria-pressed={tab === value} variant={tab === value ? "primary" : "ghost"}
+            className={`min-h-11 rounded-xl px-2 ${tab === value ? renewalPrimaryClass : "!text-stone-600 hover:!bg-stone-50"}`}
+            onClick={() => setTab(value)}>
+            {label}
+          </Button>
+        ))}
       </div>
-      {(tab === "rental" || role === "manager") && <div className={`grid items-end gap-3 ${role === "manager" ? (tab === "renewal" ? "lg:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]" : "lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]") : "sm:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]"}`}>
-        {(tab === "rental" || role === "manager") && (
+      {tab === "renewal" && role === "manager" && <RenewalSearch value={search} onChange={setSearch} onSearch={() => change({ search: search.trim() || undefined })}>
+        <select aria-label="Sắp xếp yêu cầu gia hạn" className="h-11 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-700 sm:w-auto"
+          value={query.sort || "createdAt,desc"} onChange={e => change({ sort: e.target.value })}>
+          <option value="createdAt,desc">Mới nhất</option>
+          <option value="createdAt,asc">Cũ nhất</option>
+          <option value="newEndDate,asc">Ngày kết thúc đề nghị gần nhất</option>
+          <option value="amount,desc">Giá giảm dần</option>
+        </select>
+      </RenewalSearch>}
+      {tab === "rental" && <div className={`grid items-end gap-3 ${role === "manager" ? "lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]" : "sm:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]"}`}>
           <form
             className="grid h-full grid-cols-[minmax(0,1fr)_auto] items-end gap-2"
             onSubmit={(event) => {
@@ -423,8 +417,7 @@ function WorkspaceData({
             </label>
             <Button type="submit" className="h-[42px] shrink-0 self-end">Tìm kiếm</Button>
           </form>
-        )}
-        {tab === "rental" && <label className="block min-w-0">
+        <label className="block min-w-0">
           Trạng thái
           <select
             className={`${inputClass} mt-1 block h-[42px] w-full`}
@@ -440,7 +433,7 @@ function WorkspaceData({
               </option>
               ))}
           </select>
-        </label>}
+        </label>
         {role === "manager" && (
           <label className="block min-w-0">
             Sắp xếp
@@ -451,12 +444,8 @@ function WorkspaceData({
             >
               <option value="createdAt,desc">Mới nhất</option>
               <option value="createdAt,asc">Cũ nhất</option>
-              <option value={tab === "rental" ? "contractEndDate,asc" : "newEndDate,asc"}>
-                {tab === "rental" ? "Ngày hết hạn gần nhất" : "Ngày kết thúc đề nghị gần nhất"}
-              </option>
-              <option value={tab === "rental" ? "monthlyPrice,desc" : "amount,desc"}>
-                Giá giảm dần
-              </option>
+              <option value="contractEndDate,asc">Ngày hết hạn gần nhất</option>
+              <option value="monthlyPrice,desc">Giá giảm dần</option>
             </select>
           </label>
         )}

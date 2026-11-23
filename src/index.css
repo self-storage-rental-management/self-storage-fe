@@ -145,6 +145,26 @@ svg:not(.recharts-surface):not(.show-icon) { display: none !important; }
 .ui-button-primary { background: var(--action-primary); color: var(--action-primary-ink); }
 .ui-button-primary:hover { background: var(--action-primary-hover); }
 .ui-button-primary:active { background: var(--action-primary-active); }
+.manager-return-table { min-width: 1100px; }
+.manager-return-table thead { background: transparent; }
+.manager-return-table th { padding-top: 1rem; padding-bottom: 1rem; font-size: 0.75rem; font-weight: 500; text-transform: none; letter-spacing: normal; }
+.manager-return-table td { padding-top: 1.25rem; padding-bottom: 1.25rem; }
+.manager-return-table tbody { border-bottom: 1px solid #e7e5e4; }
+.check-in-work-table thead { background: #f6f4f1; border-top: 1px solid #e7e5e4; }
+.check-in-work-table th { font-size: 0.75rem; font-weight: 500; text-transform: none; letter-spacing: normal; }
+.check-in-work-table td { overflow-wrap: anywhere; padding-top: 1.1rem; padding-bottom: 1.1rem; }
+.check-in-work-table tbody { background: #fff; }
+.check-in-work-table .ui-badge { border: 0; border-radius: 9999px; padding: 0.35rem 0.75rem; }
+.check-in-work-table .ui-badge-success { background: #dcfce7; color: #166534; }
+.check-in-work-table .ui-badge-error { background: #fbe0e1; color: #a01c1c; }
+.check-in-work-table .ui-badge-warning { background: #fef3c7; color: #854d0e; }
+.check-in-work-table .check-in-status-scheduled .ui-badge { background: #dce9ff; color: #1d4ed8; }
+.manager-payment-table .ui-badge { border-radius: 9999px; padding: 0.35rem 0.75rem; white-space: normal; }
+.manager-payment-table .ui-badge-success { background: #dcfce7; color: #166534; }
+.manager-payment-table .ui-badge-error { background: #fbe0e1; color: #a01c1c; }
+.manager-payment-table .payment-status-refunded .ui-badge { background: #dce9ff; color: #1d4ed8; }
+.check-in-work-table td:last-child button { max-width: 100%; white-space: normal !important; overflow-wrap: anywhere; }
+.check-in-work-table td:nth-child(5) > span { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 .ui-button-primary.renewal-confirm-button:disabled,
 .ui-button-primary.booking-confirm-button:disabled { background: #e7e5e4; color: #57534e; opacity: 1; }
 .ui-button-secondary { background: var(--action-secondary); color: var(--text-primary); }
