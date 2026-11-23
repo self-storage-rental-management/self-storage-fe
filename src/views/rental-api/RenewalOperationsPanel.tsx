@@ -619,7 +619,7 @@ export default function RenewalOperationsPanel({
                 {/* 1. Header Meta & Customer Pill */}
                 <div className="space-y-2 border-b border-stone-200/80 pb-3">
                   <p className="text-xs sm:text-sm font-medium text-stone-600">
-                    Hợp đồng <span className="font-semibold text-stone-900">{s.rentalDisplayCode || s.displayCode || "HD-0123"}</span> · Ô kho <span className="font-semibold text-stone-900">{unitCode}</span> · Gia hạn <span className="font-semibold text-stone-900">{rentalMonths} tháng</span>
+                    Hợp đồng <span className="font-semibold text-stone-900">{s.rentalDisplayCode || s.displayCode || "HD-0123"}</span>, Ô kho <span className="font-semibold text-stone-900">{unitCode}</span>, Gia hạn <span className="font-semibold text-stone-900">{rentalMonths} tháng</span>
                   </p>
                   <div>
                     <div className="inline-flex flex-wrap items-center gap-4 rounded-lg border border-stone-200 bg-stone-50 px-3.5 py-1.5 text-xs text-stone-700">
