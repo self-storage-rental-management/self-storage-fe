@@ -424,12 +424,31 @@ export default function BusinessDashboardPanel({
             </span>
             <span className="text-xs text-emerald-700 font-medium">đ</span>
           </div>
-          <p className="mt-2 text-[11px] text-stone-500 flex items-center justify-between">
-            <span>
-              {revenueReport?.paymentPurposeBreakdown?.reduce((sum, p) => sum + p.count, 0) || 0} giao dịch thanh toán
-            </span>
-            <span className="text-emerald-700 font-semibold font-mono">Đã đối soát</span>
-          </p>
+          <div className="mt-2 text-[11px] text-stone-500">
+            <div className="flex items-center justify-between">
+              <span>
+                {revenueReport?.paymentPurposeBreakdown?.reduce((sum, p) => sum + p.count, 0) || 0} giao dịch thanh toán
+              </span>
+              {(() => {
+                const status = revenueReport?.reconciliationStatus || 'VERIFIED'
+                if (status === 'PARTIAL') {
+                  return <span className="text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded font-semibold font-mono text-[10px]">Đối soát một phần</span>
+                }
+                if (status === 'UNVERIFIED') {
+                  return <span className="text-orange-700 bg-orange-50 px-1.5 py-0.5 rounded font-semibold font-mono text-[10px]">Chưa đối soát</span>
+                }
+                if (status === 'UNKNOWN') {
+                  return <span className="text-stone-600 bg-stone-100 px-1.5 py-0.5 rounded font-semibold font-mono text-[10px]">Chưa xác minh</span>
+                }
+                return <span className="text-emerald-700 font-semibold font-mono">Đã đối soát</span>
+              })()}
+            </div>
+            {revenueReport?.unverifiedAmount != null && revenueReport.unverifiedAmount > 0 ? (
+              <div className="text-[10px] text-amber-600 mt-0.5 text-right font-medium">
+                Chưa xác minh: {formatVnd(revenueReport.unverifiedAmount)} ({revenueReport.unverifiedTransactions ?? 0} gd)
+              </div>
+            ) : null}
+          </div>
         </Card>
 
         {/* KPI 2: Current Month Expected / Collected */}

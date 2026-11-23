@@ -27,6 +27,9 @@ export interface BusinessRevenueReport {
   monthlyBreakdown: MonthlyRevenue[]
   facilityBreakdown: FacilityRevenue[]
   paymentPurposeBreakdown: PurposeRevenue[]
+  reconciliationStatus?: 'VERIFIED' | 'PARTIAL' | 'UNVERIFIED' | 'UNKNOWN' | string
+  unverifiedAmount?: number
+  unverifiedTransactions?: number
 }
 
 export interface FacilityPerformance {
