@@ -8,7 +8,6 @@ import {
   listOverdueCases,
   listOverdueFollowUps,
   sendOverdueFollowUp,
-  validOverdueRef,
 } from "../../services/overdueApi"
 import { validateText } from "../../services/renewalOperationsApi"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
@@ -182,8 +181,6 @@ function OverdueSession({ identity, facilityId, onLocked }: {
   })
   const [search, setSearch] = useState("")
   const [selected, setSelected] = useState<string>()
-  const [historyRef, setHistoryRef] = useState("")
-  const [refError, setRefError] = useState(false)
   const [locked, setLocked] = useState(false)
   const read = useRentalApiResource(
     `${identity}:${JSON.stringify(query)}`,
@@ -283,38 +280,6 @@ function OverdueSession({ identity, facilityId, onLocked }: {
           </Card>
         </>
       )}
-      <Card className="p-4">
-        <details className="text-sm">
-        <summary className="cursor-pointer font-semibold">Tra cứu lịch sử</summary>
-        <div className="mt-3 flex flex-wrap items-end gap-2">
-        <label className="min-w-0 flex-1">
-          Mã theo dõi có sẵn
-          <input
-            className={operationsInputClass}
-            value={historyRef}
-            onChange={(e) => setHistoryRef(e.target.value)}
-            placeholder="Nhập mã hồ sơ quá hạn cần tra cứu"
-          />
-        </label>
-        <Button
-          variant="outline"
-          onClick={async () => {
-            const ref = historyRef.trim()
-            if (validOverdueRef(ref)) { setRefError(false); setSelected(ref); return }
-            if (/^(?:SH-\d{6}|QH-\d{4}-\d{6})$/i.test(ref)) {
-              try { const record = await getOverdueCase(ref); setRefError(false); setSelected(record.caseRef) }
-              catch { setRefError(true) }
-            } else setRefError(true)
-          }}
-        >
-          Mở lịch sử
-        </Button>
-        {refError && (
-          <p role="alert">Mã hồ sơ không hợp lệ. Vui lòng chọn hồ sơ trong danh sách phía trên.</p>
-        )}
-        </div>
-        </details>
-      </Card>
       {selected && (
         <Modal
           open
@@ -406,7 +371,7 @@ function OverdueDetail({
           )}
         </>
       )}
-      {last && (
+      {last && !history.data?.data.some(event => event.id === last.id) && (
         <div role="status">
           <OverdueFollowUpCard event={last} />
         </div>

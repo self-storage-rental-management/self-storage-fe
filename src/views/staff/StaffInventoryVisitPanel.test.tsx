@@ -1,0 +1,41 @@
+import { renderToStaticMarkup } from 'react-dom/server'
+import { describe, expect, it, vi } from 'vitest'
+import type { CheckInCase, InventoryVisit } from '../../services/checkInApi'
+import StaffInventoryVisitPanel from './StaffInventoryVisitPanel'
+
+const appointmentAt = '2026-11-03T03:00:00Z'
+const arrivedAt = '2026-11-03T02:45:00Z'
+const deadline = '2026-11-08T08:00:00Z'
+const visit: InventoryVisit = { appointmentAt, arrivedAt: null, identityVerifiedAt: null, verifiedByName: null, photoId: null }
+
+function render(inventoryVisit: InventoryVisit | null, now = Date.parse('2026-11-03T02:45:00Z')) {
+  const item = { checkInId: 'checkin-1', checkInStatus: 'setup_completed', inventoryResolutionStatus: 'NOT_STARTED',
+    inventoryFinalDeadlineAt: deadline, inventoryVisit } as CheckInCase
+  return renderToStaticMarkup(<StaffInventoryVisitPanel item={item} now={now} busy={false}
+    onBusyChange={vi.fn()} onSaved={vi.fn()} onPreview={vi.fn()} />)
+}
+
+describe('staff inventory visit', () => {
+  it('offers the arrival action only with an appointment inside the deadline', () => {
+    expect(render(null)).not.toContain('Ghi nhận khách đã đến')
+    expect(render(visit)).toContain('Ghi nhận khách đã đến')
+    expect(render(visit, Date.parse(deadline))).toContain('Đã quá hạn kiểm kê')
+    expect(render(visit, Date.parse(deadline))).not.toContain('Ghi nhận khách đã đến')
+  })
+
+  it('requires the booking customer and a photo before enabling identity verification', () => {
+    const html = render({ ...visit, arrivedAt })
+    expect(html).toContain('03/11/2026 09:45')
+    expect(html).toContain('người đặt kho trực tiếp có mặt')
+    expect(html).toContain('accept="image/jpeg,image/png,image/webp"')
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Xác minh người đặt kho<\/button>/)
+  })
+
+  it('shows the recorded verifier and opens the restricted evidence only by action', () => {
+    const html = render({ ...visit, arrivedAt, identityVerifiedAt: '2026-11-03T02:50:00Z',
+      verifiedByName: 'Nhân viên A', photoId: 'private-identity-file' })
+    expect(html).toContain('Đã xác minh lúc 03/11/2026 09:50 bởi Nhân viên A.')
+    expect(html).toContain('Xem ảnh xác minh')
+    expect(html).not.toContain('private-identity-file')
+  })
+})
