@@ -135,7 +135,7 @@ describe('customer reservation layout regression', () => {
     const cases: Array<[Partial<CustomerReservationDetail>, number, string]> = [
       [{ inventoryArrivedAt: '2026-11-02T09:00:00Z' }, Date.parse('2026-11-02T09:05:00Z'), 'Đang chờ xác minh danh tính.'],
       [{}, Date.parse('2026-11-08T08:00:00Z'), 'Đã quá hạn kiểm kê'],
-      [{ inventoryResolutionStatus: 'PENDING_CUSTOMER' }, Date.now(), 'Staff đã công bố kết quả kiểm kê'],
+      [{ inventoryResolutionStatus: 'PENDING_CUSTOMER' }, Date.now(), 'Nhân viên đã cập nhật kết quả kiểm kê'],
     ]
     for (const [overrides, now, text] of cases) {
       const html = renderToStaticMarkup(<InventoryAppointmentPanel detail={{ ...detail, ...overrides }} now={now} onSaved={vi.fn()} />)

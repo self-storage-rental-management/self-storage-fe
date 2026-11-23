@@ -28,7 +28,7 @@ export default function ReturnPolicyNotice({ terms, business = false }: { terms?
         <p><b>Trả trong thời gian chuẩn bị, trước ngày bắt đầu tính tiền:</b> áp dụng phí theo báo giá{setupFee != null ? ` (${formatVndAmount(setupFee)})` : ''}. Tiền thuê được quyết toán theo điều khoản đã chấp nhận. Tiền cọc đảm bảo được quyết toán riêng sau khi nghiệm thu.</p>
         <p className="mt-1 text-xs text-stone-600">Nếu hư hỏng, hệ thống trừ phí hư hỏng vào cọc một tháng trước; chỉ phần vượt cọc mới yêu cầu khách thanh toán thêm. Không nhập phí tự do: nhân viên chọn hạng mục, số lượng/diện tích theo bảng giá chuẩn.</p>
         <p className="mt-1 text-xs text-stone-600"><b>Hư hỏng nhẹ</b> gồm trầy xước, bong tróc sơn, vết bẩn khó vệ sinh; <b>hư hỏng nặng</b> gồm cửa cong, khóa hỏng, sàn nứt/vỡ hoặc hư hỏng làm mất an toàn, không thể sử dụng.</p>
-        <p className="mt-1 text-xs text-stone-600">Nếu việc trả kho phát sinh vì hàng không khớp khai báo, nhân viên ghi nhận nguyên nhân và bằng chứng để cơ sở xem xét. Hệ thống không tự động coi đây là khách tự ý hủy.</p>
+        <p className="mt-1 text-xs text-stone-600">Nếu hàng thực tế khác khai báo, nhân viên ghi nhận nguyên nhân và bằng chứng để cơ sở xem xét. Trường hợp này không tự động được coi là khách tự ý hủy.</p>
       </div>
       <div className="rounded-lg border border-amber-200 bg-white/70 p-3">
         <p><b>Trả sau khi kỳ thuê đã bắt đầu:</b> tháng đã bắt đầu được tính trọn tháng; hệ thống hoàn tiền thuê của các tháng chưa bắt đầu. Nếu hư hỏng vượt tiền cọc một tháng, phần vượt tiếp tục trừ vào tiền thuê chưa sử dụng; vượt cả khoản này thì khách thanh toán thêm.</p>
@@ -38,7 +38,7 @@ export default function ReturnPolicyNotice({ terms, business = false }: { terms?
       <p><b>Thời hạn quyết toán:</b> Nhân viên nghiệm thu trong 4 giờ làm việc sau khi khách bàn giao đủ điều kiện. Quản lý cơ sở duyệt trong 6 giờ sau khi nhận đủ hồ sơ. Khách có 72 giờ xem và xác nhận bảng kê. Quá hạn không tự động đồng ý thay khách.</p>
       <p className="font-medium">Phí trả kho khác với khoản thanh toán trước 20% để giữ chỗ. Không mặc định mất toàn bộ cọc đảm bảo khi trả kho.</p>
       {business && <p className="border-t border-amber-200 pt-3">Ban điều hành cần công bố điều kiện, công thức và mức phí trong gói thuê trước khi khách nhận báo giá. Quyết toán dùng phiên bản đã lưu theo đơn, không áp chính sách mới ngược cho hợp đồng cũ. Nếu hồ sơ thiếu bảng giá đã lưu hoặc có tranh chấp, cần xem xét thủ công trước khi chốt.</p>}
-      {!terms && <p className="text-stone-600">Mức phí và số ngày báo trước cụ thể nằm trong báo giá/hợp đồng đã chấp nhận. Bảng quyết toán sau nghiệm thu là nơi đối chiếu số tiền thực tế; không có một mức phạt cố định cho mọi đơn.</p>}
+      {!terms && <p className="text-stone-600">Mức phí và số ngày báo trước cụ thể nằm trong báo giá/hợp đồng đã chấp nhận. Số tiền thực tế được thể hiện trong bảng quyết toán sau nghiệm thu; không có một mức phạt cố định cho mọi đơn.</p>}
     </div>
     </details>
   </div>

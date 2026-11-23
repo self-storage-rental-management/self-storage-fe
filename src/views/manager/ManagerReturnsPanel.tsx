@@ -481,7 +481,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
         facilityCompensation > 0 ? facilityCompensation : undefined
       )
       showToast(
-        `Đã rà soát khiếu nại cho đơn ${selectedReturn.id} thành công!`
+        `Đã xử lý khiếu nại của hồ sơ ${selectedReturn.id}.`
       )
       setDisputeModalOpen(false)
       setDisputeResolutionNote('')
