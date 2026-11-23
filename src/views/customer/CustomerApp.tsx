@@ -1332,6 +1332,27 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       targetId: notification.relatedEntityId || undefined,
       isRead: notification.isRead,
     })),
+    // Keep the customer informed even if a legacy Staff action changed the
+    // reservation but did not persist a notification row. The backend
+    // notification remains the source of truth when it exists; Layout merges
+    // this fallback by id without creating duplicates for normal API flow.
+    ...(isApiAuthenticated() ? backendReservations
+      .filter(reservation =>
+        (reservation.goodsReviewStatus === 'APPROVED' || reservation.goodsReviewStatus === 'REJECTED') &&
+        !backendNotifications.some(notification => notification.relatedEntityId === reservation.id && (
+          notification.title === 'Hàng hóa đã được chấp thuận' || notification.title === 'Hàng hóa không được chấp thuận'
+        ))
+      )
+      .map(reservation => ({
+        id: `goods-review-result-${reservation.id}-${reservation.goodsReviewStatus}`,
+        date: reservation.createdAt,
+        title: reservation.goodsReviewStatus === 'APPROVED' ? 'Hàng hóa đã được chấp thuận' : 'Hàng hóa chưa được chấp thuận',
+        message: reservation.goodsReviewStatus === 'APPROVED'
+          ? `${reservation.reservationCode} · Vui lòng thanh toán tiền cọc để hoàn tất đặt kho`
+          : `${reservation.reservationCode} · Hàng hóa không được chấp thuận. Vui lòng mở hồ sơ để xem chi tiết`,
+        page: 'reservations',
+        targetId: reservation.id,
+      })) : []),
     ...(isApiAuthenticated() ? [] : myHolds.filter(hold => hold.status === 'awaiting_review' && hold.goodsReviewStatus === 'PENDING').map(hold => ({ id: `goods-review-submitted-${hold.id}`, date: hold.goodsReviewSubmittedAt || hold.createdAt, title: 'Yêu cầu hàng hóa đã được gửi', message: `${hold.id} · Kho đang được giữ · Chưa yêu cầu tiền cọc`, page: 'reservations', targetId: hold.id }))),
     ...(isApiAuthenticated() ? [] : myHolds.filter(hold => hold.goodsReviewStatus === 'APPROVED').map(hold => ({ id: `goods-review-approved-${hold.id}`, date: hold.reviewedAt || hold.createdAt, title: 'Hàng hóa đã được chấp thuận', message: `${hold.id} · Vui lòng thanh toán tiền cọc để hoàn tất đặt kho`, page: 'reservations', targetId: hold.id }))),
     ...(isApiAuthenticated() ? [] : myHolds.filter(hold => hold.goodsReviewStatus === 'REJECTED').map(hold => ({ id: `goods-review-rejected-${hold.id}`, date: hold.reviewedAt || hold.createdAt, title: 'Hàng hóa chưa được chấp thuận', message: `${hold.id} · Lý do: ${hold.staffReviewNotes || 'Hàng hóa chưa phù hợp điều kiện lưu trữ'}`, page: 'reservations', targetId: hold.id }))),

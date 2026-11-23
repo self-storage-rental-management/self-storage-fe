@@ -388,13 +388,13 @@ function ReturnWorkspace({
           <div key={record.id} className="rounded-xl border border-stone-200 bg-white shadow-xs transition overflow-hidden">
             {/* ─── Compact Summary Header (Clickable for staff/manager) ─── */}
             <div
-              className={`flex flex-wrap items-center justify-between gap-3 p-3.5 transition select-none ${
+              className={`flex flex-wrap items-center justify-between gap-3 p-3.5 cursor-pointer transition select-none ${
                 role === 'customer'
                   ? 'bg-stone-50/80 border-b border-stone-200'
-                  : isExpanded
-                  ? 'cursor-pointer bg-stone-50/80 border-b border-stone-200'
-                  : 'cursor-pointer hover:bg-stone-50/60'
-              }`}
+                  : inventoryMismatch
+                    ? isExpanded ? 'bg-red-50/80 border-b border-red-200' : 'bg-red-50/40 hover:bg-red-50/80'
+                    : isExpanded ? 'bg-stone-50/80 border-b border-stone-200' : 'hover:bg-stone-50/60'
+              } ${role === 'customer' ? '' : 'cursor-pointer'}`}
               onClick={role === 'customer' ? undefined : () => toggleExpand(record.id)}
             >
               <div className="flex flex-wrap items-center gap-2.5">

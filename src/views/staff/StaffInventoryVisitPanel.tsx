@@ -63,7 +63,7 @@ export default function StaffInventoryVisitPanel({ item, now, busy, onBusyChange
 
   return <section className="space-y-3 rounded-lg border border-violet-200 bg-violet-50 p-4 text-sm text-violet-950">
     <p className="font-semibold">Lịch hẹn và xác minh khách kiểm kê</p>
-    {item.setupCompletedAt && <p>Khách báo setup xong lúc {format(item.setupCompletedAt)}</p>}
+    {item.setupCompletedAt && <p>Khách báo chuẩn bị xong lúc {format(item.setupCompletedAt)}</p>}
     <p>Giờ hẹn <b>{visit?.appointmentAt ? format(visit.appointmentAt) : 'Chưa đặt lịch'}</b></p>
     {item.inventoryDueAt && <p>Mốc nhắc {format(item.inventoryDueAt)}</p>}
     {item.inventoryFinalDeadlineAt && <p>Hạn kiểm kê <b>{format(item.inventoryFinalDeadlineAt)}</b></p>}
