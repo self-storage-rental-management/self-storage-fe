@@ -51,9 +51,9 @@ export interface RenewalApiRecord {
 export interface RenewalApiOption {
   pricingPackageCode: string
   pricingPackageName?: string | null
-  discountRate?: number // Older renewal-options responses omit the rate.
   signingWindowDays?: number | null
   rentalMonths: number
+  discountRate?: number | null
 }
 export interface RenewalVnpayPaymentResponse {
   paymentId: string

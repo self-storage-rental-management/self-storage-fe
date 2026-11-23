@@ -443,6 +443,8 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     try {
       const updated = await markCustomerPreparationComplete(r.id, 'Khách hàng đã sắp xếp hàng và sẵn sàng để nhân viên kiểm kê.')
       setDetail(updated)
+      setPreparationConfirmed(true)
+      setMessage('Đã báo sẵn sàng để kiểm kê. Nhân viên sẽ thực hiện kiểm kê hàng hóa.')
       try { await onRefresh() } catch { /* The preparation command has already succeeded. */ }
     } catch (error) {
       setMessage(userFacingError(error, 'Không thể báo đã chuẩn bị xong.'))
@@ -451,8 +453,10 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         setDetail(current)
         if (current.checkInStatus === 'setup_completed' || current.checkInStatus === 'completed') setMessage(null)
       } catch { /* Preserve the command error if readback is also unavailable. */ }
+      try { await onRefresh() } catch { /* Preserve the command error if readback is also unavailable. */ }
+      preparationLock.current = false
     }
-    finally { preparationLock.current = false; setConfirmingPreparation(false) }
+    finally { setConfirmingPreparation(false) }
   }
   const resolveInventoryDecision = async (decision: 'ACCEPT_FULL' | 'ACCEPT_PARTIAL' | 'CANCEL_AND_RETURN', scheduledDate?: string) => {
     if (resolvingInventory) return
@@ -594,7 +598,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         </div>
         <h2 className="mt-1 text-lg font-bold text-stone-900">{displayedUnitTypeName} · {displayedFacilityName}</h2>
         <div className="mt-3 space-y-2">
-          <p className="text-xs leading-5 text-stone-600">{savedQuote?.rentalPeriodConfirmed ? 'Lịch thuê đã chốt:' : 'Lịch thuê dự kiến sau thời gian chuẩn bị:'} <b className="text-stone-900">{formatDisplayDate(savedQuote?.startDate || r.startDate)} đến {formatDisplayDate(rentalEndDateForDisplay(savedQuote?.endDate || r.endDate))}</b></p>
+          <p className="text-xs leading-5 text-stone-600">{savedQuote?.rentalPeriodConfirmed ? 'Kỳ thuê đã chốt:' : 'Kỳ thuê dự kiến sau thời gian chuẩn bị:'} <b className="text-stone-900">{formatDisplayDate(savedQuote?.startDate || r.startDate)} đến {formatDisplayDate(rentalEndDateForDisplay(savedQuote?.endDate || r.endDate))}</b></p>
           <p className="text-xs leading-5 text-blue-800">Lịch nhận kho khách đặt: <b>{savedAppointmentAt ? formatCustomerDateTime(new Date(savedAppointmentAt)) : 'Chưa đặt lịch'}</b></p>
         </div>
       </div>
@@ -606,7 +610,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
           <p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{countdown.text}</p>
           <p className="mt-1">Nhân viên duyệt trong tối đa {STAFF_REVIEW_HOURS} giờ từ khi gửi đơn. Sau khi được duyệt, bạn có thể thanh toán cọc.</p>
         </div>}
-        <CustomerReservationPayment reservation={r} facilityName={displayedFacilityName} unitTypeName={displayedUnitTypeName} paymentExpiresAt={detail?.paymentExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />
+        <CustomerReservationPayment reservation={r} facilityName={displayedFacilityName} unitTypeName={displayedUnitTypeName} paymentStartedAt={detail?.paymentStartedAt} paymentExpiresAt={detail?.paymentExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />
         {r.status === 'AWAITING_CUSTOMER_RECEIPT' && <div className={`rounded-lg border p-3 text-right text-xs ${receiptCountdown.expired ? 'border-red-400 bg-red-50 text-red-950' : receiptCountdown.urgent ? 'border-red-300 bg-red-50/70 text-red-950' : 'border-amber-300 bg-amber-50 text-amber-950'}`}>
           <p className="font-bold">Nhân viên đã hoàn tất bàn giao kho trống</p>
           <p className="mt-1">Vui lòng kiểm tra kho và mã ra vào, sau đó xác nhận đã nhận kho để bắt đầu thời gian chuẩn bị.</p>

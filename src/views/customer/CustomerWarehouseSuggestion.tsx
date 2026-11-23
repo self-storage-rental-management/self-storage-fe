@@ -63,9 +63,9 @@ function RentalPriceComparison({ currentName, suggestedName, comparison }: {
   const rentalSavings = current.rentAfterPackageDiscount - suggested.rentAfterPackageDiscount
   const rows = [
     ['Tiền thuê cả kỳ', current.rentAfterPackageDiscount, suggested.rentAfterPackageDiscount],
-    ['Tiền cọc đảm bảo (hoàn lại khi trả kho)', current.securityDepositAmount, suggested.securityDepositAmount],
+    ['Tiền cọc đảm bảo kho (hoàn lại khi trả kho)', current.securityDepositAmount, suggested.securityDepositAmount],
     ['Tổng phải thanh toán', current.rentAfterPackageDiscount + current.securityDepositAmount, suggested.rentAfterPackageDiscount + suggested.securityDepositAmount],
-    ['Thanh toán trước 20% (đã nằm trong tổng)', current.reservationDepositAmount, suggested.reservationDepositAmount],
+    ['Phí giữ chỗ (thanh toán trước 20%)', current.reservationDepositAmount, suggested.reservationDepositAmount],
   ] as const
 
   return <div className="space-y-2 rounded-lg border border-amber-200 bg-white p-3 text-stone-900">

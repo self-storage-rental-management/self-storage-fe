@@ -99,6 +99,7 @@ export interface CheckInCase {
   identityVerificationNote: string | null
   contractSignedAt: string | null
   contractEvidenceReference: string | null
+  paymentEvidenceReference: string | null
   paymentCollectedAt: string | null
   setupStartedAt: string | null
   setupDueAt: string | null
@@ -410,6 +411,13 @@ export async function completeCheckInSetup(checkInId: string, note?: string) {
   return assertEnvelope(await apiRequest<unknown>(
     `/api/staff/check-ins/${encodeURIComponent(checkInId)}/setup/complete`,
     { method: 'POST', body: JSON.stringify({ note }) },
+  ))
+}
+
+export async function archiveCompletedCheckIn(checkInId: string) {
+  return assertEnvelope(await apiRequest<unknown>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}`,
+    { method: 'DELETE' },
   ))
 }
 

@@ -509,6 +509,7 @@ export interface CustomerReservationDetail {
   reservation: CustomerReservation
   goodsCondition: string | null
   notes: string | null
+  paymentStartedAt: string | null
   paymentExpiresAt: string | null
   complaintExpiresAt: string | null
   archivedAt: string | null
