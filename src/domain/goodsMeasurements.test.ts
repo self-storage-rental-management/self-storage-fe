@@ -8,7 +8,7 @@ it('converts centimeters to cubic meters and includes every package and goods ty
 })
 
 it('retains small package volumes instead of displaying zero', () => {
-  expect(formatGoodsVolume(goodsVolumeM3({ quantity: 3, lengthCm: 1.1, widthCm: 1.1, heightCm: 1.1 }))).toBe('0,000004')
+  expect(formatGoodsVolume(goodsVolumeM3({ quantity: 3, lengthCm: 1.1, widthCm: 1.1, heightCm: 1.1 }))).toBe('< 0,001')
 })
 
 it('calculates the customer example of ten 40 × 50 × 50 cm packages as one cubic meter', () => {

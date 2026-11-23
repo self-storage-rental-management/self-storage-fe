@@ -133,7 +133,7 @@ export default function ManagerCheckInReminderPanel({ showToast }: { showToast: 
                     <Td>
                       <Badge variant={state.expired ? 'error' : state.urgent ? 'warning' : 'muted'}>{state.text}</Badge>
                       {item.receiptConfirmationDueAt && <p className={`mt-1 text-xs ${state.expired || state.urgent ? 'text-red-700' : 'text-stone-500'}`}>Hạn {formatManagerDateTime(item.receiptConfirmationDueAt)}</p>}
-                      <p className={releaseState.eligible ? 'mt-1 text-xs font-semibold text-red-700' : 'mt-1 text-xs font-semibold text-amber-700'}>{releaseState.text}</p>
+                      {releaseState.eligible && <p className="mt-1 text-xs font-semibold text-red-700">{releaseState.text}</p>}
                     </Td>
                     <Td className="text-right"><div className="flex flex-wrap justify-end gap-2">
                       <Button size="sm" variant="outline" disabled={sendingId !== null || releasingId !== null} onClick={() => void remind(item)}>{sendingId === item.checkInId ? 'Đang gửi…' : 'Nhắc khách xác nhận'}</Button>

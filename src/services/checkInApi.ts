@@ -6,6 +6,13 @@ export type CheckInStatus = WorkflowCheckInStatus | null
 export type CheckInListStatus = 'UNSCHEDULED' | NonNullable<CheckInStatus>
 export type CheckInGroup = 'ONGOING' | 'PROCESSED'
 export type CheckInReservationStatus = ReservationStatus
+export type InventoryVisit = {
+  appointmentAt: string | null
+  arrivedAt: string | null
+  identityVerifiedAt: string | null
+  verifiedByName: string | null
+  photoId: string | null
+}
 export type InventoryResolutionStatus =
   | 'NOT_STARTED'
   | 'PENDING_CUSTOMER'
@@ -27,6 +34,8 @@ export interface CheckInChecklist {
 
 export interface CheckInInventoryLine {
   actualGoods?: GoodsItemInput | null
+  actualCategoryId?: string | null
+  actualMaterialId?: string | null
   goodsItemId: string
   actualQuantity: number
   condition: 'INTACT' | 'DAMAGED' | 'NOT_PRESENT'
@@ -95,6 +104,7 @@ export interface CheckInCase {
   appointmentAt: string | null
   checkedInAt: string | null
   identityVerifiedAt: string | null
+  inventoryVisit?: InventoryVisit | null
   verifiedIdentityDocument: string | null
   identityVerificationNote: string | null
   contractSignedAt: string | null
@@ -476,7 +486,25 @@ export async function confirmPartialInventoryRemoval(checkInId: string, request:
   ))
 }
 
-export async function uploadCheckInEvidence(checkInId: string, file: File) {
+export async function recordInventoryArrival(checkInId: string) {
+  return assertEnvelope(await apiRequest<unknown>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/inventory-arrival`,
+    { method: 'POST' },
+  ))
+}
+
+export async function verifyInventoryIdentity(checkInId: string, request: {
+  identityDocumentNumber: string
+  photoId: string
+  bookingCustomerPresent: boolean
+}) {
+  return assertEnvelope(await apiRequest<unknown>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/inventory-identity`,
+    { method: 'POST', body: JSON.stringify(request) },
+  ))
+}
+
+export async function uploadCheckInEvidence(checkInId: string, file: File, purpose: 'CHECK_IN' | 'CHECK_IN_IDENTITY' = 'CHECK_IN') {
   if (file.size > 25 * 1024 * 1024) {
     throw new ApiClientError(
       "Tệp vượt quá dung lượng tối đa 25MB. Vui lòng chọn tệp nhỏ hơn.",
@@ -485,7 +513,7 @@ export async function uploadCheckInEvidence(checkInId: string, file: File) {
   }
   const form = new FormData()
   form.set('file', file)
-  form.set('entityType', 'CHECK_IN')
+  form.set('entityType', purpose)
   form.set('entityId', checkInId)
   const payload = await apiRequest<unknown>('/api/files', { method: 'POST', body: form })
   if (!payload || typeof payload !== 'object' || !('data' in payload)) {
