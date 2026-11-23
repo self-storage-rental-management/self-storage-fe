@@ -73,6 +73,6 @@ export default function BookingPersonalDetails({ user, identity, phone, address,
       {!!identity && !validateCccd(identity).ok && <p role="alert" className="mt-1 text-xs text-red-700">{validateCccd(identity).error}</p>}
     </div>
     <div><label className={label} htmlFor="booking-customer-address">Địa chỉ<span className={badge}>Không bắt buộc khi đặt giữ kho</span></label><input id="booking-customer-address" className={input} value={address} onChange={event => onAddressChange(event.target.value)} /></div>
-    <p className="text-xs leading-5 text-stone-500">Thay đổi ở đây chỉ lưu cho đơn đặt mới. Hồ sơ và các đơn cũ giữ nguyên.</p>
+    <p className="text-xs leading-5 text-stone-500">Sau khi tạo đơn, số điện thoại, CCCD và địa chỉ đã nhập sẽ được cập nhật vào hồ sơ. Các đơn cũ vẫn giữ nguyên dữ liệu đã chụp.</p>
   </section>
 }

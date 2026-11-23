@@ -19,17 +19,17 @@ export default function PaymentReceiptCard({ title,reference,status,fields,foote
       {currency && <p className="mt-1 text-xs text-stone-500">Tiền tệ: {currency}</p>}
     </div>
     }
-    <div className="space-y-5 px-5 py-5 sm:px-6">
-      {information.length > 0 && <section>
-        <h4 className="mb-3 text-sm font-semibold text-stone-900">Thông tin thanh toán</h4>
-        <dl className="divide-y divide-stone-100">{information.map(([label, value]) => <div key={label} className="grid gap-1 py-2.5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] sm:gap-4">
-          <dt className="text-sm text-stone-500">{label}</dt><dd className="min-w-0 break-words text-sm font-medium leading-relaxed text-stone-900">{value}</dd>
+    <div className="grid gap-6 px-5 py-5 sm:px-6 md:grid-cols-2">
+      {information.length > 0 && <section className="space-y-3">
+        <h4 className="border-b border-stone-100 pb-2 text-sm font-semibold text-stone-900">Thông tin thanh toán</h4>
+        <dl className="divide-y divide-stone-100">{information.map(([label, value]) => <div key={label} className="grid gap-1 py-2 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1.8fr)] sm:gap-2">
+          <dt className="text-xs text-stone-500">{label}</dt><dd className="min-w-0 break-words text-xs font-semibold leading-relaxed text-stone-900">{value}</dd>
         </div>)}</dl>
       </section>}
-      <section className="rounded-xl border border-stone-200 bg-stone-50/60 px-4 py-3">
-        <h4 className="mb-2 text-sm font-semibold text-stone-900">Thông tin giao dịch</h4>
-        <dl className="divide-y divide-stone-200/70">{transaction.map(([label, value]) => <div key={label} className="grid gap-1 py-2.5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] sm:gap-4">
-          <dt className="text-xs leading-5 text-stone-500">{label}</dt><dd className="min-w-0 break-all text-xs font-medium leading-5 text-stone-800">{value}</dd>
+      <section className="rounded-xl border border-stone-200 bg-stone-50/60 p-4">
+        <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-900">Thông tin giao dịch</h4>
+        <dl className="divide-y divide-stone-200/70">{transaction.map(([label, value]) => <div key={label} className="grid gap-1 py-1.5 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1.8fr)] sm:gap-2">
+          <dt className="text-xs text-stone-500">{label}</dt><dd className="min-w-0 break-all font-mono text-xs font-medium leading-5 text-stone-800">{value}</dd>
         </div>)}</dl>
       </section>
     </div>
