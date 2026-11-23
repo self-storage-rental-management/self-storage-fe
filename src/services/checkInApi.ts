@@ -25,6 +25,8 @@ export interface CheckInChecklist {
 }
 
 export interface CheckInInventoryLine {
+  actualCategoryId?: string | null
+  actualMaterialId?: string | null
   goodsItemId: string
   actualQuantity: number
   condition: 'INTACT' | 'DAMAGED' | 'NOT_PRESENT'
@@ -72,6 +74,8 @@ export interface CheckInCase {
     name: string | null
     categoryName?: string | null
     materialName?: string | null
+    catalogCategoryId?: string | null
+    catalogMaterialId?: string | null
     quantity: number
     lengthCm: number | null
     widthCm: number | null

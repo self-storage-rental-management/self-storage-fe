@@ -1,4 +1,5 @@
 import { validateCccd, normalizeCccd, maskCccd } from '../../domain/cccd'
+import { getGoodsCatalog, type GoodsCatalog } from "../../services/customerReservationApi"
 import { useEffect, useId, useMemo, useState } from "react"
 import { isCheckInHandoverExpired, staffCheckInActions } from "../../domain/reservationCheckInPolicy"
 
@@ -243,6 +244,8 @@ function compareGoodsLabel(actual: string, declared: string[]) {
 }
 
 type InventoryDraft = {
+  actualCategoryId?: string
+  actualMaterialId?: string
   quantity: string
   condition: CheckInInventoryLine["condition"] | ""
   note: string
@@ -270,6 +273,8 @@ function inventoryFromDeclaration(line: DeclaredInventoryLine): InventoryDraft {
   const quantity = formatInputNumber(line.quantity)
   return {
     ...emptyInventory,
+    actualCategoryId: line.catalogCategoryId ?? "",
+    actualMaterialId: line.catalogMaterialId ?? "",
     quantity,
     lengthCm: formatInputNumber(line.lengthCm),
     widthCm: formatInputNumber(line.widthCm),
@@ -683,17 +688,30 @@ export default function StaffCheckInOperationsPanel({
   }, [])
 
   const declaredLines = handoverTarget?.declaredGoodsLines ?? []
+  const [inventoryCatalog, setInventoryCatalog] = useState<GoodsCatalog>()
+  const [catalogError, setCatalogError] = useState(false)
+  const [catalogRetry, setCatalogRetry] = useState(0)
+  const inventoryTargetId = handoverTarget?.checkInId
+  useEffect(() => {
+    if (!inventoryTargetId) return
+    let current = true
+    setCatalogError(false)
+    void getGoodsCatalog().then(catalog => {
+      if (current) setInventoryCatalog(catalog)
+    }).catch(() => { if (current) setCatalogError(true) })
+    return () => { current = false }
+  }, [inventoryTargetId, catalogRetry])
+  const legacyDeclaredLines = declaredLines.filter(line => !line.catalogCategoryId)
   const declaredCategoryValues = useMemo(
-    () => declaredGoodsCategoryValues(declaredLines),
-    [declaredLines],
+    () => declaredGoodsCategoryValues(legacyDeclaredLines),
+    [legacyDeclaredLines],
   )
   const declaredMaterialValues = useMemo(
-    () => declaredGoodsMaterialValues(declaredLines),
-    [declaredLines],
+    () => declaredGoodsMaterialValues(legacyDeclaredLines),
+    [legacyDeclaredLines],
   )
   const goodsCategoryMatches = compareGoodsLabel(goodsCategory, declaredCategoryValues)
   const goodsMaterialMatches = compareGoodsLabel(goodsMaterial, declaredMaterialValues)
-  const goodsDeclarationVariance = goodsCategoryMatches === false || goodsMaterialMatches === false
   const lineInventory = declaredLines.length > 0 && (
     handoverTarget?.checkInStatus !== "completed" || Boolean(handoverTarget.handover?.inventoryLines?.some(line => line.measurements))
   )
@@ -703,11 +721,15 @@ export default function StaffCheckInOperationsPanel({
     )
     return { line, entry, comparison: compareInventory(line, entry) }
   })
-  const inventoryLinesComplete = inventoryRows.every(({ entry, comparison }) => {
+  const goodsDeclarationVariance = goodsCategoryMatches === false || goodsMaterialMatches === false
+    || inventoryRows.some(({ line, entry, comparison }) => comparison.quantity > 0 && !!line.catalogCategoryId
+      && (entry.actualCategoryId !== line.catalogCategoryId || (entry.actualMaterialId || null) !== (line.catalogMaterialId || null)))
+  const inventoryLinesComplete = inventoryRows.every(({ line, entry, comparison }) => {
     const { quantity, measured, needsNote } = comparison
     return entry.checked && Number.isInteger(quantity) && quantity >= 0 && quantity <= 2147483647
       && Boolean(entry.condition) && (quantity === 0 ? entry.condition === "NOT_PRESENT" : measured && Number.isFinite(comparison.volume) && entry.condition !== "NOT_PRESENT")
       && (!needsNote || Boolean(entry.note.trim()))
+      && (quantity === 0 || !line.catalogCategoryId || Boolean(entry.actualCategoryId))
   })
   const actualDimensions = [0, 0, 0]
   let actualWeight = 0
@@ -989,6 +1011,9 @@ export default function StaffCheckInOperationsPanel({
         if (quantity > 0 && (!measured || !Number.isFinite(comparison.volume))) {
           errors[`${field}-measurements`] = "Nhập đủ kích thước và khối lượng thực tế của dòng hàng"
         }
+        if (quantity > 0 && line.catalogCategoryId && !entry.actualCategoryId) {
+          errors[`${field}-category`] = "Chọn loại hàng thực tế từ danh mục"
+        }
         if (!entry.condition || (quantity === 0) !== (entry.condition === "NOT_PRESENT")) {
           errors[`${field}-condition`] = "Chọn tình trạng phù hợp với số kiện thực tế"
         }
@@ -1121,6 +1146,8 @@ export default function StaffCheckInOperationsPanel({
         inventoryLines: lineInventory ? inventoryRows.map(({ line, entry, comparison }) => ({
           goodsItemId: line.id,
           actualQuantity: comparison.quantity,
+          actualCategoryId: comparison.quantity > 0 ? entry.actualCategoryId || null : null,
+          actualMaterialId: comparison.quantity > 0 ? entry.actualMaterialId || null : null,
           condition: entry.condition as CheckInInventoryLine["condition"],
           note: entry.note.trim() || null,
           measurements: comparison.quantity > 0 ? {
@@ -1460,6 +1487,8 @@ export default function StaffCheckInOperationsPanel({
     const savedLines = item.handover?.inventoryLines ?? []
     setInventoryDraft(Object.fromEntries(savedLines.map(line => [line.goodsItemId, {
       quantity: String(line.actualQuantity), condition: line.condition, note: line.note ?? "",
+      actualCategoryId: line.actualCategoryId ?? "",
+      actualMaterialId: line.actualMaterialId ?? "",
       lengthCm: formatInputNumber(line.measurements?.lengthCm),
       widthCm: formatInputNumber(line.measurements?.widthCm),
       heightCm: formatInputNumber(line.measurements?.heightCm),
@@ -2142,9 +2171,14 @@ export default function StaffCheckInOperationsPanel({
                 <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-950"><b>Kiểm kê hàng hóa</b><p className="mt-1 text-xs">Đối chiếu số kiện, khối lượng, thể tích, kích thước, loại hàng, chất liệu chính và tình trạng hàng hóa sau khi khách đã sắp xếp xong. Hiện trạng kho trống đã được ghi nhận ở bước bàn giao.</p>{handoverTarget.inventoryDueAt && <p className="mt-1 text-xs">Mốc nhắc xử lý: <b>{formatStaffDateTime(handoverTarget.inventoryDueAt)}</b></p>}{handoverTarget.inventoryFinalDeadlineAt && <p className={`mt-1 text-xs font-bold ${new Date(handoverTarget.inventoryFinalDeadlineAt).getTime() <= now ? 'text-red-700' : 'text-indigo-900'}`}>{new Date(handoverTarget.inventoryFinalDeadlineAt).getTime() <= now ? 'Đã quá hạn kiểm kê' : 'Hạn hoàn tất kiểm kê'}: <b>{formatStaffDateTime(handoverTarget.inventoryFinalDeadlineAt)}</b></p>}</div>
                 {lineInventory ? (
                   <div className="space-y-5">
+                    {catalogError && <p role="status" className="text-sm text-stone-700">
+                      Chưa tải được danh mục hàng. <button type="button" className="underline" onClick={() => setCatalogRetry(value => value + 1)}>Tải lại danh mục</button>
+                    </p>}
                     {inventoryRows.map(({ line, entry, comparison }, index) => {
                       const absent = comparison.quantity === 0
                       const errorKey = `inventory-${line.id}`
+                      const categories = inventoryCatalog?.categories ?? []
+                      const materials = categories.find(category => category.id === entry.actualCategoryId)?.materials ?? []
                       return (
                         <fieldset key={line.id} className="min-w-0 space-y-3 rounded-lg border border-stone-200 px-4 pb-4" disabled={isReviewingCompletedStep || submitting}>
                           <legend className="max-w-full px-1">
@@ -2159,6 +2193,26 @@ export default function StaffCheckInOperationsPanel({
                             {line.lengthCm != null && line.widthCm != null && line.heightCm != null && ` · ${line.lengthCm} × ${line.widthCm} × ${line.heightCm} cm/kiện`}
                             {line.weightPerPackageKg != null && ` · ${line.weightPerPackageKg} kg/kiện`}
                           </p>
+                          {!absent && (line.catalogCategoryId || categories.length > 0) && <div className="grid gap-3 sm:grid-cols-2">
+                            <Select label="Loại hàng thực tế" value={entry.actualCategoryId ?? ""} onChange={event => {
+                              const categoryId = event.target.value
+                              updateInventoryLine(line, { actualCategoryId: categoryId, actualMaterialId: categoryId === line.catalogCategoryId ? line.catalogMaterialId ?? "" : "" })
+                            }}>
+                              <option value="" disabled={!!line.catalogCategoryId}>Chọn loại hàng</option>
+                              {line.catalogCategoryId && !categories.some(category => category.id === line.catalogCategoryId) &&
+                                <option value={line.catalogCategoryId}>{line.categoryName || line.name || "Loại hàng đã khai báo"}</option>}
+                              {categories.map(category => <option key={category.id} value={category.id}>{category.label}</option>)}
+                            </Select>
+                            <Select label="Chất liệu thực tế" value={entry.actualMaterialId ?? ""} disabled={!entry.actualCategoryId}
+                              onChange={event => updateInventoryLine(line, { actualMaterialId: event.target.value })}>
+                              <option value="">Không có mã chất liệu</option>
+                              {entry.actualCategoryId === line.catalogCategoryId && line.catalogMaterialId &&
+                                !materials.some(material => material.id === line.catalogMaterialId) &&
+                                <option value={line.catalogMaterialId}>{line.materialName || "Chất liệu đã khai báo"}</option>}
+                              {materials.map(material => <option key={material.id} value={material.id}>{material.label}</option>)}
+                            </Select>
+                          </div>}
+                          {fieldErrors[`${errorKey}-category`] && <p className="text-xs text-red-700">{fieldErrors[`${errorKey}-category`]}</p>}
                           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                             {inventoryDimensions.map(([field, label]) => (
                               <Input key={field} label={label} type="number" min="0.01" step="any" value={absent ? "" : entry[field]} disabled={absent}

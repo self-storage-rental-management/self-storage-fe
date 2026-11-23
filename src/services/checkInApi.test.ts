@@ -69,6 +69,7 @@ describe('checkInApi', () => {
   it('completes handover and supports no-show', async () => {
     const inventoryLines = [
       { goodsItemId: 'goods-1', actualQuantity: 2, condition: 'INTACT' as const, note: null,
+        actualCategoryId: 'category-1', actualMaterialId: 'material-1',
         measurements: { lengthCm: 100, widthCm: 100, heightCm: 50, weightKg: 100 } },
       { goodsItemId: 'goods-2', actualQuantity: 0, condition: 'NOT_PRESENT' as const,
         note: 'Khách chưa đưa hàng vào kho', measurements: null },

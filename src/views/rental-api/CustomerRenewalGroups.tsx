@@ -11,8 +11,7 @@ const shortLabels: Record<RenewalApiRecord['status'], string> = {
   payment_processing: 'Chờ kết quả thanh toán', payment_failed: 'Chờ thanh toán lại',
   payment_expired: 'Hết hạn', rejected: 'Đã đóng', cancelled: 'Đã hủy', completed: 'Hoàn tất',
 }
-// Failed/expired payments can still require action: they are not completed records.
-const terminal = new Set<RenewalApiRecord['status']>(['completed', 'cancelled', 'rejected'])
+const terminal = new Set<RenewalApiRecord['status']>(['completed', 'cancelled', 'rejected', 'payment_expired'])
 const isFinished = (row: RenewalApiRecord) => terminal.has(row.status) || row.statusSummary?.workflowStatus === 'NO_SHOW'
 
 export default function CustomerRenewalGroups({ rows, onDetail }: {

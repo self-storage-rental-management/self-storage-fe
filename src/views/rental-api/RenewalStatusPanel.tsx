@@ -2,7 +2,11 @@ import { Button } from '../../components/ui'
 import { renewalInvoiceLabels, renewalRefundLabels, renewalTransactionLabels, type RenewalStatusSummary } from '../../types/renewalStatus'
 import { rentalDate, rentalMoney } from './presentation'
 
-export default function RenewalStatusPanel({ summary, onReceipt }: { summary: RenewalStatusSummary; onReceipt: (id: string) => void }) {
+export default function RenewalStatusPanel({ summary, onReceipt, invoice }: {
+  summary: RenewalStatusSummary
+  onReceipt: (id: string) => void
+  invoice?: { paymentId: string; number: string }
+}) {
   const i = summary.invoice
   const known = !['UNKNOWN', 'NOT_ISSUED'].includes(i.status)
   return <section className="space-y-4 rounded-xl border border-stone-200 p-4 sm:p-5" aria-label="Khoản phải thu và giao dịch gia hạn">
@@ -42,7 +46,11 @@ export default function RenewalStatusPanel({ summary, onReceipt }: { summary: Re
         </div>
         {t.deadlineExpired && t.status === 'RECONCILIATION_REQUIRED' && <p className="mt-2 text-xs text-amber-800">Hạn thanh toán đã qua, đang đối soát kết quả. Chưa xác nhận giao dịch thất bại hoặc chưa thu tiền.</p>}
         {t.refundedAmount > 0 && <p className="mt-2 text-xs text-stone-600">Đã hoàn: {rentalMoney(t.refundedAmount, t.currency)}</p>}
-        <details className="mt-2 text-xs text-stone-600"><summary className="w-fit cursor-pointer rounded py-1 hover:text-amber-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600">Mã giao dịch</summary><p className="mt-1 break-all">{t.reference || t.paymentId}</p></details>
+        <details className="mt-2 text-xs text-stone-600">
+          <summary className="w-fit cursor-pointer rounded py-1 hover:text-amber-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600">{invoice?.paymentId === t.paymentId ? "Mã giao dịch và hóa đơn" : "Mã giao dịch"}</summary>
+          <p className="mt-1 break-all">{t.reference || t.paymentId}</p>
+          {invoice?.paymentId === t.paymentId && <p className="mt-1 break-all">Số hóa đơn: {invoice.number}</p>}
+        </details>
       </article>)}
     </div>
   </section>

@@ -76,6 +76,7 @@ export interface RenewalVnpayPaymentResponse {
   receiptAvailable?: boolean
 }
 export interface RenewalApiQuote {
+  continuousPeriod?: boolean | null
   id: string
   rentalId: string
   customerId: string
