@@ -244,7 +244,7 @@ export default function StaffReservationReviews({
             </p>
           </div>
           <p className="text-sm">
-            <b>Tình trạng đóng gói:</b> {row.goodsCondition || "-"}
+            <b>Phương thức đóng gói:</b> {row.goodsCondition || "-"}
           </p>
           {row.reservationNotes && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm"><b>Ghi chú của khách hàng:</b> {row.reservationNotes}</p>}
           {row.goodsItems.map((item) => (

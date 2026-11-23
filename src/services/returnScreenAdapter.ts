@@ -9,7 +9,7 @@ export function returnScreenRecord(record: ApiReturn): ReturnCase {
     facilityId: record.facilityId, facilityName: record.facilityName,
     customerId: record.customerId, customerName: record.customerName,
     customerEmail: record.customerEmail ?? '', customerPhone: record.customerPhone ?? '',
-    requestedAt: record.requestedAt ?? '', scheduledDate: record.scheduledDate, status: record.status,
+    requestedAt: record.requestedAt ?? '', scheduledDate: record.scheduledDate, returnType: record.returnType, status: record.status,
     initialConditionSnapshot: 'Chưa có thông tin bàn giao trong phản hồi trả kho',
     packageCount: Number.NaN, initialWeightKg: Number.NaN,
     inventoryMatch: record.inventoryMatch ?? undefined, damageClassification: record.damageClassification ?? undefined,

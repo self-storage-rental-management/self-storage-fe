@@ -499,7 +499,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
   }
 
   const handleSetupExitDecision = async () => {
-    if (!selectedItem || !selectedItem.setupExitReviewRequired) return
+    if (!selectedItem || !selectedItem.setupExitReviewRequired || selectedItem.returnType === 'INVENTORY_MISMATCH') return
     if (selectedItem.moveInCompletedAt && !selectedItem.inspectedAt) {
       setFeedback('Hàng đã được đưa vào kho. Nhân viên phải kiểm kê và nghiệm thu trả kho trước khi Ban điều hành quyết định số tiền hoàn.')
       return
@@ -1199,7 +1199,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                       </Badge>
                     </Td>
                     <Td className="text-right whitespace-nowrap space-x-1.5">
-                      {isBusiness && item.setupExitReviewRequired ? (
+                      {isBusiness && item.setupExitReviewRequired && item.returnType !== 'INVENTORY_MISMATCH' ? (
                         <Button
                           variant="primary"
                           size="sm"
@@ -1452,7 +1452,7 @@ export default function BusinessReturnsPanel({ user }: Props) {
                   </div>
                 </div>
 
-                {isBusiness && selectedItem.setupExitReviewRequired && (
+                {isBusiness && selectedItem.setupExitReviewRequired && selectedItem.returnType !== 'INVENTORY_MISMATCH' && (
                   <div className="p-3 bg-amber-50 rounded-xl border border-amber-300 space-y-3">
                     <div>
                       <p className="font-bold text-amber-950 text-sm">Quyết định trả/hủy trong thời gian chuẩn bị</p>

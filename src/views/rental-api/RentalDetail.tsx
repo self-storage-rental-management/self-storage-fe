@@ -69,6 +69,11 @@ export default function RentalDetail({
   const [startError, setStartError] = useState<string>()
   const [preparationSubmitting, setPreparationSubmitting] = useState(false)
   const [preparationError, setPreparationError] = useState<string>()
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000)
+    return () => window.clearInterval(timer)
+  }, [])
   const labelClass = "text-xs font-medium text-stone-500"
   const valueClass = "mt-1 text-sm font-semibold text-stone-900"
 
@@ -177,7 +182,7 @@ export default function RentalDetail({
             <dd className="space-y-3">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-lg border border-stone-200 bg-stone-50 p-3"><p className="text-xs text-stone-500">Bàn giao thực tế</p><p className="mt-1 font-semibold">{rentalDate(vietnamDateInput(rental.setupStartedAt))}</p><p className="mt-1 text-xs text-stone-500">{new Date(rental.setupStartedAt).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })}</p></div>
-                <div className="rounded-lg border border-stone-200 bg-stone-50 p-3"><p className="text-xs text-stone-500">Kết thúc thời gian miễn phí</p><p className="mt-1 font-semibold">{rentalDate(rental.setupEndsAt)}</p></div>
+                <div className="rounded-lg border border-stone-200 bg-stone-50 p-3"><p className="text-xs text-stone-500">Kết thúc thời gian miễn phí</p><p className="mt-1 font-semibold">{rentalDate(rental.setupEndsAt)}</p><p className="mt-1 text-xs text-stone-500">{new Date(rental.setupEndsAt).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })}</p></div>
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3"><span className="text-sm text-emerald-800">Bắt đầu kỳ thuê có tính tiền</span><span className="font-bold text-emerald-900">{rentalDate(rental.startDate)}</span></div>
               {rental.moveInCompletedAt && <p className="border-t border-stone-100 pt-3 text-xs text-stone-500">Đã báo hoàn tất chuẩn bị lúc {new Date(rental.moveInCompletedAt).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })} ngày {rentalDate(vietnamDateInput(rental.moveInCompletedAt))}</p>}
@@ -200,7 +205,8 @@ export default function RentalDetail({
             <dt>Kiểm kê đầu vào</dt>
             <dd><Badge variant="warning">Chưa kiểm kê</Badge>
               <p className="mt-2 text-xs leading-5 text-stone-500">Kỳ thuê vẫn tính theo mốc đã bàn giao, hồ sơ kiểm kê cần được hoàn tất trước hạn xử lý.</p>
-              {rental.inventoryDueAt && <p className="mt-1 text-xs text-stone-500">Hạn kiểm kê: {new Date(rental.inventoryDueAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</p>}
+              {rental.inventoryDueAt && <p className="mt-1 text-xs text-stone-500">Mốc nhắc kiểm kê: {new Date(rental.inventoryDueAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</p>}
+              {rental.inventoryFinalDeadlineAt && <p className={`mt-1 text-xs font-bold ${new Date(rental.inventoryFinalDeadlineAt).getTime() <= now ? 'text-red-700' : 'text-stone-700'}`}>{new Date(rental.inventoryFinalDeadlineAt).getTime() <= now ? 'Đã quá hạn kiểm kê' : 'Hạn hoàn tất kiểm kê'}: {new Date(rental.inventoryFinalDeadlineAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</p>}
             </dd>
           </div>}
           {rental.setupExitReviewRequired && <div>

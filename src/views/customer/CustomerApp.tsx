@@ -10,6 +10,8 @@ import { formatCustomerDate, formatCustomerDateTime } from '../../i18n/customerD
 import { useBackendNotifications } from '../../hooks/useBackendNotifications'
 import { userFacingError } from '../../presentation/userFacingError'
 import { useState, useEffect, useRef, useMemo, type ChangeEvent } from 'react'
+import { useStableJsonValue } from '../../hooks/useStableJsonValue'
+import InventoryMismatchReturnNotice from '../../components/InventoryMismatchReturnNotice'
 import Layout, { getInitialPage, Icon, type LayoutNotification, type NavItem } from '../../components/Layout'
 import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Input, Select, Tabs, Avatar } from '../../components/ui'
 import { formatVnd, formatVndAmount } from '../../i18n/currency'
@@ -726,7 +728,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     const loadReservations = async () => {
       try {
         const reservations = await loadCustomerReservationRecords()
-        if (!cancelled) setBackendReservations(reservations)
+        if (!cancelled) setBackendReservations(current => JSON.stringify(current) === JSON.stringify(reservations) ? current : reservations)
       } catch (error) {
         if (!cancelled && initialLoad) {
           showToast(userFacingError(error, 'Không thể tải danh sách đặt kho.'))
@@ -939,7 +941,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const previousReviewRequirement = useRef(hasOtherGoods)
   const previousBookingStart = useRef<number | null>(null)
 
-  const apiGoodsItems = useMemo<GoodsItemInput[]>(() => goodsItems.map(item => {
+  const apiGoodsItems = useStableJsonValue(useMemo<GoodsItemInput[]>(() => goodsItems.map(item => {
     const quantity = Math.max(1, Number(item.quantity) || packageCountNumber || 1)
     const selectedGoodsCategory = catalogCategoryFor(item.category)
     const selectedGoodsMaterial = resolveDraftMaterial(item, selectedGoodsCategory)
@@ -964,7 +966,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       allowHorizontalPlacement: item.allowHorizontalPlacement === 'yes',
       fragile: item.fragile === 'yes',
     }
-  }), [goodsItems, goodsCatalog, packageCountNumber, cargoLengthNumber, cargoWidthNumber, cargoHeightNumber, goodsWeightNumber])
+  }), [goodsItems, goodsCatalog, packageCountNumber, cargoLengthNumber, cargoWidthNumber, cargoHeightNumber, goodsWeightNumber]))
 
   const timelinePackage = backendRentalPackages.find(pkg => pkg.code === selectedPackageId)
   const timelineSetupDays = isApiAuthenticated()
@@ -974,7 +976,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     : estimatedRentalPeriod(moveInDate || earliestCheckInDate, timelineSetupDays, rentalMonths),
   [moveInDate, earliestCheckInDate, timelineSetupDays, rentalMonths])
 
-  const recommendationInput = useMemo(() => {
+  const recommendationInput = useStableJsonValue(useMemo(() => {
     if (!selectedTarget || !bookingRentalPeriod || !selectedPackageId.trim()) return null
     return {
       facilityId: selectedTarget.facility.id,
@@ -983,7 +985,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       goodsCondition,
       goodsItems: apiGoodsItems,
     }
-  }, [selectedTarget, bookingRentalPeriod, selectedPackageId, goodsCondition, apiGoodsItems])
+  }, [selectedTarget, bookingRentalPeriod, selectedPackageId, goodsCondition, apiGoodsItems]))
 
   useEffect(() => {
     if (!serverQuote) return
@@ -1110,7 +1112,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       try {
         const loadedGoodsCatalog = await getGoodsCatalog()
         if (cancelled || request !== catalogRequest) return
-        setGoodsCatalog(loadedGoodsCatalog)
+        setGoodsCatalog(current => JSON.stringify(current) === JSON.stringify(loadedGoodsCatalog) ? current : loadedGoodsCatalog)
         setCatalogError(null)
       } catch (error) {
         if (!cancelled && request === catalogRequest) setCatalogError(catalogLoadError(error))
@@ -1136,8 +1138,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         if (cancelled || request !== warehouseRequest) return
         const loadedUnitTypes = facilityTypes.flat()
         setWarehouseError(null)
-        setBackendFacilities(facilityPage.data)
-        setBackendUnitTypes(loadedUnitTypes)
+        setBackendFacilities(current => JSON.stringify(current) === JSON.stringify(facilityPage.data) ? current : facilityPage.data)
+        setBackendUnitTypes(current => JSON.stringify(current) === JSON.stringify(loadedUnitTypes) ? current : loadedUnitTypes)
         // The list response is date-aware too. Seed the card counters from
         // it immediately so an older availability map cannot briefly show a
         // stale number while the separate availability refresh is running.
@@ -1756,19 +1758,19 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       && selectedPalletCheck.availableUnitCount <= 0,
   )
   const showAlternativeOutcome = Boolean(
-    !recommendationLoading && selectedTarget && selectedPalletCheck
+    selectedTarget && selectedPalletCheck
       && (selectedCheckIsIncompatible || selectedCheckHasNoVacancy)
       && warehouseSuggestion && recommendedUnitType
       && recommendedUnitType.id !== selectedTarget.unitType.id,
   )
   const showNoCompatibleOutcome = Boolean(
-    !recommendationLoading && selectedPalletCheck && !warehouseSuggestion
+    selectedPalletCheck && !warehouseSuggestion
       && (recommendationStatus === 'NO_COMPATIBLE_WAREHOUSE'
         || (!recommendationStatus && selectedCheckIsIncompatible
           && serverRecommendation?.recommendedUnitTypeId == null)),
   )
   const showNoVacantOutcome = Boolean(
-    !recommendationLoading && selectedPalletCheck && !warehouseSuggestion
+    selectedPalletCheck && !warehouseSuggestion
       && (recommendationStatus === 'NO_VACANT_WAREHOUSE'
         || (!recommendationStatus && selectedCheckHasNoVacancy)),
   )
@@ -1925,7 +1927,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         if (!item.customGoodsName.trim()) errors[`customGoodsName-${item.id}`] = 'Vui lòng nhập tên hàng hóa.'
       }
     })
-    if (!goodsCondition.trim()) errors.condition = 'Vui lòng mô tả tình trạng đóng gói.'
+    if (!goodsCondition.trim()) errors.condition = 'Vui lòng chọn phương thức đóng gói.'
     if (!Number.isFinite(goodsWeightNumber) || goodsWeightNumber <= 0) errors.weight = 'Vui lòng nhập cân nặng mỗi kiện cho tất cả mẫu hàng.'
     const dateIsValid = /^\d{4}-\d{2}-\d{2}$/.test(moveInDate)
       && requestedDate !== null
@@ -2021,7 +2023,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     if (!item.allowHorizontalPlacement) missing.push('lựa chọn đặt nằm ngang')
     return missing.length ? [`Hàng ${index + 1}: ${missing.join(', ')}`] : []
   })
-  if (!goodsCondition.trim()) missingGoodsFields.push('Chọn tình trạng đóng gói.')
+  if (!goodsCondition.trim()) missingGoodsFields.push('Chọn phương thức đóng gói.')
 
   const goodsContinueIssue = !selectedPackageId ? 'Vui lòng chọn gói thuê.'
     : !recommendationFormReady ? (missingGoodsFields.join('; ') || 'Danh mục hàng hóa chưa hợp lệ. Vui lòng kiểm tra mục được đánh dấu.')
@@ -2170,7 +2172,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         customerPhone: 'Vui lòng nhập số điện thoại liên hệ.',
         customerPhoneValid: VIETNAMESE_PHONE_ERROR_MESSAGE,
         customerAddress: 'Vui lòng nhập địa chỉ.',
-        goodsCondition: 'Vui lòng mô tả tình trạng đóng gói.',
+        goodsCondition: 'Vui lòng chọn phương thức đóng gói.',
         goodsItems: 'Đơn phải có ít nhất một loại hàng hóa.',
         appointmentAt: 'Thời gian nhận kho chưa hợp lệ.',
       }
@@ -2784,7 +2786,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                           </div>
                         })()}
 
-                        {hold.payment.status === 'paid' && <p className="pt-1 text-[11px] font-medium text-black">{hold.assignedUnitId ? 'Cọc đã thanh toán. Quản lý cơ sở đã phân gian kho. Vui lòng nhận kho trong thời hạn 7 ngày.' : 'Cọc đã thanh toán. Quản lý cơ sở có tối đa 6 giờ để phân gian kho cụ thể.'}</p>}
+                        {hold.payment.status === 'paid' && <p className="pt-1 text-[11px] font-medium text-black">{hold.assignedUnitId ? 'Cọc đã thanh toán. Quản lý cơ sở đã phân gian kho. Vui lòng nhận kho trong thời hạn 3 ngày.' : 'Cọc đã thanh toán. Quản lý cơ sở có tối đa 6 giờ để phân gian kho cụ thể.'}</p>}
 
                         {hold.generatedAccessPin && !holdInactive && (
                           <div className="mt-2 rounded bg-[#292a27] p-2 text-white text-xs flex items-center justify-between">
@@ -3497,16 +3499,17 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               <fieldset><legend className="mb-3 text-sm font-medium">Gói thuê và kỳ hạn</legend>
                 {rentalPackagesLoading && isApiAuthenticated() && <p role="status" className="text-sm text-stone-500">Đang tải gói thuê…</p>}
                 <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{(isApiAuthenticated()
-                  ? backendRentalPackages.map(pkg => ({ id: pkg.code, months: pkg.rentalMonths, days: pkg.freeSetupDays }))
-                  : selectedUnitActivePackages.map(pkg => ({ id: pkg.id, months: pkg.months, days: pkg.freeSetupDays }))).map(pkg => <label key={pkg.id} className={`cursor-pointer rounded-xl border p-3 transition focus-within:ring-2 focus-within:ring-blue-500 ${selectedPackageId === pkg.id ? 'border-blue-600 bg-blue-50 text-blue-900 ring-1 ring-blue-600' : 'border-stone-300 bg-white text-stone-800'}`}>
+                  ? backendRentalPackages.map(pkg => ({ id: pkg.code, months: pkg.rentalMonths, days: pkg.freeSetupDays, discountPercent: Number.isFinite(pkg.discountRate) ? pkg.discountRate * 100 : null }))
+                  : selectedUnitActivePackages.map(pkg => ({ id: pkg.id, months: pkg.months, days: pkg.freeSetupDays, discountPercent: pkg.discountPercent ?? null }))).map(pkg => <label key={pkg.id} className={`cursor-pointer rounded-xl border p-3 transition focus-within:ring-2 focus-within:ring-blue-500 ${selectedPackageId === pkg.id ? 'border-blue-600 bg-blue-50 text-blue-900 ring-1 ring-blue-600' : 'border-stone-300 bg-white text-stone-800'}`}>
                     <input type="radio" name="booking-rental-package" className="sr-only" checked={selectedPackageId === pkg.id} disabled={reservationSubmitting} onChange={() => {
                       setSelectedPackageId(pkg.id); setRentalMonths(pkg.months); setServerQuote(null); setServerCompatibility(null); setReservationSubmitError(null); setTermsAccepted(false); setArrivalTermsAccepted(false)
                     }} />
                     <span className="block text-sm font-semibold">{pkg.months} tháng</span>
+                    <span className={`mt-1 block text-xs font-semibold ${pkg.discountPercent != null && pkg.discountPercent > 0 ? 'text-emerald-700' : 'text-stone-600'}`}>{pkg.discountPercent == null ? 'Mức giảm theo báo giá' : pkg.discountPercent > 0 ? `Giảm ${pkg.discountPercent.toLocaleString('vi-VN', { maximumFractionDigits: 2 })}% tiền thuê` : 'Không giảm giá kỳ hạn'}</span>
                     <span className="mt-1 block text-xs">{pkg.days == null ? 'Thời gian chuẩn bị theo báo giá' : `Chuẩn bị miễn phí ${pkg.days} ngày`}</span>
                   </label>)}</div>
                 {!rentalPackagesLoading && (isApiAuthenticated() ? !backendRentalPackages.length : !selectedUnitActivePackages.length) && <p className="text-sm text-amber-800">Không có gói thuê đang hoạt động.</p>}
-                <p className="mt-3 text-xs leading-5 text-stone-500">Chuẩn bị miễn phí: khoảng thời gian sau khi nhận kho mà chưa bị tính tiền thuê. Chỉ áp dụng cho đơn đầu tiên, không áp dụng khi gia hạn. Giá và mức giảm theo từng gói hiển thị ở báo giá.</p>
+                <p className="mt-3 text-xs leading-5 text-stone-500">Chuẩn bị miễn phí: khoảng thời gian sau khi nhận kho mà chưa bị tính tiền thuê. Chỉ áp dụng cho đơn đầu tiên, không áp dụng khi gia hạn. Mức giảm trên mỗi gói áp dụng cho tiền thuê. Số tiền được giảm và tổng thanh toán hiển thị ở báo giá.</p>
               </fieldset>
               <p className="mt-2 text-xs text-stone-600">Kiểm tra kho trống cho kỳ thuê dự kiến: {displayDateValue(bookingRentalPeriod?.startDate || availabilityPeriod.startDate)} đến {displayDateValue(bookingRentalPeriod?.endDate || availabilityPeriod.endDate)}. Bạn chọn lịch nhận kho ở bước 4. Khi đổi lịch, hệ thống sẽ kiểm tra lại kho trống và cập nhật báo giá.</p>
               </section>
@@ -3557,7 +3560,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => setGoodsItems(items => [...items, createGoodsDeclarationItem()])}>+ Thêm hàng hóa</Button>
 
               <div className="mt-4 grid grid-cols-1 gap-3">
-                <Select label="Tình trạng đóng gói chung *" value={goodsCondition} onChange={e => setGoodsCondition(e.target.value)}><option value="">Chọn tình trạng đóng gói</option>{['Thùng carton', 'Thùng nhựa', 'Thùng gỗ', 'Bọc màng / túi bảo vệ', 'Kiện hàng / pallet', 'Chưa đóng gói', 'Đóng gói hỗn hợp'].map(value => <option key={value}>{value}</option>)}</Select>
+                <Select label="Phương thức đóng gói chung *" value={goodsCondition} onChange={e => setGoodsCondition(e.target.value)}><option value="">Chọn phương thức đóng gói</option>{['Thùng carton', 'Thùng nhựa', 'Thùng gỗ', 'Bọc màng / túi bảo vệ', 'Kiện hàng / pallet', 'Chưa đóng gói', 'Đóng gói hỗn hợp'].map(value => <option key={value}>{value}</option>)}</Select>
                 <label className="flex items-start gap-2 text-sm text-stone-700"><input className="mt-1" type="checkbox" checked={goodsNotProhibited} onChange={e => setGoodsNotProhibited(e.target.checked)} /><span>Hàng của tôi không thuộc danh mục cấm (cháy nổ, hóa chất, hàng tươi sống…). Xem <a className="font-semibold underline" href="#booking-prohibited-rules" onClick={event => { event.preventDefault(); const rules = document.getElementById('booking-prohibited-rules'); if (rules instanceof HTMLDetailsElement) { rules.open = true; rules.scrollIntoView({ behavior: 'smooth', block: 'center' }) } }}>Quy định thuê kho</a>.</span></label>
                 <details id="booking-prohibited-rules" className="rounded-lg border border-stone-200 p-3"><summary className="cursor-pointer text-sm font-medium">Quy định thuê kho và danh mục hàng cấm</summary><div className="mt-3"><p className="mb-3 text-sm">Không nhận hàng cháy nổ, hóa chất nguy hiểm, hàng tươi sống hoặc hàng vi phạm pháp luật.</p><CustomerTransactionTerms /></div></details>
               </div>
@@ -3569,6 +3572,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             </>}
 
             {bookingStep === 4 && <div className="space-y-3 rounded-xl border border-stone-200 bg-stone-50 p-4">
+              <InventoryMismatchReturnNotice />
               <div>
 
                 <p className="mt-1 text-xs leading-5 text-stone-600">
@@ -3620,7 +3624,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   showToast(`Đã chuyển sang ${unitTypeLabel(recommendedUnitType.name)}.`)
                 }}
               />}
-            {!handledWarehouseOutcome && !recommendationLoading && warehouseSuggestion && recommendedUnitType && selectedTarget
+            {!handledWarehouseOutcome && warehouseSuggestion && recommendedUnitType && selectedTarget
               && recommendedUnitType.id !== selectedTarget.unitType.id && (
               <CustomerWarehouseSuggestion
                 currentName={unitTypeLabel(selectedTarget.unitType.name)}
@@ -3983,7 +3987,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     <section><p className="mb-2 text-[10px] font-bold uppercase tracking-[.14em] text-amber-700">{'3. Điều khoản chính'}</p><div className="grid gap-2 sm:grid-cols-2">{[
                       `Đơn giá đã lưu: ${formatVnd(activeHoldForContract.quote.baseMonthlyPrice)}/tháng. Tổng giá trị tiền thuê sau gia hạn cần được đối soát trong Hồ sơ thuê.`,
                       `Quy định thanh toán trước 20% (giữ chỗ): Thanh toán trước 20% (giữ chỗ) là khoản bảo đảm việc giữ loại kho đã chọn và không được hoàn lại trong trường hợp khách hàng tự ý hủy đơn hoặc bỏ lịch nhận kho. Khi nhận kho đúng hẹn, khoản này (${formatVnd(deposit)}) sẽ được khấu trừ 100% vào tổng nghĩa vụ thanh toán. Tiền cọc đảm bảo thuê (${formatVnd(securityDeposit)}) là khoản riêng để bảo đảm cơ sở vật chất và sẽ được hoàn lại sau khi thanh lý hợp đồng.`,
-                      'Thời hạn nhận kho: Khách hàng cần hoàn tất thủ tục nhận kho đúng lịch hẹn (tối đa trong vòng 7 ngày). Quá thời hạn này mà không nhận kho sẽ bị coi là bỏ lịch (No-show) và mất khoản trả trước giữ chỗ.',
+                      'Thời hạn nhận kho: Khách hàng cần hoàn tất thủ tục nhận kho đúng lịch hẹn (tối đa trong vòng 3 ngày). Quá thời hạn này mà không nhận kho sẽ bị coi là bỏ lịch (No-show) và mất khoản trả trước giữ chỗ.',
                       'Khách chỉ lưu hàng đã khai báo, tuân thủ tải trọng, kích thước cửa kho, PCCC và danh mục hàng cấm.',
                       'Gia hạn theo gói tháng. Hệ thống kiểm tra điều kiện và mở thanh toán khi các nguồn cần thiết sẵn sàng, quản lý cơ sở theo dõi hồ sơ.',
                       'Khi trả kho, nhân viên lập biên bản trước–sau, khấu trừ phải có nội dung, số tiền và minh chứng.',
@@ -4083,7 +4087,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             <p className="text-xs text-stone-600">
               {'Chọn ngày giờ bạn sẽ đến cơ sở để cùng nhân viên đối chiếu CCCD, cân đo hàng hóa thực tế và nhận mã mở cửa:'}
             </p>
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950"><b>{'Hạn đổi lịch:'}</b> {activeHoldForSchedule.checkInDeadline ? dateInputValue(new Date(activeHoldForSchedule.checkInDeadline)) : ('trong thời hạn nhận kho 7 ngày')}. {'Ngày dự kiến trên đơn sẽ được cập nhật theo lịch mới.'}</div>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950"><b>{'Hạn đổi lịch:'}</b> {activeHoldForSchedule.checkInDeadline ? dateInputValue(new Date(activeHoldForSchedule.checkInDeadline)) : ('trong thời hạn nhận kho 3 ngày')}. {'Ngày dự kiến trên đơn sẽ được cập nhật theo lịch mới.'}</div>
 
             <div className="grid grid-cols-2 gap-3">
               <Input

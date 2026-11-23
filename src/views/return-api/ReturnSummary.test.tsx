@@ -29,5 +29,33 @@ describe('Return summary', () => {
     expect(html).toContain('sau hạn chuẩn bị')
     expect(html).not.toContain('Phí chấm dứt sớm một lần')
   })
+  it('separates inventory mismatch pricing from a normal return', () => {
+    const html = renderToStaticMarkup(<ReturnSummary record={{ ...record, returnType: 'INVENTORY_MISMATCH', earlyTerminationPolicy: {
+      type: 'GOODS_MOVED_IN', earlyTerminationFee: 0, billableSetupDays: 2,
+      usedGoodsCharge: 200000, totalRentalCharge: 200000, rentalRefundAmount: 5800000, noticeDays: 0,
+    }, setupExitRequested: true, setupEarlyExit: true, rentalRefundCredit: 5800000, earlyTerminationFee: 0 }} />)
+    expect(html).toContain('Trả kho do hàng hóa sai khai báo')
+    expect(html).toContain('Tính tiền từ ngày xác nhận nhận kho đến ngày hẹn trả kho dự kiến.')
+    expect(html).toContain('Manager lập quyết toán, khách xác nhận trước khi hoàn tiền hoặc thu thêm.')
+    expect(html).toContain('5.800.000')
+    expect(html).not.toContain('Phí chấm dứt sớm một lần')
+  })
+
+  it('keeps the fixed fee visible for a normal setup return', () => {
+    const html = renderToStaticMarkup(<ReturnSummary record={{ ...record, setupExitRequested: true,
+      setupEarlyExit: true, rentalRefundCredit: 5800000, earlyTerminationFee: 5500000 }} />)
+    expect(html).toContain('Phí chấm dứt sớm một lần')
+    expect(html).toContain('5.500.000')
+  })
+
+  it('shows the no-show cutoff and recovery deadline without implying automatic movement', () => {
+    const html = renderToStaticMarkup(<ReturnSummary record={{ ...record,
+      status: 'recovery_required',
+      recoveryEligibleAt: '2026-10-22T17:00:00Z',
+      recoveryTaskDeadlineAt: '2026-10-22T21:00:00Z',
+    }} />)
+    expect(html).toContain('Hàng chưa được tự động di chuyển')
+    expect(html).toContain('Hạn xử lý nhiệm vụ thu hồi')
+  })
 
 })

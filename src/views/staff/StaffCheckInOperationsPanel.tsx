@@ -4,6 +4,7 @@ import { isCheckInHandoverExpired, staffCheckInActions } from "../../domain/rese
 
 import {
   completeCheckIn,
+  confirmPartialInventoryRemoval,
   completeCheckInSetup,
   confirmCheckInPayment,
   downloadCheckInEvidence,
@@ -12,6 +13,7 @@ import {
   recordCheckInRemainingPayment,
   rejectCheckIn,
   scheduleCheckIn,
+  sendCustomerReceiptReminder,
   signCheckInContract,
   startCheckInSetup,
   uploadCheckInEvidence,
@@ -365,6 +367,56 @@ function handoverExpired(item: CheckInCase, now = Date.now()) {
   return stepForCheckIn(item) <= 4 && isCheckInHandoverExpired(item.appointmentAt || item.scheduledAt, now)
 }
 
+function receiptConfirmationState(item: CheckInCase, now = Date.now()) {
+  if (item.checkInStatus !== "handover_pending_receipt" || !item.receiptConfirmationDueAt) {
+    return { text: null, expired: false, urgent: false }
+  }
+  const remaining = new Date(item.receiptConfirmationDueAt).getTime() - now
+  if (!Number.isFinite(remaining) || remaining <= 0) {
+    return { text: "Đã quá hạn xác nhận", expired: true, urgent: true }
+  }
+  const minutes = Math.ceil(remaining / 60_000)
+  const days = Math.floor(minutes / 1_440)
+  const hours = Math.floor((minutes % 1_440) / 60)
+  const rest = minutes % 60
+  return {
+    text: `Còn ${days > 0 ? `${days} ngày ` : ""}${hours > 0 ? `${hours} giờ ` : ""}${rest} phút`,
+    expired: false,
+    urgent: remaining <= 2 * 60 * 60_000,
+  }
+}
+
+function receiptReleaseState(item: CheckInCase, now = Date.now()) {
+  if (item.checkInStatus !== "handover_pending_receipt" || !item.receiptConfirmationReleaseAt) {
+    return { text: null, eligible: false }
+  }
+  const remaining = new Date(item.receiptConfirmationReleaseAt).getTime() - now
+  if (!Number.isFinite(remaining) || remaining <= 0) {
+    return { text: "Đã đủ điều kiện để Manager giải phóng kho", eligible: true }
+  }
+  const minutes = Math.ceil(remaining / 60_000)
+  const days = Math.floor(minutes / 1_440)
+  const hours = Math.floor((minutes % 1_440) / 60)
+  const rest = minutes % 60
+  return {
+    text: "Manager có thể giải phóng sau "
+      + (days > 0 ? days + " ngày " : "")
+      + (hours > 0 ? hours + " giờ " : "")
+      + rest + " phút",
+    eligible: false,
+  }
+}
+
+function receiptConfirmationPriority(item: CheckInCase, now = Date.now()) {
+  const state = receiptConfirmationState(item, now)
+  const releaseState = receiptReleaseState(item, now)
+  if (releaseState.eligible) return 0
+  if (state.expired) return 1
+  if (state.urgent) return 2
+  if (item.checkInStatus === "handover_pending_receipt") return 3
+  return 4
+}
+
 const workflowStepLabels = [
   "Xác minh khách",
   "Ký hợp đồng",
@@ -389,10 +441,11 @@ function CheckInTableColumns() {
   )
 }
 
-function CheckInWorkList({ group, filters, refreshKey, renderRow }: {
+function CheckInWorkList({ group, filters, refreshKey, now, renderRow }: {
   group: CheckInGroup
   filters: CheckInFilters
   refreshKey: number
+  now: number
   renderRow: (item: CheckInCase, group: CheckInGroup) => React.ReactNode
 }) {
   const [page, setPage] = useState(0)
@@ -449,7 +502,9 @@ function CheckInWorkList({ group, filters, refreshKey, renderRow }: {
                 </Tr>
               </Thead>
               <Tbody>
-                {result.data.map(item => renderRow(item, group))}
+                {[...result.data]
+                  .sort((left, right) => receiptConfirmationPriority(left, now) - receiptConfirmationPriority(right, now))
+                  .map(item => renderRow(item, group))}
               </Tbody>
             </Table>
           )}
@@ -558,6 +613,8 @@ export default function StaffCheckInOperationsPanel({
   const [goodsCategory, setGoodsCategory] = useState("")
 
   const [goodsMaterial, setGoodsMaterial] = useState("")
+  const [actualPackagingMethod, setActualPackagingMethod] = useState("")
+  const [packagingCondition, setPackagingCondition] = useState<'' | 'INTACT' | 'MINOR_DAMAGE' | 'MAJOR_DAMAGE' | 'UNPACKAGED'>('')
 
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([])
 
@@ -585,6 +642,10 @@ export default function StaffCheckInOperationsPanel({
 
   const [noShowReason, setNoShowReason] = useState("")
 
+  const [partialRemovalTarget, setPartialRemovalTarget] = useState<CheckInCase | null>(null)
+  const [partialRemovalNotes, setPartialRemovalNotes] = useState("")
+  const [partialRemovalFiles, setPartialRemovalFiles] = useState<File[]>([])
+
   const [rejectTarget, setRejectTarget] = useState<CheckInCase | null>(null)
 
   const [rejectReason, setRejectReason] = useState("")
@@ -610,6 +671,7 @@ export default function StaffCheckInOperationsPanel({
   } | null>(null)
 
   const [submitting, setSubmitting] = useState(false)
+  const [remindingCustomerCheckInId, setRemindingCustomerCheckInId] = useState<string | null>(null)
   const [showCustomerReadyModal, setShowCustomerReadyModal] = useState(false)
 
   useEffect(() => {
@@ -744,7 +806,10 @@ export default function StaffCheckInOperationsPanel({
     }))
     setVarianceAccepted(false)
   }
-  const measurementVariance = goodsDeclarationVariance || (lineInventory
+  const packagingMethodMismatch = Boolean(actualPackagingMethod.trim() && handoverTarget?.declaredPackagingMethod
+    && actualPackagingMethod.trim().toLocaleLowerCase('vi') !== handoverTarget.declaredPackagingMethod.trim().toLocaleLowerCase('vi'))
+  const measurementVariance = goodsDeclarationVariance || packagingMethodMismatch
+    || packagingCondition === 'MINOR_DAMAGE' || packagingCondition === 'MAJOR_DAMAGE' || (lineInventory
     ? inventoryRows.some(({ comparison }) => comparison.badges.some(badge => badge.matches === false))
       || (inventoryLinesComplete && packageCountValid && (totalPackages !== handoverTarget?.declaredPackageCount
         || hasMaterialVariance(String(actualWeight), handoverTarget?.declaredGoodsWeightKg ?? NaN, 0.1)
@@ -894,6 +959,21 @@ export default function StaffCheckInOperationsPanel({
     showToast(message)
   }
 
+  const remindCustomerReceipt = async (item: CheckInCase) => {
+    if (!item.checkInId || item.checkInStatus !== "handover_pending_receipt" || remindingCustomerCheckInId) return
+    setRemindingCustomerCheckInId(item.checkInId)
+    try {
+      const result = await sendCustomerReceiptReminder(item.checkInId)
+      showToast(result.sent
+        ? `Đã gửi nhắc khách xác nhận nhận kho cho đơn ${item.reservationCode}.`
+        : `Nhân viên đã nhắc đơn ${item.reservationCode} trong 2 giờ gần đây. Vui lòng thử lại sau.`)
+    } catch (reason) {
+      fail(reason, "Không thể gửi nhắc khách xác nhận nhận kho.")
+    } finally {
+      setRemindingCustomerCheckInId(null)
+    }
+  }
+
   const submitHandover = async () => {
     setFieldErrors({})
     setError(null)
@@ -944,14 +1024,16 @@ export default function StaffCheckInOperationsPanel({
     }
     if (!goodsCategory.trim()) errors.goodsCategory = "Vui lòng nhập loại hàng"
     if (!goodsMaterial.trim()) errors.goodsMaterial = "Vui lòng nhập chất liệu chính"
+    if (!actualPackagingMethod.trim()) errors.actualPackagingMethod = "Vui lòng ghi nhận phương thức đóng gói thực tế"
+    if (!packagingCondition) errors.packagingCondition = "Vui lòng chọn tình trạng đóng gói thực tế"
     if (!initialCondition.trim()) errors.initialCondition = "Cần ghi nhận hiện trạng kho ở bước bàn giao"
     if (!keyLockReference.trim()) errors.lockReference = "Cần ghi nhận mã ổ khóa hoặc chìa khóa ở bước bàn giao"
     if ((!lineInventory || inventoryLinesComplete) && !allChecksComplete && !Object.keys(errors).length) {
       errors.handoverChecklist = "Cần hoàn tất các bước xác nhận trước khi kiểm kê"
     }
     if (measurementVariance) {
-      if (!varianceAccepted) {
-        errors.varianceAccepted = "Cần trao đổi với khách và đánh dấu chấp nhận chênh lệch"
+      if (!lineInventory && !varianceAccepted) {
+        errors.varianceAccepted = "Cần ghi nhận chấp thuận chênh lệch ở biểu mẫu cũ"
       }
       if (!varianceReason.trim()) {
         errors.varianceReason = "Vui lòng nhập lý do chênh lệch khi hàng hóa khác đơn đặt"
@@ -1008,7 +1090,7 @@ export default function StaffCheckInOperationsPanel({
         setEvidenceFiles([])
       }
 
-      await completeCheckIn(handoverTarget.checkInId, {
+      const completed = await completeCheckIn(handoverTarget.checkInId, {
         checklist: lineInventory ? { ...checklist, measurementVerified: true, conditionRecorded: true } : checklist,
 
         identityDocumentNumber: identityDocumentNumber.trim(),
@@ -1026,7 +1108,7 @@ export default function StaffCheckInOperationsPanel({
 
           actualVolumeM3: lineInventory ? actualVolume : Number(volumeM3),
 
-          varianceAccepted: measurementVariance && varianceAccepted,
+          varianceAccepted: lineInventory ? measurementVariance : measurementVariance && varianceAccepted,
         },
 
         varianceReason: measurementVariance ? varianceReason.trim() : null,
@@ -1052,6 +1134,8 @@ export default function StaffCheckInOperationsPanel({
         goodsCategory: goodsCategory.trim(),
 
         goodsMaterial: goodsMaterial.trim(),
+        actualPackagingMethod: actualPackagingMethod.trim(),
+        packagingCondition: packagingCondition || null,
 
         evidenceReferences: uploadedEvidence,
 
@@ -1069,9 +1153,9 @@ export default function StaffCheckInOperationsPanel({
 
       setPaymentEvidenceFile(null)
 
-      showToast(
-        `Đã hoàn tất bàn giao ${handoverTarget.storageUnitCode}. Hồ sơ vẫn được lưu trong Nhận kho & bàn giao để xem lại.`,
-      )
+      showToast(completed.inventoryResolutionStatus === "PENDING_CUSTOMER"
+        ? `Đã ghi nhận sai lệch cho ${handoverTarget.storageUnitCode}. Đang chờ khách xác nhận phương án xử lý.`
+        : `Đã hoàn tất bàn giao ${handoverTarget.storageUnitCode}. Hồ sơ vẫn được lưu trong Nhận kho & bàn giao để xem lại.`)
 
       setCustomerWaitTarget(null)
       setHandoverTarget(null)
@@ -1277,6 +1361,34 @@ export default function StaffCheckInOperationsPanel({
     }
   }
 
+  const submitPartialRemoval = async () => {
+    if (!partialRemovalTarget?.checkInId || !partialRemovalNotes.trim() || !partialRemovalFiles.length) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      const evidenceReferences: string[] = []
+      for (const file of partialRemovalFiles) {
+        if (!validateUploadFile(file, "bằng chứng đưa phần hàng dư ra", setError)) return
+        const asset = await uploadCheckInEvidence(partialRemovalTarget.checkInId, file)
+        evidenceReferences.push(asset.id)
+      }
+      await confirmPartialInventoryRemoval(partialRemovalTarget.checkInId, {
+        remainderRemoved: true,
+        evidenceReferences,
+        notes: partialRemovalNotes.trim(),
+      })
+      showToast(`Đã xác nhận phần hàng dư của ${partialRemovalTarget.reservationCode} đã được đưa khỏi gian kho.`)
+      setPartialRemovalTarget(null)
+      setPartialRemovalNotes("")
+      setPartialRemovalFiles([])
+      refresh()
+    } catch (reason) {
+      fail(reason, "Không thể xác nhận phần hàng dư đã được đưa ra.")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const openHandover = (item: CheckInCase) => {
     setError(null)
     setFieldErrors({})
@@ -1299,8 +1411,8 @@ export default function StaffCheckInOperationsPanel({
       reservationMatched: Boolean(item.identityVerifiedAt) || restoredChecklist.reservationMatched,
       contractVerified: Boolean(item.contractSignedAt) || restoredChecklist.contractVerified,
       paymentVerified: Boolean(item.paymentCollectedAt) || restoredChecklist.paymentVerified,
-      accessHandedOver: Boolean(item.setupStartedAt) || restoredChecklist.accessHandedOver,
-      unitWalkthrough: Boolean(item.setupStartedAt) || restoredChecklist.unitWalkthrough,
+      accessHandedOver: Boolean(item.checkedInAt) || restoredChecklist.accessHandedOver,
+      unitWalkthrough: Boolean(item.checkedInAt) || restoredChecklist.unitWalkthrough,
     })
 
     setIdentityDocumentNumber(item.identityDocumentNumber || "")
@@ -1332,6 +1444,8 @@ export default function StaffCheckInOperationsPanel({
     const declaredMaterials = declaredGoodsMaterialValues(item.declaredGoodsLines)
     setGoodsCategory(item.handover?.goodsCategory?.trim() || (declaredCategories.length === 1 ? declaredCategories[0] : ""))
     setGoodsMaterial(item.handover?.goodsMaterial?.trim() || (item.checkInStatus === "completed" ? "" : declaredMaterials.length === 1 ? declaredMaterials[0] : ""))
+    setActualPackagingMethod(item.handover?.actualPackagingMethod || '')
+    setPackagingCondition(item.handover?.packagingCondition || '')
 
     setLengthCm(formatInputNumber(item.declaredGoodsLengthCm))
 
@@ -1408,8 +1522,17 @@ export default function StaffCheckInOperationsPanel({
     setRejectEvidenceReferences([])
   }
 
+  const openPartialRemoval = (item: CheckInCase) => {
+    setError(null)
+    setPartialRemovalTarget(item)
+    setPartialRemovalNotes("")
+    setPartialRemovalFiles([])
+  }
+
   const renderRow = (item: CheckInCase, group: CheckInGroup) => {
     const actions = staffCheckInActions(item, now)
+    const receiptState = receiptConfirmationState(item, now)
+    const receiptRelease = receiptReleaseState(item, now)
     return (
     <Tr key={item.reservationId}>
       <Td>
@@ -1435,11 +1558,23 @@ export default function StaffCheckInOperationsPanel({
         {group === "ONGOING" && stepForCheckIn(item) <= 4 && (item.appointmentAt || item.scheduledAt) && handoverExpired(item, now) && (
           <p className="mt-1 text-[11px] font-medium text-red-700">Đã hết hạn nhận kho</p>
         )}
+        {item.checkInStatus === "handover_pending_receipt" && item.receiptConfirmationDueAt && (
+          <p className={`mt-1 text-[11px] font-semibold ${receiptState.expired || receiptState.urgent ? "text-red-700" : "text-amber-700"}`}>
+            {receiptState.text} · Hạn {formatStaffDateTime(item.receiptConfirmationDueAt)}
+          </p>
+        )}
+        {receiptRelease.text && (
+          <p className={receiptRelease.eligible ? "mt-1 text-[11px] font-semibold text-red-700" : "mt-1 text-[11px] font-semibold text-amber-700"}>
+            {receiptRelease.text}
+          </p>
+        )}
       </Td>
       <Td>
         <Badge
           variant={
-            item.checkInStatus === "completed"
+            receiptRelease.eligible || receiptState.expired
+              ? "error"
+              : item.checkInStatus === "completed"
               ? "success"
               : item.checkInStatus === "no_show" ||
                   item.checkInStatus === "rejected"
@@ -1449,16 +1584,35 @@ export default function StaffCheckInOperationsPanel({
                   : "warning"
           }
         >
-          {staffCheckInStatusLabel(
-            item.checkInStatus,
-            item.reservationStatus,
-          )}
+          {receiptRelease.eligible
+            ? "Đủ điều kiện để Manager giải phóng kho"
+            : receiptState.expired
+            ? "Đã quá hạn xác nhận nhận kho"
+            : staffCheckInStatusLabel(item.checkInStatus, item.reservationStatus)}
         </Badge>
       </Td>
       <Td className="min-w-[320px] whitespace-nowrap text-right">
         <div className="flex flex-nowrap items-center justify-end gap-1 whitespace-nowrap">
           {group === "ONGOING" && item.checkInStatus !== "completed" && (
             <>
+              {item.checkInStatus === "handover_pending_receipt" && item.checkInId && <Button
+                className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
+                size="sm"
+                variant="outline"
+                disabled={submitting || Boolean(remindingCustomerCheckInId)}
+                onClick={() => void remindCustomerReceipt(item)}
+              >
+                {remindingCustomerCheckInId === item.checkInId ? "Đang gửi…" : "Nhắc khách xác nhận"}
+              </Button>}
+              {item.inventoryResolutionStatus === "PARTIAL_ACCEPTED" && <Button
+                className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
+                size="sm"
+                variant="danger"
+                disabled={submitting}
+                onClick={() => openPartialRemoval(item)}
+              >
+                Xác nhận đã đưa phần dư ra
+              </Button>}
               <Button
                 className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
                 size="sm"
@@ -1467,15 +1621,15 @@ export default function StaffCheckInOperationsPanel({
               >
                 {actions.label}
               </Button>
-              <Button
+              {actions.canReject && <Button
                 className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
                 size="sm"
                 variant="danger"
-                disabled={submitting || !actions.canReject}
+                disabled={submitting}
                 onClick={() => openRejection(item)}
               >
                 Từ chối nhận kho
-              </Button>
+              </Button>}
               <Button
                 className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
                 size="sm"
@@ -1594,7 +1748,7 @@ export default function StaffCheckInOperationsPanel({
       )}
       {(["ONGOING", "PROCESSED"] as const).map(group => (
         <CheckInWorkList key={group + JSON.stringify(filters)} group={group} filters={filters}
-          refreshKey={refreshKey} renderRow={renderRow} />
+          refreshKey={refreshKey} now={now} renderRow={renderRow} />
       ))}
 
       <Modal
@@ -1917,7 +2071,7 @@ export default function StaffCheckInOperationsPanel({
                       </span>
                     </div>
                     <p className="mt-1 text-xs text-emerald-800">
-                      Bàn giao lúc: {formatStaffDateTime(handoverTarget.setupStartedAt)}. Khách hàng có {handoverTarget.freeSetupDays} ngày để chuyển đồ và chuẩn bị trước khi tính cước hợp đồng.
+                      Bàn giao lúc: {formatStaffDateTime(handoverTarget.checkedInAt)}. Thời gian setup chỉ bắt đầu sau khi khách xác nhận đã nhận kho.
                     </p>
                   </div>
                 )}
@@ -1930,10 +2084,16 @@ export default function StaffCheckInOperationsPanel({
                 {handoverTarget.checkInStatus === "handover_pending_receipt" ? (
                   <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 pb-3">
-                      <p className="font-bold text-base">Đang chờ khách hàng sẵn sàng bàn giao</p>
-                      <span className="rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-bold text-amber-900">Chờ khách xác nhận</span>
+                      <p className="font-bold text-base">Đang chờ khách hàng xác nhận nhận kho</p>
+                      <span className={`rounded-full border px-3 py-1 text-xs font-bold ${receiptConfirmationState(handoverTarget, now).expired ? "border-red-300 bg-red-100 text-red-900" : "border-amber-300 bg-white text-amber-900"}`}>
+                        {receiptConfirmationState(handoverTarget, now).expired ? "Đã quá hạn" : "Chờ khách xác nhận"}
+                      </span>
                     </div>
-                    <p className="mt-3 text-sm">Vui lòng chờ khách hàng nhấn <b>“Sẵn sàng bàn giao”</b>. Hệ thống sẽ tự cập nhật bước tiếp theo.</p>
+                    <p className="mt-3 text-sm">Vui lòng chờ khách hàng nhấn <b>“Xác nhận đã nhận kho”</b>. Thời gian setup chưa bắt đầu ở bước này.</p>
+                    {handoverTarget.checkedInAt && <p className="mt-2 text-xs">Bàn giao lúc: <b>{formatStaffDateTime(handoverTarget.checkedInAt)}</b></p>}
+                    {handoverTarget.receiptConfirmationDueAt && <p className={`mt-1 text-xs font-bold ${receiptConfirmationState(handoverTarget, now).expired || receiptConfirmationState(handoverTarget, now).urgent ? "text-red-700" : "text-amber-700"}`}>
+                      {receiptConfirmationState(handoverTarget, now).text} · Hạn xác nhận: {formatStaffDateTime(handoverTarget.receiptConfirmationDueAt)}
+                    </p>}
                   </div>
                 ) : (
                   <>
@@ -1948,7 +2108,7 @@ export default function StaffCheckInOperationsPanel({
 
                   <div className="mt-3 grid gap-3 sm:grid-cols-3 text-xs">
                     <div className="rounded-lg border border-violet-200 bg-white p-3">
-                      <span className="text-stone-500">Bắt đầu bàn giao:</span>
+                      <span className="text-stone-500">Bắt đầu setup:</span>
                       <p className="font-bold text-stone-900 mt-0.5">{formatStaffDateTime(handoverTarget.setupStartedAt)}</p>
                     </div>
                     <div className="rounded-lg border border-violet-200 bg-white p-3">
@@ -1979,7 +2139,7 @@ export default function StaffCheckInOperationsPanel({
 
             {handoverStep === 6 && (
               <div className="space-y-4">
-                <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-950"><b>Kiểm kê hàng hóa</b><p className="mt-1 text-xs">Đối chiếu số kiện, khối lượng, thể tích, kích thước, loại hàng, chất liệu chính và tình trạng hàng hóa sau khi khách đã sắp xếp xong. Hiện trạng kho trống đã được ghi nhận ở bước bàn giao.</p>{handoverTarget.inventoryDueAt && <p className="mt-1 text-xs">Hạn kiểm kê: <b>{formatStaffDateTime(handoverTarget.inventoryDueAt)}</b></p>}</div>
+                <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-950"><b>Kiểm kê hàng hóa</b><p className="mt-1 text-xs">Đối chiếu số kiện, khối lượng, thể tích, kích thước, loại hàng, chất liệu chính và tình trạng hàng hóa sau khi khách đã sắp xếp xong. Hiện trạng kho trống đã được ghi nhận ở bước bàn giao.</p>{handoverTarget.inventoryDueAt && <p className="mt-1 text-xs">Mốc nhắc xử lý: <b>{formatStaffDateTime(handoverTarget.inventoryDueAt)}</b></p>}{handoverTarget.inventoryFinalDeadlineAt && <p className={`mt-1 text-xs font-bold ${new Date(handoverTarget.inventoryFinalDeadlineAt).getTime() <= now ? 'text-red-700' : 'text-indigo-900'}`}>{new Date(handoverTarget.inventoryFinalDeadlineAt).getTime() <= now ? 'Đã quá hạn kiểm kê' : 'Hạn hoàn tất kiểm kê'}: <b>{formatStaffDateTime(handoverTarget.inventoryFinalDeadlineAt)}</b></p>}</div>
                 {lineInventory ? (
                   <div className="space-y-5">
                     {inventoryRows.map(({ line, entry, comparison }, index) => {
@@ -2166,7 +2326,7 @@ export default function StaffCheckInOperationsPanel({
                             setVarianceAccepted(event.target.checked)
                           }}
                         />
-                        Đã trao đổi với khách và chấp nhận chênh lệch *
+                        {lineInventory ? "Đã ghi nhận sai lệch để khách hàng xác nhận" : "Đã trao đổi với khách và chấp nhận chênh lệch *"}
                       </label>
                       {fieldErrors.varianceAccepted && (
                         <p className="text-xs text-red-600 font-medium mt-1 pl-6">{fieldErrors.varianceAccepted}</p>
@@ -2225,6 +2385,19 @@ export default function StaffCheckInOperationsPanel({
                     {(fieldErrors.initialCondition || fieldErrors.initialUnitCondition) && (
                       <p className="text-xs text-red-600 font-medium mt-1">{fieldErrors.initialCondition || fieldErrors.initialUnitCondition}</p>
                     )}
+                  </div>
+                  <div className="space-y-2 rounded-lg border border-stone-200 p-3">
+                    <p className="text-sm">Phương thức khách khai: <b>{handoverTarget?.declaredPackagingMethod || 'Chưa ghi nhận'}</b></p>
+                    <Input label="Phương thức đóng gói thực tế *" value={actualPackagingMethod} disabled={isReviewingCompletedStep}
+                      error={fieldErrors.actualPackagingMethod} onChange={event => { setActualPackagingMethod(event.target.value); clearFieldError('actualPackagingMethod') }} />
+                    {actualPackagingMethod.trim() && handoverTarget?.declaredPackagingMethod && <p className={packagingMethodMismatch ? 'text-sm font-semibold text-red-700' : 'text-sm text-emerald-700'}>{packagingMethodMismatch ? 'Không khớp phương thức đã khai báo' : 'Khớp phương thức đã khai báo'}</p>}
+                    <label className="block text-sm font-medium">Tình trạng đóng gói thực tế *
+                      <select className="mt-1 w-full rounded-lg border border-stone-300 bg-white p-2" value={packagingCondition} disabled={isReviewingCompletedStep}
+                        onChange={event => { setPackagingCondition(event.target.value as typeof packagingCondition); clearFieldError('packagingCondition') }}>
+                        <option value="">Chọn tình trạng đóng gói</option><option value="INTACT">Nguyên vẹn</option><option value="MINOR_DAMAGE">Hư hỏng nhẹ</option><option value="MAJOR_DAMAGE">Hư hỏng nặng</option><option value="UNPACKAGED">Chưa đóng gói</option>
+                      </select>
+                    </label>
+                    {fieldErrors.packagingCondition && <p className="text-xs text-red-700">{fieldErrors.packagingCondition}</p>}
                   </div>
                   {!lineInventory && (
                   <Input
@@ -2360,7 +2533,7 @@ export default function StaffCheckInOperationsPanel({
                 <div className="flex flex-wrap items-center justify-end gap-3">
                   <span className="text-xs text-stone-600">
                     {handoverTarget.checkInStatus === "handover_pending_receipt"
-                      ? "Đang chờ khách nhấn Sẵn sàng bàn giao."
+                      ? "Đang chờ khách nhấn Xác nhận đã nhận kho."
                       : "Đang chờ khách nhấn Sẵn sàng để kiểm kê sau khi sắp xếp hàng hóa xong."}
                   </span>
                   <Button variant="outline" onClick={() => void refreshHandoverTarget()} disabled={submitting}>
@@ -2426,7 +2599,7 @@ export default function StaffCheckInOperationsPanel({
       <Modal
         open={customerWaitTarget === "receipt" && Boolean(handoverTarget)}
         onClose={() => setCustomerWaitTarget(null)}
-        title="Đang chờ khách hàng sẵn sàng bàn giao"
+        title="Đang chờ khách hàng xác nhận nhận kho"
         size="md"
       >
         {handoverTarget && (
@@ -2434,11 +2607,20 @@ export default function StaffCheckInOperationsPanel({
             <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
               <p className="font-bold">Nhân viên đã xác nhận bàn giao kho trống</p>
               <p className="mt-2 leading-6">
-                Đơn <b>{handoverTarget.reservationCode}</b> đang chờ khách hàng nhấn <b>“Sẵn sàng bàn giao”</b> trên cổng khách hàng.
-                Chưa thể chuyển sang kiểm kê hàng hóa ở bước này.
+                Đơn <b>{handoverTarget.reservationCode}</b> đang chờ khách hàng nhấn <b>“Xác nhận đã nhận kho”</b> trên cổng khách hàng.
+                Chưa thể chuyển sang thời gian setup hoặc kiểm kê hàng hóa ở bước này.
               </p>
+              {handoverTarget.receiptConfirmationDueAt && <p className="mt-2 font-semibold">{receiptConfirmationState(handoverTarget, now).text} · Hạn xác nhận: {formatStaffDateTime(handoverTarget.receiptConfirmationDueAt)}</p>}
+              {receiptReleaseState(handoverTarget, now).text && <p className="mt-2 font-semibold text-red-700">{receiptReleaseState(handoverTarget, now).text} · Sau đủ 3 ngày chỉ Manager được giải phóng kho.</p>}
             </div>
             <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => void remindCustomerReceipt(handoverTarget)}
+                disabled={submitting || Boolean(remindingCustomerCheckInId)}
+              >
+                {remindingCustomerCheckInId === handoverTarget.checkInId ? "Đang gửi…" : "Nhắc khách xác nhận"}
+              </Button>
               <Button onClick={() => setCustomerWaitTarget(null)} disabled={submitting}>
                 Đóng thông báo
               </Button>
@@ -2636,6 +2818,49 @@ export default function StaffCheckInOperationsPanel({
       </Modal>
 
       <Modal
+        open={Boolean(partialRemovalTarget)}
+        onClose={() => {
+          if (!submitting) {
+            setError(null)
+            setPartialRemovalTarget(null)
+          }
+        }}
+        title="Xác nhận phần hàng dư đã được đưa ra"
+      >
+        {partialRemovalTarget && (
+          <div className="space-y-4">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+              Đơn <b>{partialRemovalTarget.reservationCode}</b> · gian <b>{partialRemovalTarget.storageUnitCode}</b> đang chờ xác nhận phần hàng không được tiếp nhận đã được đưa ra khỏi gian kho.
+            </div>
+            <Input
+              label="Ghi chú bàn giao phần hàng dư"
+              value={partialRemovalNotes}
+              maxLength={2000}
+              onChange={event => setPartialRemovalNotes(event.target.value)}
+            />
+            <label className="block text-sm font-medium text-stone-700">
+              Bằng chứng đưa phần hàng dư ra (ảnh hoặc PDF)
+              <input
+                className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
+                type="file"
+                multiple
+                accept="image/jpeg,image/png,image/webp,application/pdf"
+                onChange={event => setPartialRemovalFiles(Array.from(event.target.files || []))}
+              />
+              <span className="mt-1 block text-xs font-normal text-stone-500">Cần ít nhất một tệp bằng chứng trước khi hoàn tất.</span>
+            </label>
+            {error && <div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800">{error}</div>}
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => { setError(null); setPartialRemovalTarget(null) }} disabled={submitting}>Đóng</Button>
+              <Button variant="danger" disabled={submitting || !partialRemovalNotes.trim() || !partialRemovalFiles.length} onClick={() => void submitPartialRemoval()}>
+                {submitting ? "Đang lưu…" : "Xác nhận đã đưa phần dư ra"}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
         open={Boolean(detailTarget)}
         onClose={() => setDetailTarget(null)}
         title="Biên bản nhận kho & bàn giao"
@@ -2795,6 +3020,12 @@ export default function StaffCheckInOperationsPanel({
                   {detailTarget.handover.goodsCondition}
                 </p>
               </div>
+            </div>
+            <div className="rounded-lg border border-stone-200 p-3 text-sm">
+              <b>Đối chiếu đóng gói</b>
+              <p className="mt-1">Khách khai: {detailTarget.declaredPackagingMethod || 'Chưa ghi nhận'}</p>
+              <p className="mt-1">Thực tế: {detailTarget.handover.actualPackagingMethod || 'Chưa ghi nhận'}</p>
+              <p className="mt-1">Tình trạng: {({ INTACT: 'Nguyên vẹn', MINOR_DAMAGE: 'Hư hỏng nhẹ', MAJOR_DAMAGE: 'Hư hỏng nặng', UNPACKAGED: 'Chưa đóng gói' } as Record<string, string>)[detailTarget.handover.packagingCondition || ''] || 'Chưa ghi nhận'}</p>
             </div>
             <div className="rounded-lg border border-stone-200 p-3">
               <b>Vật dụng/quyền truy cập đã bàn giao</b>
