@@ -26,7 +26,7 @@ export interface MaintenanceTaskApi {
   assignedStaffName: string | null
   status: MaintenanceTaskStatus
   recoveryRequired?: boolean
-  recoveryType?: 'NONE' | 'RETURN_NO_SHOW' | 'INVENTORY_OVERDUE'
+  recoveryType?: 'NONE' | 'RETURN_NO_SHOW' | 'INVENTORY_OVERDUE' | 'SETUP_OVERDUE' | 'MISMATCH_REMOVAL' | 'EXCESS_ITEMS'
   dueAt: string | null
   deadlineAt?: string | null
   recoveryHandoverLocation?: string | null
@@ -76,7 +76,7 @@ function isMaintenanceTask(value: unknown): value is MaintenanceTaskApi {
     (value.taskType === undefined || value.taskType === 'maintenance' || value.taskType === 'inventory_check') &&
     ['low', 'medium', 'high'].includes(String(value.priority)) &&
     ['open', 'in_progress', 'completed', 'cancelled'].includes(String(value.status)) &&
-    (value.recoveryType === undefined || ['NONE', 'RETURN_NO_SHOW', 'INVENTORY_OVERDUE'].includes(String(value.recoveryType))) &&
+    (value.recoveryType === undefined || ['NONE', 'RETURN_NO_SHOW', 'INVENTORY_OVERDUE', 'SETUP_OVERDUE', 'MISMATCH_REMOVAL', 'EXCESS_ITEMS'].includes(String(value.recoveryType))) &&
     isNullableText(value.returnCaseId) && isNullableText(value.damageClassification) &&
     isNullableText(value.reportedById) && isNullableText(value.reportedByName) &&
     isNullableText(value.assignedStaffId) && isNullableText(value.assignedStaffName) &&

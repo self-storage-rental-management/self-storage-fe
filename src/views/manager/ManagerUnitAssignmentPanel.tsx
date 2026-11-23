@@ -158,7 +158,7 @@ export default function ManagerUnitAssignmentPanel({ showToast, embedded = false
     {!embedded && <SectionHeader
       eyebrow="Vận hành nhận kho"
       title="Phân kho"
-      subtitle="Các đơn đã thanh toán và đang chờ kho được xếp trước. Chọn kho phù hợp và xem đầy đủ vị trí, kích thước, tải trọng trước khi xác nhận."
+      subtitle="Các đơn đã thanh toán và đang chờ kho được xếp trước. Chọn gian kho phù hợp, xem thông tin chi tiết và xác nhận phân kho."
     />}
 
     {embedded && <div className="flex flex-wrap items-start justify-between gap-3">
@@ -225,7 +225,7 @@ export default function ManagerUnitAssignmentPanel({ showToast, embedded = false
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs">
           {[
-            ['select', '1. Chọn kho'],
+            ['select', '1. Chọn gian kho'],
             ['confirm', '2. Xác nhận'],
             ...(selected.assignedStorageUnitId ? [['change', '3. Đổi khi không phù hợp']] : []),
           ].map(([key, label]) => <button type="button" key={key} disabled={key === 'confirm' && !storageUnitId} onClick={() => setFlow(key as typeof flow)} className={`rounded-full border px-2 py-1 ${flow === key ? 'border-amber-400 bg-amber-50 font-semibold text-amber-900' : 'border-stone-200 text-stone-500'} disabled:cursor-not-allowed disabled:opacity-60`}>{label}</button>)}

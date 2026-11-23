@@ -281,6 +281,11 @@ export const KNOWN_FACILITY_CORRECTIONS: Record<string, { name?: string; address
     name: 'Kho Hồ Thanh Phương',
     address: 'Lô E2a-7, Đường D1, Khu Công nghệ cao, Phường Long Thạnh Mỹ, TP. Thủ Đức, TP. Hồ Chí Minh',
     city: 'TP. Hồ Chí Minh'
+  },
+  'FPT-TV-F01': {
+    name: 'Kho Thư viện FPT',
+    address: 'Khuôn viên Thư viện FPT, Lô E2a-7, Đường D1, Khu Công nghệ cao, Phường Long Thạnh Mỹ, TP. Thủ Đức, TP. Hồ Chí Minh',
+    city: 'TP. Hồ Chí Minh'
   }
 }
 

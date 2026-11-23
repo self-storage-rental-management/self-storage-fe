@@ -9,6 +9,8 @@ import { formatVndAmount } from '../../i18n/currency'
 import { exportManagerFacilityExcel } from '../../utils/excelExport'
 import { Badge, Button, Card, Input, Modal, SectionHeader, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import ManagerPagination from './ManagerPagination'
+import ManagerCashflowPanel from './ManagerCashflowPanel'
+import type { CashflowReport } from '../../services/managerCashflowApi'
 import { managerApiIdentity } from './managerD1D5Api'
 import { managerDisplayError, managerDisplayExplanation } from './managerPresentation'
 import { managerFacilityNotice, singleManagerFacility } from './managerFacilityUi'
@@ -109,6 +111,7 @@ export default function ManagerReportsApiPanel({ overview = false }: { overview?
 
 function ManagerReportsSession({ actor, facilityId, overview }: { actor: ApiActor; facilityId: string; overview: boolean }) {
   const identity = managerApiIdentity(actor)
+  const [financialReport, setFinancialReport] = useState<CashflowReport>()
   const summaryRead = useRentalApiResource(`${identity}:report-summary:${facilityId}`, async () => {
     const response = await getManagerReportSummary(facilityId)
     if (response.data.facilityId !== facilityId) {
@@ -133,8 +136,9 @@ function ManagerReportsSession({ actor, facilityId, overview }: { actor: ApiActo
   }
 
   const handleExportExcel = () => {
-    if (!summary) return
+    if (!summary || !financialReport) return
     exportManagerFacilityExcel({
+      financialReport,
       facilityName: summary.facilityName || facilityId,
       metrics: {
         occupancyRate: summary.occupancyRate,
@@ -143,7 +147,7 @@ function ManagerReportsSession({ actor, facilityId, overview }: { actor: ApiActo
         availableUnits: summary.availableUnits,
         maintenanceUnits: summary.maintenanceUnits,
         monthlyRevenue: summary.monthlyRecurringRevenue,
-        collectedRevenue: summary.collectedRevenue ?? 'Chưa đối soát',
+        collectedRevenue: financialReport.collected,
         overdueRentalsCount: summary.overdueRentalsCount,
         monthCheckinsCount: summary.monthCheckinsCount,
         openReturnsCount: summary.openReturnsCount,
@@ -168,7 +172,7 @@ function ManagerReportsSession({ actor, facilityId, overview }: { actor: ApiActo
         subtitle={summary ? `${summary.facilityName} · Số liệu từ hệ thống vận hành` : 'Số liệu lấy trực tiếp từ hệ thống cơ sở.'}
         action={
           summary ? (
-            <Button variant="outline" onClick={handleExportExcel}>
+            <Button variant="outline" onClick={handleExportExcel} disabled={!financialReport}>
               <span>Xuất báo cáo Excel</span>
             </Button>
           ) : undefined
@@ -179,11 +183,12 @@ function ManagerReportsSession({ actor, facilityId, overview }: { actor: ApiActo
       <div className="grid min-w-0 grid-cols-2 gap-3 xl:grid-cols-3 2xl:grid-cols-6">
         <ReportMetric title="Tỷ lệ lấp đầy" value={`${summary.occupancyRate}%`} detail="Tỷ lệ gian kho đang được sử dụng" />
         <ReportMetric title="Tiền thuê dự kiến/tháng" value={formatVndAmount(summary.monthlyRecurringRevenue)} detail="Theo các hợp đồng đang hiệu lực" />
-        <ReportMetric title="Tiền đã thu" value={summary.collectedRevenue === null ? 'Chưa xác minh' : formatVndAmount(summary.collectedRevenue)} detail="Chỉ tính khoản thu đã được đối soát" />
+        <ReportMetric title="Gian kho đang thuê" value={summary.occupiedUnits} detail="Số gian kho đang được sử dụng" />
         <ReportMetric title="Hợp đồng quá hạn" value={summary.overdueRentalsCount} detail="Hồ sơ đã qua ngày hết hạn thuê" />
         <ReportMetric title="Nhận kho trong tháng" value={summary.monthCheckinsCount} detail="Số lượt nhận kho trong tháng này" />
         <ReportMetric title="Yêu cầu trả kho" value={summary.openReturnsCount} detail="Các yêu cầu đang chờ hoàn tất" />
       </div>
+      <ManagerCashflowPanel key={facilityId} facilityId={facilityId} identity={identity} onReport={setFinancialReport} />
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="p-5">
           <h3 className="mb-4 font-bold">Phân bổ trạng thái gian kho</h3>

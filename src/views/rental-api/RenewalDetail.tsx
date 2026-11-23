@@ -177,7 +177,8 @@ export default function RenewalDetail({
       </dl>
       {r.reviewReason && <p>Lý do quyết định: {r.reviewReason}</p>}
       {r.cancellationReason && <p>Lý do hủy: {r.cancellationReason === "AUTO_RECOVERY_DAY_8" ? "Đã qua ngày quá hạn thứ 7, hồ sơ chuyển sang xử lý thu hồi kho. Tiền thuê trả trước đang chờ đối soát nguyên nhân." : r.cancellationReason}</p>}
-      <div className="space-y-3">
+      <section className="space-y-3 rounded-xl border border-stone-200 p-4" aria-labelledby="renewal-ledger-heading">
+          <h4 id="renewal-ledger-heading" className="font-semibold text-stone-900">Bảng kê và biên lai</h4>
           {r.statusSummary ? <RenewalStatusPanel summary={r.statusSummary} onReceipt={setReceiptPaymentId} /> : <p className="rounded-lg border border-stone-200 p-3 text-sm text-stone-600" role="status">Chưa xác định được bảng kê khoản phải thu. Cần đối soát trước khi xác nhận số tiền đã thanh toán hoặc còn phải thu.</p>}
           {role === "customer" && paymentInSummary && paymentDetail &&
             <p className="text-sm leading-5 text-stone-600" role="status">{paymentDetail}</p>}
@@ -196,22 +197,22 @@ export default function RenewalDetail({
             {paymentDetail && <p className="mt-3 border-t border-stone-100 pt-2 text-xs leading-5 text-stone-600">{paymentDetail}</p>}
           </section>}
           {role === "customer" && paymentError && <p role="alert" className="rounded bg-amber-50 p-3 text-amber-900">{paymentError}</p>}
-      </div>
+      </section>
       {receiptPaymentId && <Modal open onClose={() => setReceiptPaymentId(null)} title="Biên lai khoản thu gia hạn" size="lg">
         <RenewalReceipt id={r.id} paymentId={receiptPaymentId} role={role} />
       </Modal>}
       {terms ? (
         <details className="rounded-xl border border-stone-200 bg-white p-4">
           <summary className="cursor-pointer font-semibold text-stone-900">Điều khoản và chi phí gia hạn</summary>
-          <div className="mt-4 space-y-5 text-sm">
-            <section aria-label="Thông tin gia hạn">
+          <div className="mt-4 grid gap-4 text-sm lg:grid-cols-2">
+            <section className="rounded-lg border border-stone-200 p-3" aria-label="Thông tin gia hạn">
               <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Thông tin gia hạn</h4>
               {terms.signingWindowDays != null && <dl className="rounded-lg bg-stone-50 p-3"><div><dt className="text-stone-500">Thời hạn đến cơ sở ký gia hạn</dt><dd className="mt-1 text-stone-900">Sau khi thanh toán khoản trả trước thành công, bạn có tối đa {terms.signingWindowDays} ngày để đến ký. Thời hạn này có thể ngắn hơn nếu đến hạn xử lý quá hạn trước.</dd></div></dl>}
               <p className="mt-2 text-xs leading-5 text-stone-600">{terms.continuousPeriod
                 ? "Kỳ thuê mới bắt đầu ngay sau kỳ thuê hiện tại. Bạn không bị tính phí quá hạn cho những ngày thuộc kỳ thuê mới."
                 : "Theo báo giá đã lưu, nếu hoàn tất muộn, kỳ thuê mới bắt đầu từ ngày ký. Phí quá hạn cho những ngày trước đó được tính riêng."}</p>
             </section>
-            <section aria-label="Chi phí gia hạn">
+            <section className="rounded-lg border border-stone-200 p-3" aria-label="Chi phí gia hạn">
               <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Chi phí gia hạn</h4>
               <dl className="divide-y divide-stone-100 rounded-lg border border-stone-200 px-3">
                 <div className="flex justify-between gap-4 py-2"><dt className="text-stone-600">Đơn giá/tháng</dt><dd className="text-right font-medium text-stone-900">{rentalMoney(terms.monthlyPrice, terms.currency)}</dd></div>
@@ -220,7 +221,7 @@ export default function RenewalDetail({
                 <div className="flex justify-between gap-4 py-3"><dt className="font-semibold text-stone-900">Tổng sau điều chỉnh</dt><dd className="text-right font-bold text-stone-900">{rentalMoney(terms.totalAfterDiscount, terms.currency)}</dd></div>
               </dl>
             </section>
-            <section aria-label="Kế hoạch thanh toán">
+            <section className="rounded-lg border border-stone-200 p-3 lg:col-span-2" aria-label="Kế hoạch thanh toán">
               <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Kế hoạch thanh toán</h4>
               {hasDeposit && <dl className="grid gap-2 sm:grid-cols-2">
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-3"><dt className="text-amber-900">Tiền thuê gia hạn trả trước</dt><dd className="mt-1 text-lg font-semibold text-amber-950">{rentalMoney(terms.renewalDepositAmount, terms.currency)}</dd></div>

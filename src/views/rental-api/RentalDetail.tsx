@@ -9,7 +9,7 @@ import type { RentalApiDetail, RentalApiRole } from "../../types/rentalApi"
 import { bookingPaymentPurposes, bookingPaymentStatuses } from "../../services/rentalBookingEvidence"
 import { rentalRecordLabel, rentalStatusLabel, rentalMoney, unknown, rentalDataWarning, rentalPeriodText, rentalDate, accessStatusLabels } from "./presentation"
 import { downloadCheckInEvidence } from "../../services/checkInApi"
-import { confirmCustomerRentalStart, getCustomerReservation, markCustomerPreparationComplete, previewCustomerRentalStart, type CustomerReservationDetail, type RentalStartConfirmation } from "../../services/customerReservationApi"
+import { confirmCustomerRentalStart, getCustomerReservation, previewCustomerRentalStart, type CustomerReservationDetail, type RentalStartConfirmation } from "../../services/customerReservationApi"
 import InventoryAppointmentPanel from "../customer/InventoryAppointmentPanel"
 import { userFacingError } from "../../presentation/userFacingError"
 import FilePreviewDialog from "../../components/FilePreviewDialog"
@@ -126,20 +126,6 @@ export default function RentalDetail({
     }
   }
 
-  const reportPreparationComplete = async () => {
-    if (role !== 'customer' || !rental.reservationId || preparationSubmitting) return
-    setPreparationSubmitting(true)
-    setPreparationError(undefined)
-    try {
-      setInventoryDetail(await markCustomerPreparationComplete(rental.reservationId,
-        'Khách hàng đã sắp xếp hàng và sẵn sàng để nhân viên kiểm kê.'))
-      onRentalStartConfirmed?.()
-    } catch (error) {
-      setPreparationError(userFacingError(error, 'Không thể báo đã chuẩn bị xong.'))
-    } finally {
-      setPreparationSubmitting(false)
-    }
-  }
 
   return (
     <div className="space-y-5 [&_dt]:text-xs [&_dt]:font-normal [&_dt]:text-stone-500 [&_dd]:mt-1.5 [&_dd]:break-words [&_dd]:text-sm [&_dd]:font-medium [&_dd]:leading-relaxed [&_dd]:text-stone-900">
@@ -202,9 +188,6 @@ export default function RentalDetail({
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3"><span className="text-sm text-emerald-800">Bắt đầu kỳ thuê có tính tiền</span><span className="font-bold text-emerald-900">{rentalDate(rental.startDate)}</span></div>
               {rental.moveInCompletedAt && <p className="border-t border-stone-100 pt-3 text-xs text-stone-500">Đã báo hoàn tất chuẩn bị lúc {new Date(rental.moveInCompletedAt).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })} ngày {rentalDate(vietnamDateInput(rental.moveInCompletedAt))}</p>}
-              {role === 'customer' && (rental.status === 'setup' || rental.status === 'active') && rental.inventoryPending
-                && !rental.moveInCompletedAt && !inventoryDetail?.setupCompletedAt && !rental.inventoryVerifiedAt && rental.reservationId
-                && <div className="mt-3 rounded-lg border border-violet-300 bg-violet-50 p-3 text-violet-950"><p className="text-sm font-bold">Bạn đã sắp xếp hàng xong?</p><p className="mt-1 text-xs leading-5">Báo đã setup xong để mở bước chọn lịch kiểm kê.</p><Button className="mt-2" size="sm" disabled={preparationSubmitting} onClick={() => void reportPreparationComplete()}>{preparationSubmitting ? 'Đang gửi…' : 'Đã setup xong'}</Button>{preparationError && <p role="alert" className="mt-2 text-xs text-red-700">{preparationError}</p>}</div>}
             </dd>
           </div>}
           {rental.inventoryVerifiedAt ? <div>

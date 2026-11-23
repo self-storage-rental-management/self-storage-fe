@@ -251,14 +251,16 @@ export function OperationEventCard({
 export function RenewalOperationsSummary({ state: s, role, cashRecorded = false, showProgress = true }: { state: RenewalOperationState; role?: RenewalOperationsRole; cashRecorded?: boolean; showProgress?: boolean }) {
   const { copy } = useManagerPresentation()
   const progressSteps = [
-    { label: "Thanh toán tiền thuê trả trước", detail: "Khoản tiền thuê gia hạn trả trước đã được ghi nhận", done: !!s.depositPaidAt || ["SIGNING", "SIGNING_EXPIRY_PENDING", "SIGNING_EXPIRED", "COMPLETED"].includes(s.phase) },
-    { label: "Chọn lịch ký", detail: "Lịch hẹn đã được lưu", done: !!s.appointmentRef },
-    { label: "Khách đến", detail: "Nhân viên đã ghi nhận khách tại cơ sở", done: !!s.arrivalRef },
-    { label: "Thanh toán còn lại", detail: "Khoản tiền thuê còn lại đã được ghi nhận", done: cashRecorded || !!s.fullRentPaidAt || s.phase === "COMPLETED" },
-    { label: "Hoàn tất ký", detail: "Hợp đồng gia hạn đã được lưu", done: !!s.completedAt || s.phase === "COMPLETED" },
+    { label: "Chọn lịch ký", done: !!s.appointmentRef },
+    { label: "Thanh toán tiền thuê trả trước", done: !!s.depositPaidAt || ["SIGNING", "SIGNING_EXPIRY_PENDING", "SIGNING_EXPIRED", "COMPLETED"].includes(s.phase) },
+    { label: "Khách đến", done: !!s.arrivalRef },
+    { label: "Thanh toán còn lại", done: cashRecorded || !!s.fullRentPaidAt || s.phase === "COMPLETED" },
+    { label: "Hoàn tất ký", done: !!s.completedAt || s.phase === "COMPLETED" },
   ]
   const activeProgressIndex = progressSteps.findIndex(step => !step.done)
   const progressIndex = activeProgressIndex < 0 ? progressSteps.length : activeProgressIndex
+  const completedCount = progressSteps.filter(step => step.done).length
+  const canAdvance = s.phase === "SIGNING" || s.phase === "AWAITING_PAYMENT_INTENT"
   return (
     <Card className="space-y-3 p-4 text-sm">
       <h3 className="font-semibold">Lịch ký</h3>
@@ -270,26 +272,25 @@ export function RenewalOperationsSummary({ state: s, role, cashRecorded = false,
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h4 className="font-semibold">Tiến trình gia hạn</h4>
-            <p className="text-xs text-stone-500">Đã hoàn thành {progressIndex}/{progressSteps.length} bước</p>
+            <p className="text-xs text-stone-600">Đã hoàn thành {completedCount}/{progressSteps.length} bước</p>
           </div>
           <span className={`rounded-full px-3 py-1 text-xs font-semibold ${progressIndex === progressSteps.length ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"}`}>
-            {progressIndex === progressSteps.length ? "Gia hạn hoàn tất" : `Đang thực hiện: ${progressSteps[progressIndex]?.label}`}
+            {s.phase === "COMPLETED" ? "Gia hạn hoàn tất" : canAdvance && activeProgressIndex >= 0 ? `Đang chờ: ${progressSteps[progressIndex].label}` : copy(phaseLabels[s.phase])}
           </span>
         </div>
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+        <ol className="grid gap-2 sm:grid-cols-5">
           {progressSteps.map((step, index) => {
             const completed = step.done
-            const current = index === progressIndex && progressIndex < progressSteps.length
-            return <div key={step.label} aria-current={current ? "step" : undefined} className={`rounded-lg border p-3 ${completed ? "border-emerald-200 bg-emerald-50 text-emerald-950" : current ? "border-amber-400 bg-amber-500 text-white" : "border-stone-200 bg-white text-stone-400"}`}>
+            const current = canAdvance && index === activeProgressIndex
+            return <li key={step.label} aria-current={current ? "step" : undefined} className={`rounded-lg border p-2.5 ${completed ? "border-emerald-200 bg-emerald-50 text-emerald-950" : current ? "border-amber-400 bg-amber-100 text-amber-950" : "border-stone-200 bg-white text-stone-600"}`}>
               <div className="mb-2 flex items-center justify-between gap-1">
                 <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${completed ? "bg-emerald-600 text-white" : current ? "bg-white text-amber-700" : "bg-stone-100 text-stone-500"}`}>{index + 1}</span>
                 <span className="text-[10px] font-semibold">{completed ? "Đã xong" : current ? "Hiện tại" : "Sắp tới"}</span>
               </div>
               <p className="text-xs font-bold">{step.label}</p>
-              <p className={`mt-1 text-[11px] leading-4 ${current ? "text-amber-50" : completed ? "text-emerald-800" : "text-stone-500"}`}>{step.detail}</p>
-            </div>
+            </li>
           })}
-        </div>
+        </ol>
       </section>}
       <dl className="grid gap-3 sm:grid-cols-3">
         <div><dt className="text-xs text-stone-500">Trạng thái</dt><dd className="font-semibold">{copy(phaseLabels[s.phase])}</dd></div>
@@ -486,6 +487,36 @@ export default function RenewalOperationsPanel({
     if (lockRef.current) return
     read.refresh()
   }
+  const selectedForm = selected && (
+      <OperationForm
+        key={`${identity}:${revision}:${selected.action}`}
+        action={selected.action}
+        state={selected.state}
+        proposal={selected.proposal}
+        onLocked={lock}
+        onCancel={() => {
+          setSelected(undefined)
+          setRevision((v) => v + 1)
+          onChanged?.()
+        }}
+        onSuccess={(e) => {
+          setLastEvent(e)
+          if (selected.action === "incident") setSuccessMessage("Đã gửi báo cáo sự cố tại cơ sở.")
+          if (selected.action === "cash") {
+            const reference = e.data && typeof e.data === "object" && "transactionReference" in e.data ? e.data.transactionReference : undefined
+            setSuccessMessage(typeof reference === "string" ? `Đã ghi nhận thanh toán. Mã biên lai: ${reference}` : "Đã ghi nhận thanh toán.")
+          }
+          if (selected.action === "completion") setSuccessMessage("Gia hạn đã hoàn tất. Hệ thống đã đối chiếu các khoản thu và biên lai đã lưu.")
+          if (selected.action === "noShow") setSuccessMessage("Đã ghi nhận khách không đến. Gian kho đang thuê và khoản đã thu được giữ nguyên để đối soát.")
+          if (e.kind === "ARRIVAL" || e.kind === "NO_SHOW" || e.kind === "COMPLETION") onDocumentEvent?.(e)
+          if (selected.action === "appointment" || selected.action === "reschedule")
+            setSuccessMessage(selected.action === "reschedule" ? "Đổi lịch ký đã lưu thành công." : "Lịch ký đã lưu thành công.")
+          setSelected(undefined)
+          setRevision((v) => v + 1)
+          onChanged?.()
+        }}
+      />
+  )
   return (
     <div className="space-y-4 mt-4">
       {!appointmentOnly && <RenewalDepositSettlementPanel id={id} role={role} revision={read.data?.expectedVersion}
@@ -517,10 +548,19 @@ export default function RenewalOperationsPanel({
             </div>
           )}
           {successMessage && <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">{successMessage}</p>}
-          {!appointmentOnly && actions.length > 0 && <Card className="p-4 space-y-3">
-            {role === "staff" && <h3 className="text-sm font-semibold text-stone-900">Xử lý ký gia hạn</h3>}
+          {!appointmentOnly && <Card className="p-4 space-y-3">
+            {role === "staff" && <h3 className="text-sm font-semibold text-stone-900">Thao tác tại cơ sở</h3>}
+            {role === "staff" && read.data.phase !== "SIGNING" && <p className="text-sm text-stone-600" role="status">
+              {read.data.phase === "AWAITING_PAYMENT_INTENT"
+                ? read.data.appointmentRef ? "Đã có lịch ký. Chờ khách thanh toán khoản trả trước để tiếp tục." : "Chờ khách chọn lịch ký và thanh toán khoản trả trước."
+                : copy(phaseLabels[read.data.phase])}
+            </p>}
             <div className={role === "staff" ? "grid gap-3 lg:grid-cols-3" : "grid gap-3 sm:grid-cols-2"}>
               {actions.map((action) => {
+                if (role === "staff" && action !== "incident" && read.data?.phase !== "SIGNING") return null
+                if (role === "staff" && read.data?.arrivalRef && action === "arrival") return null
+                if (role === "staff" && !read.data?.arrivalRef && (action === "cash" || action === "completion")) return null
+                if (role === "staff" && action === "cash" && (cashRecorded || read.data?.fullRentPaidAt)) return null
                 const blockedReason = operationBlockedReason(
                   read.data!,
                   role,
@@ -543,18 +583,23 @@ export default function RenewalOperationsPanel({
                         : blockedReason
                   : blockedReason
                 return (
-                  <div key={action} className={role === "staff" ? `flex min-w-0 flex-col gap-3 rounded-lg border p-3 ${action === "noShow" ? "border-rose-200 bg-rose-50 lg:col-span-3" : "border-stone-200 bg-stone-50"}` : undefined}>
-                    {role === "staff" && <div className="flex items-center gap-2 text-sm font-semibold text-stone-700">
+                  <div key={action} className={role === "staff" ? action === "incident" ? "flex flex-wrap items-center justify-between gap-2 border-t border-stone-200 pt-3 lg:col-span-3" : action === "noShow" ? "flex min-w-0 flex-col gap-3 rounded-lg border border-rose-200 bg-rose-50 p-3 lg:col-span-3" : "flex min-w-0 flex-col gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3" : undefined}>
+                    {role === "staff" && action !== "incident" && <div className="flex items-center gap-2 text-sm font-semibold text-stone-700">
                       <span className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-xs ring-1 ${action === "noShow" ? "text-rose-700 ring-rose-200" : "ring-stone-200"}`}>{action === "arrival" ? 1 : action === "cash" ? 2 : action === "completion" ? 3 : "!"}</span>
                       {action === "arrival" ? "Khách đến cơ sở" : action === "cash" ? "Thanh toán còn lại" : action === "completion" ? "Hoàn tất gia hạn" : "Ngoại lệ lịch hẹn"}
                     </div>}
                     <Button
                       type="button"
-                      variant={action === "noShow" ? "danger" : "outline"}
-                      className={role === "staff" ? "mt-auto w-full" : undefined}
+                      aria-expanded={action === "incident" ? selected?.action === "incident" : undefined}
+                      variant={action === "noShow" ? "danger" : role === "staff" && action !== "incident" && !reason ? "primary" : "outline"}
+                      className={role === "staff" ? action === "incident" ? "shrink-0" : "mt-auto w-full" : undefined}
                       disabled={!!reason || locked}
                       onClick={() => {
                         if (lockRef.current || reason) return
+                        if (action === "incident" && selected?.action === "incident") {
+                          setSelected(undefined)
+                          return
+                        }
                         setSuccessMessage(undefined)
                         setSelected({ action, state: read.data!, proposal: proposalRead.data })
                       }}
@@ -568,6 +613,7 @@ export default function RenewalOperationsPanel({
                 )
               })}
             </div>
+            {selected?.action === "incident" && selectedForm}
           </Card>}
           {!appointmentOnly && role === "staff" && operationBlockedReason(
             read.data, role, "completion", actor, facilityId, customerId, proposalRead.data, now,
@@ -589,35 +635,7 @@ export default function RenewalOperationsPanel({
       />}
       {/* Keep the selected snapshot mounted across background read/proposal updates.
           The server still validates its version; uncertain retries retain the original body/key. */}
-      {selected && (
-        <OperationForm
-          key={`${identity}:${revision}:${selected.action}`}
-          action={selected.action}
-          state={selected.state}
-          proposal={selected.proposal}
-          onLocked={lock}
-          onCancel={() => {
-            setSelected(undefined)
-            setRevision((v) => v + 1)
-            onChanged?.()
-          }}
-          onSuccess={(e) => {
-            setLastEvent(e)
-            if (selected.action === "cash") {
-              const reference = e.data && typeof e.data === "object" && "transactionReference" in e.data ? e.data.transactionReference : undefined
-              setSuccessMessage(typeof reference === "string" ? `Đã ghi nhận thanh toán. Mã biên lai: ${reference}` : "Đã ghi nhận thanh toán.")
-            }
-            if (selected.action === "completion") setSuccessMessage("Gia hạn đã hoàn tất. Hệ thống đã đối chiếu các khoản thu và biên lai đã lưu.")
-            if (selected.action === "noShow") setSuccessMessage("Đã ghi nhận khách không đến. Gian kho đang thuê và khoản đã thu được giữ nguyên để đối soát.")
-            if (e.kind === "ARRIVAL" || e.kind === "NO_SHOW" || e.kind === "COMPLETION") onDocumentEvent?.(e)
-            if (selected.action === "appointment" || selected.action === "reschedule")
-              setSuccessMessage(selected.action === "reschedule" ? "Đổi lịch ký đã lưu thành công." : "Lịch ký đã lưu thành công.")
-            setSelected(undefined)
-            setRevision((v) => v + 1)
-            onChanged?.()
-          }}
-        />
-      )}
+      {selected?.action !== "incident" && selectedForm}
       {role === "staff" && !appointmentOnly && <>
         {!embedded && <EventTimeline
           key={`${identity}:${revision}:payments`}
@@ -717,6 +735,7 @@ function OperationForm({
     onLocked(interactionLock.current)
   }
   const [reason, setReason] = useState("")
+  const [incidentType, setIncidentType] = useState("")
   const [evidence, setEvidence] = useState("")
   const [appointment, setAppointment] = useState(() => s.appointmentStart ? signingLocalInput(s.appointmentStart) : "")
   const [scheduleReady, setScheduleReady] = useState(false)
@@ -774,7 +793,8 @@ function OperationForm({
   const build = (): RenewalOperationCommand => {
     if (s.expectedVersion === null) throw new Error("Hồ sơ chưa đủ thông tin để tiếp tục xử lý.")
     const base = { expectedVersion: s.expectedVersion }
-    if (needReason) validateText(reason)
+    if (action === "incident" && !incidentType) throw new Error("Vui lòng chọn loại sự cố.")
+    if (needReason && action !== "incident") validateText(reason)
     if (needFiles) validateEvidence(files)
     if (
       manager &&
@@ -824,7 +844,7 @@ function OperationForm({
           body: {
             ...base,
             appointmentRef: s.appointmentRef,
-            reason,
+            reason: reason.trim() ? `${incidentType}: ${reason.trim()}` : incidentType,
             evidenceFileIds: files,
           },
         }
@@ -1032,13 +1052,22 @@ function OperationForm({
             />
           </label>
         )}
+        {action === "incident" && (
+          <label className="block">
+            Loại sự cố (bắt buộc)
+            <select className={operationsInputClass} value={incidentType} onChange={e => setIncidentType(e.target.value)}>
+              <option value="">Chọn loại sự cố</option>
+              {["Khách không đến", "Đến trễ", "Từ chối ký", "Thiếu giấy tờ", "Lỗi thanh toán", "Khác"].map(type => <option key={type}>{type}</option>)}
+            </select>
+          </label>
+        )}
         {needReason && (
           <label className="block">
-            Lý do (bắt buộc)
+            {action === "incident" ? "Ghi chú thêm (không bắt buộc)" : "Lý do (bắt buộc)"}
             <textarea
               className={operationsInputClass}
               value={reason}
-              maxLength={action === "noShow" ? 1000 : 2000}
+              maxLength={action === "noShow" ? 1000 : action === "incident" ? 1900 : 2000}
               onChange={(e) => setReason(e.target.value)}
             />
           </label>
@@ -1126,6 +1155,7 @@ function OperationForm({
           className={appointmentOnly ? "rounded-full px-5 disabled:!bg-stone-100 disabled:!text-stone-400" : undefined}
           disabled={
             command.busy || uploading || command.conflict || decisionMissing.length > 0 ||
+            (action === "incident" && !command.uncertain && !incidentType) ||
             (!command.uncertain && ["appointment", "reschedule"].includes(action) && !scheduleReady) ||
             (!command.uncertain && action === "completion" && (!isUuid(signedDocumentFile) || cash.loading || !!cash.error || !cash.data || cash.data.amount !== 0 || !cash.data.effectiveStartDate)) ||
             (action === "noShow" && !command.uncertain && !attested) ||
@@ -1174,7 +1204,7 @@ function OperationForm({
             ? ["appointment", "reschedule"].includes(action) ? "Đang lưu lịch ký…" : action === "noShow" ? "Đang ghi nhận…" : "Đang gửi…"
             : command.uncertain
               ? "Thử lại cùng yêu cầu"
-              : ["appointment", "reschedule"].includes(action) ? "Lưu lịch ký" : action === "completion" ? "Hoàn tất gia hạn" : action === "cash" ? "Xác nhận đã thu tiền" : action === "noShow" ? "Xác nhận khách không đến" : "Gửi yêu cầu"}
+              : ["appointment", "reschedule"].includes(action) ? "Lưu lịch ký" : action === "completion" ? "Hoàn tất gia hạn" : action === "cash" ? "Xác nhận đã thu tiền" : action === "noShow" ? "Xác nhận khách không đến" : action === "incident" ? "Gửi báo cáo" : "Gửi yêu cầu"}
         </Button>
         {!["appointment", "reschedule"].includes(action) && <Button
           variant="outline"

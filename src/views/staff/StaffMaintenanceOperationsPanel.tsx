@@ -46,7 +46,7 @@ function MaintenanceWorkspace({ actorId, identity, taskId, showToast }: {
   const lock = useRef(false)
   const witnessRead = useRentalApiResource(
     `${identity}:recovery-witnesses:${selected?.facilityId ?? ''}`,
-    () => selected?.recoveryType === 'INVENTORY_OVERDUE'
+    () => selected && ['INVENTORY_OVERDUE', 'SETUP_OVERDUE', 'MISMATCH_REMOVAL'].includes(selected.recoveryType || '')
       ? listMaintenanceStaff(selected.facilityId)
       : Promise.resolve([]),
     { retainDataOnRefresh: true },
@@ -103,7 +103,7 @@ function MaintenanceWorkspace({ actorId, identity, taskId, showToast }: {
         makeUnitAvailable,
         unitVacated: selected.recoveryRequired ? true : undefined,
         recoveryHandoverLocation: selected.recoveryRequired ? recoveryHandoverLocation.trim() : undefined,
-        recoveryWitnessStaffId: selected.recoveryType === 'INVENTORY_OVERDUE' ? recoveryWitnessStaffId : undefined,
+        recoveryWitnessStaffId: ['INVENTORY_OVERDUE', 'SETUP_OVERDUE', 'MISMATCH_REMOVAL'].includes(selected.recoveryType || '') ? recoveryWitnessStaffId : undefined,
       })
     }, makeUnitAvailable
       ? `Đã hoàn thành bảo trì gian ${selected.unitCode} và chuyển gian sang sẵn sàng.`
@@ -168,7 +168,7 @@ function MaintenanceWorkspace({ actorId, identity, taskId, showToast }: {
             Báo cáo kết quả
             <textarea className="mt-1 block min-h-24 w-full rounded border border-stone-300 bg-white p-2" maxLength={4000} disabled={busy} required value={resultReport} onChange={(event) => setResultReport(event.target.value)} placeholder="Mô tả hạng mục đã kiểm tra, sửa chữa và kết quả nghiệm thu…" />
           </label>
-          {selected.recoveryType === 'INVENTORY_OVERDUE' && <label className="block text-sm font-medium text-stone-700">Nhân viên thứ hai xác nhận thu hồi<select className="mt-1 block w-full rounded border border-stone-300 bg-white p-2" disabled={busy || witnessRead.loading} value={recoveryWitnessStaffId} onChange={(event) => setRecoveryWitnessStaffId(event.target.value)}><option value="">Chọn nhân viên cùng cơ sở</option>{witnessOptions.map((witness) => <option key={witness.id} value={witness.id}>{witness.fullName}</option>)}</select></label>}
+          {['INVENTORY_OVERDUE', 'SETUP_OVERDUE', 'MISMATCH_REMOVAL'].includes(selected.recoveryType || '') && <label className="block text-sm font-medium text-stone-700">Nhân viên thứ hai xác nhận thu hồi<select className="mt-1 block w-full rounded border border-stone-300 bg-white p-2" disabled={busy || witnessRead.loading} value={recoveryWitnessStaffId} onChange={(event) => setRecoveryWitnessStaffId(event.target.value)}><option value="">Chọn nhân viên cùng cơ sở</option>{witnessOptions.map((witness) => <option key={witness.id} value={witness.id}>{witness.fullName}</option>)}</select></label>}
           {selected.recoveryRequired && <label className="block text-sm font-medium text-stone-700">Khu vực lưu tạm và người nhận bàn giao<input className="mt-1 block w-full rounded border border-stone-300 bg-white p-2" maxLength={500} disabled={busy} value={recoveryHandoverLocation} onChange={(event) => setRecoveryHandoverLocation(event.target.value)} placeholder="Ví dụ: Khu lưu tạm A, kệ 02, nhân viên nhận bàn giao" /></label>}
           <label className="block text-sm font-medium text-stone-700">
             Ảnh sửa chữa / nghiệm thu
@@ -184,7 +184,7 @@ function MaintenanceWorkspace({ actorId, identity, taskId, showToast }: {
           </label>
           <div className="flex justify-end gap-2">
             <Button variant="outline" disabled={busy} onClick={() => setSelected(null)}>Đóng</Button>
-            <Button disabled={busy || !resultReport.trim() || selected.recoveryRequired && (!recoveryHandoverLocation.trim() || selected.recoveryType === 'INVENTORY_OVERDUE' && !recoveryWitnessStaffId)} onClick={complete}>{busy ? 'Đang lưu…' : 'Gửi báo cáo và hoàn thành'}</Button>
+            <Button disabled={busy || !resultReport.trim() || selected.recoveryRequired && (!recoveryHandoverLocation.trim() || ['INVENTORY_OVERDUE', 'SETUP_OVERDUE', 'MISMATCH_REMOVAL'].includes(selected.recoveryType || '') && !recoveryWitnessStaffId)} onClick={complete}>{busy ? 'Đang lưu…' : 'Gửi báo cáo và hoàn thành'}</Button>
           </div>
         </div>
       )}

@@ -13,7 +13,7 @@ import RecoveryTaskDetail, { recoveryStatusLabels } from '../rental-api/Recovery
 import { rentalDate } from '../rental-api/presentation'
 import { managerFacilityNotice, singleManagerFacility } from './managerFacilityUi'
 import ManagerCheckInReminderPanel from './ManagerCheckInReminderPanel'
-import ManagerInventoryAppointments from './ManagerInventoryAppointments'
+import ManagerIntakeWorkflowPanel from './ManagerIntakeWorkflowPanel'
 import {
   assignMaintenanceTask,
   cancelMaintenanceTask,
@@ -277,6 +277,7 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
       <div id="staff-handover-panel" role="tabpanel" aria-labelledby="staff-handover-tab" hidden={activeTab !== 'handover'} className="space-y-5">
         <ManagerCheckInReminderPanel showToast={showToast} onCountChange={setReceiptCount} />
         <ManagerInventoryAppointments onCountChange={setInventoryCount} />
+        <ManagerIntakeWorkflowPanel />
       </div>
 
       <div id="staff-tasks-panel" role="tabpanel" aria-labelledby="staff-tasks-tab" hidden={activeTab !== 'tasks'} className="space-y-5">
