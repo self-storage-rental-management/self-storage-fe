@@ -141,6 +141,7 @@ export function exportRevenueExcel(options: RevenueExportOptions = {}): string {
 }
 
 export interface ManagerFacilityExportOptions {
+  financialReport?: import('../services/managerCashflowApi').CashflowReport
   facilityName: string
   metrics: {
     occupancyRate: number | string
@@ -214,6 +215,25 @@ export function exportManagerFacilityExcel(options: ManagerFacilityExportOptions
     ['Yêu cầu trả kho chờ xử lý', m.openReturnsCount ?? 0, 'Đang chờ nghiệm thu / hoàn tất']
   ]
 
+  if (options.financialReport) {
+    const f = options.financialReport
+    sheetSummary.push([], ['DÒNG TIỀN', `${f.from} → ${f.to}`, f.completeness],
+      ['Đã hoàn trong kỳ', f.refunded, 'Khoản hoàn đã ghi nhận hoàn tất'],
+      ['Thực giữ lại trong kỳ', f.netRetained, 'Đã thu − đã hoàn'],
+      ['Chờ hoàn hiện tại', f.pendingRefund, 'Chưa trừ khỏi dòng tiền'],
+      ['Cọc đang giữ hiện tại', f.securityDepositHeld ?? 'Chưa đủ dữ liệu', f.snapshotAt],
+      ...f.warnings.map(w => ['Lưu ý đối soát', w, '']))
+    const flow = XLSX.utils.aoa_to_sheet([
+      ['Tháng', 'Đã thu', 'Đã hoàn', 'Thực giữ lại'],
+      ...f.monthly.map(m => [m.month, m.collected, m.refunded, m.net]),
+    ])
+    XLSX.utils.book_append_sheet(wb, flow, 'Thu và hoàn tiền')
+    const refunds = XLSX.utils.aoa_to_sheet([
+      ['Đơn', 'Khách', 'Trạng thái', 'Cọc', 'Ghi có tiền thuê', 'Khấu trừ', 'Tiền hoàn', 'Ngày chi', 'Tham chiếu', 'Đã xác minh chi'],
+      ...f.settlements.map(s => [s.reservationCode, s.customerName, s.status, s.deposit ?? 'Chưa phân bổ', s.rentalCredit ?? 'Chưa phân bổ', s.deductions ?? 'Chưa phân bổ', s.refund, s.paidAt || '', s.reference || '', s.payoutRecorded ? 'Đã ghi nhận' : 'Chưa hoàn']),
+    ])
+    XLSX.utils.book_append_sheet(wb, refunds, 'Quyết toán tiền hoàn')
+  }
   const wsSummary = XLSX.utils.aoa_to_sheet(sheetSummary)
   wsSummary['!cols'] = [{ wch: 30 }, { wch: 22 }, { wch: 45 }]
   XLSX.utils.book_append_sheet(wb, wsSummary, 'Chỉ số tổng quan')
