@@ -68,7 +68,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
   const formatManagerMoney = (value?: number) => useApi
     ? value == null || !Number.isFinite(value) ? 'Chưa xác định' : formatVnd(value)
     : legacyManagerMoney(value)
-  const [returnTab, setReturnTab] = useState(() => storeReturns.some(r => r.status === 'disputed' && isManagerFacilityVisible(user, r.facilityId, r.facilityName)) ? 'disputed' : 'All')
+  const [returnTab, setReturnTab] = useState('All')
   const [returnSearch, setReturnSearch] = useState('')
   const [damageFilter, setDamageFilter] = useState('all')
   const [settlementFilter, setSettlementFilter] = useState('all')
@@ -130,7 +130,6 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
   const hiddenFacilityCount = scopedReturns.length - facilityReturns.length
   const moneyValue = (value?: number) => useApi ? value ?? Number.NaN : normalizeManagerMoney(value) ?? 0
 
-  const disputedCount = facilityReturns.filter(r => r.status === 'disputed').length
   const refundPendingCount = facilityReturns.filter(r => r.status === 'refund_pending').length
   const completedCount = scopedReturns.filter(r => r.status === 'completed').length
   const awaitingInspectionCount = facilityReturns.filter(r => r.status === 'requested' || r.status === 'scheduled').length
@@ -144,7 +143,6 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
       (returnTab === 'awaiting_inspection' && (r.status === 'requested' || r.status === 'scheduled')) ||
       (returnTab === 'inspected' && (r.status === 'inspected' || r.status === 'awaiting_business_review' || r.status === 'awaiting_customer_confirmation')) ||
       (returnTab === 'needs_maintenance' && ((r.damageClassification && r.damageClassification !== 'no_damage') || r.proposedUnitStatus === 'maintenance')) ||
-      (returnTab === 'disputed' && r.status === 'disputed') ||
       (returnTab === 'refund_pending' && r.status === 'refund_pending') ||
       (returnTab === 'payment_due' && r.status === 'payment_due') ||
       (returnTab === 'completed' && r.status === 'completed')
@@ -528,7 +526,6 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
             ['awaiting_inspection', `Chờ nghiệm thu ${awaitingInspectionCount}`],
             ['inspected', `Đã kiểm tra ${inspectedCount}`],
             ['needs_maintenance', `Cần bảo trì ${needsMaintenanceCount}`],
-            ['disputed', `Khiếu nại ${disputedCount}`],
             ['completed', `Hoàn tất ${completedCount}`],
           ].map(([value, label]) => <button key={value} type="button" aria-pressed={returnTab === value}
             className={`border-b-2 px-1 py-3 text-sm ${returnTab === value ? 'border-amber-700 font-semibold text-stone-900' : 'border-transparent text-stone-500 hover:text-stone-900'}`}

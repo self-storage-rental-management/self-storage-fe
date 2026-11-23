@@ -2,7 +2,7 @@ import { parseVietnamDate, vietnamDateInput } from '../../utils/vietnamTime'
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { singleManagerFacility, managerFacilityNotice } from "../manager/managerFacilityUi"
 import { Fragment, useCallback, useEffect, useRef, useState } from "react"
-import { RentalDeadlineBanner, rentalDeadlineState, rentalDaysUntilDeadline } from "./RentalDeadlineNotice"
+import { RentalDeadlineBanner, rentalDeadlineState } from "./RentalDeadlineNotice"
 import { Badge, Button, Card, Modal } from "../../components/ui"
 import { getAuthenticatedActor } from "../../services/authApi"
 import { downloadCheckInEvidence } from "../../services/checkInApi"
@@ -21,6 +21,7 @@ import ApiReadState from "./ApiReadState"
 import CustomerRenewalGroups from './CustomerRenewalGroups'
 import { renewalPrimaryClass, RenewalSearch } from './renewalListStyles'
 import ManagerRentalGroups from './ManagerRentalGroups'
+import { RentalRecordGroup, RentalRecordRow } from './RentalRecordList'
 import RentalDetail from "./RentalDetail"
 import RenewalDetail from "./RenewalDetail"
 import RenewalOperationsPanel, { RenewalDocumentHistory, RenewalPaymentHistory } from "./RenewalOperationsPanel"
@@ -39,7 +40,6 @@ import {
 
 const inputClass =
   "rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
-const customerRentalColumns = 'grid grid-cols-[minmax(220px,max-content)_minmax(110px,max-content)_minmax(170px,max-content)_minmax(130px,max-content)_minmax(150px,max-content)_minmax(340px,max-content)] justify-between'
 function recordStatusTone(status: string) {
   if (status === 'payment_failed') return 'error'
   if (['active', 'deposit_paid', 'full_rent_paid'].includes(status)) return 'success'
@@ -453,58 +453,42 @@ function WorkspaceData({
       </section>
       <ApiReadState {...read} retry={refresh} />
       {read.data && (
-        <Card className={role === 'customer' ? '!border-0 !bg-transparent !shadow-none' : 'overflow-hidden rounded-2xl'}>
-          {role === 'manager' ? <ManagerRentalGroups kind={read.data.kind} rows={read.data.page.data} onDetail={id => setDetail({ kind: read.data!.kind, id })} /> : role === 'customer' && read.data.kind === 'renewal' ? <CustomerRenewalGroups rows={read.data.page.data} onDetail={id => setDetail({ kind: 'renewal', id })} /> : role === 'customer' && read.data.kind === 'rental' ? <div className="space-y-5">{[
+        <Card className={role === 'customer' || (role === 'manager' && read.data.kind === 'rental') ? '!border-0 !bg-transparent !shadow-none' : 'overflow-hidden rounded-2xl'}>
+          {role === 'manager' ? (read.data.kind === 'rental'
+            ? <ManagerRentalGroups kind="rental" rows={read.data.page.data} onDetail={id => setDetail({ kind: 'rental', id })} />
+            : <ManagerRentalGroups kind="renewal" rows={read.data.page.data} onDetail={id => setDetail({ kind: 'renewal', id })} />
+          ) : role === 'customer' && read.data.kind === 'renewal' ? <CustomerRenewalGroups rows={read.data.page.data} onDetail={id => setDetail({ kind: 'renewal', id })} /> : role === 'customer' && read.data.kind === 'rental' ? <div className="space-y-5">{[
             { id: 'ongoing', title: 'Đang diễn ra', subtitle: 'Hồ sơ đang thuê, quá hạn hoặc đang xử lý trả kho.', rows: read.data.page.data.filter(row => row.status !== 'completed'), active: true },
             { id: 'finished', title: 'Hồ sơ đã kết thúc', subtitle: 'Hồ sơ thuê đã hoàn tất xử lý.', rows: read.data.page.data.filter(row => row.status === 'completed'), active: false },
           ].map(group => {
             const pages = Math.ceil(group.rows.length / 5)
             const page = Math.min(rentalPages[group.id] ?? 0, Math.max(0, pages - 1))
-            return <section key={group.id} aria-labelledby={`rental-group-${group.id}`} className="overflow-hidden rounded-xl border border-stone-200 bg-white">
-            <header className="flex items-center justify-between gap-3 border-b border-stone-100 px-4 py-4">
-              <div className="flex items-center gap-3"><span aria-hidden="true" className={`h-8 w-1 rounded-full ${group.active ? 'bg-amber-400' : 'bg-stone-300'}`} /><div><h2 id={`rental-group-${group.id}`} className="text-base font-semibold text-stone-900">{group.title}</h2><p className="mt-0.5 text-xs text-stone-500">{group.subtitle}</p></div></div>
-              <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${group.active ? 'bg-amber-50 text-amber-800' : 'bg-stone-100 text-stone-600'}`}>{group.rows.length} hồ sơ</span>
-            </header>
-            {group.rows.length ? <div className="overflow-x-auto bg-stone-50/60 p-4">
-            <div className="min-w-[1120px] space-y-2">
-            <div className={`${customerRentalColumns} border-l-4 border-transparent px-1 text-xs font-semibold text-stone-500`}>
-              {['Kho / Cơ sở', 'Mã hồ sơ', 'Trạng thái', 'Thời hạn thuê', 'Giá thuê / tháng', 'Thao tác'].map(label => <div key={label} className={`px-3 py-2 ${label === 'Trạng thái' ? 'text-center' : ''}`}>{label}</div>)}
-            </div>
-            {group.rows.slice(page * 5, (page + 1) * 5).map(row => {
-              const days = rentalDaysUntilDeadline(row)
-              const focused = focusStorageUnitId === row.storageUnit.id && row.status !== 'completed'
-              return <article key={row.id} id={`rental-api-record-${row.id}`} tabIndex={-1}
-                className={`min-w-0 overflow-hidden rounded-xl border border-stone-200 border-l-4 border-l-amber-500 bg-white shadow-sm transition-colors duration-200 hover:border-amber-300 hover:bg-white hover:shadow-md focus-within:border-l-amber-500 ${focused ? 'outline outline-2 outline-amber-400' : ''}`}>
-                <div className={`${customerRentalColumns} items-center divide-x divide-stone-100 px-1 py-2`}>
-                    <div className="min-w-0 px-3"><p className="text-sm font-bold text-stone-900">{row.storageUnit.code}</p><h3 className="mt-0.5 text-xs font-medium text-stone-700">{row.facility.name}</h3><p className="mt-0.5 text-xs text-stone-500">{copy(row.unitType.name)}</p></div>
-                    <div className="min-w-0 px-3"><span className="block max-w-[24ch] truncate font-mono text-xs leading-5 text-stone-500" title={rentalRecordLabel(row)}>{rentalRecordLabel(row)}</span></div>
-                    <div className="flex flex-col items-center gap-1.5 px-3 [&_.ui-badge]:!flex [&_.ui-badge]:!min-h-8 [&_.ui-badge]:!w-[95%] [&_.ui-badge]:!items-center [&_.ui-badge]:!justify-center [&_.ui-badge]:!border-0 [&_.ui-badge]:!text-center">
-                      <Badge variant={recordStatusTone(row.status)}>{copy(rentalStatusLabel(row))}</Badge>
-                      {row.status === 'setup' && row.inventoryVerifiedAt && row.startDate && (
-                        <span className="text-center text-xs text-stone-600">Theo lịch: {rentalDate(row.startDate)}</span>
-                      )}
-                      {row.status !== 'completed' && Number.isFinite(days) && days <= 7 && <span className={`inline-flex min-h-8 w-[95%] items-center justify-center rounded-full px-2 text-center text-xs font-semibold ${days <= -8 ? 'bg-red-100 text-red-800' : days < 0 ? 'bg-orange-100 text-orange-800' : 'bg-amber-100 text-amber-800'}`}>{days < 0 ? `Quá hạn ${-days} ngày` : days === 0 ? 'Hết hạn hôm nay' : `Còn ${days} ngày`}</span>}
-                    </div>
-                  <div className="px-3 text-xs font-medium text-stone-800"><p>{rentalDate(row.startDate)}</p><p className="text-xs font-normal text-stone-400">đến</p><p>{rentalDate(row.dateSemantics?.lastPermittedDate || row.contractEndDate)}</p></div>
-                  <div className="px-3 text-xs font-bold text-stone-900">{row.monthlyPrice == null ? 'Chưa xác định' : rentalMoney(row.monthlyPrice, row.currency)}</div>
-                  <div className="grid grid-cols-2 gap-2 px-3 [&>button]:!h-10 [&>button]:min-w-0 [&>button]:justify-center [&>button]:!whitespace-nowrap [&>button]:!px-2 [&>button]:!py-0 [&>button]:!text-sm">
-                    <Button size="sm" variant="outline" onClick={() => setDetail({ kind: 'rental', id: row.id })}>{row.canConfirmRentalStart ? 'Xem & xác nhận' : 'Chi tiết hồ sơ'}</Button>
-                    <Button size="sm" variant="outline" className="!border-emerald-600 !bg-emerald-600 !text-white hover:!bg-emerald-700" disabled={row.status !== 'active'} title={row.status === 'active' ? undefined : 'Chỉ có thể gia hạn khi kỳ thuê đã bắt đầu.'} onClick={() => setAction({ kind: 'request', rentalId: row.id })}>Gia hạn</Button>
-                    <Button size="sm" variant="primary" disabled={row.status === 'completed'} onClick={() => setReturnRental({ id: row.id, active: row.status === 'active' || row.status === 'setup' })}>Trả kho</Button>
-                    {onRequestSupport && <Button size="sm" variant="outline" onClick={() => onRequestSupport(row.id, row.storageUnit.code)}>Hỗ trợ hồ sơ</Button>}
-                  </div>
-                </div>
-                {rentalDeadlineState(row) && <div className="px-4 pb-4"><RentalDeadlineBanner rental={row} role={role} /></div>}
-              </article>
-            })}
-            </div>
-          </div> : <p className="px-4 py-8 text-center text-sm text-stone-500">{group.active ? 'Không có hồ sơ thuê đang diễn ra.' : 'Chưa có hồ sơ thuê đã kết thúc.'}</p>}
-            {group.rows.length > 0 && <div className="border-t border-stone-100 text-sm">
-              <Pager fixedSize page={page} pages={pages} total={group.rows.length} size={5}
+            return <RentalRecordGroup key={group.id} id={`rental-group-${group.id}`} title={group.title} subtitle={group.subtitle}
+              count={group.rows.length} active={group.active}
+              empty={group.active ? 'Không có hồ sơ thuê đang diễn ra.' : 'Chưa có hồ sơ thuê đã kết thúc.'}
+              footer={<Pager fixedSize page={page} pages={pages} total={group.rows.length} size={5}
                 setSize={() => {}}
-                setPage={next => setRentalPages(current => ({ ...current, [group.id]: next }))} />
-            </div>}
-          </section>})}</div> : <div className="overflow-x-auto">
+                setPage={next => setRentalPages(current => ({ ...current, [group.id]: next }))} />}>
+              {group.rows.slice(page * 5, (page + 1) * 5).map(row => <RentalRecordRow
+                key={row.id}
+                rental={row}
+                role="customer"
+                unitTypeName={copy(row.unitType.name)}
+                focused={focusStorageUnitId === row.storageUnit.id && row.status !== 'completed'}
+                actions={<>
+                  <Button type="button" size="sm" variant="outline" onClick={() => setDetail({ kind: 'rental', id: row.id })}>
+                    {row.canConfirmRentalStart ? 'Xem & xác nhận' : 'Chi tiết hồ sơ'}
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" className="!border-[#287b59] !bg-[#287b59] !text-white hover:!bg-[#216347]"
+                    disabled={row.status !== 'active'} title={row.status === 'active' ? undefined : 'Chỉ có thể gia hạn khi kỳ thuê đã bắt đầu.'}
+                    onClick={() => setAction({ kind: 'request', rentalId: row.id })}>Gia hạn</Button>
+                  <Button type="button" size="sm" variant="outline" className="!border-amber-400 !bg-amber-100 !text-amber-950 hover:!bg-amber-200"
+                    disabled={row.status === 'completed'} onClick={() => setReturnRental({ id: row.id, active: row.status === 'active' || row.status === 'setup' })}>Trả kho</Button>
+                  {onRequestSupport && <Button type="button" size="sm" variant="outline" onClick={() => onRequestSupport(row.id, row.storageUnit.code)}>Hỗ trợ hồ sơ</Button>}
+                </>}
+              />)}
+            </RentalRecordGroup>
+          })}</div> : <div className="overflow-x-auto">
             <table className="w-full min-w-[960px] table-fixed text-left text-sm">
               <caption className="sr-only">Danh sách hồ sơ thuê hoặc gia hạn</caption>
               <colgroup>

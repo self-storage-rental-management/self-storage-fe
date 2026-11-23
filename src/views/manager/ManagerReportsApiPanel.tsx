@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import './managerInventoryList.css'
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { ApiClientError } from '../../services/apiClient'
 import { getAuthenticatedActor, type ApiActor } from '../../services/authApi'
@@ -202,32 +203,32 @@ function ManagerReportsSession({ actor, facilityId, overview }: { actor: ApiActo
       </div>
     </> : null}
 
-    <Card className="overflow-hidden">
-      <div className="space-y-3 border-b border-stone-200 p-4">
+    <Card className="manager-inventory-list overflow-hidden !rounded-2xl !shadow-none">
+      <div className="space-y-4 border-b border-stone-200 p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold text-stone-900">Nhật ký hoạt động cơ sở</h3>
-          {activities && <span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs tabular-nums text-stone-600">{activities.pagination.totalItems.toLocaleString('vi-VN')} hoạt động</span>}
+          <h3 className="text-lg font-semibold text-stone-900">Nhật ký hoạt động cơ sở</h3>
+          {activities && <span className="rounded-full border border-stone-200 bg-stone-100 px-3 py-1 text-sm tabular-nums text-stone-600">{activities.pagination.totalItems.toLocaleString('vi-VN')} hoạt động</span>}
         </div>
         <form onSubmit={submitSearch} className="flex max-w-4xl flex-wrap items-end gap-2">
-          <label className="min-w-0 basis-60 flex-1 text-xs font-semibold text-stone-600">Tìm hoạt động<Input value={draftSearch} onChange={event => setDraftSearch(event.target.value)} placeholder="Hành động, mã hồ sơ hoặc ghi chú" className="mt-1" /></label>
+          <label className="min-w-0 basis-60 flex-1 text-sm text-stone-600">Tìm hoạt động<Input value={draftSearch} onChange={event => setDraftSearch(event.target.value)} placeholder="Hành động, mã hồ sơ hoặc ghi chú" className="mt-1 min-h-11 !rounded-[10px]" /></label>
           <Button type="submit">Tìm kiếm</Button>
           {search && <Button type="button" variant="ghost" onClick={() => { setDraftSearch(''); setSearch(''); setPage(1) }}>Xóa tìm kiếm</Button>}
         </form>
       </div>
       {activityRead.loading ? <p className="p-6 text-center text-sm text-stone-500" role="status">Đang tải nhật ký hoạt động...</p> : activityRead.error ? <div className="flex flex-wrap items-center justify-between gap-3 p-5" role="alert"><p>{managerDisplayError(activityRead.error)}</p><Button variant="outline" onClick={activityRead.refresh}>Thử lại</Button></div> : activities ? <>
-        <Table tableClassName="min-w-[800px] table-fixed [&_th]:bg-stone-50 [&_th]:normal-case [&_th]:tracking-normal [&_th]:font-sans [&_td]:py-4 [&_td]:align-top">
-          <colgroup><col className="w-[15%]" /><col className="w-[48%]" /><col className="w-[25%]" /><col className="w-[12%]" /></colgroup>
-          <Thead><tr><Th>Thời gian</Th><Th>Hoạt động</Th><Th>Người thực hiện</Th><Th className="text-right">Chi tiết</Th></tr></Thead>
+        <Table tableClassName="min-w-[900px] table-fixed [&_th]:normal-case [&_th]:tracking-normal [&_th]:font-sans [&_td]:align-top">
+          <colgroup><col className="w-[14%]" /><col className="w-[24%]" /><col className="w-[22%]" /><col className="w-[18%]" /><col className="w-[14%]" /><col className="w-[8%]" /></colgroup>
+          <Thead><tr><Th>Thời gian</Th><Th>Hoạt động</Th><Th>Đối tượng</Th><Th>Người thực hiện</Th><Th>Ghi chú</Th><Th className="text-right">Chi tiết</Th></tr></Thead>
           <Tbody>{activities.data.map(row => <Tr key={row.id}>
             <Td><ActivityTime value={row.timestamp} /></Td>
             <Td>
               <Badge variant={activityVariant(row.action)}>{activityTitle(row)}</Badge>
-              <p className="mt-1.5 text-xs text-stone-500">{entityLabels[row.entityType.toLowerCase()] || 'Thông tin cơ sở'}</p>
-              {row.notes && <p className="mt-1 line-clamp-2 break-words text-xs leading-relaxed text-stone-600">{managerDisplayExplanation(row.notes)}</p>}
             </Td>
+            <Td><p className="text-sm text-stone-800">{entityLabels[row.entityType.toLowerCase()] || 'Thông tin cơ sở'}</p><p className="mt-1 break-all text-xs text-stone-500" title={row.entityId}>{row.entityId || 'Chưa có mã'}</p></Td>
             <Td><p className="break-words text-sm font-medium text-stone-800">{actorLabel(row.actorName)}</p><p className="mt-1 break-all text-xs text-stone-400">{actorLabel(row.actorRole)}</p></Td>
+            <Td><p className="line-clamp-2 break-words text-xs leading-relaxed text-stone-600">{row.notes ? managerDisplayExplanation(row.notes) : '—'}</p></Td>
             <Td className="text-right"><Button size="sm" variant="outline" onClick={() => setSelectedActivity(row)} aria-label={`Chi tiết: ${activityTitle(row)}`}>Xem</Button></Td>
-          </Tr>)}{!activities.data.length && <tr><td colSpan={4} className="p-10 text-center text-sm text-stone-500">Không có hoạt động phù hợp.</td></tr>}</Tbody>
+          </Tr>)}{!activities.data.length && <tr><td colSpan={6} className="p-10 text-center text-sm text-stone-500">Không có hoạt động phù hợp.</td></tr>}</Tbody>
         </Table>
         <ManagerPagination page={page} pageCount={Math.max(activities.pagination.totalPages, 1)} total={activities.pagination.totalItems} pageSize={pageSize} onPageChange={setPage} />
       </> : null}

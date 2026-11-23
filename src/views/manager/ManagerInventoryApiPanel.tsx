@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import "./managerInventoryList.css"
 import ManagerUnitTypeModal from "./ManagerUnitTypeModal"
 import {
   Badge,
@@ -423,7 +424,7 @@ export function InventoryContent({
   )
   return (
     <>
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-6">
+      <div className="manager-inventory-stats grid grid-cols-2 gap-3 xl:grid-cols-6">
         <StatCard title="Tổng số gian" value={units.length} icon={Icon.box} />
         <StatCard
           title="Còn trống"
@@ -448,9 +449,9 @@ export function InventoryContent({
         />
       </div>
       <SectionHeader title={title} action={onCreateUnitType && <Button variant="primary" onClick={onCreateUnitType}>+ Thêm loại kho</Button>} />
-      <Card className="p-4">
-        <div className="grid items-end gap-3 md:grid-cols-2 2xl:grid-cols-6">
-          <label className="block min-w-0 text-sm font-medium text-stone-700 md:col-span-2">
+      <Card className="manager-inventory-filters !rounded-2xl !shadow-none p-5">
+        <div className="manager-inventory-filter-grid grid items-end gap-3">
+          <label className="block min-w-0 text-sm font-medium text-stone-700">
             Tìm kiếm
             <input
               className={`${inputClass} mt-1`}
@@ -487,11 +488,17 @@ export function InventoryContent({
             ["all", "Tất cả khu vực"],
             ...zones.map((z) => [z, z] as [string, string]),
           ])}
-        </div>
-        <div className="mt-2 flex justify-end">
+          {filter("Sắp xếp", "sort", [
+            ["attention", "Cần chú ý trước"],
+            ["code", "Sắp xếp theo mã gian"],
+            ["area-desc", "Diện tích từ lớn đến nhỏ"],
+            ["price-asc", "Giá từ thấp đến cao"],
+            ["price-desc", "Giá từ cao đến thấp"],
+          ])}
           <Button
             size="sm"
             variant="ghost"
+            className="min-h-11 whitespace-nowrap"
             onClick={() => {
               setFilters(emptyInventoryFilters)
               setPage(1)
@@ -499,17 +506,11 @@ export function InventoryContent({
           >Xóa bộ lọc</Button>
         </div>
       </Card>
-      <div className="flex flex-wrap items-end justify-between gap-3 text-sm text-stone-600">
-        <span>Hiển thị {visible.length} trên {units.length} gian kho</span>
-        <div className="w-full sm:w-64">{filter("Sắp xếp", "sort", [
-            ["attention", "Cần chú ý trước"],
-            ["code", "Sắp xếp theo mã gian"],
-            ["area-desc", "Diện tích từ lớn đến nhỏ"],
-            ["price-asc", "Giá từ thấp đến cao"],
-            ["price-desc", "Giá từ cao đến thấp"],
-          ])}</div>
+      <Card className="manager-inventory-list min-w-0 max-w-full overflow-hidden !rounded-2xl !shadow-none">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 px-5 py-5">
+          <h2 className="text-lg font-semibold text-stone-900">Danh sách gian kho</h2>
+          <span className="rounded-full border border-stone-200 bg-stone-100 px-3 py-1 text-sm tabular-nums text-stone-600">Hiển thị {visible.length} trên {units.length} gian kho</span>
         </div>
-      <Card className="min-w-0 max-w-full overflow-hidden">
         <Table className="max-w-full" tableClassName="min-w-[900px] table-fixed [&_th]:px-3 [&_td]:px-3">
           <caption className="sr-only">Danh sách gian kho của cơ sở</caption>
           <colgroup>
@@ -532,7 +533,7 @@ export function InventoryContent({
           </Thead>
           <Tbody>
             {pagination.items.map((u) => (
-              <Tr key={u.id} className="odd:bg-white even:bg-stone-50/50">
+              <Tr key={u.id} className="bg-white">
                 <Td className="align-middle">
                   <p className="break-words font-mono text-sm font-bold leading-5 [overflow-wrap:anywhere]" title={u.code}>{u.code}</p>
                 </Td>
@@ -603,8 +604,8 @@ export function InventoryContent({
           }}
         />
       </Card>
-      {showCatalog && <><Card>
-        <h2 className="border-b border-stone-200 p-4 font-bold">
+      {showCatalog && <><Card className="manager-inventory-list overflow-hidden !rounded-2xl !shadow-none">
+        <h2 className="border-b border-stone-200 px-5 py-5 text-lg font-semibold text-stone-900">
           Loại gian kho tại cơ sở
         </h2>
         <FacilityCatalogTable rows={inventory.catalog} />
