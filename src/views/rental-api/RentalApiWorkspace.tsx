@@ -118,6 +118,7 @@ type WorkspaceProps = {
   focusStorageUnitId?: string
   initialRentalId?: string
   onRequestSupport?: (id: string, unitCode: string) => void
+  onBrowseUnits?: () => void
 }
 
 export default function RentalApiWorkspace(props: WorkspaceProps) {
@@ -127,7 +128,7 @@ export default function RentalApiWorkspace(props: WorkspaceProps) {
   return <WorkspaceSession key={`${identity}:${initialRentalId ?? ''}`} {...props} />
 }
 
-function WorkspaceSession({ role, focusStorageUnitId, initialRentalId, onRequestSupport }: WorkspaceProps) {
+function WorkspaceSession({ role, focusStorageUnitId, initialRentalId, onRequestSupport, onBrowseUnits }: WorkspaceProps) {
   const actor = getAuthenticatedActor()
   const facilityId = role === "manager" ? singleManagerFacility(actor) : undefined
   const identity = `${actor?.id}:${role}:${JSON.stringify(actor?.facilityScopes)}:${JSON.stringify(actor?.permissions)}`
@@ -175,6 +176,7 @@ function WorkspaceSession({ role, focusStorageUnitId, initialRentalId, onRequest
     <WorkspaceData
       focusStorageUnitId={focusStorageUnitId}
       onRequestSupport={onRequestSupport}
+      onBrowseUnits={onBrowseUnits}
       key={identity}
       role={role}
       identity={identity}
@@ -204,6 +206,7 @@ function WorkspaceSession({ role, focusStorageUnitId, initialRentalId, onRequest
 function WorkspaceData({
   focusStorageUnitId,
   onRequestSupport,
+  onBrowseUnits,
   role,
   identity,
   tab,
@@ -221,6 +224,7 @@ function WorkspaceData({
 }: {
   focusStorageUnitId?: string
   onRequestSupport?: WorkspaceProps['onRequestSupport']
+  onBrowseUnits?: WorkspaceProps['onBrowseUnits']
   role: RentalApiRole
   identity: string
   tab: "rental" | "renewal"
@@ -635,6 +639,7 @@ function WorkspaceData({
           actorId={actor.id}
           rentalId={action.rentalId}
           revision={action.revision}
+          onBrowseUnits={onBrowseUnits}
           onClose={() => setAction(undefined)}
           onSuccess={(created) => {
             setAction(undefined)

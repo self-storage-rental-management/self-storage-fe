@@ -2982,6 +2982,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       {/* ── MY RENTALS (HỒ SƠ THUÊ CỦA TÔI) ───────────────────── */}
       {page === 'rental-records' && isApiAuthenticated() && <CustomerRentalsApiPanel key={`${user.id}:${rentalMenuVisit}`}
         focusStorageUnitId={receiptRentalTarget}
+        onBrowseUnits={() => navigateTo('browse-units')}
         onRequestSupport={(id, unitCode) => openRecordSupport({ linkedRecord: { type: 'RENTAL', id }, label: `hồ sơ thuê gian ${unitCode}` })} />}
       {page === 'rental-records' && !isApiAuthenticated() && (
         <div className="fade-in space-y-4">

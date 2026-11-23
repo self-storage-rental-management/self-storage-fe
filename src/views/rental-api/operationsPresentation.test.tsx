@@ -129,9 +129,17 @@ describe("D3 operation prerequisites and truthful UI", () => {
     expect(operationBlockedReason(signingState, "staff", "noShow", operationsActor("staff"), undefined, undefined, undefined, appointmentEnd))
       .toBeNull()
     expect(operationBlockedReason({ ...signingState, phase: "SIGNING_EXPIRY_PENDING" }, "staff", "noShow", operationsActor("staff"), undefined, undefined, undefined, appointmentEnd))
-      .toBeNull()
+      .not.toBeNull()
     expect(operationBlockedReason({ ...signingState, arrivalRef: ids.event }, "staff", "noShow", operationsActor("staff"), undefined, undefined, undefined, appointmentEnd))
       .toContain("Đã ghi nhận khách đến")
+  })
+  it("lets the customer reschedule a no-show only before the signing deadline", () => {
+    const state = { ...signingState, phase: "NO_SHOW" as const }
+    const deadline = Date.parse(state.effectiveSigningDeadline!)
+    expect(operationBlockedReason(state, "customer", "reschedule", operationsActor("customer"), ids.facility, ids.customer, undefined, deadline - 1))
+      .toBeNull()
+    expect(operationBlockedReason(state, "customer", "reschedule", operationsActor("customer"), ids.facility, ids.customer, undefined, deadline))
+      .not.toBeNull()
   })
   it("accepts the strict no-show state/event shape and presents the safety boundary", () => {
     const state = { ...signingState, phase: "NO_SHOW" as const }

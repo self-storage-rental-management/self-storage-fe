@@ -18,6 +18,11 @@ export const renewalPaymentDisplayLabel = (p: RenewalVnpayPaymentResponse) => re
 
 // Legacy workflow codes remain readable without presenting them as an invoice/payment outcome.
 export function renewalWorkflowLabel(r: RenewalApiRecord) {
+  if (r.status === 'payment_expired' && r.statusSummary?.workflowStatus === 'AWAITING_RECONCILIATION')
+    return 'Đã đóng, chờ đối soát VNPay'
+  if (r.status === 'accepted' && r.statusSummary?.workflowStatus === 'AWAITING_RECONCILIATION'
+      && r.approvedPaymentDeadline && Date.parse(r.approvedPaymentDeadline) <= Date.now())
+    return 'Đã hết hạn, đang đối soát VNPay'
   if (r.statusSummary) return renewalWorkflowLabels[r.statusSummary.workflowStatus]
   return ({ pending: 'Đang kiểm tra', accepted: 'Chờ thanh toán', approved: 'Chờ thanh toán',
     deposit_paid: 'Chờ ký gia hạn', full_rent_paid: 'Chờ ký gia hạn', appointment_scheduled: 'Đã hẹn ký gia hạn',

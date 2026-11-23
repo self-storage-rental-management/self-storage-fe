@@ -58,6 +58,7 @@ export default function RenewalDetail({
     r, role === "customer", onPaymentChange,
   )
   const canViewReceipt = reconciledRenewalPayment(payment)
+  const paymentInSummary = !!payment && r.statusSummary?.transactions?.some(transaction => transaction.paymentId === payment.paymentId)
   const paymentDeadline = payment?.paymentDeadline ?? r.approvedPaymentDeadline
   const paymentExpired = r.status === "accepted" && !!paymentDeadline && Date.parse(paymentDeadline) <= Date.now() && payment?.paymentStatus !== "PAID"
   const paymentStatusLabel = payment ? renewalPaymentDisplayLabel(payment) : ''
@@ -76,7 +77,8 @@ export default function RenewalDetail({
     r.status === "full_rent_paid" ||
     (r.statusSummary?.transactions?.some((t) => t.status === "SUCCEEDED" && t.amount > 0) ?? false)
   const verification = r.systemVerification
-  const workflowStatusLabel = r.statusSummary ? renewalWorkflowLabel(r) : paymentExpired ? "Đã hết hạn thanh toán, đang đối soát VNPay" : r.status === "accepted" && r.approvedPaymentDeadline
+  const workflowStatusLabel = paymentExpired ? "Đã hết hạn thanh toán, đang đối soát VNPay"
+    : r.statusSummary ? renewalWorkflowLabel(r) : r.status === "accepted" && r.approvedPaymentDeadline
     ? isCustomer ? "Đã mở thanh toán qua VNPay thử nghiệm" : hasDeposit ? "Đã mở thanh toán tiền thuê trả trước qua VNPay thử nghiệm" : "Đã mở thanh toán toàn kỳ qua VNPay thử nghiệm"
     : r.status === "accepted" && verification?.status === "VERIFIED"
     ? "Đang kiểm tra điều kiện thanh toán"
@@ -104,12 +106,14 @@ export default function RenewalDetail({
         : 1
     : renewalProgress(r, payment)
 
-  const renewalTerminalMessage = r.statusSummary?.workflowStatus === 'NO_SHOW' ? 'Cơ sở đã ghi nhận khách không đến lịch ký. Gian kho đang thuê vẫn giữ nguyên; khoản đã thu được theo dõi riêng để đối soát theo chính sách.'
+  const renewalTerminalMessage = r.statusSummary?.workflowStatus === 'NO_SHOW' ? 'Cơ sở đã ghi nhận khách không đến. Nếu còn lượt và còn hạn ký, bạn có thể đổi lịch mà không cần trả trước lần nữa.'
     : r.statusSummary?.workflowStatus === 'SIGNING_EXPIRED' ? 'Hạn ký gia hạn đã hết. Khoản đã thu được theo dõi riêng để đối soát và xử lý theo chính sách.'
     : r.statusSummary?.workflowStatus === 'ON_HOLD' ? 'Hồ sơ đang tạm dừng xử lý. Vui lòng kiểm tra điều kiện, điều khoản hoặc khoản hoàn trước khi tiếp tục.'
     : r.status === "rejected" ? "Yêu cầu bị từ chối. Xem lý do quyết định bên dưới."
     : r.status === "cancelled" ? "Yêu cầu đã hủy. Các khoản đã thu cần được đối soát theo giao dịch."
-      : r.status === "payment_expired" ? "Yêu cầu đã hết hạn thanh toán, các bước tiếp theo đang tạm dừng."
+      : r.status === "payment_expired" && r.statusSummary?.workflowStatus === "AWAITING_RECONCILIATION"
+        ? "Yêu cầu đã đóng và lịch ký đã được nhả. Cơ sở đang đối soát giao dịch cũ. Bạn chưa thể mở lượt thanh toán mới."
+      : r.status === "payment_expired" ? "Yêu cầu đã đóng vì hết hạn thanh toán. Bạn có thể tạo yêu cầu mới nếu hợp đồng còn đủ điều kiện."
         : null
   const actions: {
     action: RenewalApiAction
@@ -183,8 +187,12 @@ export default function RenewalDetail({
       {r.reviewReason && <p>Lý do quyết định: {r.reviewReason}</p>}
       {r.cancellationReason && <p>Lý do hủy: {r.cancellationReason === "AUTO_RECOVERY_DAY_8" ? "Đã qua ngày quá hạn thứ 7, hồ sơ chuyển sang xử lý thu hồi kho. Tiền thuê trả trước đang chờ đối soát nguyên nhân." : r.cancellationReason}</p>}
       <div className="space-y-3">
-          {r.statusSummary ? <RenewalStatusPanel summary={r.statusSummary} onReceipt={setReceiptPaymentId} /> : <p className="rounded-lg border border-stone-200 p-3 text-sm text-stone-600" role="status">Chưa xác định được bảng kê khoản phải thu. Cần đối soát trước khi xác nhận số tiền đã thanh toán hoặc còn phải thu.</p>}
-          {role === "customer" && payment && <section className={`rounded-xl border p-4 ${payment.reconciliationRequired ? "border-amber-200 bg-amber-50/50" : "border-stone-200 bg-white"}`} aria-label="Thanh toán gia hạn" aria-live="polite">
+          {r.statusSummary ? <RenewalStatusPanel summary={r.statusSummary} onReceipt={setReceiptPaymentId}
+            invoice={role === "customer" && payment?.invoiceNumber?.trim() ? { paymentId: payment.paymentId, number: payment.invoiceNumber } : undefined}
+          /> : <p className="rounded-lg border border-stone-200 p-3 text-sm text-stone-600" role="status">Chưa xác định được bảng kê khoản phải thu. Cần đối soát trước khi xác nhận số tiền đã thanh toán hoặc còn phải thu.</p>}
+          {role === "customer" && paymentInSummary && paymentDetail &&
+            <p className="text-sm leading-5 text-stone-600" role="status">{paymentDetail}</p>}
+          {role === "customer" && payment && !paymentInSummary && <section className={`rounded-xl border p-4 ${payment.reconciliationRequired ? "border-amber-200 bg-amber-50/50" : "border-stone-200 bg-white"}`} aria-label="Thanh toán gia hạn" aria-live="polite">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h4 className="text-sm font-semibold text-stone-700">{isCustomer ? "Thanh toán gia hạn" : hasDeposit ? "Tiền thuê gia hạn trả trước" : "Thanh toán toàn kỳ"}</h4>
               <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${paymentDisplayStatus === 'RECONCILIATION_REQUIRED' ? "bg-amber-100 text-amber-800" : paymentDisplayStatus === 'SUCCEEDED' ? "bg-emerald-50 text-emerald-700" : ["FAILED", "CANCELLED"].includes(payment.paymentStatus) ? "bg-red-50 text-red-700" : "bg-stone-100 text-stone-600"}`}>{paymentStatusLabel}</span>
@@ -215,7 +223,9 @@ export default function RenewalDetail({
                 <div><dt className="text-stone-500">{extensionPeriodLabel}</dt><dd className="mt-1 font-semibold text-stone-900">{rentalDate(extensionStartDate)} → {rentalDate(extensionEndDate)}</dd></div>
                 {terms.signingWindowDays != null && <div className="sm:col-span-2"><dt className="text-stone-500">Thời gian đến ký</dt><dd className="mt-1 text-stone-900">{terms.signingWindowDays} ngày từ khi thanh toán khoản trả trước thành công, trong giới hạn xử lý quá hạn.</dd></div>}
               </dl>
-              <p className="mt-2 text-xs leading-5 text-stone-600">Chưa quá hạn: kỳ mới nối tiếp kỳ cũ. Nếu hoàn tất khi đã quá hạn: kỳ mới bắt đầu từ ngày ký, phí quá hạn tính riêng cho các ngày trước đó.</p>
+              <p className="mt-2 text-xs leading-5 text-stone-600">{terms.continuousPeriod
+                ? "Kỳ mới nối tiếp kỳ cũ. Bảng kê gia hạn không cộng phí quá hạn cho các ngày đã nằm trong kỳ thuê mới."
+                : "Theo báo giá đã lưu, nếu hoàn tất muộn thì kỳ mới bắt đầu từ ngày ký và phí quá hạn tính riêng cho các ngày trước đó."}</p>
             </section>
             <section aria-label="Chi phí gia hạn">
               <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Chi phí gia hạn</h4>
