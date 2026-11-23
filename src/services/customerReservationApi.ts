@@ -14,6 +14,13 @@ export type ReservationRecommendationStatus =
 export type PaymentStatus = ApiPaymentStatus
 export type InvoiceStatus = ApiInvoiceStatus
 export type ReservationStatus = ApiReservationStatus
+export type InventoryResolutionStatus =
+  | 'NOT_STARTED'
+  | 'PENDING_CUSTOMER'
+  | 'ACCEPTED'
+  | 'PARTIAL_ACCEPTED'
+  | 'RETURN_REQUESTED'
+  | 'RECOVERY_REQUIRED'
 
 export interface Pagination {
   page: number
@@ -379,7 +386,7 @@ export interface CreateReservationInput {
   goodsCondition?: string | null
   notes?: string | null
   goodsItems: GoodsItemInput[]
-  appointmentAt?: string | null
+  appointmentAt: string
   acceptedTerms: boolean
 }
 
@@ -389,6 +396,7 @@ export interface CustomerReservation {
   setupEarlyExitFee?: number | null
   setupReturnRentalId?: string | null
   setupReturnCaseId?: string | null
+  setupReturnScheduledDate?: string | null
   pricingPolicyVersion?: string | null
   pricingSnapshotStatus?: 'COMPLETE' | 'INCOMPLETE' | null
   pricingQuotedAt?: string | null
@@ -513,7 +521,29 @@ export interface CustomerReservationDetail {
   goodsItems: ReservationGoodsItem[]
   payments: ReservationPaymentResult[]
   checkInStatus?: string | null
+  handoverCompletedAt?: string | null
+  receiptConfirmationDueAt?: string | null
+  receiptConfirmationOverdue?: boolean
+  receiptConfirmationReleaseAt?: string | null
+  receiptReleaseEligible?: boolean
+  setupStartedAt?: string | null
+  setupDueAt?: string | null
+  freeSetupDays?: number | null
+  paidRentalStartsOn?: string | null
   rentalStatus?: string | null
+  inventoryDueAt?: string | null
+  inventoryFinalDeadlineAt?: string | null
+  inventoryRemovalPublishedAt?: string | null
+  inventoryRemovalDeadlineAt?: string | null
+  inventoryResolutionStatus?: InventoryResolutionStatus | null
+  inventoryFullFit?: boolean
+  inventoryPartialFitAvailable?: boolean
+  inventorySuggestedPackageCount?: number | null
+  inventoryMismatchSummary?: string | null
+  inventoryAcceptedQuantitiesJson?: string | null
+  inventoryActualJson?: string | null
+  inventoryMismatchJson?: string | null
+  inventorySuggestedQuantitiesJson?: string | null
 }
 
 export interface ReservationEmailVerificationResult {
@@ -830,6 +860,22 @@ export async function markCustomerPreparationComplete(reservationId: string, not
   const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
     `/api/customer/reservations/${encodeURIComponent(reservationId)}/preparation-complete`,
     { method: 'POST', body: JSON.stringify({ note: note?.trim() || null }) },
+  )
+  return checkedReservationDetail(response.data)
+}
+
+export async function resolveCustomerInventory(
+  reservationId: string,
+  decision: 'ACCEPT_FULL' | 'ACCEPT_PARTIAL' | 'CANCEL_AND_RETURN',
+  note?: string,
+  scheduledDate?: string,
+) {
+  const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
+    `/api/customer/reservations/${encodeURIComponent(reservationId)}/inventory-resolution`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ decision, note: note?.trim() || null, scheduledDate: scheduledDate || null }),
+    },
   )
   return checkedReservationDetail(response.data)
 }

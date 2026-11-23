@@ -1,3 +1,4 @@
+import { invoiceNumberLabel } from '../customer/paymentLabels'
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { useEffect, useState } from "react"
 import RenewalRiskNotice from "./RenewalRiskNotice"
@@ -6,7 +7,7 @@ import { Badge, Button, Card, Modal } from "../../components/ui"
 import BookingTransactionReceipt from "./BookingTransactionReceipt"
 import type { RentalApiDetail, RentalApiRole } from "../../types/rentalApi"
 import { bookingPaymentPurposes, bookingPaymentStatuses } from "../../services/rentalBookingEvidence"
-import { rentalStatusLabel, rentalMoney, unknown, rentalDataWarning, rentalPeriodText, rentalDate, accessStatusLabels } from "./presentation"
+import { rentalRecordLabel, rentalStatusLabel, rentalMoney, unknown, rentalDataWarning, rentalPeriodText, rentalDate, accessStatusLabels } from "./presentation"
 import { downloadCheckInEvidence } from "../../services/checkInApi"
 import { confirmCustomerRentalStart, markCustomerPreparationComplete, previewCustomerRentalStart, type RentalStartConfirmation } from "../../services/customerReservationApi"
 import { userFacingError } from "../../presentation/userFacingError"
@@ -68,9 +69,15 @@ export default function RentalDetail({
   const [startError, setStartError] = useState<string>()
   const [preparationSubmitting, setPreparationSubmitting] = useState(false)
   const [preparationError, setPreparationError] = useState<string>()
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000)
+    return () => window.clearInterval(timer)
+  }, [])
   const labelClass = "text-xs font-medium text-stone-500"
   const valueClass = "mt-1 text-sm font-semibold text-stone-900"
 
+  const displayCode = rental.displayCode
   const evidence = rental.bookingEvidence
   const agreed = evidence?.agreedAmounts
   const warnings = rental.dataWarnings.filter(warning => warning.field !== "contractEndDate")
@@ -135,19 +142,19 @@ export default function RentalDetail({
           <div>
             <dt className={labelClass}>Mã hồ sơ thuê</dt>
             <dd className={`${valueClass} flex items-center gap-2`}>
-              <span className="break-all font-mono text-xs sm:text-sm" title={rental.id}>{rental.id}</span>
-              <button
+              <span className="break-all font-mono text-xs sm:text-sm" title={displayCode || undefined}>{rentalRecordLabel(rental)}</span>
+              {displayCode && <button
                 type="button"
                 aria-label="Sao chép mã hồ sơ thuê"
                 title="Sao chép mã hồ sơ"
                 className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-                onClick={() => { void navigator.clipboard?.writeText(rental.id) }}
+                onClick={() => { void navigator.clipboard?.writeText(displayCode) }}
               >
                 <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                   <rect x="8" y="8" width="12" height="12" rx="2" strokeWidth="1.7" />
                   <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" strokeWidth="1.7" />
                 </svg>
-              </button>
+              </button>}
             </dd>
           </div>
           <div>
@@ -175,7 +182,7 @@ export default function RentalDetail({
             <dd className="space-y-3">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-lg border border-stone-200 bg-stone-50 p-3"><p className="text-xs text-stone-500">Bàn giao thực tế</p><p className="mt-1 font-semibold">{rentalDate(vietnamDateInput(rental.setupStartedAt))}</p><p className="mt-1 text-xs text-stone-500">{new Date(rental.setupStartedAt).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })}</p></div>
-                <div className="rounded-lg border border-stone-200 bg-stone-50 p-3"><p className="text-xs text-stone-500">Kết thúc thời gian miễn phí</p><p className="mt-1 font-semibold">{rentalDate(rental.setupEndsAt)}</p></div>
+                <div className="rounded-lg border border-stone-200 bg-stone-50 p-3"><p className="text-xs text-stone-500">Kết thúc thời gian miễn phí</p><p className="mt-1 font-semibold">{rentalDate(rental.setupEndsAt)}</p><p className="mt-1 text-xs text-stone-500">{new Date(rental.setupEndsAt).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })}</p></div>
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3"><span className="text-sm text-emerald-800">Bắt đầu kỳ thuê có tính tiền</span><span className="font-bold text-emerald-900">{rentalDate(rental.startDate)}</span></div>
               {rental.moveInCompletedAt && <p className="border-t border-stone-100 pt-3 text-xs text-stone-500">Đã báo hoàn tất chuẩn bị lúc {new Date(rental.moveInCompletedAt).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })} ngày {rentalDate(vietnamDateInput(rental.moveInCompletedAt))}</p>}
@@ -198,7 +205,8 @@ export default function RentalDetail({
             <dt>Kiểm kê đầu vào</dt>
             <dd><Badge variant="warning">Chưa kiểm kê</Badge>
               <p className="mt-2 text-xs leading-5 text-stone-500">Kỳ thuê vẫn tính theo mốc đã bàn giao, hồ sơ kiểm kê cần được hoàn tất trước hạn xử lý.</p>
-              {rental.inventoryDueAt && <p className="mt-1 text-xs text-stone-500">Hạn kiểm kê: {new Date(rental.inventoryDueAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</p>}
+              {rental.inventoryDueAt && <p className="mt-1 text-xs text-stone-500">Mốc nhắc kiểm kê: {new Date(rental.inventoryDueAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</p>}
+              {rental.inventoryFinalDeadlineAt && <p className={`mt-1 text-xs font-bold ${new Date(rental.inventoryFinalDeadlineAt).getTime() <= now ? 'text-red-700' : 'text-stone-700'}`}>{new Date(rental.inventoryFinalDeadlineAt).getTime() <= now ? 'Đã quá hạn kiểm kê' : 'Hạn hoàn tất kiểm kê'}: {new Date(rental.inventoryFinalDeadlineAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</p>}
             </dd>
           </div>}
           {rental.setupExitReviewRequired && <div>
@@ -285,7 +293,7 @@ export default function RentalDetail({
                   <p className="text-sm font-medium text-stone-600">{bookingPaymentPurposes[payment.purpose]}</p>
                   <p className="mt-1 text-xl font-bold text-stone-900">{rentalMoney(payment.amount, evidence.currency)}</p>
                   <p className="mt-2 text-sm"><strong>Trạng thái:</strong> {bookingPaymentStatuses[payment.status]}</p>
-                  {payment.invoiceNumber && <p className="mt-1 text-sm"><strong>Hóa đơn:</strong> {payment.invoiceNumber} · {payment.invoiceStatus}</p>}
+                  <p className="mt-1 text-sm"><strong>Số hóa đơn:</strong> {invoiceNumberLabel(payment.invoiceNumber)}{payment.invoiceNumber?.trim() && ` · ${payment.invoiceStatus}`}</p>
                   {role === 'customer' && payment.status === 'PAID' && rental.reservationId && <Button variant="outline" size="sm" className="mt-3" onClick={() => setReceiptPayment(payment.id)}>Xem biên lai</Button>}
                 </li>
               ))}

@@ -13,6 +13,7 @@ export interface MaintenanceTaskApi {
   storageUnitId: string
   unitCode: string
   rentalId?: string | null
+  customerName?: string | null
   returnCaseId: string | null
   title: string
   taskType?: MaintenanceTaskType
@@ -24,13 +25,25 @@ export interface MaintenanceTaskApi {
   assignedStaffId: string | null
   assignedStaffName: string | null
   status: MaintenanceTaskStatus
+  recoveryRequired?: boolean
+  recoveryType?: 'NONE' | 'RETURN_NO_SHOW' | 'INVENTORY_OVERDUE' | 'SETUP_OVERDUE' | 'MISMATCH_REMOVAL' | 'EXCESS_ITEMS'
   dueAt: string | null
+  deadlineAt?: string | null
+  recoveryHandoverLocation?: string | null
+  recoveryWitnessStaffId?: string | null
+  recoveryWitnessStaffName?: string | null
   startedAt: string | null
   completedAt: string | null
   resultReport: string | null
   evidencePhotos: string[]
   createdAt: string
   updatedAt: string
+}
+
+export function formatMaintenanceTaskTitle({ title, unitCode }: Pick<MaintenanceTaskApi, 'title' | 'unitCode'>) {
+  const name = title.trim()
+  const code = unitCode.trim()
+  return name === code || name.endsWith(` · ${code}`) ? name : `${name} · ${code}`
 }
 
 export interface MaintenanceStaffOption {
@@ -59,13 +72,19 @@ function isMaintenanceTask(value: unknown): value is MaintenanceTaskApi {
   return isUuidLike(value.id) && isUuidLike(value.facilityId) && isText(value.facilityName) &&
     isUuidLike(value.storageUnitId) && isText(value.unitCode) && isText(value.title) && isText(value.reason) &&
     (value.rentalId === undefined || value.rentalId === null || isUuidLike(value.rentalId)) &&
+    (value.customerName === undefined || isNullableText(value.customerName)) &&
     (value.taskType === undefined || value.taskType === 'maintenance' || value.taskType === 'inventory_check') &&
     ['low', 'medium', 'high'].includes(String(value.priority)) &&
     ['open', 'in_progress', 'completed', 'cancelled'].includes(String(value.status)) &&
+    (value.recoveryType === undefined || ['NONE', 'RETURN_NO_SHOW', 'INVENTORY_OVERDUE', 'SETUP_OVERDUE', 'MISMATCH_REMOVAL', 'EXCESS_ITEMS'].includes(String(value.recoveryType))) &&
     isNullableText(value.returnCaseId) && isNullableText(value.damageClassification) &&
     isNullableText(value.reportedById) && isNullableText(value.reportedByName) &&
     isNullableText(value.assignedStaffId) && isNullableText(value.assignedStaffName) &&
     (value.dueAt === null || typeof value.dueAt === 'string') &&
+    (value.deadlineAt === undefined || value.deadlineAt === null || isInstant(value.deadlineAt)) &&
+    (value.recoveryHandoverLocation === undefined || isNullableText(value.recoveryHandoverLocation)) &&
+    (value.recoveryWitnessStaffId === undefined || value.recoveryWitnessStaffId === null || isUuidLike(value.recoveryWitnessStaffId)) &&
+    (value.recoveryWitnessStaffName === undefined || isNullableText(value.recoveryWitnessStaffName)) &&
     (value.startedAt === null || isInstant(value.startedAt)) &&
     (value.completedAt === null || isInstant(value.completedAt)) &&
     isNullableText(value.resultReport) && Array.isArray(value.evidencePhotos) && value.evidencePhotos.every(isText) &&
@@ -170,6 +189,9 @@ export interface CompleteMaintenanceTaskRequest {
   resultReport: string
   evidencePhotos: string[]
   makeUnitAvailable: boolean
+  unitVacated?: boolean
+  recoveryHandoverLocation?: string
+  recoveryWitnessStaffId?: string
 }
 
 export interface MaintenanceEvidenceAsset {

@@ -3,6 +3,15 @@ import { ApiClientError } from "../../services/apiClient"
 import type { RenewalApiAction, RenewalApiRecord } from "../../types/renewalApi"
 import type { ApiActor } from "../../services/authApi"
 import type { RentalApiRecord, RentalApiRole } from "../../types/rentalApi"
+import { renewalDisplayLabel } from "../../presentation/renewalIdentity"
+
+export { renewalDisplayLabel } from "../../presentation/renewalIdentity"
+
+export function rentalRecordLabel(record: RentalApiRecord | RenewalApiRecord) {
+  return "rentalId" in record
+    ? renewalDisplayLabel(record)
+    : record.displayCode || "Chưa cấp mã"
+}
 
 export function rentalPeriodText(rental: RentalApiRecord, showTechnicalWarning = true) {
   const verified = rental.dateSemantics?.completeness === "COMPLETE"

@@ -32,6 +32,7 @@ export interface CustomerRental {
   setupStartedAt?: string | null
   setupEndsAt?: string | null
   inventoryDueAt?: string | null
+  inventoryFinalDeadlineAt?: string | null
   inventoryPending?: boolean
   moveInCompletedAt?: string | null
   setupExitReviewRequired?: boolean

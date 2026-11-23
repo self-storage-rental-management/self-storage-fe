@@ -1,3 +1,4 @@
+import { invoiceNumberLabel } from '../customer/paymentLabels'
 import { useRef, useState, type FormEvent } from 'react'
 import { downloadPaymentReceipt } from '../../utils/downloadPaymentReceipt'
 import { getRenewalReceipt } from '../../services/renewalReceiptApi'
@@ -175,7 +176,7 @@ function receiptFields(item: ManagerPaymentHistoryItem): [string, string][] {
     ['Nội dung', content],
     ['Số tiền', money(item.amount, item.currency)],
     ['Tiền tệ', item.currency || 'VND'],
-    ['Số hóa đơn', item.invoiceNumber || '-'],
+    ['Số hóa đơn', invoiceNumberLabel(item.invoiceNumber)],
     ['Trạng thái hóa đơn', item.invoiceStatus || 'DRAFT'],
     ['Ngày phát hành hóa đơn', item.invoiceIssuedAt ? new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(item.invoiceIssuedAt)) : '-']
   )

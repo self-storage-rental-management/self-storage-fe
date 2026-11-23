@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
-import CustomerReservationCard from './CustomerReservationCard'
+import CustomerReservationCard, { ReservationPreparationNotice } from './CustomerReservationCard'
 import { paymentCountdown, reservationProgress, reservationStatusLabels } from './reservationPresentation'
 import ReservationReceipt from './ReservationReceipt'
 import type { CustomerReservation, ReservationPaymentResult, ReservationStatus } from '../../services/customerReservationApi'
@@ -16,17 +16,32 @@ const base: CustomerReservation = {
   dueAtCheckIn: 3400000, totalInitialObligation: 4000000, totalGoodsVolumeM3: 0.1,
   totalGoodsWeightKg: 10, holdExpiresAt: '2026-11-01T10:00:00Z', createdAt: '2026-11-01T09:50:00Z',
 }
-function render(status: ReservationStatus) {
-  return renderToStaticMarkup(<CustomerReservationCard reservation={{ ...base, status }} facilityName="Kho HCM" unitTypeName="Kho nhỏ"
+beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date('2026-11-01T09:50:00Z')) })
+afterEach(() => { vi.useRealTimers() })
+function render(status: ReservationStatus, overrides: Partial<CustomerReservation> = {}) {
+  return renderToStaticMarkup(<CustomerReservationCard reservation={{ ...base, status, ...overrides }} facilityName="Kho HCM" unitTypeName="Kho nhỏ"
     onVerify={() => {}} onCancel={() => {}} onRefresh={async () => {}} />)
 }
 describe('customer reservation layout regression', () => {
+  it('keeps the selected appointment visible while goods await review and after staff approval', () => {
+    const appointmentAt = '2026-11-24T03:00:00Z'
+    const waiting = render('AWAITING_REVIEW', { appointmentAt, goodsReviewStatus: 'PENDING' })
+    const approved = render('AWAITING_PAYMENT', { appointmentAt, goodsReviewStatus: 'APPROVED' })
+    for (const html of [waiting, approved]) {
+      expect(html).toContain('24/11/2026')
+      expect(html).toContain('10:00')
+    }
+    expect(waiting).toContain('tối đa 6 giờ')
+    expect(waiting).not.toContain('>Thanh toán trước 20% (giữ chỗ)</button>')
+    expect(approved).toContain('Nhân viên cơ sở đã duyệt hàng hóa')
+    expect(approved).toContain('>Thanh toán trước 20% (giữ chỗ)</button>')
+  })
   it('counts down against the backend deadline and blocks expired or invalid deadlines', () => {
     const deadline = '2026-11-01T10:00:00Z'
     const timestamp = Date.parse(deadline)
-    expect(paymentCountdown(deadline, timestamp - 600_000)).toEqual({ text: '10:00', expired: false })
-    expect(paymentCountdown(deadline, timestamp - 599_000).text).toBe('09:59')
-    expect(paymentCountdown(deadline, timestamp + 1)).toEqual({ text: '00:00', expired: true })
+    expect(paymentCountdown(deadline, timestamp - 600_000)).toEqual({ text: '00:10:00', expired: false, urgency: 'normal' })
+    expect(paymentCountdown(deadline, timestamp - 599_000).text).toBe('00:09:59')
+    expect(paymentCountdown(deadline, timestamp + 1)).toEqual({ text: '00:00:00', expired: true, urgency: 'danger' })
     expect(paymentCountdown('invalid', timestamp).expired).toBe(true)
   })
 
@@ -37,20 +52,20 @@ describe('customer reservation layout regression', () => {
       responseCode: '00', transactionStatus: '00', gatewayPayDate: '20261101165500', message: '',
       processedAt: '2026-11-01T09:55:00Z', lastReconciledAt: null }
     const html = renderToStaticMarkup(<ReservationReceipt payment={payment} reservationCode={base.reservationCode} />)
-    for (const text of ['Biên lai đặt cọc giữ chỗ', 'transaction-1', 'RSV-TEST', 'Thời điểm VNPay ghi nhận', '01/11/2026 16:55:00', 'Đơn đã xác nhận cọc']) expect(html).toContain(text)
+    for (const text of ['Biên lai thanh toán trước 20% (giữ chỗ)', 'transaction-1', 'RSV-TEST', 'Thời điểm VNPay ghi nhận', '01/11/2026 16:55:00', 'Đơn đã xác nhận khoản trả trước']) expect(html).toContain(text)
     expect(html).toContain('6.402.000 ₫')
     expect(html).not.toContain('166.452.000.000')
     for (const paymentStatus of ['FAILED', 'NOT_RECEIVED'] as const) {
       const failedHtml = renderToStaticMarkup(<ReservationReceipt payment={{ ...payment, paymentStatus }} reservationCode={base.reservationCode} />)
       expect(failedHtml).toContain('chưa có biên lai thanh toán')
-      expect(failedHtml).not.toContain('Đơn đã xác nhận cọc')
+      expect(failedHtml).not.toContain('Đơn đã xác nhận khoản trả trước')
     }
   })
 
   it('shows countdown rather than only the expiry date', () => {
     const html = render('AWAITING_PAYMENT')
     expect(html).toContain('role="timer"')
-    expect(html).toContain('Thời gian thanh toán đặt cọc giữ chỗ còn lại')
+    expect(html).toContain('Hạn thanh toán trước 20% (giữ chỗ)')
     expect(html).not.toContain('Thanh toán mô phỏng')
   })
   it('restores the amber card, financial breakdown and five-step progress for real reservations', () => {
@@ -62,9 +77,9 @@ describe('customer reservation layout regression', () => {
     expect(html).not.toContain('Chưa có đơn')
   })
   it('opens payment only for backend AWAITING_PAYMENT, not for email/review/confirmed', () => {
-    expect(render('AWAITING_PAYMENT')).toContain('>Thanh toán đặt cọc giữ chỗ</button>')
+    expect(render('AWAITING_PAYMENT')).toContain('>Thanh toán trước 20% (giữ chỗ)</button>')
     for (const status of ['AWAITING_EMAIL', 'AWAITING_REVIEW', 'CONFIRMED', 'EXPIRED'] as const) {
-      expect(render(status)).not.toContain('>Thanh toán đặt cọc giữ chỗ</button>')
+      expect(render(status)).not.toContain('>Thanh toán trước 20% (giữ chỗ)</button>')
     }
   })
   it('shows hold confirmation only after the reservation deposit is confirmed', () => {
@@ -80,8 +95,17 @@ describe('customer reservation layout regression', () => {
     expect(render('AWAITING_CUSTOMER_RECEIPT')).not.toContain('Lưu lịch nhận kho')
   })
   it('shows the two customer gates before inventory', () => {
-    expect(render('AWAITING_CUSTOMER_RECEIPT')).toContain('Sẵn sàng bàn giao')
-    expect(render('PREPARING')).toContain('Sẵn sàng để kiểm kê')
+    expect(render('AWAITING_CUSTOMER_RECEIPT')).toContain('Xác nhận đã nhận kho')
+    expect(render('PREPARING')).not.toContain('Sẵn sàng để kiểm kê')
+
+    const notice = (checkInStatus: string) => renderToStaticMarkup(
+      <ReservationPreparationNotice checkInStatus={checkInStatus} submitting={false} onReady={() => {}} />,
+    )
+    expect(notice('setup_in_progress')).toContain('Sẵn sàng để kiểm kê')
+    expect(notice('handover_pending_receipt')).toContain('Sẵn sàng để kiểm kê')
+    expect(notice('setup_completed')).toContain('Đang chờ nhân viên kiểm kê')
+    expect(notice('setup_completed')).not.toContain('Sẵn sàng để kiểm kê')
+    expect(notice('completed')).toContain('Đã hoàn tất kiểm kê')
   })
   it('requires an explicit cancellation confirmation', () => {
     const html = render('AWAITING_EMAIL')
@@ -108,7 +132,7 @@ describe('customer reservation layout regression', () => {
 it('pre-handover reservation shows setup-adjusted estimated dates without repricing', () => {
  const html = renderToStaticMarkup(<CustomerReservationCard reservation={{ ...base, rentalPeriodConfirmed: false, appointmentAt: '2026-10-30T03:00:00Z', freeSetupDays: 6 }} facilityName="Kho HCM" unitTypeName="Kho nhỏ" onVerify={() => {}} onCancel={() => {}} onRefresh={async () => {}} />)
  expect(html).toContain('05/11/2026')
- expect(html).toContain('Kỳ thuê dự kiến sau thời gian chuẩn bị')
+ expect(html).toContain('Lịch thuê dự kiến sau thời gian chuẩn bị')
  expect(html).toContain('4.000.000 ₫')
  expect(html).not.toContain('Kỳ thuê bắt đầu từ ngày kho có thể sẵn sàng sớm nhất')
 })
@@ -121,7 +145,7 @@ it('pre-handover reservation shows setup-adjusted estimated dates without repric
    expect(html).toContain('aria-labelledby="reservation-quote-tab-reservation-1" hidden=""')
    const invoice = html.slice(html.indexOf('role="tabpanel" id="reservation-quote-reservation-1"'))
    expect(invoice).toContain('Tổng chi phí phải thanh toán')
-   expect(html).toContain('Thanh toán đặt cọc giữ chỗ')
+   expect(html).toContain('Thanh toán trước 20% (giữ chỗ)')
    expect(invoice).not.toContain('Thông tin hàng hóa đã khai báo')
    expect(html.split('>Thông tin khách hàng</h3>')).toHaveLength(2)
  })
