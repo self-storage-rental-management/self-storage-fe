@@ -13,6 +13,7 @@ import RecoveryTaskDetail, { recoveryStatusLabels } from '../rental-api/Recovery
 import { rentalDate } from '../rental-api/presentation'
 import { managerFacilityNotice, singleManagerFacility } from './managerFacilityUi'
 import ManagerCheckInReminderPanel from './ManagerCheckInReminderPanel'
+import ManagerInventoryAppointments from './ManagerInventoryAppointments'
 import ManagerIntakeWorkflowPanel from './ManagerIntakeWorkflowPanel'
 import {
   assignMaintenanceTask,

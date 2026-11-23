@@ -6,8 +6,8 @@ import { listFacilityContentPolicies, saveFacilityContentPolicies, type Facility
 import BusinessReturnsPanel from "./BusinessReturnsPanel"
 import BusinessRefundRequestsPanel from "./BusinessRefundRequestsPanel"
 import BusinessDamageIncidentsPanel from "./BusinessDamageIncidentsPanel"
-import BusinessRentalRegulationsPanel from "./BusinessRentalRegulationsPanel"
 import CentralizedPolicyWorkspace from "./CentralizedPolicyWorkspace"
+import BusinessRentalRegulationsPanel from "./BusinessRentalRegulationsPanel"
 import BusinessFacilityLifecycleRequests from "./BusinessFacilityLifecycleRequests"
 import BusinessFacilityDetailsModal from "./BusinessFacilityDetailsModal"
 import BusinessDashboardPanel from "./BusinessDashboardPanel"
@@ -679,13 +679,20 @@ export default function BusinessApp({
       id: "centralized-policies",
       label: "Chính sách",
       icon: Icon.shield,
-      group: "Quy định pháp lý",
+      group: "Quy Định & Pháp Lý",
       permission: "policies:read",
     },
     {
       id: "rental-regulations",
       label: "Quy định khi thuê",
       icon: Icon.clipboard,
+      group: "Quy định pháp lý",
+      permission: "policies:read",
+    },
+    {
+      id: "rental-source-policies",
+      label: "Chính sách gia hạn",
+      icon: Icon.policy,
       group: "Quy định pháp lý",
       permission: "policies:read",
     },
@@ -2591,7 +2598,6 @@ export default function BusinessApp({
       performance: 'Hiệu Suất Mặt Bằng',
       pricing: 'Thiết lập giá kho',
       policies: 'Gói thuê',
-      'centralized-policies': 'Chính sách (9 Quy tắc)',
       'rental-regulations': 'Quy định khi thuê',
       'rental-source-policies': 'Chính Sách Gia Hạn',
       returns: 'Trả kho',
@@ -3885,9 +3891,7 @@ export default function BusinessApp({
       roleLabel={"Giám Đốc Thương Mại"}
       roleColor="bg-amber-100 text-amber-700"
     >
-      {page === "centralized-policies" && (
-        <CentralizedPolicyWorkspace user={user} lang={lang} />
-      )}
+      {page === "centralized-policies" && <CentralizedPolicyWorkspace user={user} lang={lang} />}
       {page === "rental-source-policies" && <DuongPolicyWorkspace user={user} onLocked={setIntegrationLocked} />}
       {page === "returns" && (
         <div className="fade-in space-y-5">
