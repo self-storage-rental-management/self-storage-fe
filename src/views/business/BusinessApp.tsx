@@ -1977,7 +1977,7 @@ export default function BusinessApp({
       if (!editableUnitTypes.length) {
         showToast(backendPricingArchivedCount > 0
           ? 'Các loại kho đã lưu trữ không thể cập nhật giá. Hãy khôi phục loại kho trước khi định giá.'
-          : 'Manager chưa khai báo loại kho thực tế cho cơ sở này.')
+          : 'Quản lý cơ sở chưa khai báo loại kho thực tế cho cơ sở này.')
         return
       }
       const invalid = editableUnitTypes.some(unitType => {
@@ -5270,11 +5270,11 @@ export default function BusinessApp({
 
             {isApiAuthenticated() ? (
               <div className="space-y-3">
-                {backendPricingLoading && <p className="rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-600">Đang tải danh sách loại kho Manager đã khai báo...</p>}
+                {backendPricingLoading && <p className="rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-600">Đang tải danh sách loại kho quản lý cơ sở đã khai báo...</p>}
                 {!backendPricingLoading && backendPricingUnitTypes.length === 0 && <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
                   {backendPricingArchivedCount > 0
                     ? 'Các loại kho của cơ sở đã được lưu trữ nên không thể cập nhật giá. Hãy khôi phục loại kho trước khi định giá.'
-                    : 'Manager chưa khai báo loại kho thực tế. BO chỉ có thể định giá sau khi danh sách này tồn tại.'}
+                    : 'Quản lý cơ sở chưa khai báo loại kho thực tế. Ban điều hành chỉ có thể định giá sau khi danh sách này tồn tại.'}
                 </p>}
                 {!backendPricingLoading && backendPricingArchivedCount > 0 && backendPricingUnitTypes.length > 0 && <p className="rounded-xl border border-stone-200 bg-stone-50 p-3 text-xs text-stone-600">
                   Đã bỏ qua {backendPricingArchivedCount} loại kho đã lưu trữ vì không thể cập nhật giá.

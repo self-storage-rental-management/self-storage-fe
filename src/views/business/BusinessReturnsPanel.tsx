@@ -36,7 +36,8 @@ export const statusLabels: Record<string, string> = {
   requested: 'Đã yêu cầu trả kho',
   scheduled: 'Đã hẹn nghiệm thu',
   inspected: 'Đã nghiệm thu hiện trường',
-  awaiting_business_review: 'Chờ Ban điều hành duyệt bảng giá cũ',
+  awaiting_business_review: 'Chờ duyệt quyết toán',
+  recovery_required: 'Cần xử lý thu hồi',
   awaiting_customer_confirmation: 'Chờ khách xác nhận quyết toán',
   disputed: 'Đang khiếu nại (Chờ Quản lý thẩm định)',
   payment_due: 'Chờ khách nộp phụ phí',
@@ -77,7 +78,7 @@ const SAMPLE_RETURNS: Array<{
   status: string
   returnType?: ApiReturn['returnType']
   settlementMode?: ApiReturn['settlementMode']
-  depositAmount: number
+  depositAmount: number | null
   totalDeductions: number
   netRefundAmount: number
   amountDueFromCustomer: number
@@ -102,6 +103,7 @@ const SAMPLE_RETURNS: Array<{
   moveInCompletedAt?: string | null
   earlyTerminationPolicy?: import('../../services/returnApi').EarlyTerminationPolicyView | null
   activeReturnPolicy?: import('../../services/returnApi').ActiveReturnPolicyView | null
+  managerApprovalRequired?: boolean
   legacyPricingReviewRequired?: boolean
   legacyPricingSnapshotAvailable?: boolean
   legacyPricingEvidenceFileId?: string | null
@@ -388,7 +390,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
         status: r.status,
         returnType: r.returnType,
         settlementMode: r.settlementMode,
-        depositAmount: r.depositAmount ?? 0,
+        depositAmount: r.depositAmount,
         totalDeductions: r.totalDeductions,
         netRefundAmount: r.netRefundAmount ?? Number.NaN,
         amountDueFromCustomer: r.amountDueFromCustomer ?? Number.NaN,
@@ -413,6 +415,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
         moveInCompletedAt: r.moveInCompletedAt,
         earlyTerminationPolicy: r.earlyTerminationPolicy,
         activeReturnPolicy: r.activeReturnPolicy,
+        managerApprovalRequired: r.managerApprovalRequired,
         legacyPricingReviewRequired: r.legacyPricingReviewRequired,
         legacyPricingSnapshotAvailable: r.legacyPricingSnapshotAvailable,
         legacyPricingEvidenceFileId: r.legacyPricingEvidenceFileId,
@@ -448,7 +451,15 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
 
   // Quick stats
   const totalCount = displayItems.length
-  const awaitingBusinessCount = displayItems.filter((i) => i.status === 'awaiting_business_review' || Boolean(i.setupExitReviewRequired)).length
+  const isAwaitingLegacyPricing = (item: (typeof displayItems)[number]) =>
+    item.status === 'awaiting_business_review' && (!useApi || item.legacyPricingReviewRequired === true)
+  const returnStatusLabel = (item: (typeof displayItems)[number]) => {
+    if (isAwaitingLegacyPricing(item)) return 'Chờ Ban điều hành duyệt bảng giá cũ'
+    if (item.status === 'awaiting_business_review' && item.managerApprovalRequired) return 'Chờ quản lý cơ sở duyệt'
+    return statusLabels[item.status] || item.status
+  }
+
+  const awaitingBusinessCount = displayItems.filter((i) => isAwaitingLegacyPricing(i) || Boolean(i.setupExitReviewRequired)).length
   const disputedCount = displayItems.filter((i) => i.status === 'disputed').length
   const refundPendingCount = displayItems.filter((i) => i.status === 'refund_pending').length
   const awaitingCustCount = displayItems.filter((i) => i.status === 'awaiting_customer_confirmation' || i.status === 'inspected').length
@@ -525,7 +536,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
               ...item,
               setupExitReviewRequired: false,
               netRefundAmount: setupRefundAmount + setupRentalRefundAmount,
-              totalDeductions: Math.max(0, item.depositAmount - setupRefundAmount),
+              totalDeductions: Math.max(0, (item.depositAmount ?? 0) - setupRefundAmount),
               status: setupRefundAmount + setupRentalRefundAmount > 0 ? 'refund_pending' : 'completed',
               managerResolutionNote: `Quyết định của Ban điều hành về thời gian chuẩn bị: ${setupDecisionNote.trim()}`,
             }
@@ -535,7 +546,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
         ...prev,
         setupExitReviewRequired: false,
         netRefundAmount: setupRefundAmount + setupRentalRefundAmount,
-        totalDeductions: Math.max(0, prev.depositAmount - setupRefundAmount),
+        totalDeductions: prev.depositAmount == null ? prev.totalDeductions : Math.max(0, prev.depositAmount - setupRefundAmount),
         status: setupRefundAmount + setupRentalRefundAmount > 0 ? 'refund_pending' : 'completed',
         managerResolutionNote: `Quyết định của Ban điều hành về thời gian chuẩn bị: ${setupDecisionNote.trim()}`,
       } : null)
@@ -551,7 +562,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
   }
 
   const handleLegacyPricingDecision = async () => {
-    if (!selectedItem || selectedItem.status !== 'awaiting_business_review') return
+    if (!selectedItem || !isAwaitingLegacyPricing(selectedItem)) return
     if (!legacyDecisionNote.trim() || !legacySnapshotJson.trim() || !legacyEvidenceFileId.trim()) {
       setFeedback('Cần nhập lý do, bảng giá trả sớm theo định dạng JSON và mã tệp chứng từ gốc.')
       return
@@ -867,11 +878,12 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
   const handleCreateNewReturn = async () => {
     if (useApi) { setFeedback('Khách hàng tạo yêu cầu từ hồ sơ thuê, BO không tạo hồ sơ giả thay cho API.'); return }
     if (!newScheduledDate) {
-      alert('Vui lòng chọn ngày hẹn trả kho.')
+      setFeedback('Vui lòng chọn ngày hẹn trả kho.')
       return
     }
 
     setSubmitting(true)
+    setFeedback('')
     try {
       const generatedId = `ret-${Date.now()}`
       const newDossier = {
@@ -906,15 +918,15 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
         await requestReturn(newRentalId, newScheduledDate, newNotes)
         await loadApiData()
         setCreateModalOpen(false)
-        alert('Đã khởi tạo yêu cầu trả kho mới thành công!')
+        setFeedback('Đã khởi tạo yêu cầu trả kho thành công.')
         return
       }
 
       saveLocalState([newDossier, ...localReturns])
       setCreateModalOpen(false)
-      alert('Đã khởi tạo yêu cầu trả kho mới thành công!')
+      setFeedback('Đã khởi tạo yêu cầu trả kho thành công.')
     } catch (err) {
-      alert(returnError(err))
+      setFeedback(returnError(err))
     } finally {
       setSubmitting(false)
     }
@@ -995,7 +1007,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
   const handleSeedDemoData = () => {
     if (useApi) return
     saveLocalState(SAMPLE_RETURNS)
-    alert('Đã nạp thành công 5 hồ sơ trả kho & quyết toán mẫu vào hệ thống!')
+    setFeedback('Đã nạp 5 hồ sơ trả kho mẫu.')
   }
 
   // 9. Xóa toàn bộ dữ liệu đang xử lý dở dang (chỉ giữ các hồ sơ đã hoàn tất thanh lý)
@@ -1068,7 +1080,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
               className="mt-1.5 h-10 w-full rounded-lg border border-stone-300 bg-white px-3 text-sm font-normal text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-600/30 focus:border-amber-600"
             >
               <option value="all">Tất cả trạng thái quy trình</option>
-              <option value="awaiting_business_review">Chờ Ban điều hành duyệt bảng giá cũ</option>
+              <option value="awaiting_business_review">Chờ duyệt quyết toán</option>
               <option value="disputed">Đang khiếu nại (chờ Quản lý thẩm định)</option>
               <option value="refund_pending">Chờ giải ngân hoàn cọc</option>
               <option value="payment_due">Chờ khách đóng thêm tiền</option>
@@ -1171,7 +1183,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                     </Td>
                     <Td>
                       <Badge variant={statusBadgeVariant(item.status)}>
-                        {statusLabels[item.status] || item.status}
+                        {returnStatusLabel(item)}
                       </Badge>
                     </Td>
                     <Td className="text-right whitespace-nowrap space-x-1.5">
@@ -1184,7 +1196,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                         >
                           Duyệt hủy setup
                         </Button>
-                      ) : isBusiness && (item.legacyPricingReviewRequired || item.status === 'awaiting_business_review') ? (
+                      ) : isBusiness && isAwaitingLegacyPricing(item) ? (
                         <Button
                           variant="primary"
                           size="sm"
@@ -1420,7 +1432,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                   <div>
                     <p className="text-xs text-stone-500 font-medium">Trạng thái hồ sơ</p>
                     <Badge variant={statusBadgeVariant(selectedItem.status)}>
-                      {statusLabels[selectedItem.status] || selectedItem.status}
+                      {returnStatusLabel(selectedItem)}
                     </Badge>
                   </div>
                   <div>
@@ -1475,7 +1487,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                         <input
                           type="number"
                           min="0"
-                          max={selectedItem.depositAmount}
+                          max={selectedItem.depositAmount ?? undefined}
                           step="1000"
                           value={setupRefundAmount}
                           onChange={(e) => setSetupRefundAmount(Math.max(0, Number(e.target.value) || 0))}
@@ -1519,7 +1531,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                   </div>
                 )}
 
-                {isBusiness && selectedItem.status === 'awaiting_business_review' && (
+                {isBusiness && isAwaitingLegacyPricing(selectedItem) && (
                   <div className="p-3 bg-rose-50 rounded-xl border border-rose-300 space-y-3">
                     <div>
                       <p className="font-bold text-rose-950 text-sm">Bổ sung bảng giá trả sớm cho hồ sơ cũ</p>
@@ -2113,10 +2125,13 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
               <label className="block text-xs font-bold text-stone-700 mb-1">Ngày hẹn trả kho dự kiến (*):</label>
               <LocalizedDateInput
                 type="date"
+                aria-invalid={!newScheduledDate && feedback.includes('ngày hẹn trả kho')}
+                aria-describedby={!newScheduledDate && feedback.includes('ngày hẹn trả kho') ? 'return-date-error' : undefined}
                 value={newScheduledDate}
                 onChange={(e) => setNewScheduledDate(e.target.value)}
                 className="w-full px-2.5 py-2 border border-stone-300 rounded-lg bg-white text-xs font-mono"
               />
+              {!newScheduledDate && feedback.includes('ngày hẹn trả kho') && <p id="return-date-error" role="alert" className="text-xs text-red-700">{feedback}</p>}
             </div>
 
             <div>
@@ -2129,6 +2144,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
               />
             </div>
 
+            {feedback && !feedback.includes('ngày hẹn trả kho') && <p role="alert" className="text-xs text-red-700">{feedback}</p>}
             <div className="flex justify-end gap-2 pt-2 border-t border-stone-200">
               <Button variant="outline" size="sm" onClick={() => setCreateModalOpen(false)}>
                 Hủy bỏ

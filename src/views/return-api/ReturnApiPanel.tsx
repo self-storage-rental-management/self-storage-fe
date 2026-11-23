@@ -69,7 +69,7 @@ function returnRecoveryCutoff(value: string | null | undefined) {
 
 function statusLabel(record: Pick<ApiReturn, 'status' | 'returnType'>) {
   if (record.status === 'awaiting_business_review' && record.returnType === 'INVENTORY_MISMATCH') {
-    return 'Chờ Manager duyệt quyết toán'
+    return 'Chờ quản lý cơ sở duyệt quyết toán'
   }
   if (record.status === 'awaiting_business_review') return 'Chờ Ban điều hành duyệt bảng giá cũ'
   return labels[record.status]
@@ -101,7 +101,7 @@ export function ReturnSummary({ record, hideTerminationFee = false }: { record: 
         <p className="font-semibold">Trả kho do hàng hóa sai khai báo</p>
         <ul className="mt-1 list-disc space-y-1 pl-5">
           <li>Tính tiền từ ngày xác nhận nhận kho đến ngày hẹn trả kho dự kiến.</li>
-          <li>Manager lập quyết toán, khách xác nhận trước khi hoàn tiền hoặc thu thêm.</li>
+          <li>Quản lý cơ sở lập quyết toán, khách xác nhận trước khi hoàn tiền hoặc thu thêm.</li>
         </ul>
       </div>}
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
@@ -353,7 +353,7 @@ function ReturnWorkspace({
           void run(() => editing ? updateReturnRequest(editing, date, notes) : requestReturn(rentalId, date, notes))
         }} className="space-y-4 rounded-xl border border-stone-200 bg-stone-50 p-4">
           {rows.some(record => record.id === editing && record.returnType === 'INVENTORY_MISMATCH')
-            ? <div className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-950"><p className="font-semibold">Trả kho do hàng hóa sai khai báo</p><ul className="mt-1 list-disc space-y-1 pl-5"><li>Tính tiền từ ngày xác nhận nhận kho đến ngày hẹn trả kho dự kiến.</li><li>Manager lập quyết toán, khách xác nhận trước khi hoàn tiền hoặc thu thêm.</li></ul></div>
+            ? <div className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-950"><p className="font-semibold">Trả kho do hàng hóa sai khai báo</p><ul className="mt-1 list-disc space-y-1 pl-5"><li>Tính tiền từ ngày xác nhận nhận kho đến ngày hẹn trả kho dự kiến.</li><li>Quản lý cơ sở lập quyết toán, khách xác nhận trước khi hoàn tiền hoặc thu thêm.</li></ul></div>
             : <ReturnPolicyNotice />}
           <div>
             <VietnameseDateInput label="Ngày trả kho" value={date} min={today} max={maxEditReturnDate} onChange={setDate} />
@@ -416,7 +416,7 @@ function ReturnWorkspace({
                   Ngày hẹn trả: <strong className="text-stone-700">{rentalDate(record.scheduledDate)}</strong>
                 </span>
                 {(record.managerReviewDueAt || record.customerConfirmationDueAt) && <span className="rounded bg-red-50 px-2 py-1 text-xs font-bold text-red-800">
-                  {record.managerReviewDueAt ? 'Hạn Manager duyệt 6 giờ' : 'Hạn xác nhận 72 giờ'}: {new Date(record.managerReviewDueAt || record.customerConfirmationDueAt!).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}
+                  {record.managerReviewDueAt ? 'Hạn quản lý cơ sở duyệt' : 'Hạn xác nhận 72 giờ'}: {new Date(record.managerReviewDueAt || record.customerConfirmationDueAt!).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}
                   {' · '}{Date.parse(record.managerReviewDueAt || record.customerConfirmationDueAt!) <= Date.now() ? 'Đã quá hạn' : `Còn ${Math.ceil((Date.parse(record.managerReviewDueAt || record.customerConfirmationDueAt!) - Date.now()) / 60_000)} phút`}
                 </span>}
                 {role === 'staff' && ['requested', 'scheduled'].includes(record.status) && <button type="button" disabled={busy} className="rounded border px-2 py-1 text-xs" onClick={async e => {
@@ -770,7 +770,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       {role !== 'customer' && <EmergencyContactsPanel key={record.rentalId} rentalId={record.rentalId} />}
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
         <p className="font-semibold">Bước tiếp theo</p>
-        <p className="mt-1">{recoveryNextStep ?? { requested: 'Yêu cầu đã được gửi. Cơ sở sẽ sắp xếp lịch và thực hiện nghiệm thu trước khi quyết toán.', scheduled: 'Đến cơ sở theo ngày hẹn để trả kho và bàn giao cho nhân viên nghiệm thu.', inspected: 'Nghiệm thu đã được ghi nhận. Chờ cơ sở gửi kết quả quyết toán để khách hàng xác nhận.', awaiting_business_review: record.returnType === 'INVENTORY_MISMATCH' ? 'Bảng kê kiểm kê sai lệch đang chờ Manager duyệt. Sau đó bạn sẽ được xem và xác nhận quyết toán.' : 'Hồ sơ cũ chưa có bảng giá trả sớm đã lưu. Chờ Ban điều hành xem xét.', awaiting_customer_confirmation: 'Kiểm tra các khoản phí bên dưới, sau đó đồng ý quyết toán hoặc yêu cầu xem xét lại.', disputed: 'Hồ sơ đang có khiếu nại từ khách hàng. Cần Ban điều hành hoặc Quản lý cơ sở giải quyết trước khi tiếp tục.', payment_due: 'Thanh toán khoản quyết toán còn thiếu để tiếp tục hoàn tất trả kho.', refund_pending: 'Cơ sở đang xử lý hoàn cọc. Hồ sơ chỉ hoàn tất khi khoản hoàn tiền được ghi nhận.', recovery_required: 'Khách chưa đến theo lịch và đã hết thời gian ân hạn. Cơ sở cần lập biên bản kiểm kê và bàn giao hàng trước khi xử lý tiếp.', completed: 'Hồ sơ trả kho và quyết toán đã hoàn tất.' }[record.status]}</p>
+        <p className="mt-1">{recoveryNextStep ?? { requested: 'Yêu cầu đã được gửi. Cơ sở sẽ sắp xếp lịch và thực hiện nghiệm thu trước khi quyết toán.', scheduled: 'Đến cơ sở theo ngày hẹn để trả kho và bàn giao cho nhân viên nghiệm thu.', inspected: 'Nghiệm thu đã được ghi nhận. Chờ cơ sở gửi kết quả quyết toán để khách hàng xác nhận.', awaiting_business_review: record.returnType === 'INVENTORY_MISMATCH' ? 'Bảng kê kiểm kê sai lệch đang chờ quản lý cơ sở duyệt. Sau đó bạn sẽ được xem và xác nhận quyết toán.' : 'Hồ sơ cũ chưa có bảng giá trả sớm đã lưu. Chờ Ban điều hành xem xét.', awaiting_customer_confirmation: 'Kiểm tra các khoản phí bên dưới, sau đó đồng ý quyết toán hoặc yêu cầu xem xét lại.', disputed: 'Hồ sơ đang có khiếu nại từ khách hàng. Cần Ban điều hành hoặc Quản lý cơ sở giải quyết trước khi tiếp tục.', payment_due: 'Thanh toán khoản quyết toán còn thiếu để tiếp tục hoàn tất trả kho.', refund_pending: 'Cơ sở đang xử lý hoàn cọc. Hồ sơ chỉ hoàn tất khi khoản hoàn tiền được ghi nhận.', recovery_required: 'Khách chưa đến theo lịch và đã hết thời gian ân hạn. Cơ sở cần lập biên bản kiểm kê và bàn giao hàng trước khi xử lý tiếp.', completed: 'Hồ sơ trả kho và quyết toán đã hoàn tất.' }[record.status]}</p>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded-xl border border-stone-200 p-4">
@@ -1162,7 +1162,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                         <p className="font-bold">Trả kho do hàng hóa sai khai báo</p>
                         <ul className="mt-2 list-disc space-y-1 pl-5">
                           <li>Tính tiền từ ngày xác nhận nhận kho đến ngày hẹn trả kho dự kiến.</li>
-                          <li>Manager lập quyết toán, khách xác nhận trước khi hoàn tiền hoặc thu thêm.</li>
+                          <li>Quản lý cơ sở lập quyết toán, khách xác nhận trước khi hoàn tiền hoặc thu thêm.</li>
                         </ul>
                       </div>
                     ) : projectedDue === 0 ? (

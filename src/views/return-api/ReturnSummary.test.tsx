@@ -36,7 +36,7 @@ describe('Return summary', () => {
     }, setupExitRequested: true, setupEarlyExit: true, rentalRefundCredit: 5800000, earlyTerminationFee: 0 }} />)
     expect(html).toContain('Trả kho do hàng hóa sai khai báo')
     expect(html).toContain('Tính tiền từ ngày xác nhận nhận kho đến ngày hẹn trả kho dự kiến.')
-    expect(html).toContain('Manager lập quyết toán, khách xác nhận trước khi hoàn tiền hoặc thu thêm.')
+    expect(html).toContain('Quản lý cơ sở lập quyết toán, khách xác nhận trước khi hoàn tiền hoặc thu thêm.')
     expect(html).toContain('5.800.000')
     expect(html).not.toContain('Phí chấm dứt sớm một lần')
   })
