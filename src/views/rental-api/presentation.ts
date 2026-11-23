@@ -119,6 +119,8 @@ export function rentalError(error: unknown) {
       ["Accepted Renewal terms do not match persisted request", "Điều khoản được xác nhận không còn khớp với yêu cầu đã lưu. Hãy tải lại yêu cầu và xác nhận báo giá mới."],
       ["Shared renewal amount exceeds supported precision", "Số tiền gia hạn không hợp lệ theo quy tắc làm tròn hiện tại. Vui lòng liên hệ quản lý cơ sở."],
     ]
+    if (error.message.includes("Signing calendar/deadline/Recovery cutoff unavailable"))
+      return "Chưa thể tải lịch ký. Vui lòng thử lại hoặc liên hệ cơ sở."
     const specific = renewalErrors.find(([sourceText]) => error.message.includes(sourceText))
     if (specific) return specific[1]
     if (error.code === "DEFERRED_SOURCE" || error.message.includes("DEFERRED_SOURCE"))

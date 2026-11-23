@@ -1997,7 +1997,7 @@ export default function BusinessApp({
           })
         }))
       } catch (error) {
-        showToast(error instanceof Error ? error.message : 'Không thể lưu biểu giá lên backend.')
+        showToast(error instanceof Error ? error.message : 'Không thể lưu biểu giá. Vui lòng thử lại.')
         return
       }
     }

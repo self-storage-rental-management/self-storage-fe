@@ -1036,7 +1036,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {[
           { label: 'Tổng hồ sơ trả kho', value: totalCount, note: 'Toàn bộ mạng lưới cơ sở', tone: 'text-stone-900' },
-          { label: 'Cần BO thẩm định & duyệt', value: awaitingBusinessCount, note: 'Bảng giá cũ và hủy trong thời gian chuẩn bị', tone: 'text-amber-800' },
+          { label: 'Chờ ban điều hành duyệt', value: awaitingBusinessCount, note: 'Bảng giá cũ và hủy trong thời gian chuẩn bị', tone: 'text-amber-800' },
           { label: 'Chờ giải ngân hoàn cọc', value: refundPendingCount, note: 'Đã chốt quyết toán, chờ lệnh chi', tone: 'text-stone-900' },
           { label: 'Chờ khách duyệt biên bản', value: awaitingCustCount, note: 'Biên bản nghiệm thu đã lập', tone: 'text-stone-900' },
           { label: 'Đã hoàn tất thanh lý', value: completedCount, note: 'Đã giải phóng gian kho', tone: 'text-emerald-800' },

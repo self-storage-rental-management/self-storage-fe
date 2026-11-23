@@ -69,7 +69,7 @@ export default function BusinessConfigPanel({ canWrite = true }: Props) {
         autoProrate,
       })
       setConfig(updated)
-      setSuccess('Đã cập nhật cấu hình vận hành & phí trễ hạn thành công xuống hệ thống!')
+      setSuccess('Đã lưu cấu hình vận hành và phí trễ hạn.')
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : 'Lỗi khi lưu cấu hình vận hành.')
     } finally {
@@ -92,7 +92,7 @@ export default function BusinessConfigPanel({ canWrite = true }: Props) {
     <Card className="overflow-hidden rounded-2xl border border-stone-200 bg-white p-0 text-sm shadow-sm">
       <div className="border-b border-stone-100 bg-gradient-to-r from-amber-50 to-white px-5 py-4">
         <h3 className="text-base font-semibold text-stone-900">
-          Cấu hình vận hành & Phí phạt hệ thống (Business Operations)
+          Cấu hình vận hành và phí
         </h3>
         <p className="mt-1 text-xs text-stone-500">
           Quản lý mức phí phạt quá hạn thực tế, thời gian ân hạn, hạn mức cọc và các tham số tài chính áp dụng cho toàn bộ StorageHub.
@@ -279,7 +279,7 @@ export default function BusinessConfigPanel({ canWrite = true }: Props) {
         {canWrite && (
           <div className="flex justify-end pt-3 border-t border-stone-100">
             <Button type="submit" disabled={saving}>
-              {saving ? 'Đang lưu cấu hình...' : 'Lưu & Cập nhật tham số hệ thống'}
+              {saving ? 'Đang lưu cấu hình...' : 'Lưu cấu hình'}
             </Button>
           </div>
         )}

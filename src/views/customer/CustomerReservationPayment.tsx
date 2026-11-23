@@ -166,7 +166,7 @@ export default function CustomerReservationPayment({ user, reservation, facility
       <p role="timer" className="mt-1 text-2xl font-extrabold tabular-nums">{countdown.text}</p>
       <p className="mt-1">{countdown.expired ? 'Đã hết thời hạn. Đang chờ cập nhật trạng thái đơn.' : 'Vui lòng hoàn tất thanh toán trước khi hết thời hạn.'}</p>
       <div className="mt-2 rounded border border-amber-300/40 bg-amber-500/20 px-2 py-1.5 text-center text-[11px] font-semibold text-inherit">
-        {payment?.paymentStatus === 'PAID' ? 'Khoản trả trước đã thanh toán không được hoàn lại khi tự ý hủy trước nhận kho.' : 'Bạn chưa thanh toán. Hủy ngay không mất phí.'}
+        {payment?.paymentStatus === 'PAID' ? 'Nếu bạn tự hủy trước khi nhận kho, khoản trả trước được xử lý theo điều khoản đã chấp nhận.' : 'Bạn chưa thanh toán. Hủy ngay không mất phí.'}
       </div>
       {profileIncomplete && <div role="alert" className="mt-2 rounded-lg border border-rose-200 bg-rose-50 p-2 text-left text-[11px] leading-5 text-rose-900"><b>Chưa thể thanh toán</b><p>Hoàn thiện hồ sơ trước khi thanh toán, gồm: {missingProfileFields.length ? missingProfileFields.join(', ') : 'thông tin tài khoản'}.</p><p className="mt-1">Mở mục Hồ sơ để bổ sung rồi quay lại đơn này.</p></div>}
       <Button className="mt-2" size="sm" disabled={busy || countdown.expired || profileIncomplete} onClick={() => {

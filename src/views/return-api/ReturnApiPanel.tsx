@@ -94,7 +94,7 @@ export function ReturnSummary({ record, hideTerminationFee = false }: { record: 
       </div>
       <p className="text-sm text-stone-600">{'Ngày dự kiến trả: '}<strong className="text-stone-900">{rentalDate(record.scheduledDate)}</strong></p>
       {['requested', 'scheduled'].includes(record.status) && record.recoveryEligibleAt && <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">Nếu khách chưa đến và chưa hoàn tất trả kho, hồ sơ sẽ chuyển sang nhiệm vụ xử lý sau <strong>{returnRecoveryCutoff(record.recoveryEligibleAt)}</strong>. Hàng chưa được tự động di chuyển.</p>}
-      {record.returnType === 'INVENTORY_MISMATCH' && <p className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-950">Đây là yêu cầu trả kho do kết quả kiểm kê không phù hợp. Phí và thời gian được quyết toán theo nhánh xử lý kiểm kê, không gộp với trả kho hợp lệ thông thường.</p>}
+      {record.returnType === 'INVENTORY_MISMATCH' && <p className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-950">Yêu cầu trả kho này liên quan đến hàng hóa không khớp khai báo. Phí và thời gian được tính theo kết quả kiểm kê.</p>}
       {record.status === 'recovery_required' && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-950">Khách chưa đến theo lịch và đã hết thời gian ân hạn. Hàng chưa được tự động di chuyển. Cơ sở cần lập biên bản, kiểm kê và bàn giao hai người trước khi thu hồi.</p>}
       {record.status === 'recovery_required' && record.recoveryTaskDeadlineAt && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-950">Hạn xử lý nhiệm vụ thu hồi: {returnRecoveryCutoff(record.recoveryTaskDeadlineAt)}</p>}
       {inventoryMismatch && record.earlyTerminationPolicy && <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-950">
@@ -112,7 +112,7 @@ export function ReturnSummary({ record, hideTerminationFee = false }: { record: 
         ] as const).map(([label, amount]) => <div key={label} className="rounded-lg bg-stone-50 p-3"><p className="text-xs text-stone-500">{label}</p><p className="mt-1 text-sm font-bold text-stone-900">{amount == null ? 'Chưa xác định' : rentalMoney(amount, 'VND')}</p></div>)}
       </div>
       {record.setupExitRequested && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{inventoryMismatch
-        ? 'Quyết toán trả kho do kiểm kê không phù hợp. Chỉ tính thời gian sử dụng thực tế và các khoản có bằng chứng, không áp dụng phí chấm dứt sớm cố định.'
+        ? 'Chỉ tính thời gian sử dụng thực tế và các khoản có bằng chứng, không áp dụng phí chấm dứt sớm cố định.'
         : record.setupEarlyExit
         ? hideTerminationFee ? 'Quyết toán trả kho trong thời gian chuẩn bị theo bảng kê đã ghi nhận.' : 'Quyết toán trả kho trong thời gian chuẩn bị. Tiền thuê thực thu và tiền cọc đảm bảo thuê được trừ phí chấm dứt sớm một lần cùng các khoản phí có chứng cứ.'
         : record.setupReturnedAt ? 'Kho được nghiệm thu sau hạn chuẩn bị, áp dụng quyết toán của kỳ thuê đã bắt đầu.' : 'Nhân viên cần xác nhận đã dọn hết hàng và bàn giao kho trống. Điều khoản thời gian chuẩn bị áp dụng theo thời điểm nghiệm thu thực tế.'}</p>}
