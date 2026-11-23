@@ -379,7 +379,7 @@ const workflowStepLabels = [
 
 type CheckInFilters = Pick<NonNullable<Parameters<typeof listCheckIns>[0]>, "q" | "status" | "scheduledFrom" | "scheduledTo">
 
-const checkInTableColumnWidths = ["22%", "16%", "20%", "14%", "28%"] as const
+const checkInTableColumnWidths = ["18%", "13%", "15%", "19%", "35%"] as const
 
 function CheckInTableColumns() {
   return (
@@ -433,7 +433,7 @@ function CheckInWorkList({ group, filters, refreshKey, renderRow }: {
               {group === "ONGOING" ? "Không có đơn đang diễn ra phù hợp." : "Không có đơn đã xử lý phù hợp."}
             </p>
           ) : (
-            <Table tableClassName="min-w-[960px] table-fixed">
+            <Table tableClassName="min-w-[1060px] table-fixed">
               <CheckInTableColumns />
               <Thead>
                 <Tr>
@@ -1493,7 +1493,7 @@ export default function StaffCheckInOperationsPanel({
           <p className="mt-1 text-[11px] font-medium text-red-700">Đã hết hạn nhận kho</p>
         )}
       </Td>
-      <Td>
+      <Td className="whitespace-nowrap">
         <Badge
           variant={
             item.checkInStatus === "completed"
@@ -1512,12 +1512,12 @@ export default function StaffCheckInOperationsPanel({
           )}
         </Badge>
       </Td>
-      <Td className="min-w-[320px] whitespace-nowrap text-right">
-        <div className="flex flex-nowrap items-center justify-end gap-1 whitespace-nowrap">
+      <Td className="whitespace-nowrap text-right">
+        <div className="flex flex-nowrap items-center justify-end gap-1.5 whitespace-nowrap">
           {group === "ONGOING" && item.checkInStatus !== "completed" && (
             <>
               <Button
-                className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
+                className="shrink-0 whitespace-nowrap !px-2.5 !py-1 !text-xs font-medium"
                 size="sm"
                 disabled={submitting || !actions.canOpen}
                 onClick={() => beginHandover(item)}
@@ -1525,7 +1525,7 @@ export default function StaffCheckInOperationsPanel({
                 {actions.label}
               </Button>
               <Button
-                className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
+                className="shrink-0 whitespace-nowrap !px-2.5 !py-1 !text-xs font-medium"
                 size="sm"
                 variant="danger"
                 disabled={submitting || !actions.canReject}
@@ -1534,7 +1534,7 @@ export default function StaffCheckInOperationsPanel({
                 Từ chối nhận kho
               </Button>
               <Button
-                className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
+                className="shrink-0 whitespace-nowrap !px-2.5 !py-1 !text-xs font-medium"
                 size="sm"
                 variant="danger"
                 disabled={submitting || !actions.canMarkAbsent}
@@ -1548,11 +1548,19 @@ export default function StaffCheckInOperationsPanel({
             </>
           )}
           {["handover_pending_receipt", "setup_in_progress", "setup_completed"].includes(item.checkInStatus || "") && (
-            <Button size="sm" variant="outline" onClick={() => setDetailTarget(item)}>Xem biên bản</Button>
+            <Button
+              className="shrink-0 whitespace-nowrap !px-2.5 !py-1 !text-xs font-medium"
+              size="sm"
+              variant="outline"
+              onClick={() => setDetailTarget(item)}
+            >
+              Xem biên bản
+            </Button>
           )}
           {item.checkInStatus === "completed" && (
             <>
               <Button
+                className="shrink-0 whitespace-nowrap !px-2.5 !py-1 !text-xs font-medium"
                 size="sm"
                 variant="outline"
                 onClick={() => openHandover(item)}
@@ -1560,6 +1568,7 @@ export default function StaffCheckInOperationsPanel({
                 Xem lại các bước
               </Button>
               <Button
+                className="shrink-0 whitespace-nowrap !px-2.5 !py-1 !text-xs font-medium"
                 size="sm"
                 variant="outline"
                 onClick={() => setDetailTarget(item)}
@@ -1567,6 +1576,7 @@ export default function StaffCheckInOperationsPanel({
                 Xem biên bản
               </Button>
               <Button
+                className="shrink-0 whitespace-nowrap !px-2.5 !py-1 !text-xs font-medium"
                 size="sm"
                 variant="danger"
                 onClick={() => setDeleteTarget(item)}
