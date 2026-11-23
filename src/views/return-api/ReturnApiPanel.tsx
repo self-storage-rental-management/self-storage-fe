@@ -23,6 +23,9 @@ import {
   returnError,
   uploadReturnEvidence,
   type ApiReturn,
+  calculateDamageFee,
+  returnDamageCatalog,
+  type DamageItemInput,
   type InspectionInput,
   type ReturnFees,
   type ReturnRole,
@@ -595,11 +598,93 @@ function FeeInputRow({
   )
 }
 
+function DamagePricingSelector({
+  category,
+  items,
+  onChange,
+  disabled,
+}: {
+  category: 'minor' | 'major'
+  items: DamageItemInput[]
+  onChange: (items: DamageItemInput[]) => void
+  disabled?: boolean
+}) {
+  const catalog = returnDamageCatalog.filter((item) => item.category === category)
+  const addItem = () => {
+    const first = catalog[0]
+    if (first) onChange([...items, { code: first.code, quantity: 1 }])
+  }
+  return (
+    <div className="rounded-xl border border-stone-200 bg-stone-50/50 p-3 space-y-2">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="text-xs font-bold text-stone-800">Bảng giá hư hỏng tự động</p>
+          <p className="text-[11px] text-stone-500">Chọn hạng mục và số lượng/diện tích; hệ thống tự tính theo giá chuẩn.</p>
+        </div>
+        <span className="shrink-0 rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-bold text-stone-700">Tự động tính</span>
+      </div>
+      {items.length === 0 && <p className="rounded-lg bg-white/70 p-2 text-xs text-stone-500">Chưa có hạng mục. Nếu kho không hư hại, giữ nguyên mức phí 0 ₫.</p>}
+      {items.map((item, index) => {
+        const price = catalog.find((entry) => entry.code === item.code) ?? catalog[0]
+        return (
+          <div key={`${item.code}-${index}`} className="grid grid-cols-[minmax(0,1fr)_6.5rem_auto] items-end gap-2">
+            <label className="text-[11px] font-semibold text-stone-700">
+              Hạng mục
+              <select
+                value={item.code}
+                disabled={disabled}
+                onChange={(event) => onChange(items.map((current, currentIndex) => currentIndex === index ? { ...current, code: event.target.value } : current))}
+                className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-2 py-2 text-xs text-stone-800"
+              >
+                {catalog.map((entry) => <option key={entry.code} value={entry.code}>{entry.label}</option>)}
+              </select>
+            </label>
+            <label className="text-[11px] font-semibold text-stone-700">
+              Số lượng ({price?.unit ?? 'đơn vị'})
+              <input
+                type="number"
+                min="0.01"
+                step={price?.unit === 'm²' ? '0.01' : '1'}
+                value={item.quantity}
+                disabled={disabled}
+                onChange={(event) => onChange(items.map((current, currentIndex) => currentIndex === index ? { ...current, quantity: Number(event.target.value) || 0 } : current))}
+                className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-2 py-2 text-right text-xs text-stone-800"
+              />
+            </label>
+            <button
+              type="button"
+              disabled={disabled}
+              aria-label="Xóa hạng mục hư hỏng"
+              onClick={() => onChange(items.filter((_, currentIndex) => currentIndex !== index))}
+              className="rounded-lg border border-stone-300 bg-white px-2.5 py-2 text-xs text-stone-600 hover:border-rose-300 hover:text-rose-700"
+            >
+              Xóa
+            </button>
+            <p className="col-span-full -mt-1 text-[10px] text-stone-500">
+              Giá chuẩn: {price ? `${rentalMoney(price.unitPrice, 'VND')} / ${price.unit} (khung ${rentalMoney(price.suggestedMin, 'VND')}–${rentalMoney(price.suggestedMax, 'VND')})` : ''}
+            </p>
+            <p className="col-span-full text-[10px] font-semibold text-stone-800">
+              Tính: {item.quantity || 0} × {price ? rentalMoney(price.unitPrice, 'VND') : '0 ₫'} = {rentalMoney(calculateDamageFee([item]), 'VND')}
+            </p>
+          </div>
+        )
+      })}
+      <div className="flex items-center justify-between gap-2 border-t border-stone-200 pt-2">
+        <button type="button" disabled={disabled} onClick={addItem} className="rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-stone-800 hover:bg-stone-50">
+          + Thêm hạng mục
+        </button>
+        <span className="text-sm font-extrabold text-stone-900">{rentalMoney(calculateDamageFee(items), 'VND')}</span>
+      </div>
+    </div>
+  )
+}
+
 function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLocked, onRecoveryChanged }: { role: ReturnRole; record: ApiReturn; run: (work: () => Promise<ApiReturn>) => Promise<void>; busy: boolean; recoveryLocked: boolean; onRecoveryLocked: (locked: boolean) => void; onRecoveryChanged: () => void }) {
   const id = record.id
   const actor = getAuthenticatedActor()
   const [note, setNote] = useState('')
   const [fees, setFees] = useState<ReturnFees>({ damageFee: 0, cleaningFee: 0, lostItemFee: 0, overdueFee: 0, outstandingFee: 0 })
+  const [damageItems, setDamageItems] = useState<DamageItemInput[]>([])
   const [goodsLeft, setGoodsLeft] = useState(false)
   const [damage, setDamage] = useState<InspectionInput['damageClassification']>('no_damage')
   const [unit, setUnit] = useState<'available' | 'maintenance'>('available')
@@ -662,6 +747,8 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
     }
     return inspectReturn(id, {
       ...sanitizeFees(fees),
+      damageFee: calculateDamageFee(damageItems),
+      damageItems,
       inventoryMatch: 'match',
       damageClassification: goodsLeft ? 'abandoned_goods' : damage,
       staffNotes: note,
@@ -897,6 +984,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                                 disabled={busy}
                                 onClick={() => {
                                   setDamage(opt.id)
+                                  setDamageItems([])
                                   setVacatedReturnId(null)
                                 }}
                                 className={`rounded-xl border p-2.5 text-center transition cursor-pointer ${
@@ -1052,7 +1140,8 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
 
                     {/* Danh sách 5 khoản phí khấu trừ */}
                     <div className="space-y-2">
-                      <FeeInputRow label="Phí hư hỏng" value={fees.damageFee} onChange={(v) => setFees((f) => ({ ...f, damageFee: v }))} disabled={busy} />
+
+                      {damage === 'minor_damage' || damage === 'major_damage' ? <DamagePricingSelector key={damage} category={damage === 'major_damage' ? 'major' : 'minor'} items={damageItems} onChange={setDamageItems} disabled={busy} /> : null}
                       <FeeInputRow label="Phí vệ sinh" value={fees.cleaningFee} onChange={(v) => setFees((f) => ({ ...f, cleaningFee: v }))} disabled={busy} />
                       <FeeInputRow label="Phí mất khóa đã bàn giao" value={fees.lostItemFee} onChange={(v) => setFees((f) => ({ ...f, lostItemFee: v }))} disabled={busy} />
                       <FeeInputRow label="Phí quá hạn" value={fees.overdueFee} onChange={(v) => setFees((f) => ({ ...f, overdueFee: v }))} disabled={busy} />
