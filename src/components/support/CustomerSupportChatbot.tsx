@@ -70,6 +70,78 @@ export default function CustomerSupportChatbot({
 
   // Auto-scroll
   const chatEndRef = useRef<HTMLDivElement>(null)
+  const launcherRef = useRef<HTMLButtonElement>(null)
+  const [btnPos, setBtnPos] = useState<{ x: number; y: number } | null>(() => {
+    if (typeof window === 'undefined') return null
+    try {
+      const saved = localStorage.getItem('storagehub_chat_btn_pos') || sessionStorage.getItem('storagehub_chat_btn_pos')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (typeof parsed?.x === 'number' && typeof parsed?.y === 'number') {
+          return {
+            x: Math.max(12, Math.min((window.innerWidth || 1024) - 60, parsed.x)),
+            y: Math.max(12, Math.min((window.innerHeight || 768) - 60, parsed.y)),
+          }
+        }
+      }
+    } catch {}
+    return null
+  })
+  const dragRef = useRef<{ startX: number; startY: number; initialX: number; initialY: number } | null>(null)
+  const isDraggingRef = useRef(false)
+  const [isDragging, setIsDragging] = useState(false)
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.button !== 0 && e.pointerType === 'mouse') return
+    const rect = launcherRef.current?.getBoundingClientRect()
+    if (!rect) return
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      initialX: rect.left,
+      initialY: rect.top,
+    }
+    isDraggingRef.current = false
+
+    const onPointerMove = (ev: PointerEvent) => {
+      if (!dragRef.current) return
+      const dx = ev.clientX - dragRef.current.startX
+      const dy = ev.clientY - dragRef.current.startY
+      if (!isDraggingRef.current && Math.hypot(dx, dy) > 4) {
+        isDraggingRef.current = true
+        setIsDragging(true)
+      }
+      if (isDraggingRef.current) {
+        const nextX = Math.max(12, Math.min((window.innerWidth || 1024) - 60, dragRef.current.initialX + dx))
+        const nextY = Math.max(12, Math.min((window.innerHeight || 768) - 60, dragRef.current.initialY + dy))
+        setBtnPos({ x: nextX, y: nextY })
+      }
+    }
+
+    const onPointerUp = () => {
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('pointercancel', onPointerUp)
+      dragRef.current = null
+      if (isDraggingRef.current) {
+        setIsDragging(false)
+        setBtnPos((current) => {
+          if (current) {
+            try {
+              localStorage.setItem('storagehub_chat_btn_pos', JSON.stringify(current))
+              sessionStorage.setItem('storagehub_chat_btn_pos', JSON.stringify(current))
+            } catch {}
+          }
+          return current
+        })
+        setTimeout(() => { isDraggingRef.current = false }, 80)
+      }
+    }
+
+    window.addEventListener('pointermove', onPointerMove, { passive: true })
+    window.addEventListener('pointerup', onPointerUp)
+    window.addEventListener('pointercancel', onPointerUp)
+  }
   useEffect(() => {
     if (isOpen) {
       chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })

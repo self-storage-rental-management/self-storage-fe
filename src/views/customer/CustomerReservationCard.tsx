@@ -16,6 +16,7 @@ import { paymentMethodLabel } from './paymentLabels'
 import { formatPolicyDateTime, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyDateTimeInput, policyTimeInput, STAFF_REVIEW_HOURS } from '../../domain/reservationCheckInPolicy'
 import ReservationQuoteSummary from './ReservationQuoteSummary'
 import InventoryAppointmentPanel, { inventoryDeadlineText } from './InventoryAppointmentPanel'
+import type { User } from '../../types'
 import type { Facility, UnitType } from '../../types/storageHub'
 import { totalGoodsVolumeM3, formatGoodsVolume } from '../../domain/goodsMeasurements'
 
@@ -50,6 +51,7 @@ function maskIdentityDocument(value?: string | null) {
 }
 
 interface Props {
+  user?: User
   reservation: CustomerReservation
   facilityName: string
   unitTypeName: string
@@ -287,7 +289,27 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [setupGoodsEditOpen, setSetupGoodsEditOpen] = useState(false)
   const [setupGoodsDraft, setSetupGoodsDraft] = useState<GoodsItemInput[]>([])
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false)
+  const moreMenuRef = useRef<HTMLDivElement>(null)
   const [now, setNow] = useState(Date.now())
+
+  useEffect(() => {
+    if (!moreMenuOpen) return
+    const handleClickOutside = (event: MouseEvent) => {
+      if (moreMenuRef.current && !moreMenuRef.current.parentElement?.contains(event.target as Node)) {
+        setMoreMenuOpen(false)
+      }
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMoreMenuOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [moreMenuOpen])
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(timer)
@@ -562,7 +584,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   <Card
     id={`customer-reservation-${r.id}`}
     tabIndex={-1}
-    className={`p-6 !border-l-8 transition-all duration-200 ${
+    className={`p-5 transition-all duration-200 border border-stone-200 bg-white rounded-xl shadow-xs hover:shadow-md ${
       inactive
         ? 'border-l-stone-300 text-stone-500'
         : inventoryMismatchPending
@@ -729,33 +751,76 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
 
     </div>
     {message && <p role="status" className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{message}</p>}
-    <Modal open={bookingDocumentOpen} onClose={() => setBookingDocumentOpen(false)} title="Phiếu xác nhận giữ kho">
-      {bookingDocument && <div className="space-y-4">
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
-          <p className="font-bold">Phiếu xác nhận giữ kho đã được phát hành</p>
-          <p className="mt-2">Đơn giữ kho: <b>{bookingDocument.reservationCode}</b></p>
-          <p>Tệp: <b>{bookingDocument.fileName}</b></p>
-          <p>Ngày phát hành: <b>{formatCustomerDateTime(new Date(bookingDocument.issuedAt))}</b></p>
+    <Modal size="2xl" open={bookingDocumentOpen} onClose={() => setBookingDocumentOpen(false)} title="Phiếu xác nhận giữ kho">
+      {bookingDocument && <div className="space-y-5 py-1">
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-5 text-sm text-emerald-950 shadow-xs">
+          <div className="flex items-center gap-2 text-emerald-800 font-bold text-base">
+            <svg className="h-5 w-5 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Phiếu xác nhận giữ kho đã được phát hành
+          </div>
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-stone-700 bg-white/80 p-4 rounded-xl border border-emerald-100">
+            <div>
+              <span className="text-xs text-stone-500 block">Đơn giữ kho</span>
+              <span className="font-mono font-bold text-stone-900">{bookingDocument.reservationCode}</span>
+            </div>
+            <div>
+              <span className="text-xs text-stone-500 block">Ngày phát hành</span>
+              <span className="font-semibold text-stone-900">{formatCustomerDateTime(new Date(bookingDocument.issuedAt))}</span>
+            </div>
+            <div className="md:col-span-2">
+              <span className="text-xs text-stone-500 block">Tệp tài liệu</span>
+              <span className="font-mono text-xs text-stone-800 break-all">{bookingDocument.fileName}</span>
+            </div>
+          </div>
         </div>
-        <p className="text-sm text-stone-600">Phiếu ghi nhận loại kho đã giữ và khoản trả trước 20% (giữ chỗ) đã thanh toán. Đây không phải hợp đồng thuê và không xác nhận một gian kho vật lý cụ thể.</p>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <p className="text-sm text-stone-600 leading-relaxed">
+          Phiếu ghi nhận loại kho đã giữ và khoản trả trước 20% (giữ chỗ) đã thanh toán. Đây không phải hợp đồng thuê và không xác nhận một gian kho vật lý cụ thể.
+        </p>
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2 border-t border-stone-100">
           <Button variant="outline" onClick={() => void viewBookingDocument()}>Xem PDF</Button>
-          <Button onClick={() => void saveBookingDocument()}>Tải PDF</Button>
+          <Button className="bg-amber-600 hover:bg-amber-700 text-white font-semibold" onClick={() => void saveBookingDocument()}>Tải PDF</Button>
         </div>
       </div>}
     </Modal>
-    <Modal open={handoverDocumentsOpen} onClose={() => setHandoverDocumentsOpen(false)} title="Văn bản hợp đồng và bàn giao">
-      <div className="space-y-3">
+    <Modal size="2xl" open={handoverDocumentsOpen} onClose={() => setHandoverDocumentsOpen(false)} title="Văn bản hợp đồng và bàn giao">
+      <div className="space-y-4 py-1">
         <p className="text-sm text-stone-600">Các tệp được nhân viên tải lên khi hoàn tất bàn giao kho.</p>
-        {handoverDocuments.map((document, index) => {
-          const isSignedContract = document.originalName.toLowerCase().startsWith('hop-dong-da-ky-') || index === 0
-          return <div key={document.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm"><span><b className="mr-2">{isSignedContract ? 'Hợp đồng đã ký' : 'Bằng chứng bàn giao'}</b>{document.originalName.replace(/^hop-dong-da-ky-/i, '')}</span><span className="flex gap-2"><Button size="sm" variant="outline" onClick={() => void viewHandoverDocument(document)}>Xem</Button><Button size="sm" onClick={() => void saveHandoverDocument(document)}>Tải xuống</Button></span></div>
-        })}
-        {!handoverDocuments.length && <p className="rounded-lg border border-dashed border-stone-300 p-5 text-center text-sm text-stone-500">Chưa có văn bản bàn giao được tải lên.</p>}
+        <div className="space-y-2.5">
+          {handoverDocuments.map((document, index) => {
+            const isSignedContract = document.originalName.toLowerCase().startsWith('hop-dong-da-ky-') || index === 0
+            return (
+              <div key={document.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50/80 p-3.5 hover:bg-stone-50 transition-colors">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold ${
+                      isSignedContract ? 'bg-amber-100 text-amber-900' : 'bg-blue-100 text-blue-900'
+                    }`}>
+                      {isSignedContract ? 'Hợp đồng đã ký' : 'Bằng chứng bàn giao'}
+                    </span>
+                  </div>
+                  <p className="mt-1 font-mono text-xs text-stone-700 break-all leading-relaxed">
+                    {document.originalName.replace(/^hop-dong-da-ky-/i, '')}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2 self-end sm:self-center">
+                  <Button size="sm" variant="outline" onClick={() => void viewHandoverDocument(document)}>Xem</Button>
+                  <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white font-semibold" onClick={() => void saveHandoverDocument(document)}>Tải xuống</Button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+        {!handoverDocuments.length && (
+          <p className="rounded-xl border border-dashed border-stone-300 p-8 text-center text-sm text-stone-500">
+            Chưa có văn bản bàn giao được tải lên.
+          </p>
+        )}
       </div>
     </Modal>
-    <Modal open={Boolean(paymentReceipt)} onClose={() => setPaymentReceipt(null)} title="Biên lai thanh toán nhận kho">
-      {paymentReceipt && <ReservationReceipt payment={paymentReceipt} reservationCode={r.reservationCode} />}
+    <Modal size="2xl" open={Boolean(paymentReceipt)} onClose={() => setPaymentReceipt(null)} title="Biên lai thanh toán nhận kho">
+      {paymentReceipt && <div className="w-full min-w-0"><ReservationReceipt payment={paymentReceipt} reservationCode={r.reservationCode} /></div>}
     </Modal>
     <Modal open={cancelConfirmOpen} onClose={() => setCancelConfirmOpen(false)} title="Xác nhận hủy giữ kho" closeLabel="Đóng xác nhận hủy">
       <div className="space-y-5">
