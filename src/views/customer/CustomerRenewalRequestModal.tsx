@@ -21,10 +21,13 @@ import {
 
 const discountPercent = new Intl.NumberFormat("vi-VN", { style: "percent", maximumFractionDigits: 2 })
 
-function renewalOptionLabel(option: RenewalApiOption) {
-  const name = option.pricingPackageName?.trim().replace(/^gói\s+thuê(?=\s|\p{P}|$)/iu, "Gói gia hạn")
+export function renewalOptionLabel(option: RenewalApiOption) {
+  let name = option.pricingPackageName?.trim().replace(/^gói\s+thuê(?=\s|\p{P}|$)/iu, "Gói gia hạn")
     || `Gói gia hạn ${option.rentalMonths} tháng`
-  return option.discountRate === undefined
+  if (option.rentalMonths && !/tháng|năm/i.test(name) && /^gói/i.test(name)) {
+    name = `${name} (${option.rentalMonths} tháng)`
+  }
+  return option.discountRate == null
     ? name
     : `${name}, giảm ${discountPercent.format(option.discountRate)}`
 }
