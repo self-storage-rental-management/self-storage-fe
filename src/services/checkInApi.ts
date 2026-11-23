@@ -424,6 +424,13 @@ export async function completeCheckInSetup(checkInId: string, note?: string) {
   ))
 }
 
+export async function archiveCompletedCheckIn(checkInId: string) {
+  return assertEnvelope(await apiRequest<unknown>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}`,
+    { method: 'DELETE' },
+  ))
+}
+
 export interface CheckInPayment {
   paymentId: string
   reservationId: string

@@ -210,12 +210,12 @@ export interface StaffRosterMember {
 }
 
 export const STAFF_ROSTER: StaffRosterMember[] = [
-  { id: 'staff-1', name: 'Mai Tran', initials: 'MT', role: 'staff', email: 'mai.tran@storagehub.demo', phone: '+84 905 111 222', facility: 'Kho Hồ Thanh Phương', facilityId: 'HTP-F01', online: true },
-  { id: 'staff-2', name: 'Huy Le', initials: 'HL', role: 'staff', email: 'huy.le@storagehub.demo', phone: '+84 905 333 444', facility: 'Kho Hồ Thanh Phương', facilityId: 'HTP-F01', online: true },
-  { id: 'staff-3', name: 'Anh Pham', initials: 'AP', role: 'staff', email: 'anh.pham@storagehub.demo', phone: '+84 905 555 666', facility: 'Kho Hồ Thanh Phương', facilityId: 'HTP-F01', online: false },
-  { id: 'staff-4', name: 'Tuan Vo', initials: 'TV', role: 'staff', email: 'tuan.vo@storagehub.demo', phone: '+84 905 777 888', facility: 'Kho Hồ Thanh Phương', facilityId: 'HTP-F01', online: true },
-  { id: 'staff-5', name: 'Demo Staff', initials: 'DS', role: 'staff', email: 'staff@storagehub.demo', phone: '+84 905 550 101', facility: 'Kho Hồ Thanh Phương', facilityId: 'HTP-F01', online: true },
-  { id: 'staff-mgr', name: 'Demo Manager', initials: 'DM', role: 'manager', email: 'manager@storagehub.demo', phone: '+84 903 444 888', facility: 'Kho Hồ Thanh Phương', facilityId: 'HTP-F01', online: true }
+  { id: 'staff-1', name: 'Mai Tran', initials: 'MT', role: 'staff', email: 'mai.tran@storagehub.demo', phone: '+84 905 111 222', facility: 'Kho Thư viện FPT', facilityId: 'FPT-TV-F01', online: true },
+  { id: 'staff-2', name: 'Huy Le', initials: 'HL', role: 'staff', email: 'huy.le@storagehub.demo', phone: '+84 905 333 444', facility: 'Kho Thư viện FPT', facilityId: 'FPT-TV-F01', online: true },
+  { id: 'staff-3', name: 'Anh Pham', initials: 'AP', role: 'staff', email: 'anh.pham@storagehub.demo', phone: '+84 905 555 666', facility: 'Kho Thư viện FPT', facilityId: 'FPT-TV-F01', online: false },
+  { id: 'staff-4', name: 'Tuan Vo', initials: 'TV', role: 'staff', email: 'tuan.vo@storagehub.demo', phone: '+84 905 777 888', facility: 'Kho Thư viện FPT', facilityId: 'FPT-TV-F01', online: true },
+  { id: 'staff-5', name: 'Demo Staff', initials: 'DS', role: 'staff', email: 'staff@storagehub.demo', phone: '+84 905 550 101', facility: 'Kho Thư viện FPT', facilityId: 'FPT-TV-F01', online: true },
+  { id: 'staff-mgr', name: 'Demo Manager', initials: 'DM', role: 'manager', email: 'manager@storagehub.demo', phone: '+84 903 444 888', facility: 'Kho Thư viện FPT', facilityId: 'FPT-TV-F01', online: true }
 ]
 
 export const TICKETS: TicketItem[] = [
@@ -591,9 +591,9 @@ export const RENTALS: RentalRecord[] = [
 ]
 
 export const STAFF_LIST = [
-  { id: 'demo-staff', name: 'Demo Staff', email: 'staff@storagehub.demo', role: 'Operations Specialist', roleVi: 'Chuyên viên vận hành', shift: 'Morning', shiftVi: 'Ca sáng', tasks: 3, status: 'on-duty', phone: '090 555 0101', facilityId: 'HTP-F01', facilityName: 'Kho Hồ Thanh Phương' },
-  { id: 'staff-2', name: 'Mai Tran', email: 'mai@storagehub.demo', role: 'Facility Supervisor', roleVi: 'Giám sát cơ sở', shift: 'Day', shiftVi: 'Ca ngày', tasks: 5, status: 'on-duty', phone: '090 555 0102', facilityId: 'HTP-F01', facilityName: 'Kho Hồ Thanh Phương' },
-  { id: 'staff-3', name: 'Nguyen Quoc Dat', email: 'dat.nguyen@storagehub.demo', role: 'Security & Access Tech', roleVi: 'Kỹ thuật an ninh và truy cập', shift: 'Night', shiftVi: 'Ca đêm', tasks: 1, status: 'off-duty', phone: '090 555 0103', facilityId: 'HTP-F01', facilityName: 'Kho Hồ Thanh Phương' }
+  { id: 'demo-staff', name: 'Demo Staff', email: 'staff@storagehub.demo', role: 'Operations Specialist', roleVi: 'Chuyên viên vận hành', shift: 'Morning', shiftVi: 'Ca sáng', tasks: 3, status: 'on-duty', phone: '090 555 0101', facilityId: 'FPT-TV-F01', facilityName: 'Kho Thư viện FPT' },
+  { id: 'staff-2', name: 'Mai Tran', email: 'mai@storagehub.demo', role: 'Facility Supervisor', roleVi: 'Giám sát cơ sở', shift: 'Day', shiftVi: 'Ca ngày', tasks: 5, status: 'on-duty', phone: '090 555 0102', facilityId: 'FPT-TV-F01', facilityName: 'Kho Thư viện FPT' },
+  { id: 'staff-3', name: 'Nguyen Quoc Dat', email: 'dat.nguyen@storagehub.demo', role: 'Security & Access Tech', roleVi: 'Kỹ thuật an ninh và truy cập', shift: 'Night', shiftVi: 'Ca đêm', tasks: 1, status: 'off-duty', phone: '090 555 0103', facilityId: 'FPT-TV-F01', facilityName: 'Kho Thư viện FPT' }
 ]
 
 export interface OverdueAccount {
@@ -808,11 +808,11 @@ export const SETTINGS_GROUPS: SettingGroup[] = [
 ]
 
 export const USERS = [
-  { id: 'demo-customer', name: 'Demo Customer', email: 'customer@storagehub.demo', role: 'customer', facility: 'Kho Hồ Thanh Phương', facilityId: 'HTP-F01', phone: '+84 908 123 456', status: 'active', lastLogin: 'Today, 09:12 AM', joined: 'Jan 12, 2026' },
-  { id: 'demo-staff', name: 'Demo Staff', email: 'staff@storagehub.demo', role: 'staff', facility: 'Kho Hồ Thanh Phương', facilityId: 'HTP-F01', phone: '+84 905 550 101', status: 'active', lastLogin: 'Today, 08:45 AM', joined: 'Jan 10, 2026' },
-  { id: 'demo-manager', name: 'Demo Manager', email: 'manager@storagehub.demo', role: 'manager', facility: 'Kho Hồ Thanh Phương', facilityId: 'HTP-F01', phone: '+84 903 444 888', status: 'active', lastLogin: 'Today, 08:30 AM', joined: 'Jan 05, 2026' },
-  { id: 'demo-business', name: 'Demo Operations', email: 'business@storagehub.demo', role: 'business', facility: 'Kho Hồ Thanh Phương', facilityId: 'HTP-F01', phone: '+84 28 3999 1111', status: 'active', lastLogin: 'Yesterday, 04:20 PM', joined: 'Dec 20, 2025' },
-  { id: 'demo-admin', name: 'Demo Administrator', email: 'admin@storagehub.demo', role: 'admin', facility: 'Kho Hồ Thanh Phương', facilityId: 'HTP-F01', phone: '+84 901 000 999', status: 'active', lastLogin: 'Today, 07:55 AM', joined: 'Dec 01, 2025' }
+  { id: 'demo-customer', name: 'Demo Customer', email: 'customer@storagehub.demo', role: 'customer', facility: 'Kho Thư viện FPT', facilityId: 'FPT-TV-F01', phone: '+84 908 123 456', status: 'active', lastLogin: 'Today, 09:12 AM', joined: 'Jan 12, 2026' },
+  { id: 'demo-staff', name: 'Demo Staff', email: 'staff@storagehub.demo', role: 'staff', facility: 'Kho Thư viện FPT', facilityId: 'FPT-TV-F01', phone: '+84 905 550 101', status: 'active', lastLogin: 'Today, 08:45 AM', joined: 'Jan 10, 2026' },
+  { id: 'demo-manager', name: 'Demo Manager', email: 'manager@storagehub.demo', role: 'manager', facility: 'Kho Thư viện FPT', facilityId: 'FPT-TV-F01', phone: '+84 903 444 888', status: 'active', lastLogin: 'Today, 08:30 AM', joined: 'Jan 05, 2026' },
+  { id: 'demo-business', name: 'Demo Operations', email: 'business@storagehub.demo', role: 'business', facility: 'Kho Thư viện FPT', facilityId: 'FPT-TV-F01', phone: '+84 28 3999 1111', status: 'active', lastLogin: 'Yesterday, 04:20 PM', joined: 'Dec 20, 2025' },
+  { id: 'demo-admin', name: 'Demo Administrator', email: 'admin@storagehub.demo', role: 'admin', facility: 'Kho Thư viện FPT', facilityId: 'FPT-TV-F01', phone: '+84 901 000 999', status: 'active', lastLogin: 'Today, 07:55 AM', joined: 'Dec 01, 2025' }
 ]
 
 export const LOGIN_HISTORY = [

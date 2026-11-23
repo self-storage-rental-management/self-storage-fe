@@ -2800,7 +2800,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       {!['CANCELLED', 'EXPIRED'].includes(hold.status) && (() => {
                         const progressSteps = [
                           { label: 'Phê duyệt hồ sơ', detail: hold.goodsReviewStatus ? goodsReviewLabels[hold.goodsReviewStatus] : 'Chưa có thông tin duyệt hàng hóa' },
-                          { label: 'Thanh toán cọc', detail: 'Hoàn tất khoản trả trước 20% (giữ chỗ) 20%' },
+                          { label: 'Thanh toán cọc', detail: 'Hoàn tất khoản trả trước 20% (giữ chỗ)' },
                           { label: 'Quản lý cơ sở phân kho', detail: hold.assignedUnitId ? `Đã phân ${units.find(unit => unit.id === hold.assignedUnitId)?.code || hold.assignedUnitId}` : 'Chờ phân gian kho cụ thể' },
                           { label: 'Nhận kho và ký', detail: 'Đối chiếu và ký tại cơ sở' },
                           { label: 'Đã bàn giao', detail: 'Nhận kho và mã ra vào' }
@@ -3136,20 +3136,38 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
                         {['setup', 'active'].includes(rental.status) && (
                           <>
-                            {rental.status === 'active' && <Button
-                              variant="outline"
-                              size="sm"
-                              disabled={!isApiAuthenticated() && renewals.some(item => item.rentalId === rental.id && ['pending', 'approved', 'payment_processing'].includes(item.status))}
-                              onClick={() => {
-                                if (isApiAuthenticated()) { navigateTo('rental-records'); return }
-                                setActiveRentalForRenewal(rental)
-                                setRenewalMonths(1)
-                                setEditingRenewalId(null)
-                                setRenewalModalOpen(true)
-                              }}
-                            >
-                               {!isApiAuthenticated() && renewals.some(item => item.rentalId === rental.id && ['pending', 'approved', 'payment_processing'].includes(item.status)) ? ('Đang xử lý gia hạn') : ('Yêu cầu gia hạn')}
-                            </Button>}
+                            {rental.status === 'active' && (() => {
+                              const end = parseCustomerDate(rental.endDate)
+                              const today = new Date(now); today.setHours(0, 0, 0, 0)
+                              const remainingDays = end ? Math.round((end.getTime() - today.getTime()) / 86_400_000) : Infinity
+                              const isWithin7Days = Number.isFinite(remainingDays) && remainingDays === 7
+                              const hasOpenRenewal = renewals.some(item => item.rentalId === rental.id && !['cancelled', 'rejected', 'completed', 'payment_expired'].includes(item.status))
+                              const canRenew = isWithin7Days && !hasOpenRenewal
+
+                              return (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={!canRenew}
+                                  title={
+                                    hasOpenRenewal
+                                      ? 'Hồ sơ đã có yêu cầu gia hạn đang được xử lý.'
+                                      : !isWithin7Days
+                                      ? 'Chỉ có thể gia hạn khi hợp đồng còn 7 ngày trước ngày hết hạn.'
+                                      : undefined
+                                  }
+                                  onClick={() => {
+                                    if (isApiAuthenticated()) { navigateTo('rental-records'); return }
+                                    setActiveRentalForRenewal(rental)
+                                    setRenewalMonths(1)
+                                    setEditingRenewalId(null)
+                                    setRenewalModalOpen(true)
+                                  }}
+                                >
+                                  {hasOpenRenewal ? 'Đang xử lý gia hạn' : 'Yêu cầu gia hạn'}
+                                </Button>
+                              )
+                            })()}
                             <Button
                               variant="outline"
                               size="sm"
