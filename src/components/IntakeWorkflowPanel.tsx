@@ -17,8 +17,18 @@ interface State {
 }
 const show = (s?: string | null) => s ? new Date(s).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : 'Chưa ghi nhận'
 
-export default function IntakeWorkflowPanel({ reservationId, role, checkInId }: {
-  reservationId: string; role: 'CUSTOMER' | 'STAFF' | 'MANAGER'; checkInId?: string | null
+function vietnamDateTimeInput(timestamp: number) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(new Date(timestamp))
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]))
+  return `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}`
+}
+
+export default function IntakeWorkflowPanel({ reservationId, role, checkInId, statusSignal }: {
+  reservationId: string; role: 'CUSTOMER' | 'STAFF' | 'MANAGER'; checkInId?: string | null; statusSignal?: string | null
 }) {
   const [state, setState] = useState<State | null>(null)
   const [at, setAt] = useState('')
@@ -36,7 +46,7 @@ export default function IntakeWorkflowPanel({ reservationId, role, checkInId }: 
     void load()
     const timer = window.setInterval(() => { setNow(Date.now()); void load() }, 30_000)
     return () => { active = false; window.clearInterval(timer) }
-  }, [url])
+  }, [url, statusSignal])
   const change = async (action: string) => {
     setBusy(true); setError('')
     try {
@@ -58,6 +68,10 @@ export default function IntakeWorkflowPanel({ reservationId, role, checkInId }: 
   if (!state) return null
   const deadline = !state.readyAt ? state.setupDeadlineAt : state.remainderDeadlineAt || state.resultConfirmationDueAt || (!state.arrivedAt ? state.inventoryDeadlineAt : null)
   const remaining = deadline ? Date.parse(deadline) - now : null
+  // The API receives seconds as :00, so start at the next full minute to
+  // avoid allowing a value that is already past by the time it is submitted.
+  const minimumDateTime = vietnamDateTimeInput(Math.ceil(now / 60_000) * 60_000)
+  const selectedDateTimeIsPast = Boolean(at && at < minimumDateTime)
   const button = (action: string, label: string, disabled = false) => <button type="button" disabled={busy || disabled} onClick={() => void change(action)} className="rounded border border-stone-400 bg-white px-3 py-2 text-sm disabled:opacity-50">{label}</button>
   return <section className={`space-y-3 rounded-xl border p-4 text-left text-sm ${remaining != null && remaining < 86_400_000 ? 'border-red-400 bg-red-50 text-red-950' : 'border-stone-300 bg-stone-50'}`}>
     <h4 className="font-bold">Setup và lịch kiểm kê</h4>
@@ -66,14 +80,13 @@ export default function IntakeWorkflowPanel({ reservationId, role, checkInId }: 
     <p>Lịch kiểm kê: {show(state.appointmentAt)}</p>
     {state.resultConfirmationDueAt && <p>Vui lòng xác nhận hoặc gửi ý kiến về kết quả trong 48 giờ. Quá hạn không tự động xác nhận thay bạn.</p>}
     {role === 'MANAGER' && state.setupExtensionDays == null && !state.readyAt && <label className="block">Số ngày tối đa mỗi lần dời hạn<input className="ml-2 rounded border p-2" type="number" min="1" step="1" value={extensionDays} onChange={e => setExtensionDays(e.target.value)} /></label>}
-    {state.readyAt && <p>Khách đến: {show(state.arrivedAt)} · Xác minh: {show(state.identityVerifiedAt)}</p>}
-    {(role === 'MANAGER' || role === 'CUSTOMER') && <label className="block">Ngày giờ mới theo giờ Việt Nam<input className="mt-1 block rounded border p-2" type="datetime-local" value={at} onChange={e => setAt(e.target.value)} /></label>}
-    {role === 'CUSTOMER' && <div className="flex flex-wrap gap-2">{!state.readyAt && button('EXTEND_SETUP', 'Dời hạn setup', (state.setupExtensionCount ?? 0) >= 2 || !state.setupDeadlineAt)}{state.readyAt && !state.arrivedAt && button('APPOINTMENT', 'Lưu lịch kiểm kê')}</div>}
+    {(role === 'MANAGER' || role === 'CUSTOMER') && <label className="block">Ngày giờ mới theo giờ Việt Nam<input className="mt-1 block rounded border p-2" type="datetime-local" min={minimumDateTime} value={at} onChange={e => setAt(e.target.value)} /></label>}
+    {role === 'CUSTOMER' && <div className="flex flex-wrap gap-2">{!state.readyAt && button('EXTEND_SETUP', 'Dời hạn setup', (state.setupExtensionCount ?? 0) >= 2 || !state.setupDeadlineAt || selectedDateTimeIsPast)}{state.readyAt && !state.arrivedAt && button('APPOINTMENT', 'Xác nhận lịch kiểm kê', selectedDateTimeIsPast)}</div>}
     {role === 'STAFF' && state.readyAt && <div className="space-y-2">
       {!state.arrivedAt && button('ARRIVAL', 'Ghi nhận khách đã đến')}
       {state.arrivedAt && !state.identityVerifiedAt && <><label className="block">CCCD hoặc hộ chiếu<input className="ml-2 rounded border p-2" value={document} onChange={e => setDocument(e.target.value)} /></label><label className="block">Ảnh tại buổi kiểm kê<input type="file" accept="image/*" capture="user" onChange={e => setPhoto(e.target.files?.[0] || null)} /></label>{button('VERIFY', 'Xác minh chính chủ')}</>}
     </div>}
-    {role !== 'CUSTOMER' && <div className="flex flex-wrap gap-2">{button('REMIND', 'Nhắc khách')}{role === 'MANAGER' && <><input aria-label="Lý do điều chỉnh do cơ sở" className="rounded border p-2" placeholder="Lý do điều chỉnh do cơ sở" value={reason} onChange={e => setReason(e.target.value)} />{button('FACILITY_EXTENSION', 'Điều chỉnh hạn do cơ sở')}</>}</div>}
+    {role !== 'CUSTOMER' && <div className="flex flex-wrap gap-2">{button('REMIND', 'Nhắc khách')}{role === 'MANAGER' && <><input aria-label="Lý do điều chỉnh do cơ sở" className="rounded border p-2" placeholder="Lý do điều chỉnh do cơ sở" value={reason} onChange={e => setReason(e.target.value)} />{button('FACILITY_EXTENSION', 'Điều chỉnh hạn do cơ sở', selectedDateTimeIsPast)}</>}</div>}
     {error && <p role="alert" className="text-red-800">{error}</p>}
     <details><summary>Lịch sử xử lý</summary>{state.history.map((h, i) => <p key={i}>{show(h.time)} · {h.action === 'APPOINTMENT' ? 'Cập nhật lịch kiểm kê' : h.action === 'EXTEND_SETUP' ? 'Dời hạn setup' : h.action === 'VERIFY' ? 'Xác minh chính chủ' : h.action === 'ARRIVAL' ? 'Khách đã đến' : h.action === 'FACILITY_EXTENSION' ? 'Điều chỉnh do cơ sở' : 'Gửi nhắc'}{h.after ? ` · ${show(h.after)}` : ''}{h.reason ? ` · ${h.reason}` : ''}</p>)}</details>
   </section>
