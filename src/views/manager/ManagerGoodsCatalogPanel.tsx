@@ -186,10 +186,10 @@ export default function ManagerGoodsCatalogPanel() {
     finally { setBusy(false) }
   }
 
-  return <Card className="space-y-4 p-4">
+  return <Card className="space-y-4 !rounded-2xl !shadow-none p-5">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-      <div><h2 className="font-bold text-stone-900">Danh mục hàng hóa và vật liệu chính</h2>
-      <p className="mt-1 text-sm text-stone-500">Giữ số thứ tự bên trái để nhấc dòng lên và kéo đến vị trí mới. Loại hàng cần duyệt luôn ở cuối.</p></div>
+      <div><h2 className="text-lg font-semibold text-stone-900">Danh mục hàng hóa và vật liệu chính</h2>
+      <p className="mt-1 text-sm text-stone-600">Kéo số thứ tự hoặc dùng mũi tên để sắp xếp. Loại hàng cần duyệt luôn ở cuối.</p></div>
       <Button className="shrink-0" onClick={() => setEditor({ kind: 'category', label: '', status: 'ACTIVE' })}>Thêm loại hàng</Button>
     </div>
     {error && !editor && !archiving && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-red-50 p-3 text-sm text-red-700"><p>{error}</p><Button size="sm" variant="outline" disabled={busy} onClick={() => void load()}>Tải lại danh mục</Button></div>}

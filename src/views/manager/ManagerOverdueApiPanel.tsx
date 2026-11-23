@@ -12,6 +12,7 @@ import {
 import { validateText } from "../../services/renewalOperationsApi"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import { useRenewalCommand } from "../../hooks/useRenewalCommand"
+import { vietnamDateTimeInput } from "../../utils/vietnamTime"
 import type {
   OverdueCase,
   OverdueFollowUp,
@@ -28,6 +29,7 @@ import {
   rentalError,
   rentalMoney,
 } from "../rental-api/presentation"
+import "./managerOverdueList.css"
 
 const priorityLabels: Record<string, string> = {
   WARNING: "Cảnh báo",
@@ -50,14 +52,17 @@ const statusStyles: Record<string, string> = {
   PAYMENT_DUE: "border-orange-200 bg-orange-50 text-orange-800",
 }
 function OverdueStatusBadge({ status }: { status: string }) {
-  return <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${statusStyles[status] ?? "border-stone-200 bg-stone-50 text-stone-700"}`}>
+  return <span data-status={status} className={`overdue-status inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${statusStyles[status] ?? "border-stone-200 bg-stone-50 text-stone-700"}`}>
     <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
     {priorityLabels[status] ?? status}
   </span>
 }
 export function OverdueCompleteness({ page: p }: { page: OverduePage }) {
+  const [date, time] = vietnamDateTimeInput(p.asOf).split("T")
   return (
-    <span className="text-xs text-stone-500">Cập nhật: {rentalDate(p.asOf)}</span>
+    <span className="text-sm tabular-nums text-stone-600">
+      {time ? <>Cập nhật lúc <time dateTime={p.asOf}>{time}, {rentalDate(date)}</time></> : "Chưa có thời điểm cập nhật"}
+    </span>
   )
 }
 export function OverdueCaseSummary({ record: r, onChanged, actions }: { record: OverdueCase; onChanged?: () => void; actions?: ReactNode }) {
@@ -159,10 +164,10 @@ export default function ManagerOverdueApiPanel() {
 }
 function OverdueWorkspace({ identity, facilityId }: { identity: string; facilityId: string }) {
   const [, setLocked] = useState(false)
-  return <div className="space-y-4">
+  return <div className="space-y-5 sm:space-y-7">
     <header>
-      <h1 className="text-2xl font-bold tracking-tight text-stone-900">Theo dõi quá hạn</h1>
-      <p className="mt-1 text-sm text-stone-500">Theo dõi thời hạn thuê, công nợ và tiến độ xử lý tại cơ sở.</p>
+      <h1 className="text-2xl font-bold tracking-tight text-stone-900 sm:text-3xl">Theo dõi quá hạn</h1>
+      <p className="mt-2 text-sm text-stone-600 sm:text-base">Theo dõi thời hạn thuê, công nợ và tiến độ xử lý tại cơ sở.</p>
     </header>
     <OverdueSession identity={identity} facilityId={facilityId} onLocked={setLocked} />
   </div>
@@ -188,38 +193,34 @@ function OverdueSession({ identity, facilityId, onLocked }: {
   )
   const change = (patch: OverdueQuery) =>
     setQuery((q) => ({ ...q, ...patch, page: 0 }))
+  const controlClass = "mt-1.5 block min-h-11 w-full rounded-[10px] border border-stone-300 bg-white px-3 text-base text-stone-900"
   return (
-    <div className="space-y-4">
-      <Card className="p-4 sm:p-5">
-        <div className="grid grid-cols-1 items-end gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <div className="min-w-0 md:col-span-2">
-          <label className="block text-xs font-semibold text-stone-600" htmlFor="overdue-search">
-            Tìm kiếm
-          </label>
-          <div className="mt-1 flex items-center gap-2">
-            <input
-              id="overdue-search"
-              className={operationsInputClass.replace("mt-1 ", "")}
-              placeholder="Khách hàng, gian kho hoặc mã hồ sơ"
-              value={search}
-              maxLength={200}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") change({ search: search.trim() })
-              }}
-            />
-          <Button
-            className="shrink-0 whitespace-nowrap"
-            onClick={() => change({ search: search.trim() })}
-          >
-            Tìm kiếm
-          </Button>
-          </div>
-          </div>
-          <label className="min-w-0 text-xs font-semibold text-stone-600">
+    <div className="manager-overdue-list space-y-5 sm:space-y-7">
+      <Card className="!rounded-2xl !shadow-none p-4 sm:px-6 sm:py-5">
+        <div className="manager-overdue-filters grid items-end gap-3 sm:gap-4">
+          <form className="manager-overdue-search min-w-0" role="search" onSubmit={(e) => {
+            e.preventDefault()
+            change({ search: search.trim() })
+          }}>
+            <label className="block text-sm text-stone-600" htmlFor="overdue-search">Tìm kiếm</label>
+            <div className="relative">
+              <input
+                id="overdue-search"
+                className={`${controlClass} !pl-11 placeholder:text-stone-500`}
+                placeholder="Khách hàng, gian kho hoặc mã hồ sơ"
+                value={search}
+                maxLength={200}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              <button type="submit" aria-label="Tìm kiếm" className="absolute inset-y-0 left-0 grid w-11 cursor-pointer place-items-center rounded-l-[10px] text-stone-500 hover:text-stone-900">
+                <span aria-hidden="true" className="overdue-search-icon" />
+              </button>
+            </div>
+          </form>
+          <label className="min-w-0 text-sm text-stone-600">
             Loại quá hạn
             <select
-              className={operationsInputClass}
+              className={controlClass}
               value={query.kind}
               onChange={(e) =>
                 change({ kind: e.target.value as OverdueQuery["kind"] })
@@ -230,10 +231,10 @@ function OverdueSession({ identity, facilityId, onLocked }: {
               <option value="RENTAL_TERM">Quá thời hạn thuê</option>
             </select>
           </label>
-          <label className="min-w-0 text-xs font-semibold text-stone-600">
+          <label className="min-w-0 text-sm text-stone-600">
             Sắp xếp
             <select
-              className={operationsInputClass}
+              className={controlClass}
               value={query.sort}
               onChange={(e) => change({ sort: e.target.value })}
             >
@@ -248,28 +249,61 @@ function OverdueSession({ identity, facilityId, onLocked }: {
       <ApiReadState {...read} retry={read.refresh} />
       {read.data && (
         <>
-          <Card className="overflow-hidden">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 px-4 py-3">
-              <h2 className="flex items-center gap-2 text-sm font-semibold">Danh sách theo dõi <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-medium tabular-nums text-stone-600">{read.data.pagination.totalItems}</span></h2>
+          <Card className="overflow-hidden !rounded-2xl !shadow-none">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 px-4 py-4 sm:px-6 sm:py-5">
+              <h2 id="overdue-list-heading" className="flex items-center gap-3 text-lg font-semibold text-stone-900 sm:text-xl">
+                Danh sách theo dõi
+                <span className="rounded-full border border-stone-200 bg-stone-100 px-3 py-1 text-sm font-normal tabular-nums text-stone-600">{read.data.pagination.totalItems}</span>
+              </h2>
               <OverdueCompleteness page={read.data} />
             </div>
-            {read.data.data.length > 0 && <div className="overflow-x-auto">
-              <table className="w-full min-w-[780px] table-fixed text-left text-sm">
-                <colgroup><col className="w-[34%]" /><col className="w-[21%]" /><col className="w-[12%]" /><col className="w-[21%]" /><col className="w-[12%]" /></colgroup>
-                <thead className="border-b border-stone-200 bg-stone-50 text-xs text-stone-500">
-                  <tr><th scope="col" className="px-4 py-3 font-semibold">Khách hàng / Gian kho</th><th scope="col" className="px-4 py-3 font-semibold">Loại quá hạn</th><th scope="col" className="px-4 py-3 font-semibold">Số ngày</th><th scope="col" className="px-4 py-3 font-semibold">Trạng thái xử lý</th><th scope="col" className="px-4 py-3 text-right font-semibold">Thao tác</th></tr>
+            {read.data.data.length > 0 && (
+              <table role="table" aria-labelledby="overdue-list-heading" className="manager-overdue-table w-full table-fixed text-left text-sm text-stone-900">
+                <colgroup><col className="w-[15%]" /><col className="w-[27%]" /><col className="w-[16%]" /><col className="w-[13%]" /><col className="w-[17%]" /><col className="w-[12%]" /></colgroup>
+                <thead role="rowgroup" className="border-b border-stone-200 bg-[#f6f4f0] text-stone-600">
+                  <tr role="row">
+                    {["Khách hàng", "Gian kho", "Loại quá hạn", "Số ngày quá hạn", "Trạng thái xử lý", "Thao tác"].map(label =>
+                      <th key={label} role="columnheader" scope="col" className="font-medium last:text-right">{label}</th>)}
+                  </tr>
                 </thead>
-                <tbody className="divide-y divide-stone-200">
-                  {read.data.data.map(r => <tr key={r.caseRef} className="transition-colors hover:bg-amber-50/40 focus-within:bg-amber-50/40">
-                    <td className="break-words px-4 py-4 align-middle"><p className="font-semibold text-stone-900">{r.customerName}</p><p className="mt-1 text-xs leading-relaxed text-stone-600"><span className="text-stone-400">Kho: </span>{r.storageUnitCode}</p>{r.displayCode && <p className="mt-1 font-mono text-[11px] text-stone-400">{r.displayCode}</p>}</td>
-                    <td className="px-4 py-4 align-middle"><p className="text-stone-600">{r.kind === "PAYMENT_DUE" ? "Thanh toán quá hạn" : "Quá thời hạn thuê"}</p>{r.kind === "PAYMENT_DUE" && <p className="mt-1 text-sm font-semibold tabular-nums text-stone-900">{rentalMoney(r.outstanding, r.currency!)}</p>}</td>
-                    <td className="px-4 py-4 align-middle"><span className={`text-lg font-semibold tabular-nums ${r.priority === "URGENT" || r.priority === "RECOVERY" ? "text-red-700" : "text-stone-900"}`}>{r.overdueDays}</span><span className="ml-1 text-xs text-stone-500">ngày</span></td>
-                    <td className="px-4 py-4 align-middle"><OverdueStatusBadge status={r.workflowStatus ?? r.priority} />{r.workflowStatus && r.workflowStatus !== r.priority && r.workflowStatus !== "COMPLETED" && <p className="mt-1.5 text-xs text-stone-500">Mức độ: {priorityLabels[r.priority]}</p>}</td>
-                    <td className="px-4 py-4 text-right align-middle"><Button size="sm" variant="outline" aria-label={`Chi tiết hồ sơ ${r.displayCode ?? r.customerName}`} onClick={() => setSelected(r.caseRef)}>Chi tiết</Button></td>
-                  </tr>)}
+                <tbody role="rowgroup" className="divide-y divide-stone-200">
+                  {read.data.data.map(r => {
+                    const status = r.workflowStatus ?? r.priority
+                    return <tr role="row" key={r.caseRef} className="transition-colors hover:bg-stone-50/75 focus-within:bg-stone-50/75">
+                      <td role="cell" className="min-w-0 wrap-anywhere">
+                        <span aria-hidden="true" className="overdue-mobile-label">Khách hàng</span>
+                        <p className="text-base">{r.customerName}</p>
+                        {r.displayCode && <p className="mt-0.5 font-mono text-xs text-stone-600">{r.displayCode}</p>}
+                      </td>
+                      <td role="cell" className="min-w-0 wrap-anywhere">
+                        <span aria-hidden="true" className="overdue-mobile-label">Gian kho</span>
+                        <span className="overdue-unit-code">{r.storageUnitCode}</span>
+                      </td>
+                      <td role="cell">
+                        <span aria-hidden="true" className="overdue-mobile-label">Loại quá hạn</span>
+                        <p>{r.kind === "PAYMENT_DUE" ? "Quá hạn thanh toán" : "Quá thời hạn thuê"}</p>
+                        {r.kind === "PAYMENT_DUE" && <p className="mt-0.5 font-semibold tabular-nums">{rentalMoney(r.outstanding, r.currency!)}</p>}
+                      </td>
+                      <td role="cell">
+                        <span aria-hidden="true" className="overdue-mobile-label">Số ngày quá hạn</span>
+                        <span className={`text-xl font-bold tabular-nums ${r.priority === "URGENT" || r.priority === "RECOVERY" ? "text-red-700" : "text-stone-900"}`}>{r.overdueDays}</span>{" "}<span className="text-sm text-stone-600">ngày</span>
+                      </td>
+                      <td role="cell">
+                        <span aria-hidden="true" className="overdue-mobile-label">Trạng thái xử lý</span>
+                        <OverdueStatusBadge status={status} />
+                        {r.workflowStatus && r.workflowStatus !== "COMPLETED" && priorityLabels[status] !== priorityLabels[r.priority] && <p className="mt-1 text-xs text-stone-600">Mức độ: {priorityLabels[r.priority]}</p>}
+                      </td>
+                      <td role="cell" className="text-right">
+                        <Button type="button" variant="outline" className="min-h-11 whitespace-nowrap !rounded-[10px] !px-3 !font-medium"
+                          aria-label={`Chi tiết hồ sơ ${r.displayCode ?? r.customerName}`} onClick={() => setSelected(r.caseRef)}>
+                          Chi tiết <span aria-hidden="true" className="overdue-detail-chevron" />
+                        </Button>
+                      </td>
+                    </tr>
+                  })}
                 </tbody>
               </table>
-            </div>}
+            )}
             {read.data.data.length === 0 && (
               <p className="px-4 py-8 text-center text-sm text-stone-500">Không tìm thấy hồ sơ phù hợp.</p>
             )}
