@@ -823,7 +823,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       {/* ─── OPTION 1: MODERN 2-COLUMN INSPECTION & LIVE SETTLEMENT ─── */}
       {(canInspect || canReview) && (() => {
         const deposit = record.depositAmount ?? 0
-        const totalFees = Object.values(fees).reduce((sum, v) => sum + (Number.isNaN(v) ? 0 : v), 0)
+        const totalFees = Object.values(canInspect ? { ...fees, damageFee: calculateDamageFee(damageItems) } : fees).reduce((sum, v) => sum + (Number.isNaN(v) ? 0 : v), 0)
         const projectedRefund = Math.max(0, deposit - totalFees)
         const projectedDue = Math.max(0, totalFees - deposit)
 
@@ -1206,7 +1206,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                       <Button
                         type="submit"
                         variant="primary"
-                        disabled={busy || (canReview && !note.trim()) || (canInspect && !!record.setupExitRequested && (vacatedReturnId !== id || goodsLeft))}
+                        disabled={busy || (canReview && !note.trim()) || (canInspect && !goodsLeft && (damage === "minor_damage" || damage === "major_damage") && (damageItems.length === 0 || damageItems.some(item => item.quantity <= 0))) || (canInspect && !!record.setupExitRequested && (vacatedReturnId !== id || goodsLeft))}
                         className="w-full !bg-emerald-600 hover:!bg-emerald-700 text-white font-bold py-3 text-sm shadow-md flex items-center justify-center gap-2 cursor-pointer"
                       >
                         <span>{canInspect ? 'Ghi nhận kết quả nghiệm thu' : 'Ghi nhận xem xét khiếu nại'}</span>

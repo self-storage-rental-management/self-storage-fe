@@ -42,7 +42,14 @@ function readProfileDraft(userId: string): ProfileDraft | null {
     const parsed = JSON.parse(raw) as Partial<ProfileDraft>
     if (typeof parsed.name !== 'string' || typeof parsed.phone !== 'string' || typeof parsed.permanentAddress !== 'string'
       || typeof parsed.emergencyContactName !== 'string' || typeof parsed.emergencyContactPhone !== 'string') return null
-    return { ...parsed, profileDetails: parsed.profileDetails || {} }
+    return {
+      name: parsed.name,
+      phone: parsed.phone,
+      permanentAddress: parsed.permanentAddress,
+      emergencyContactName: parsed.emergencyContactName,
+      emergencyContactPhone: parsed.emergencyContactPhone,
+      profileDetails: parsed.profileDetails || {},
+    }
   } catch {
     return null
   }

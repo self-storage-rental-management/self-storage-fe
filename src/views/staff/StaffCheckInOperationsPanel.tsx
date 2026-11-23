@@ -75,11 +75,11 @@ const checklistLabels: Array<[keyof CheckInChecklist, string]> = [
 
   ["measurementVerified", "Đã đo và đối chiếu hàng hóa thực tế"],
 
-  ["unitWalkthrough", "Đã bàn giao kho trống cho khách hàng"],
+  ["unitWalkthrough", "Dẫn khách đi bàn giao"],
 
-  ["conditionRecorded", "Đã ghi nhận tình trạng hàng hóa"],
+  ["conditionRecorded", "Không gian không bị hư hỏng, tróc sơn"],
 
-  ["accessHandedOver", "Đã bàn giao mã truy cập, thẻ hoặc chìa khóa"],
+  ["accessHandedOver", "Bên trong sạch sẽ, không có gì tồn đọng"],
 ]
 
 const emptyChecklist = () =>
@@ -1000,7 +1000,17 @@ export default function StaffCheckInOperationsPanel({
         ]) === false))
     : checkInComparison?.hasVariance ?? false)
   const hasEmptyStorageEvidence = evidenceFiles.length > 0 || evidenceReferences.length > 0
-  const emptyStorageHandoverReady = Boolean(keyLockReference.trim() && initialCondition.trim() && hasEmptyStorageEvidence)
+  const isHandoverChecklistComplete = Boolean(
+    checklist.accessHandedOver &&
+    checklist.conditionRecorded &&
+    checklist.unitWalkthrough
+  )
+  const emptyStorageHandoverReady = Boolean(
+    keyLockReference.trim() &&
+    initialCondition.trim() &&
+    hasEmptyStorageEvidence &&
+    isHandoverChecklistComplete
+  )
 
   const workflowCurrentStep = handoverTarget ? stepForCheckIn(handoverTarget) : 1
   const handoverDeadlinePassed = handoverTarget ? handoverExpired(handoverTarget, now) : false
@@ -1436,6 +1446,9 @@ export default function StaffCheckInOperationsPanel({
           throw new Error("Không nhập mật khẩu hoặc mã PIN vào ô Mã ổ khóa / Chìa khóa.")
         }
         if (!emptyStorageHandoverReady) {
+          if (!isHandoverChecklistComplete) {
+            throw new Error("Vui lòng tích xác nhận đầy đủ 3 mục trong Danh mục kiểm tra bàn giao (*).")
+          }
           throw new Error("Cần nhập mã ổ khóa, ghi nhận hiện trạng và chọn ít nhất một ảnh hoặc PDF bằng chứng kho trống.")
         }
         const lockReference = keyLockReference.trim()
@@ -2175,7 +2188,7 @@ export default function StaffCheckInOperationsPanel({
                           checked={checklist.unitWalkthrough}
                           onChange={(e) => setChecklist(cur => ({ ...cur, unitWalkthrough: e.target.checked }))}
                         />
-                        <span>Đã dẫn khách kiểm tra gian kho trực tiếp *</span>
+                        <span>Dẫn khách đi bàn giao *</span>
                       </label>
                       <label className="flex items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 p-2.5 cursor-pointer hover:bg-stone-100 transition">
                         <input
@@ -2185,7 +2198,7 @@ export default function StaffCheckInOperationsPanel({
                           checked={checklist.conditionRecorded}
                           onChange={(e) => setChecklist(cur => ({ ...cur, conditionRecorded: e.target.checked }))}
                         />
-                        <span>Trần, sàn, vách nguyên vẹn & sạch sẽ *</span>
+                        <span>Không gian không bị hư hỏng, tróc sơn *</span>
                       </label>
                       <label className="flex items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 p-2.5 cursor-pointer hover:bg-stone-100 transition">
                         <input
@@ -2195,9 +2208,14 @@ export default function StaffCheckInOperationsPanel({
                           checked={checklist.accessHandedOver}
                           onChange={(e) => setChecklist(cur => ({ ...cur, accessHandedOver: e.target.checked }))}
                         />
-                        <span>Đã bàn giao mã khóa & hướng dẫn ra vào *</span>
+                        <span>Bên trong sạch sẽ, không có gì tồn đọng *</span>
                       </label>
                     </div>
+                    {!isHandoverChecklistComplete && !isReviewingCompletedStep && (
+                      <p className="text-xs font-medium text-amber-800">
+                        * Cần tích xác nhận đầy đủ 3 mục trong Danh mục kiểm tra bàn giao để có thể tiếp tục.
+                      </p>
+                    )}
                   </div>
                 </div>
 
