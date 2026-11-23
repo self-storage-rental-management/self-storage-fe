@@ -14,6 +14,7 @@ import {
   generateBookingDocument,
   downloadBookingDocument,
   uploadReservationGoodsImage,
+  setCustomerInventoryAppointment,
 } from './customerReservationApi'
 import { clearAuthTokens, setAccessToken } from './apiClient'
 
@@ -35,6 +36,20 @@ describe('customerReservationApi', () => {
   it('does not fabricate receipt success when the backend rejects confirmation', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { code: 'CONFLICT', message: 'Handover incomplete' } }), { status: 409, headers: { 'Content-Type': 'application/json' } })))
     await expect(confirmCustomerReceipt('reservation-1')).rejects.toMatchObject({ status: 409 })
+  })
+
+  it('sends inventory scheduling to its own endpoint and preserves the returned deadline', async () => {
+    const inventoryAppointmentAt = '2026-11-02T09:30:00.000Z'
+    const detail = { reservation: { id: 'reservation-1', status: 'PREPARING' },
+      inventoryAppointmentAt, inventoryFinalDeadlineAt: '2026-11-08T08:00:00Z' }
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: detail }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    expect(await setCustomerInventoryAppointment('reservation-1', inventoryAppointmentAt, 'Khách đổi ca làm')).toEqual(detail)
+    const [url, options] = fetchMock.mock.calls[0]
+    expect(url).toBe('http://localhost:8080/api/customer/reservations/reservation-1/inventory-appointment')
+    expect(options.method).toBe('POST')
+    expect(JSON.parse(options.body)).toEqual({ appointmentAt: inventoryAppointmentAt, reason: 'Khách đổi ca làm' })
   })
 
   it('reloads stored payment details from the backend for receipts', async () => {

@@ -12,7 +12,7 @@ export default function RenewalStatusPanel({ summary, onReceipt, invoice }: {
   return <section className="space-y-4 rounded-xl border border-stone-200 p-4 sm:p-5" aria-label="Khoản phải thu và giao dịch gia hạn">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <h4 className="font-semibold">Thanh toán gia hạn</h4>
-      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${i.status === 'PAID' ? 'bg-emerald-50 text-emerald-800' : 'bg-stone-100 text-stone-700'}`}>{i.status === 'PARTIALLY_PAID' ? 'Đã thanh toán cọc gia hạn' : renewalInvoiceLabels[i.status]}</span>
+      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${i.status === 'PAID' ? 'bg-emerald-50 text-emerald-800' : 'bg-stone-100 text-stone-700'}`}>{i.status === 'PARTIALLY_PAID' ? 'Đã thanh toán một phần' : renewalInvoiceLabels[i.status]}</span>
     </div>
     {known ? <>
       <dl className="grid gap-4 border-b border-stone-100 pb-4 text-sm sm:grid-cols-3">

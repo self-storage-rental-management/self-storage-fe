@@ -323,31 +323,18 @@ export default function CustomerRenewalRequestModal({
         )}
         {/* Khi có yêu cầu gia hạn đang mở: Hiển thị Thẻ thông báo trực quan, bỏ các nút thừa */}
         {isConflictOpenRenewal ? (
-          <div className="rounded-2xl border border-amber-300 bg-amber-50/90 p-5 text-stone-900 shadow-sm" role="alert">
-            <div className="flex items-start gap-3.5">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-800">
-                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="12" y1="8" x2="12" y2="12" />
-                  <line x1="12" y1="16" x2="12.01" y2="16" />
-                </svg>
-              </div>
-              <div className="flex-1 space-y-1.5">
-                <h4 className="text-base font-semibold text-amber-950">
-                  Gian kho này đã có yêu cầu gia hạn đang mở
-                </h4>
-                <p className="text-sm leading-relaxed text-amber-900">
-                  Hợp đồng thuê này đã được tạo một yêu cầu gia hạn trước đó và hiện đang chờ hoàn tất thanh toán. Để tránh phát sinh chi phí trùng lặp, hệ thống không cho phép tạo thêm yêu cầu mới.
-                </p>
-                <p className="text-xs font-medium text-amber-800">
-                  Bạn có thể đi đến yêu cầu gia hạn đã có để thanh toán online ngay hoặc kiểm tra thông tin.
-                </p>
-              </div>
-            </div>
+          <div className="rounded-xl bg-amber-50/90 p-4 text-stone-900" role="alert">
+            <h4 className="text-sm font-semibold text-amber-950">
+              Gian kho này đã có yêu cầu gia hạn đang mở
+            </h4>
+            <p className="mt-1 text-sm leading-5 text-amber-900">
+              Vui lòng xem hoặc thanh toán yêu cầu hiện có trước khi tạo yêu cầu mới.
+            </p>
 
-            <div className="mt-4 flex flex-wrap items-center justify-end gap-2.5 border-t border-amber-200/80 pt-3.5">
+            <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
               <Button
                 variant="outline"
+                size="sm"
                 className="bg-white hover:bg-stone-50"
                 onClick={onClose}
               >
@@ -356,6 +343,7 @@ export default function CustomerRenewalRequestModal({
               {onNavigateToRenewals && (
                 <Button
                   variant="primary"
+                  size="sm"
                   className="!border-amber-600 !bg-amber-600 !text-white hover:!bg-amber-700 shadow-sm font-medium"
                   onClick={() => onNavigateToRenewals(existingRenewalId)}
                 >
@@ -417,7 +405,7 @@ export default function CustomerRenewalRequestModal({
                     !confirmed ||
                     (revision !== undefined && revision.version === null)
                   }
-                  className="disabled:bg-stone-200 disabled:text-stone-500 disabled:opacity-100 sm:min-w-44"
+                  className="renewal-confirm-button sm:min-w-44"
                   onClick={() => {
                     if (!quote) return
                     if (!command.uncertain && quote.expiresAt && Date.parse(quote.expiresAt) <= Date.now()) {

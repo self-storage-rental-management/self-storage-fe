@@ -1,4 +1,6 @@
-import { validateCccd, normalizeCccd, maskCccd } from '../../domain/cccd'
+import { maskCccd } from '../../domain/cccd'
+import { normalizeRentalIdentity, validateRentalIdentity } from '../../domain/rentalIdentity'
+import StaffInventoryVisitPanel from './StaffInventoryVisitPanel'
 import { getGoodsCatalog, type GoodsCatalog } from "../../services/customerReservationApi"
 import { useEffect, useId, useMemo, useState } from "react"
 import { isCheckInHandoverExpired, staffCheckInActions } from "../../domain/reservationCheckInPolicy"
@@ -6,7 +8,6 @@ import { isCheckInHandoverExpired, staffCheckInActions } from "../../domain/rese
 import {
   completeCheckIn,
   confirmPartialInventoryRemoval,
-  completeCheckInSetup,
   confirmCheckInPayment,
   downloadCheckInEvidence,
   listCheckIns,
@@ -79,7 +80,7 @@ const emptyChecklist = () =>
   ) as unknown as CheckInChecklist
 
 function normalizeIdentityDocument(value: string | null | undefined) {
-  return value?.trim().replace(/[\s.-]/g, "").toUpperCase() || ""
+  return normalizeRentalIdentity(value || "")
 }
 
 function hasMaterialVariance(
@@ -1075,9 +1076,9 @@ export default function StaffCheckInOperationsPanel({
 
     const providedIdentity = normalizeIdentityDocument(identityDocumentNumber)
     if (!providedIdentity) {
-      errors.identityDocumentNumber = "Số CCCD/CMND không được để trống"
-    } else if (!validateCccd(providedIdentity).ok) {
-      errors.identityDocumentNumber = validateCccd(providedIdentity).error || "Vui lòng nhập CCCD 12 số."
+      errors.identityDocumentNumber = "Cần số CCCD hoặc hộ chiếu."
+    } else if (!validateRentalIdentity(providedIdentity).ok) {
+      errors.identityDocumentNumber = validateRentalIdentity(providedIdentity).error || "Vui lòng nhập giấy tờ hợp lệ."
     }
 
     if (Object.keys(errors).length > 0) {
@@ -1118,7 +1119,7 @@ export default function StaffCheckInOperationsPanel({
       const completed = await completeCheckIn(handoverTarget.checkInId, {
         checklist: lineInventory ? { ...checklist, measurementVerified: true, conditionRecorded: true } : checklist,
 
-        identityDocumentNumber: identityDocumentNumber.trim(),
+        identityDocumentNumber: providedIdentity,
 
         identityVerificationNote: verificationNotes.trim() || null,
 
@@ -1208,14 +1209,15 @@ export default function StaffCheckInOperationsPanel({
       let updated: CheckInCase | null = null
       if (handoverStep === 1) {
         const normalized = normalizeIdentityDocument(identityDocumentNumber)
-        if (!validateCccd(normalized).ok) {
-          setFieldErrors({ identityDocumentNumber: validateCccd(normalized).error || "Vui lòng nhập CCCD 12 số." })
-          setError(validateCccd(normalized).error || "Vui lòng nhập CCCD 12 số.")
+        const result = validateRentalIdentity(normalized)
+        if (!result.ok) {
+          setFieldErrors({ identityDocumentNumber: result.error || "Vui lòng nhập giấy tờ hợp lệ." })
+          setError(result.error || "Vui lòng nhập giấy tờ hợp lệ.")
           setSubmitting(false)
           return
         }
         updated = await verifyCheckInIdentity(handoverTarget.checkInId, {
-          identityDocumentNumber: identityDocumentNumber.trim(),
+          identityDocumentNumber: normalized,
           note: verificationNotes.trim() || undefined,
           adulthoodConfirmed,
         })
@@ -1274,10 +1276,8 @@ export default function StaffCheckInOperationsPanel({
           setCustomerWaitTarget("receipt")
           throw new Error("Đang chờ khách hàng xác nhận nhận kho trên cổng khách hàng.")
         }
-        updated = await completeCheckInSetup(
-          handoverTarget.checkInId,
-          "Nhân viên xác nhận khách hàng đã sẵn sàng bàn giao để kiểm kê hàng hóa",
-        )
+        setCustomerWaitTarget("preparation")
+        return
       }
       if (updated) {
         setHandoverTarget(updated)
@@ -1583,7 +1583,12 @@ export default function StaffCheckInOperationsPanel({
         </p>
       </Td>
       <Td>
-        <span>{formatStaffDateTime(item.appointmentAt || item.scheduledAt)}</span>
+        <span>{item.checkInStatus === "setup_completed"
+          ? item.inventoryVisit?.appointmentAt ? formatStaffDateTime(item.inventoryVisit.appointmentAt) : "Chưa đặt lịch kiểm kê"
+          : formatStaffDateTime(item.appointmentAt || item.scheduledAt)}</span>
+        {item.checkInStatus === "setup_completed" && item.inventoryVisit?.arrivedAt && (
+          <p className="mt-1 text-xs text-stone-600">{item.inventoryVisit.identityVerifiedAt ? "Đã xác minh" : "Đã đến, chờ xác minh"}</p>
+        )}
         {group === "ONGOING" && stepForCheckIn(item) <= 4 && (item.appointmentAt || item.scheduledAt) && handoverExpired(item, now) && (
           <p className="mt-1 text-[11px] font-medium text-red-700">Đã hết hạn nhận kho</p>
         )}
@@ -1851,7 +1856,7 @@ export default function StaffCheckInOperationsPanel({
                 <div className="grid gap-3 rounded-lg border border-stone-200 p-4 text-sm md:grid-cols-3">
                   <div><span className="text-stone-500">Khách hàng</span><p className="font-semibold">{handoverTarget.customerName}</p></div>
                   <div>
-                    <span className="text-stone-500">CCCD/CMND đã khai báo</span>
+                    <span className="text-stone-500">CCCD hoặc hộ chiếu đã khai báo</span>
                     <p className="font-semibold">{declaredIdentityDocument ? maskCccd(declaredIdentityDocument) : "Chưa có dữ liệu"}</p>
                     {identityMismatch && !isReviewingCompletedStep && (
                       <button
@@ -1867,7 +1872,7 @@ export default function StaffCheckInOperationsPanel({
                     )}
                   </div>
                   <Input
-                    label="CCCD/CMND trên giấy tờ gốc *"
+                    label="CCCD hoặc hộ chiếu trên giấy tờ gốc *"
                     error={fieldErrors.identityDocumentNumber}
                     value={identityDocumentNumber}
                     disabled={submitting}
@@ -1891,12 +1896,12 @@ export default function StaffCheckInOperationsPanel({
                 <div className="grid gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm sm:grid-cols-2">
                   <label className="flex items-center gap-2"><input type="checkbox" disabled={isReviewingCompletedStep} checked={checklist.identityVerified && checklist.reservationMatched} onChange={(event) => setChecklist((value) => ({ ...value, identityVerified: event.target.checked, reservationMatched: event.target.checked }))} />Đã kiểm tra giấy tờ gốc và đối chiếu khách hàng với đơn đặt kho *</label>
                 </div>
-                {validateCccd(identityDocumentNumber).warning && <label className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm"><input type="checkbox" checked={adulthoodConfirmed} onChange={event => setAdulthoodConfirmed(event.target.checked)} />Đã đối chiếu ngày sinh trên CCCD gốc và xác nhận khách đã đủ 18 tuổi *</label>}
-                {isReviewingCompletedStep && <Button disabled={submitting || !verificationNotes.trim() || !validateCccd(identityDocumentNumber).ok || (!!validateCccd(identityDocumentNumber).warning && !adulthoodConfirmed)} onClick={async () => {
+                {validateRentalIdentity(identityDocumentNumber).warning && <label className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm"><input type="checkbox" checked={adulthoodConfirmed} onChange={event => setAdulthoodConfirmed(event.target.checked)} />Đã đối chiếu ngày sinh trên giấy tờ gốc và xác nhận khách đã đủ 18 tuổi *</label>}
+                {isReviewingCompletedStep && <Button disabled={submitting || !verificationNotes.trim() || !validateRentalIdentity(identityDocumentNumber).ok || (!!validateRentalIdentity(identityDocumentNumber).warning && !adulthoodConfirmed)} onClick={async () => {
                   if (!handoverTarget.checkInId) return
                   setSubmitting(true)
                   try {
-                    const updated = await correctCheckInIdentity(handoverTarget.checkInId, { identityDocumentNumber: normalizeCccd(identityDocumentNumber), note: verificationNotes.trim(), adulthoodConfirmed })
+                    const updated = await correctCheckInIdentity(handoverTarget.checkInId, { identityDocumentNumber: normalizeRentalIdentity(identityDocumentNumber), note: verificationNotes.trim(), adulthoodConfirmed })
                     setHandoverTarget(updated)
                     refresh()
                     setError(null)
@@ -2154,10 +2159,7 @@ export default function StaffCheckInOperationsPanel({
                 <div className="rounded-xl border border-stone-200 bg-white p-4 text-sm text-stone-700 space-y-2">
                   <p className="font-bold text-stone-900">Quy trình tiếp theo</p>
                   <p className="text-xs text-stone-600 leading-relaxed">
-                    Sau khi khách hàng hoàn tất việc chuyển đồ vào kho hoặc hết thời gian chuẩn bị miễn phí, nhân viên cơ sở sẽ tiến hành <b>Kiểm kê thực tế</b> (đo đạc kích thước kiện, cân nặng và chụp ảnh lưu hồ sơ).
-                  </p>
-                  <p className="text-xs text-stone-500">
-                    Bấm <b>"Xác nhận bàn giao"</b> khi khách hàng báo đã sắp xếp xong hoặc khi đến hạn kiểm kê.
+                    Khách báo đã setup xong và tự chọn lịch. Khi khách đến, Staff ghi nhận giờ đến và xác minh đúng người đặt kho trước khi kiểm kê.
                   </p>
                 </div>
                  </>
@@ -2166,7 +2168,21 @@ export default function StaffCheckInOperationsPanel({
               </div>
             )}
 
-            {handoverStep === 6 && (
+            {handoverStep === 6 && <StaffInventoryVisitPanel
+              key={handoverTarget.checkInId ?? handoverTarget.reservationId}
+              item={handoverTarget} now={now} busy={submitting} onBusyChange={setSubmitting}
+              onSaved={updated => {
+                setHandoverTarget(updated)
+                if (updated.inventoryVisit?.identityVerifiedAt) {
+                  setIdentityDocumentNumber(updated.identityDocumentNumber || "")
+                  setChecklist(value => ({ ...value, identityVerified: true, reservationMatched: true }))
+                }
+                refresh()
+              }}
+              onPreview={photoId => void previewEvidenceFile(photoId)}
+            />}
+
+            {handoverStep === 6 && handoverTarget.inventoryVisit?.identityVerifiedAt && (
               <div className="space-y-4">
                 <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-950"><b>Kiểm kê hàng hóa</b><p className="mt-1 text-xs">Đối chiếu số kiện, khối lượng, thể tích, kích thước, loại hàng, chất liệu chính và tình trạng hàng hóa sau khi khách đã sắp xếp xong. Hiện trạng kho trống đã được ghi nhận ở bước bàn giao.</p>{handoverTarget.inventoryDueAt && <p className="mt-1 text-xs">Mốc nhắc xử lý: <b>{formatStaffDateTime(handoverTarget.inventoryDueAt)}</b></p>}{handoverTarget.inventoryFinalDeadlineAt && <p className={`mt-1 text-xs font-bold ${new Date(handoverTarget.inventoryFinalDeadlineAt).getTime() <= now ? 'text-red-700' : 'text-indigo-900'}`}>{new Date(handoverTarget.inventoryFinalDeadlineAt).getTime() <= now ? 'Đã quá hạn kiểm kê' : 'Hạn hoàn tất kiểm kê'}: <b>{formatStaffDateTime(handoverTarget.inventoryFinalDeadlineAt)}</b></p>}</div>
                 {lineInventory ? (
@@ -2588,7 +2604,7 @@ export default function StaffCheckInOperationsPanel({
                   <span className="text-xs text-stone-600">
                     {handoverTarget.checkInStatus === "handover_pending_receipt"
                       ? "Đang chờ khách nhấn Xác nhận đã nhận kho."
-                      : "Đang chờ khách nhấn Sẵn sàng để kiểm kê sau khi sắp xếp hàng hóa xong."}
+                      : "Đang chờ khách báo đã setup xong."}
                   </span>
                   <Button variant="outline" onClick={() => void refreshHandoverTarget()} disabled={submitting}>
                     Kiểm tra trạng thái
@@ -2602,16 +2618,6 @@ export default function StaffCheckInOperationsPanel({
                       Quay lại
                     </Button>
                   )}
-                  <Button
-                    onClick={() => setShowCustomerReadyModal(true)}
-                    disabled={submitting || handoverTarget.checkInStatus === "handover_pending_receipt"}
-                  >
-                    {submitting
-                      ? "Đang xác nhận…"
-                      : handoverTarget.checkInStatus === "handover_pending_receipt"
-                        ? "Chờ khách xác nhận nhận kho"
-                        : "Xác nhận bàn giao"}
-                  </Button>
                 </div>
               ) : handoverStep < 6 ? (
                 <div className="flex flex-wrap items-center justify-end gap-3">
@@ -2642,7 +2648,8 @@ export default function StaffCheckInOperationsPanel({
                       Quay lại
                     </Button>
                   )}
-                  <Button disabled={submitting} onClick={() => submitHandover()}>{submitting ? "Đang hoàn tất…" : "Hoàn tất kiểm kê"}</Button>
+                  <Button disabled={submitting || !handoverTarget.inventoryVisit?.identityVerifiedAt || Boolean(handoverTarget.inventoryFinalDeadlineAt
+                    && Date.parse(handoverTarget.inventoryFinalDeadlineAt) <= now)} onClick={() => submitHandover()}>{submitting ? "Đang hoàn tất…" : "Hoàn tất kiểm kê"}</Button>
                 </div>
               )}
             </div>
@@ -2922,6 +2929,10 @@ export default function StaffCheckInOperationsPanel({
       >
         {detailTarget?.handover && (
           <div className="space-y-4 text-sm">
+            {detailTarget.inventoryVisit?.identityVerifiedAt && <StaffInventoryVisitPanel
+              key={detailTarget.checkInId ?? detailTarget.reservationId} item={detailTarget} now={now} busy={submitting}
+              onBusyChange={setSubmitting} onSaved={setDetailTarget} onPreview={photoId => void previewEvidenceFile(photoId)}
+            />}
             {!!detailTarget.handover.inventoryLines?.length && (
               <section className="divide-y divide-stone-200 rounded-lg border border-stone-200">
                 <h3 className="px-3 py-2 font-semibold">Kết quả kiểm kê từng dòng hàng</h3>
@@ -2947,7 +2958,7 @@ export default function StaffCheckInOperationsPanel({
                 <div><dt className="text-xs text-stone-500">Khách hàng nhận kho</dt><dd className="mt-1 font-semibold">{detailTarget.customerName}</dd></div>
               </dl>
               <p className="mt-1 text-xs text-stone-500">
-                Hoàn tất lúc {formatStaffDateTime(detailTarget.checkedInAt)} bởi{" "}
+                Hoàn tất lúc {formatStaffDateTime(detailTarget.inventoryVerifiedAt || detailTarget.checkedInAt)} bởi{" "}
                 {detailTarget.performedByName ||
                   detailTarget.performedBy ||
                   "nhân viên cơ sở"}

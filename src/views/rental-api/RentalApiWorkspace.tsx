@@ -707,6 +707,11 @@ function DetailModal({
     facilityId: string
     customerId: string
   }>()
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => { document.body.style.overflow = previousOverflow }
+  }, [])
   const read = useRentalApiResource(
     `${identity}:${detail.kind}:${detail.id}`,
     async () =>
@@ -731,6 +736,7 @@ function DetailModal({
     <Modal
       open
       size="xl"
+      className="overscroll-contain"
       title={
         detail.kind === "rental"
           ? "Chi tiết hồ sơ thuê"
@@ -792,6 +798,7 @@ function DetailModal({
       ) : null}
       {detail.kind === "renewal" && operationOwner && read.data?.kind === "renewal" && !["pending", "accepted"].includes(read.data.record.status) && (
         <RenewalOperationsPanel
+          embedded
           status={(read.data.record as RenewalApiRecord).status}
           id={detail.id}
           role={role}

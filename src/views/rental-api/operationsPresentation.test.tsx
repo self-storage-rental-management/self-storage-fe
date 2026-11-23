@@ -43,7 +43,7 @@ describe("D3 operation prerequisites and truthful UI", () => {
     expect(html).not.toContain("Khách hàng cần đổi lịch")
     expect(html).toContain("Hạn ký hợp đồng")
     expect(html).toContain("Nếu không kịp, hãy liên hệ cơ sở")
-    expect(html).toContain("Hạn gia hạn hợp đồng đã hết hạn")
+    expect(html).toContain("Thời điểm cuối có thể gia hạn")
     expect(html).not.toContain("Hạn xử lý trước khi chuyển sang thu hồi kho")
   })
   it.each([null, 500, 502, 503])(

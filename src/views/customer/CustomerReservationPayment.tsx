@@ -129,7 +129,7 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
     if (busy || countdown.expired || !acceptedNoRefund || reservation.status !== 'AWAITING_PAYMENT' || !snapshot) return
     const actor = getAuthenticatedActor()
     if (!actor || profileProgress(actorToUser(actor)) < 5) {
-      onMessage('Vui lòng cập nhật đủ SĐT, CCCD và người liên hệ khẩn cấp trong Hồ sơ trước khi thanh toán trước 20% (giữ chỗ).')
+      onMessage('Vui lòng cập nhật đủ số điện thoại, giấy tờ tùy thân và người liên hệ khẩn cấp trong Hồ sơ trước khi thanh toán giữ chỗ.')
       return
     }
     paymentLock.current = true
@@ -158,7 +158,7 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
       <Button className="mt-2" size="sm" disabled={busy || countdown.expired} onClick={() => {
         const actor = getAuthenticatedActor()
         if (!actor || profileProgress(actorToUser(actor)) < 5) {
-          onMessage('Vui lòng hoàn thiện Hồ sơ trước khi thanh toán trước 20% (giữ chỗ): SĐT, CCCD và người liên hệ khẩn cấp.')
+          onMessage('Vui lòng cập nhật đủ số điện thoại, giấy tờ tùy thân và người liên hệ khẩn cấp trong Hồ sơ trước khi thanh toán giữ chỗ.')
           return
         }
         setAcceptedNoRefund(false); setPayOpen(true)
@@ -172,7 +172,7 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
           <p className="font-bold text-stone-900">Thông tin khách hàng đã khai báo</p>
           <div className="mt-2 grid gap-x-4 gap-y-1.5 sm:grid-cols-2">
             <p><span className="text-stone-500">Họ và tên:</span> <b>{displayValue(reservation.customerName)}</b></p>
-            <p><span className="text-stone-500">CCCD/CMND:</span> <b>{displayValue(reservation.identityDocumentNumber)}</b></p>
+            <p><span className="text-stone-500">CCCD/Hộ chiếu:</span> <b>{displayValue(reservation.identityDocumentNumber)}</b></p>
             <p><span className="text-stone-500">Số điện thoại:</span> <b>{displayValue(reservation.customerPhone)}</b></p>
             <p className="break-all"><span className="text-stone-500">Email:</span> <b>{displayValue(reservation.customerEmail)}</b></p>
             <p className="sm:col-span-2"><span className="text-stone-500">Địa chỉ:</span> <b>{displayValue(reservation.customerAddress)}</b></p>

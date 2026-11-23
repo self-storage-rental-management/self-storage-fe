@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import CustomerReservationCard, { ReservationPreparationNotice } from './CustomerReservationCard'
+import InventoryAppointmentPanel from './InventoryAppointmentPanel'
 import { paymentCountdown, reservationProgress, reservationStatusLabels } from './reservationPresentation'
 import ReservationReceipt from './ReservationReceipt'
-import type { CustomerReservation, ReservationPaymentResult, ReservationStatus } from '../../services/customerReservationApi'
+import type { CustomerReservation, CustomerReservationDetail, ReservationPaymentResult, ReservationStatus } from '../../services/customerReservationApi'
 
 beforeEach(() => { vi.useFakeTimers().setSystemTime(new Date('2026-11-01T09:55:00Z')) })
 afterEach(() => { vi.useRealTimers() })
@@ -97,16 +98,46 @@ describe('customer reservation layout regression', () => {
   })
   it('shows the two customer gates before inventory', () => {
     expect(render('AWAITING_CUSTOMER_RECEIPT')).toContain('Xác nhận đã nhận kho')
-    expect(render('PREPARING')).not.toContain('Sẵn sàng để kiểm kê')
+    expect(render('PREPARING')).not.toContain('Đã setup xong')
 
     const notice = (checkInStatus: string) => renderToStaticMarkup(
       <ReservationPreparationNotice checkInStatus={checkInStatus} submitting={false} onReady={() => {}} />,
     )
-    expect(notice('setup_in_progress')).toContain('Sẵn sàng để kiểm kê')
-    expect(notice('handover_pending_receipt')).toContain('Sẵn sàng để kiểm kê')
+    expect(notice('setup_in_progress')).toContain('Đã setup xong')
+    expect(notice('handover_pending_receipt')).toContain('Đã setup xong')
     expect(notice('setup_completed')).toContain('Đang chờ nhân viên kiểm kê')
-    expect(notice('setup_completed')).not.toContain('Sẵn sàng để kiểm kê')
+    expect(notice('setup_completed')).not.toContain('Đã setup xong')
     expect(notice('completed')).toContain('Đã hoàn tất kiểm kê')
+  })
+
+  it('shows the booked inventory time in Vietnam and keeps it distinct from the deadline', () => {
+    const detail = {
+      reservation: base, setupCompletedAt: '2026-11-01T08:00:00Z', inventoryAppointmentAt: '2026-11-02T09:30:00Z',
+      inventoryDueAt: '2026-11-05T08:00:00Z', inventoryFinalDeadlineAt: '2026-11-08T08:00:00Z',
+      inventoryResolutionStatus: 'NOT_STARTED',
+    } as CustomerReservationDetail
+    const html = renderToStaticMarkup(<InventoryAppointmentPanel detail={detail} now={Date.now()} onSaved={vi.fn()} />)
+    expect(html).toContain('02/11/2026 16:30')
+    expect(html).toContain('05/11/2026 15:00')
+    expect(html).toContain('08/11/2026 15:00')
+    expect(html).toContain('Đổi lịch kiểm kê')
+  })
+
+  it('hides appointment changes after arrival, after expiry and after a result is published', () => {
+    const detail = {
+      reservation: base, inventoryAppointmentAt: '2026-11-02T09:30:00Z',
+      inventoryFinalDeadlineAt: '2026-11-08T08:00:00Z', inventoryResolutionStatus: 'NOT_STARTED',
+    } as CustomerReservationDetail
+    const cases: Array<[Partial<CustomerReservationDetail>, number, string]> = [
+      [{ inventoryArrivedAt: '2026-11-02T09:00:00Z' }, Date.parse('2026-11-02T09:05:00Z'), 'Đang chờ xác minh danh tính.'],
+      [{}, Date.parse('2026-11-08T08:00:00Z'), 'Đã quá hạn kiểm kê'],
+      [{ inventoryResolutionStatus: 'PENDING_CUSTOMER' }, Date.now(), 'Staff đã công bố kết quả kiểm kê'],
+    ]
+    for (const [overrides, now, text] of cases) {
+      const html = renderToStaticMarkup(<InventoryAppointmentPanel detail={{ ...detail, ...overrides }} now={now} onSaved={vi.fn()} />)
+      expect(html).toContain(text)
+      expect(html).not.toContain('Đổi lịch kiểm kê')
+    }
   })
   it('requires an explicit cancellation confirmation', () => {
     const html = render('AWAITING_EMAIL')

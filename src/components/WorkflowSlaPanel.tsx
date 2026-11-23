@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { apiRequest } from '../services/apiClient'
 import { userFacingError } from '../presentation/userFacingError'
 import { Button, Modal } from './ui'
+import { parseVietnamDate, vietnamDateTimeInput } from '../utils/vietnamTime'
 
 const stages = { OPEN: 'Đang chờ', WARNING: 'Sắp đến hạn', OVERDUE: 'Quá hạn' }
 const owners = { CUSTOMER: 'Khách hàng', STAFF: 'Nhân viên', MANAGER: 'Quản lý', BUSINESS: 'BO', ADMIN: 'Admin' }
@@ -94,8 +95,10 @@ export default function WorkflowSlaPanel({ onClose }: { onClose: () => void }) {
   const [readError, setReadError] = useState('')
   const [editing, setEditing] = useState<WorkItem>()
   const [note, setNote] = useState('')
+  const [newDeadline, setNewDeadline] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
+  const extending = editing?.workflow === 'INVENTORY_CHECK' || editing?.workflow === 'INVENTORY_REMOVAL'
 
   useEffect(() => {
     let active = true
@@ -114,19 +117,27 @@ export default function WorkflowSlaPanel({ onClose }: { onClose: () => void }) {
   )
 
   async function saveResolution() {
-    if (!editing || saving || !note.trim()) return
+    if (!editing || saving || !note.trim() || (extending && !newDeadline)) return
     setSaving(true)
     setSaveError('')
     try {
-      await apiRequest(`/api/workflow-sla/check-in-rejections/${editing.resourceId}/resolve`, {
+      const endpoint = extending
+        ? `/api/workflow-sla/inventory/${editing.resourceId}/extend`
+        : `/api/workflow-sla/check-in-rejections/${editing.resourceId}/resolve`
+      await apiRequest(endpoint, {
         method: 'POST',
-        body: JSON.stringify({ note: note.trim() }),
+        body: JSON.stringify(extending ? {
+          workflow: editing.workflow,
+          previousDueAt: editing.dueAt,
+          dueAt: parseVietnamDate(newDeadline).toISOString(),
+          note: note.trim(),
+        } : { note: note.trim() }),
       })
       setEditing(undefined)
       setNote('')
       setRefresh((value) => value + 1)
     } catch (error) {
-      setSaveError(userFacingError(error, 'Chưa lưu được kết quả xử lý.'))
+      setSaveError(userFacingError(error, extending ? 'Chưa gia hạn được hồ sơ.' : 'Chưa lưu được kết quả xử lý.'))
     } finally {
       setSaving(false)
     }
@@ -163,14 +174,20 @@ export default function WorkflowSlaPanel({ onClose }: { onClose: () => void }) {
             event.preventDefault()
             void saveResolution()
           }}>
+            {extending && <label className="grid gap-1 font-medium">
+              Hạn mới theo giờ Việt Nam
+              <input required type="datetime-local" className="rounded-md border border-stone-300 px-3 py-2"
+                min={vietnamDateTimeInput(Math.max(Date.now(), Date.parse(editing.dueAt)) + 60_000)}
+                value={newDeadline} onChange={event => setNewDeadline(event.target.value)} disabled={saving} />
+            </label>}
             <label className="grid gap-1 font-medium">
-              Kết quả xử lý {editing.description}
+              {extending ? 'Lý do chậm do cơ sở' : `Kết quả xử lý ${editing.description}`}
               <textarea autoFocus maxLength={1000} rows={3} className="rounded-md border border-stone-300 px-3 py-2 font-normal"
                 value={note} onChange={(event) => setNote(event.target.value)} disabled={saving} />
             </label>
             {saveError && <p role="alert" className="text-red-800">{saveError}</p>}
             <div className="flex flex-wrap gap-2">
-              <Button type="submit" disabled={saving || !note.trim()}>Lưu kết quả</Button>
+              <Button type="submit" disabled={saving || !note.trim() || (extending && !newDeadline)}>{extending ? 'Lưu gia hạn' : 'Lưu kết quả'}</Button>
               <Button type="button" variant="outline" disabled={saving} onClick={() => setEditing(undefined)}>Hủy</Button>
             </div>
           </form>
@@ -195,8 +212,9 @@ export default function WorkflowSlaPanel({ onClose }: { onClose: () => void }) {
                   <td className="p-3">{row.canResolve && <Button size="sm" variant="outline" disabled={saving} onClick={() => {
                     setEditing(row)
                     setNote('')
+                    setNewDeadline('')
                     setSaveError('')
-                  }}>Ghi kết quả</Button>}</td>
+                  }}>{row.workflow === 'CHECKIN_REJECTION' ? 'Ghi kết quả' : 'Gia hạn do cơ sở'}</Button>}</td>
                 </tr>
               ))}
             </tbody>

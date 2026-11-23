@@ -145,6 +145,8 @@ svg:not(.recharts-surface):not(.show-icon) { display: none !important; }
 .ui-button-primary { background: var(--action-primary); color: var(--action-primary-ink); }
 .ui-button-primary:hover { background: var(--action-primary-hover); }
 .ui-button-primary:active { background: var(--action-primary-active); }
+.ui-button-primary.renewal-confirm-button:disabled,
+.ui-button-primary.booking-confirm-button:disabled { background: #e7e5e4; color: #57534e; opacity: 1; }
 .ui-button-secondary { background: var(--action-secondary); color: var(--text-primary); }
 .ui-button-secondary:hover { background: var(--action-secondary-hover); }
 .ui-button-secondary:active { background: var(--border-control); }

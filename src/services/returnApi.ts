@@ -75,6 +75,7 @@ export interface ApiReturn {
   inventoryMatch?: 'match' | 'missing' | 'excess' | null
   damageClassification?: 'no_damage' | 'minor_damage' | 'major_damage' | 'abandoned_goods' | null
   status: typeof returnStatuses[number]; scheduledDate: string
+  inventoryRemovalDeadlineAt?: string | null
   returnType?: 'CANCELLED_IN_SETUP' | 'RETURN_IN_SETUP' | 'INVENTORY_MISMATCH' | 'EARLY_RETURN' | 'NORMAL'
   settlementMode?: 'AUTO' | 'MANUAL_REVIEW'
   inspectionNotes: string | null; managerResolutionNote: string | null
@@ -146,7 +147,7 @@ export function isApiReturn(v: unknown): v is ApiReturn {
     (v.settlementPaymentId === undefined || v.settlementPaymentId === null || typeof v.settlementPaymentId === 'string') &&
     (v.settlementPaidAt === undefined || v.settlementPaidAt === null || (typeof v.settlementPaidAt === 'string' && Number.isFinite(Date.parse(v.settlementPaidAt)))) &&
     (v.completedAt === undefined || v.completedAt === null || (typeof v.completedAt === 'string' && Number.isFinite(Date.parse(v.completedAt)))) &&
-    ['noShowAt', 'recoveryEligibleAt', 'recoveryTaskCreatedAt'].every(k => v[k] === undefined || v[k] === null || (typeof v[k] === 'string' && Number.isFinite(Date.parse(v[k])))) &&
+    ['noShowAt', 'recoveryEligibleAt', 'recoveryTaskCreatedAt', 'inventoryRemovalDeadlineAt'].every(k => v[k] === undefined || v[k] === null || (typeof v[k] === 'string' && Number.isFinite(Date.parse(v[k])))) &&
     (v.recoveryWitnessStaffId === undefined || v.recoveryWitnessStaffId === null || isUuid(v.recoveryWitnessStaffId)) &&
     (v.recoveryWitnessStaffName === undefined || v.recoveryWitnessStaffName === null || typeof v.recoveryWitnessStaffName === 'string') &&
     (v.recoveryTaskDeadlineAt === undefined || v.recoveryTaskDeadlineAt === null || (typeof v.recoveryTaskDeadlineAt === 'string' && Number.isFinite(Date.parse(v.recoveryTaskDeadlineAt)))) &&

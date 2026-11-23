@@ -76,7 +76,7 @@ describe("CustomerRenewalRequestModal UI improvement", () => {
 
     // Verify rich alert card is rendered
     expect(html).toContain("Gian kho này đã có yêu cầu gia hạn đang mở")
-    expect(html).toContain("Hợp đồng thuê này đã được tạo một yêu cầu gia hạn trước đó")
+    expect(html).toContain("Vui lòng xem hoặc thanh toán yêu cầu hiện có trước khi tạo yêu cầu mới.")
 
     // Verify old confusing buttons are gone
     expect(html).not.toContain("Xác nhận và xem yêu cầu")
@@ -104,6 +104,7 @@ describe("CustomerRenewalRequestModal UI improvement", () => {
     expect(html).toContain("Gói gia hạn")
     expect(html).toContain("Hủy")
     expect(html).toContain("Xác nhận và xem yêu cầu")
+    expect(html).toMatch(/<button[^>]*class="[^"]*renewal-confirm-button[^"]*"[^>]*disabled=""[^>]*>Xác nhận và xem yêu cầu<\/button>/)
 
     // No conflict alert card
     expect(html).not.toContain("Gian kho này đã có yêu cầu gia hạn đang mở")

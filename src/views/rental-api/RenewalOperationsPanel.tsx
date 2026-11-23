@@ -247,7 +247,7 @@ export function OperationEventCard({
   )
 }
 
-export function RenewalOperationsSummary({ state: s, role, cashRecorded = false }: { state: RenewalOperationState; role?: RenewalOperationsRole; cashRecorded?: boolean }) {
+export function RenewalOperationsSummary({ state: s, role, cashRecorded = false, showProgress = true }: { state: RenewalOperationState; role?: RenewalOperationsRole; cashRecorded?: boolean; showProgress?: boolean }) {
   const { copy } = useManagerPresentation()
   const progressSteps = [
     { label: "Thanh toán tiền thuê trả trước", detail: "Khoản tiền thuê gia hạn trả trước đã được ghi nhận", done: !!s.depositPaidAt || ["SIGNING", "SIGNING_EXPIRY_PENDING", "SIGNING_EXPIRED", "COMPLETED"].includes(s.phase) },
@@ -265,7 +265,7 @@ export function RenewalOperationsSummary({ state: s, role, cashRecorded = false 
         <h4 className="font-semibold">Đã ghi nhận khách không đến</h4>
         <p className="mt-1 text-sm leading-6">Lịch ký và phần giữ chỗ cho kỳ gia hạn đã được giải phóng. Gian kho khách đang thuê vẫn giữ nguyên; khoản đã thu đang chờ đối soát theo chính sách.</p>
       </section>}
-      {role === "staff" && s.phase !== "NO_SHOW" && <section className="space-y-3 rounded-xl border border-stone-200 bg-stone-50 p-3" aria-label="Tiến trình gia hạn cho nhân viên">
+      {role === "staff" && showProgress && s.phase !== "NO_SHOW" && <section className="space-y-3 rounded-xl border border-stone-200 bg-stone-50 p-3" aria-label="Tiến trình gia hạn cho nhân viên">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h4 className="font-semibold">Tiến trình gia hạn</h4>
@@ -305,8 +305,8 @@ export function RenewalOperationsSummary({ state: s, role, cashRecorded = false 
           </div>
           {s.originalSigningDeadline && s.originalSigningDeadline !== s.effectiveSigningDeadline && <p>Hạn ký ban đầu: {rentalDate(s.originalSigningDeadline)}</p>}
           <div>
-            <p className="font-semibold text-stone-800">Hạn gia hạn hợp đồng đã hết hạn: {rentalDate(s.recoveryCutoff)}</p>
-            <p className="mt-1">Sau mốc này, liên hệ cơ sở để trả kho và thanh toán khoản còn thiếu.</p>
+            <p className="font-semibold text-stone-800">Thời điểm cuối có thể gia hạn: {rentalDate(s.recoveryCutoff)}</p>
+            <p className="mt-1">Từ thời điểm này, bạn không thể gia hạn. Vui lòng liên hệ cơ sở để trả kho và thanh toán khoản còn thiếu.</p>
           </div>
         </div>
       </details>
@@ -410,6 +410,7 @@ export default function RenewalOperationsPanel({
   onLocked,
   onDocumentEvent,
   appointmentOnly = false,
+  embedded = false,
 }: {
   id: string
   role: RenewalOperationsRole
@@ -420,6 +421,7 @@ export default function RenewalOperationsPanel({
   onLocked?: (locked: boolean) => void
   onDocumentEvent?: (event: RenewalOperationEvent) => void
   appointmentOnly?: boolean
+  embedded?: boolean
 }) {
   const { manager, copy, errorText } = useManagerPresentation()
 
@@ -457,11 +459,13 @@ export default function RenewalOperationsPanel({
   const actions: RenewalOperationAction[] =
     role === "customer"
       ? [
-          read.data?.appointmentRef ? "reschedule" : "appointment",
+          ...(read.data?.phase === "COMPLETED" ? [] : [
+            read.data?.appointmentRef ? "reschedule" as const : "appointment" as const,
+          ]),
           ...(!appointmentOnly && read.data?.pendingExceptionRef ? ["confirmation" as const] : []),
         ]
       : role === "staff"
-        ? ["arrival", "cash", "completion", "noShow"]
+        ? ["arrival", "cash", "completion"]
         : ["exception", "refund"]
   const lock = useCallback((value: boolean) => {
     lockRef.current = value
@@ -476,11 +480,11 @@ export default function RenewalOperationsPanel({
     <div className="space-y-4 mt-4">
       {!appointmentOnly && <RenewalDepositSettlementPanel id={id} role={role} revision={read.data?.expectedVersion}
         onLocked={lock} onChanged={() => { read.refresh();setRevision(value => value + 1);onChanged?.() }} />}
-      {!appointmentOnly && role === "staff" && <RenewalRiskNotice renewalId={id} role="staff" revision={read.data?.expectedVersion} facilityId={facilityId} />}
+      {!appointmentOnly && role === "staff" && !embedded && <RenewalRiskNotice renewalId={id} role="staff" revision={read.data?.expectedVersion} facilityId={facilityId} />}
       <ApiReadState {...read} retry={refresh} />
       {read.data && (
         <>
-          {!appointmentOnly && <RenewalOperationsSummary state={read.data} role={role} cashRecorded={cashRecorded} />}
+          {!appointmentOnly && <RenewalOperationsSummary state={read.data} role={role} cashRecorded={cashRecorded} showProgress={!embedded} />}
           {role === "manager" && !selected && <RenewalCoordinationPanel
             key={`${identity}:${revision}`}
             state={read.data} facilityId={facilityId} status={status}
@@ -500,7 +504,7 @@ export default function RenewalOperationsPanel({
             </div>
           )}
           {successMessage && <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">{successMessage}</p>}
-          {!appointmentOnly && <Card className="p-4 space-y-3">
+          {!appointmentOnly && actions.length > 0 && <Card className="p-4 space-y-3">
             {role === "staff" && <h3 className="text-sm font-semibold text-stone-900">Xử lý ký gia hạn</h3>}
             <div className={role === "staff" ? "grid gap-3 lg:grid-cols-3" : "grid gap-3 sm:grid-cols-2"}>
               {actions.map((action) => {
@@ -602,14 +606,14 @@ export default function RenewalOperationsPanel({
         />
       )}
       {role === "staff" && !appointmentOnly && <>
-        <EventTimeline
+        {!embedded && <EventTimeline
           key={`${identity}:${revision}:payments`}
           identity={`${identity}:${revision}`}
           role={role}
           id={id}
           category="payments"
-        />
-        <EventTimeline
+        />}
+        {!embedded && <EventTimeline
           key={`${identity}:${revision}:documents`}
           identity={`${identity}:${revision}`}
           role={role}
@@ -619,7 +623,28 @@ export default function RenewalOperationsPanel({
             ...(paymentEventsRead.data?.data ?? []),
             ...(lastEvent ? [lastEvent] : []),
           ]}
-        />
+        />}
+        {read.data && (() => {
+          const reason = read.data.phase === "COMPLETED"
+            ? "Gia hạn đã hoàn tất."
+            : operationBlockedReason(read.data, role, "noShow", actor, facilityId, customerId, proposalRead.data, now)
+          return <div className="rounded-lg border border-rose-200 bg-rose-50 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold text-stone-700">Ngoại lệ lịch hẹn</p>
+                {reason && <details className="relative">
+                  <summary aria-label="Xem lý do không thể ghi nhận khách không đến" className="flex h-5 w-5 cursor-pointer list-none items-center justify-center rounded-full border border-rose-300 text-xs font-semibold text-rose-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-700">i</summary>
+                  <p role="status" className="absolute left-0 top-7 z-10 w-64 max-w-[70vw] rounded-lg border border-stone-200 bg-white p-2 text-xs leading-5 text-stone-700 shadow-md">{copy(reason)}</p>
+                </details>}
+              </div>
+              <Button type="button" size="sm" variant="danger" disabled={!!reason || locked} onClick={() => {
+                if (lockRef.current || reason) return
+                setSuccessMessage(undefined)
+                setSelected({ action: "noShow", state: read.data! })
+              }}>Khách không đến</Button>
+            </div>
+          </div>
+        })()}
       </>}
       {!appointmentOnly && role !== "staff" && (
         <EventTimeline
