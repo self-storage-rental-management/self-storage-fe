@@ -13,6 +13,7 @@ import {
   getRenewalCustomerIdentity,
   getRenewalExceptionProposal,
   getRenewalPayableStatement,
+  hasRenewalIncident,
   isUuid,
   listAllRenewalPaymentEvents,
   listRenewalOperationEvents,
@@ -43,7 +44,7 @@ import {
 } from "./operationsPresentation"
 import { rentalDate, rentalError, rentalMoney, unknown } from "./presentation"
 import RenewalExceptionProposalCard from "./RenewalExceptionProposalCard"
-import RenewalCoordinationPanel from "../rental-support-integration/RenewalCoordinationPanel"
+import RenewalCoordinationPanel, { canCoordinateRenewal } from "../rental-support-integration/RenewalCoordinationPanel"
 import { EvidenceUpload, EvidenceDownload } from "../rental-support-integration/EvidenceControls"
 
 export const operationsInputClass =
@@ -450,6 +451,11 @@ export default function RenewalOperationsPanel({
     `${identity}:${revision}:${read.data?.expectedVersion}:${read.data?.pendingExceptionRef}:proposal`,
     () => role === "customer" && read.data?.pendingExceptionRef ? getRenewalExceptionProposal(id) : Promise.resolve(null),
   )
+  const incidentRead = useRentalApiResource(
+    `${identity}:${revision}:incident-availability:${read.data?.expectedVersion}`,
+    () => role === "manager" && !!read.data && canCoordinateRenewal(facilityId)
+      ? hasRenewalIncident(id) : Promise.resolve(null),
+  )
   const [now, setNow] = useState(Date.now)
   useEffect(() => {
     if (role !== "customer" && role !== "staff") return
@@ -466,7 +472,11 @@ export default function RenewalOperationsPanel({
         ]
       : role === "staff"
         ? ["arrival", "cash", "completion"]
-        : ["exception", "refund"]
+        : incidentRead.data === true && read.data
+          ? (["exception", "refund"] as RenewalOperationAction[]).filter(action =>
+              !operationBlockedReason(read.data!, role, action, actor, facilityId, customerId, proposalRead.data, now)
+              && (action !== "refund" || ["payments:read", "payments:collect", "refunds:approve"].every(permission => actor?.permissions.includes(permission))))
+          : []
   const lock = useCallback((value: boolean) => {
     lockRef.current = value
     setLocked(value)
@@ -485,7 +495,10 @@ export default function RenewalOperationsPanel({
       {read.data && (
         <>
           {!appointmentOnly && <RenewalOperationsSummary state={read.data} role={role} cashRecorded={cashRecorded} showProgress={!embedded} />}
-          {role === "manager" && !selected && <RenewalCoordinationPanel
+          {role === "manager" && incidentRead.loading && <p role="status" className="text-sm text-stone-500">Đang kiểm tra sự cố...</p>}
+          {role === "manager" && !!incidentRead.error && <div role="alert" className="text-sm text-stone-600">Không tải được danh sách sự cố. <Button type="button" variant="outline" onClick={incidentRead.refresh}>Thử lại</Button></div>}
+          {role === "manager" && incidentRead.data === false && <p className="text-sm text-stone-500">Chưa có sự cố cần xử lý.</p>}
+          {role === "manager" && incidentRead.data === true && !selected && <RenewalCoordinationPanel
             key={`${identity}:${revision}`}
             state={read.data} facilityId={facilityId} status={status}
             onLocked={lock} onChanged={event => { if (event) setLastEvent(event); lock(false); setRevision(v => v + 1); onChanged?.() }}

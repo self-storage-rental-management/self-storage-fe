@@ -59,6 +59,11 @@ export function isOperationState(
   const r = value as RenewalOperationState | null
   return (
     !!r &&
+    (r.appointmentDetails == null || (
+      typeof r.appointmentDetails === "object" &&
+      [r.appointmentDetails.customerName, r.appointmentDetails.customerEmail].every(v => v == null || typeof v === "string") &&
+      (r.appointmentDetails.proposedEndDate == null || /^\d{4}-\d{2}-\d{2}$/.test(r.appointmentDetails.proposedEndDate))
+    )) &&
     (r.rentalDisplayCode == null || (typeof r.rentalDisplayCode === "string" && /^SH-\d{6}$/.test(r.rentalDisplayCode))) &&
     (r.renewalSequence == null || (Number.isSafeInteger(r.renewalSequence) && r.renewalSequence > 0)) &&
     (r.displayCode == null || (typeof r.displayCode === "string" && /^(?:SH-\d{6}|GH-\d{4}-\d{6})$/.test(r.displayCode))) &&
@@ -327,6 +332,17 @@ export async function listAllRenewalPaymentEvents(role: RenewalOperationsRole, i
     events.push(...next.data)
   }
   return { ...first, data: events }
+}
+export async function hasRenewalIncident(id: string) {
+  const first = await listRenewalOperationEvents("manager", id, "facility-incidents", 0, 100)
+  const totalPages = first.pagination.totalPages
+  if (!Number.isInteger(totalPages) || totalPages > 1000) throw new Error("Số trang lịch sử sự cố không hợp lệ.")
+  if (first.data.some(event => event.kind === "INCIDENT")) return true
+  for (let page = 1; page < totalPages; page++) {
+    const next = await listRenewalOperationEvents("manager", id, "facility-incidents", page, 100)
+    if (next.data.some(event => event.kind === "INCIDENT")) return true
+  }
+  return false
 }
 function linkedEvent(event: RenewalOperationEvent, id: string) {
   const d = event.data as Record<string, unknown>

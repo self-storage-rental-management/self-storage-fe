@@ -1,4 +1,3 @@
-import { invoiceNumberLabel } from '../customer/paymentLabels'
 import { useManagerPresentation } from "../manager/managerPresentation"
 import RenewalRiskNotice from "./RenewalRiskNotice"
 import { Button, Card, Modal } from "../../components/ui"
@@ -18,7 +17,7 @@ import {
 } from "./presentation"
 import RenewalReceipt from "../customer/RenewalReceipt"
 import RenewalStatusPanel from './RenewalStatusPanel'
-import { reconciledRenewalPayment, renewalPaymentDisplayLabel, renewalPaymentDisplayStatus, renewalProgress, renewalWorkflowLabel } from './renewalStatusPresentation'
+import { reconciledRenewalPayment, renewalPaymentDisplayLabel, renewalPaymentDisplayStatus, renewalProgress, renewalProgressInterruption, renewalWorkflowLabel } from './renewalStatusPresentation'
 
 const renewalStepCardClass = "rounded-xl border border-amber-200 bg-amber-50/40 p-3.5 text-sm"
 
@@ -77,7 +76,8 @@ export default function RenewalDetail({
     r.status === "full_rent_paid" ||
     (r.statusSummary?.transactions?.some((t) => t.status === "SUCCEEDED" && t.amount > 0) ?? false)
   const verification = r.systemVerification
-  const workflowStatusLabel = paymentExpired ? "Đã hết hạn thanh toán, đang đối soát VNPay"
+  const interruption = renewalProgressInterruption(r, paymentExpired)
+  const workflowStatusLabel = interruption ? interruption.label
     : r.statusSummary ? renewalWorkflowLabel(r) : r.status === "accepted" && r.approvedPaymentDeadline
     ? isCustomer ? "Đã mở thanh toán qua VNPay thử nghiệm" : hasDeposit ? "Đã mở thanh toán tiền thuê trả trước qua VNPay thử nghiệm" : "Đã mở thanh toán toàn kỳ qua VNPay thử nghiệm"
     : r.status === "accepted" && verification?.status === "VERIFIED"
@@ -98,23 +98,15 @@ export default function RenewalDetail({
         { label: "Đối chiếu & ký", detail: "Staff xác minh, nhận tiền còn lại và lưu hợp đồng đã ký" },
       ]
 
-  const renewalProgressIndex = isCustomer
-    ? r.status === "completed"
-      ? 3
-      : customerHasPaid
-        ? 2
-        : 1
-    : renewalProgress(r, payment)
-
-  const renewalTerminalMessage = r.statusSummary?.workflowStatus === 'NO_SHOW' ? 'Cơ sở đã ghi nhận khách không đến. Nếu còn lượt và còn hạn ký, bạn có thể đổi lịch mà không cần trả trước lần nữa.'
-    : r.statusSummary?.workflowStatus === 'SIGNING_EXPIRED' ? 'Hạn ký gia hạn đã hết. Khoản đã thu được theo dõi riêng để đối soát và xử lý theo chính sách.'
-    : r.statusSummary?.workflowStatus === 'ON_HOLD' ? 'Hồ sơ đang tạm dừng xử lý. Vui lòng kiểm tra điều kiện, điều khoản hoặc khoản hoàn trước khi tiếp tục.'
-    : r.status === "rejected" ? "Yêu cầu bị từ chối. Xem lý do quyết định bên dưới."
-    : r.status === "cancelled" ? "Yêu cầu đã hủy. Các khoản đã thu cần được đối soát theo giao dịch."
-      : r.status === "payment_expired" && r.statusSummary?.workflowStatus === "AWAITING_RECONCILIATION"
-        ? "Yêu cầu đã đóng và lịch ký đã được nhả. Cơ sở đang đối soát giao dịch cũ. Bạn chưa thể mở lượt thanh toán mới."
-      : r.status === "payment_expired" ? "Yêu cầu đã đóng vì hết hạn thanh toán. Bạn có thể tạo yêu cầu mới nếu hợp đồng còn đủ điều kiện."
-        : null
+  const workflowStage = r.statusSummary?.workflowStatus
+  const renewalCompleted = r.status === "completed" || workflowStage === "COMPLETED"
+  const reachedSigning = workflowStage === "AWAITING_SIGNING" || workflowStage === "SIGNING_IN_PROGRESS"
+    || workflowStage === "NO_SHOW" || workflowStage === "SIGNING_EXPIRED"
+  const renewalProgressIndex = renewalCompleted
+    ? renewalProgressSteps.length
+    : isCustomer
+      ? (customerHasPaid || reachedSigning ? 2 : 1)
+      : renewalProgress(r, payment)
   const actions: {
     action: RenewalApiAction
     label: string
@@ -145,7 +137,7 @@ export default function RenewalDetail({
           <p className="mt-1 text-sm font-semibold text-stone-700">{renewalDisplayLabel(r)}</p>
           <p className="text-sm text-stone-600">{r.facility.name.replace(/[--]/g, "-")}, {r.customer.fullName}</p>
         </div>
-        <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800" aria-label="Trạng thái hồ sơ gia hạn">{workflowStatusLabel}</span>
+        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${interruption ? "bg-rose-50 text-rose-800" : "bg-blue-50 text-blue-800"}`} aria-label="Trạng thái hồ sơ gia hạn">{workflowStatusLabel}</span>
       </div>
       <section className="space-y-3 rounded-xl border border-stone-200 bg-stone-50 p-3" aria-label="Tiến trình hồ sơ gia hạn">
         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -153,27 +145,26 @@ export default function RenewalDetail({
             <h4 className="font-semibold">Tiến trình gia hạn</h4>
             <p className="text-xs text-stone-500">Đã hoàn thành {renewalProgressIndex}/{renewalProgressSteps.length} bước</p>
           </div>
-          {renewalTerminalMessage
-            ? <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">{r.statusSummary?.workflowStatus === 'NO_SHOW' ? 'Khách không đến' : 'Đang tạm dừng'}</span>
-            : renewalProgressIndex === renewalProgressSteps.length
-              ? <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">Gia hạn hoàn tất</span>
-              : <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">Đang thực hiện: {renewalProgressSteps[renewalProgressIndex]?.label}</span>}
+          {!interruption && renewalProgressIndex < renewalProgressSteps.length && <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">Đang thực hiện: {renewalProgressSteps[renewalProgressIndex]?.label}</span>}
         </div>
         <div className={`grid gap-2 sm:grid-cols-2 ${isCustomer ? "xl:grid-cols-3" : "xl:grid-cols-5"}`}>
           {renewalProgressSteps.map((step, index) => {
             const completed = index < renewalProgressIndex
-            const current = index === renewalProgressIndex && renewalProgressIndex < renewalProgressSteps.length
+            const current = !interruption && index === renewalProgressIndex
+            const stepStatus = completed ? "Đã xong" : current ? "Hiện tại"
+              : interruption ? (index === renewalProgressIndex && interruption.stepLabel) || "Chưa hoàn thành"
+              : "Sắp tới"
             return <div key={step.label} aria-current={current ? "step" : undefined} className={`rounded-lg border p-3 ${completed ? "border-emerald-200 bg-emerald-50 text-emerald-950" : current ? "border-amber-400 bg-amber-500 text-white" : "border-stone-200 bg-white text-stone-400"}`}>
               <div className="mb-2 flex items-center justify-between gap-1">
                 <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${completed ? "bg-emerald-600 text-white" : current ? "bg-white text-amber-700" : "bg-stone-100 text-stone-500"}`}>{index + 1}</span>
-                <span className="text-[10px] font-semibold">{completed ? "Đã xong" : current ? "Hiện tại" : "Sắp tới"}</span>
+                <span className="text-[10px] font-semibold">{stepStatus}</span>
               </div>
               <p className="text-xs font-bold">{step.label}</p>
               <p className={`mt-1 text-[11px] leading-4 ${current ? "text-amber-50" : completed ? "text-emerald-800" : "text-stone-500"}`}>{step.detail}</p>
             </div>
           })}
         </div>
-        {renewalTerminalMessage && <p role="status" className="rounded-lg border border-red-200 bg-red-50 p-2 text-sm text-red-800">{renewalTerminalMessage}</p>}
+        {interruption && <p role="status" className="rounded-lg border border-rose-200 bg-rose-50 p-2 text-sm text-rose-800">{interruption.message}</p>}
       </section>
       <dl className="rounded-lg border border-stone-200 p-3 text-sm">
         <div>
@@ -187,9 +178,7 @@ export default function RenewalDetail({
       {r.reviewReason && <p>Lý do quyết định: {r.reviewReason}</p>}
       {r.cancellationReason && <p>Lý do hủy: {r.cancellationReason === "AUTO_RECOVERY_DAY_8" ? "Đã qua ngày quá hạn thứ 7, hồ sơ chuyển sang xử lý thu hồi kho. Tiền thuê trả trước đang chờ đối soát nguyên nhân." : r.cancellationReason}</p>}
       <div className="space-y-3">
-          {r.statusSummary ? <RenewalStatusPanel summary={r.statusSummary} onReceipt={setReceiptPaymentId}
-            invoice={role === "customer" && payment?.invoiceNumber?.trim() ? { paymentId: payment.paymentId, number: payment.invoiceNumber } : undefined}
-          /> : <p className="rounded-lg border border-stone-200 p-3 text-sm text-stone-600" role="status">Chưa xác định được bảng kê khoản phải thu. Cần đối soát trước khi xác nhận số tiền đã thanh toán hoặc còn phải thu.</p>}
+          {r.statusSummary ? <RenewalStatusPanel summary={r.statusSummary} onReceipt={setReceiptPaymentId} /> : <p className="rounded-lg border border-stone-200 p-3 text-sm text-stone-600" role="status">Chưa xác định được bảng kê khoản phải thu. Cần đối soát trước khi xác nhận số tiền đã thanh toán hoặc còn phải thu.</p>}
           {role === "customer" && paymentInSummary && paymentDetail &&
             <p className="text-sm leading-5 text-stone-600" role="status">{paymentDetail}</p>}
           {role === "customer" && payment && !paymentInSummary && <section className={`rounded-xl border p-4 ${payment.reconciliationRequired ? "border-amber-200 bg-amber-50/50" : "border-stone-200 bg-white"}`} aria-label="Thanh toán gia hạn" aria-live="polite">
@@ -201,7 +190,6 @@ export default function RenewalDetail({
               <div className="min-w-0">
                 <p className="text-xl font-bold tracking-tight text-stone-900">{rentalMoney(payment.amount, payment.currency)}</p>
                 {payment.paidAt && <p className="mt-1 text-xs text-stone-500">Thanh toán lúc {rentalDate(payment.paidAt)}</p>}
-                <p className="mt-1 text-xs text-stone-500">Số hóa đơn: {invoiceNumberLabel(payment.invoiceNumber)}{payment.invoiceNumber?.trim() && `, ${payment.invoiceStatus}`}</p>
               </div>
               {canViewReceipt && <Button type="button" size="sm" variant="outline" className="shrink-0 self-start sm:self-auto" onClick={() => setReceiptPaymentId(payment.paymentId)}>Xem biên lai</Button>}
             </div>
@@ -218,14 +206,10 @@ export default function RenewalDetail({
           <div className="mt-4 space-y-5 text-sm">
             <section aria-label="Thông tin gia hạn">
               <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Thông tin gia hạn</h4>
-              <dl className="grid gap-3 rounded-lg bg-stone-50 p-3 sm:grid-cols-2">
-                <div><dt className="text-stone-500">Gói gia hạn</dt><dd className="mt-1 font-semibold text-stone-900">{terms.rentalMonths} tháng</dd></div>
-                <div><dt className="text-stone-500">{extensionPeriodLabel}</dt><dd className="mt-1 font-semibold text-stone-900">{rentalDate(extensionStartDate)} → {rentalDate(extensionEndDate)}</dd></div>
-                {terms.signingWindowDays != null && <div className="sm:col-span-2"><dt className="text-stone-500">Thời gian đến ký</dt><dd className="mt-1 text-stone-900">{terms.signingWindowDays} ngày từ khi thanh toán khoản trả trước thành công, trong giới hạn xử lý quá hạn.</dd></div>}
-              </dl>
+              {terms.signingWindowDays != null && <dl className="rounded-lg bg-stone-50 p-3"><div><dt className="text-stone-500">Thời hạn đến cơ sở ký gia hạn</dt><dd className="mt-1 text-stone-900">Sau khi thanh toán khoản trả trước thành công, bạn có tối đa {terms.signingWindowDays} ngày để đến ký. Thời hạn này có thể ngắn hơn nếu đến hạn xử lý quá hạn trước.</dd></div></dl>}
               <p className="mt-2 text-xs leading-5 text-stone-600">{terms.continuousPeriod
-                ? "Kỳ mới nối tiếp kỳ cũ. Bảng kê gia hạn không cộng phí quá hạn cho các ngày đã nằm trong kỳ thuê mới."
-                : "Theo báo giá đã lưu, nếu hoàn tất muộn thì kỳ mới bắt đầu từ ngày ký và phí quá hạn tính riêng cho các ngày trước đó."}</p>
+                ? "Kỳ thuê mới bắt đầu ngay sau kỳ thuê hiện tại. Bạn không bị tính phí quá hạn cho những ngày thuộc kỳ thuê mới."
+                : "Theo báo giá đã lưu, nếu hoàn tất muộn, kỳ thuê mới bắt đầu từ ngày ký. Phí quá hạn cho những ngày trước đó được tính riêng."}</p>
             </section>
             <section aria-label="Chi phí gia hạn">
               <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Chi phí gia hạn</h4>
@@ -238,12 +222,10 @@ export default function RenewalDetail({
             </section>
             <section aria-label="Kế hoạch thanh toán">
               <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Kế hoạch thanh toán</h4>
-              <dl className="grid gap-2 sm:grid-cols-2">
-                {hasDeposit ? <>
+              {hasDeposit && <dl className="grid gap-2 sm:grid-cols-2">
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-3"><dt className="text-amber-900">Tiền thuê gia hạn trả trước</dt><dd className="mt-1 text-lg font-semibold text-amber-950">{rentalMoney(terms.renewalDepositAmount, terms.currency)}</dd></div>
                   <div className="rounded-lg border border-stone-200 p-3"><dt className="text-stone-600">Tiền thuê còn lại khi ký</dt><dd className="mt-1 text-lg font-semibold text-stone-900">{rentalMoney(terms.remainingRentalAmount, terms.currency)}</dd></div>
-                </> : <div className="rounded-lg border border-amber-200 bg-amber-50 p-3"><dt className="text-amber-900">Tiền cần thanh toán</dt><dd className="mt-1 text-lg font-semibold text-amber-950">{rentalMoney(terms.totalAfterDiscount, terms.currency)}</dd></div>}
-              </dl>
+              </dl>}
               <p className="mt-2 text-xs leading-5 text-stone-600">{hasDeposit && 'Tiền thuê gia hạn trả trước được trừ vào tiền thuê kỳ mới. '}Tiền bảo đảm kho được giữ sang kỳ mới. Phí quá hạn và các phí phát sinh hợp lệ được ghi trong bảng kê thanh toán.</p>
             </section>
             {isManager && <p className="rounded-lg bg-stone-50 p-3 text-xs text-stone-600">Đây là số tiền theo báo giá, chưa xác nhận đã phát sinh nghĩa vụ hoặc đã thu tiền.</p>}
@@ -256,25 +238,17 @@ export default function RenewalDetail({
         <p className="rounded bg-amber-50 p-3">
           Hồ sơ gia hạn đã được duyệt. Trạng thái này chưa xác nhận đã thanh toán hoặc hoàn tất ký, ngày kết thúc thuê chưa thay đổi.</p>
       )}
-      {r.status === "completed" && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-1">
-          <h4 className="font-bold text-emerald-900 text-sm">Gia hạn hợp đồng thành công</h4>
-          <p className="text-xs text-emerald-800 leading-relaxed">
-            Hợp đồng thuê của bạn đã được gia hạn thành công. Thời hạn mới có hiệu lực đến ngày <b>{rentalDate(r.newEndDate)}</b>.
-          </p>
-        </div>
-      )}
       {!isManager && r.reviewState === "AWAITING_CUSTOMER_CONFIRMATION" && <p role="status" className="text-amber-700">
         Báo giá đã thay đổi. Vui lòng lấy báo giá mới và xác nhận lại trước khi tiếp tục thanh toán.
       </p>}
-      {isCustomer && customerHasPaid && r.status !== "completed" && !renewalTerminalMessage && !payment?.reconciliationRequired && (
+      {isCustomer && customerHasPaid && !renewalCompleted && !interruption && !payment?.reconciliationRequired && (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50/90 p-4 space-y-1.5" role="status">
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-emerald-600 shrink-0" />
-            <h4 className="font-bold text-emerald-950 text-sm">Đã ghi nhận thanh toán gia hạn</h4>
+            <h4 className="font-bold text-emerald-950 text-sm">Bước tiếp theo</h4>
           </div>
           <p className="text-xs text-emerald-900 leading-relaxed">
-            Hệ thống đã ghi nhận khoản thanh toán. Vui lòng theo dõi lịch hẹn và đến cơ sở ký gia hạn. Thời hạn thuê mới có hiệu lực sau khi nhân viên đối soát đủ tiền và xác nhận hoàn tất ký.
+            Vui lòng theo dõi lịch hẹn và đến cơ sở ký gia hạn. Thời hạn thuê mới có hiệu lực sau khi nhân viên đối soát đủ tiền và xác nhận hoàn tất ký.
           </p>
         </div>
       )}
@@ -289,9 +263,7 @@ export default function RenewalDetail({
           </div>
         </details>
       )}
-      {paymentExpired ? (
-        <p className="text-sm text-stone-600">Hạn thanh toán đã qua. Hệ thống đang kiểm tra kết quả VNPay, khi xác nhận chưa thu tiền, yêu cầu sẽ được đóng để bạn có thể gửi yêu cầu gia hạn mới.</p>
-      ) : canOpenPayment ? (
+      {!paymentExpired && canOpenPayment ? (
         <div className={renewalStepCardClass}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>

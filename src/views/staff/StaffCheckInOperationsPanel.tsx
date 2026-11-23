@@ -435,7 +435,7 @@ const workflowStepLabels = [
 
 type CheckInFilters = Pick<NonNullable<Parameters<typeof listCheckIns>[0]>, "q" | "status" | "scheduledFrom" | "scheduledTo">
 
-const checkInTableColumnWidths = ["16%", "15%", "13%", "16%", "10%", "30%"] as const
+const checkInTableColumnWidths = ["16%", "19%", "15%", "11%", "15%", "24%"] as const
 
 function CheckInTableColumns() {
   return (
@@ -478,10 +478,10 @@ function CheckInWorkList({ group, filters, refreshKey, now, renderRow }: {
   const title = group === "ONGOING" ? "Đang diễn ra" : "Đã xử lý"
   return (
     <section aria-label={title}>
-      <Card className="overflow-hidden">
-        <div className="flex items-center justify-between gap-2 border-b border-stone-200 px-4 py-3">
-          <h2 className="text-sm font-semibold text-stone-900">{title}</h2>
-          {result && <span className="text-xs text-stone-500">{totalItems} hồ sơ</span>}
+      <Card className="overflow-hidden !rounded-2xl !border !border-stone-200 !bg-white !shadow-none">
+        <div className="flex items-center justify-between gap-3 px-4 py-4">
+          <h2 className="text-base font-semibold text-stone-900">{title}</h2>
+          {result && <span className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs text-stone-600">{totalItems} hồ sơ</span>}
         </div>
         {error ? <p role="alert" className="p-4 text-sm text-red-800">{error}</p>
           : !result ? <p className="py-8 text-center text-sm text-stone-500">Đang tải hồ sơ…</p>
@@ -490,7 +490,7 @@ function CheckInWorkList({ group, filters, refreshKey, now, renderRow }: {
               {group === "ONGOING" ? "Không có đơn đang diễn ra phù hợp." : "Không có đơn đã xử lý phù hợp."}
             </p>
           ) : (
-            <Table tableClassName="min-w-[1420px] table-fixed">
+            <Table tableClassName="check-in-work-table min-w-[1100px] table-fixed">
               <CheckInTableColumns />
               <Thead>
                 <Tr>
@@ -1563,21 +1563,21 @@ export default function StaffCheckInOperationsPanel({
     const receiptState = receiptConfirmationState(item, now)
     const receiptRelease = receiptReleaseState(item, now)
     return (
-    <Tr key={item.reservationId}>
+    <Tr key={item.reservationId} className="[&_td]:align-top">
       <Td>
-        <b className="font-mono">{item.reservationCode}</b>
+        <b className="font-mono [overflow-wrap:anywhere]">{item.reservationCode}</b>
         <p className="mt-1 text-xs text-stone-500">
           {item.facilityName}
         </p>
       </Td>
       <Td>
-        <b>{item.customerName}</b>
-        <p className="mt-1 text-xs text-stone-500">
+        <b className="[overflow-wrap:anywhere]">{item.customerName}</b>
+        <p className="mt-1 text-xs text-stone-500 [overflow-wrap:anywhere]">
           {item.customerEmail}
         </p>
       </Td>
       <Td>
-        <b className="font-mono">{item.storageUnitCode}</b>
+        <b className="font-mono [overflow-wrap:anywhere]">{item.storageUnitCode}</b>
         <p className="mt-1 text-xs text-stone-500">
           {staffStorageUnitStatusLabel(item.storageUnitStatus)}
         </p>
@@ -1604,6 +1604,7 @@ export default function StaffCheckInOperationsPanel({
         )}
       </Td>
       <Td>
+        <span className={item.checkInStatus === "scheduled" && !receiptRelease.eligible && !receiptState.expired ? "check-in-status-scheduled" : "check-in-status"}>
         <Badge
           variant={
             receiptRelease.eligible || receiptState.expired
@@ -1624,9 +1625,10 @@ export default function StaffCheckInOperationsPanel({
             ? "Đã quá hạn xác nhận nhận kho"
             : staffCheckInStatusLabel(item.checkInStatus, item.reservationStatus)}
         </Badge>
+        </span>
       </Td>
-      <Td className="min-w-[320px] whitespace-nowrap text-right">
-        <div className="flex flex-nowrap items-center justify-end gap-1 whitespace-nowrap">
+      <Td className="text-right">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {group === "ONGOING" && item.checkInStatus !== "completed" && (
             <>
               {item.checkInStatus === "handover_pending_receipt" && item.checkInId && <Button
@@ -1714,12 +1716,13 @@ export default function StaffCheckInOperationsPanel({
         title="Nhận kho & bàn giao"
         subtitle="Xác minh, ký hợp đồng, thu tiền và ghi nhận bàn giao kho trống. Nhân viên kiểm kê sau khi khách báo đã chuẩn bị hàng xong."
       />
-      <Card className="p-4">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(260px,1.7fr)_minmax(180px,1fr)_minmax(150px,.8fr)_minmax(150px,.8fr)_auto] xl:items-end">
+      <div className="border-b border-stone-200 px-4 pb-6">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[minmax(220px,2fr)_minmax(150px,1.1fr)_minmax(150px,1fr)_minmax(150px,1fr)_auto] xl:items-end">
           <Input
             label="Tìm kiếm"
+            className="h-12 !border-stone-200 !bg-white"
             value={queryInput}
-            placeholder="Mã đơn, khách hàng, thư điện tử hoặc mã kho"
+            placeholder="Mã đơn, khách hàng, email hoặc mã kho"
             onChange={(event) => setQueryInput(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
@@ -1729,6 +1732,7 @@ export default function StaffCheckInOperationsPanel({
           />
           <Select
             label="Trạng thái"
+            className="h-12 !border-stone-200 !bg-white"
             value={statusInput}
             onChange={(event) =>
               setStatusInput(event.target.value as CheckInListStatus | "")
@@ -1751,30 +1755,32 @@ export default function StaffCheckInOperationsPanel({
           <Input
             label="Lịch nhận từ ngày"
             type="date"
+            className="h-12 !border-stone-200 !bg-white"
             value={scheduledFromInput}
             onChange={(event) => setScheduledFromInput(event.target.value)}
           />
           <Input
             label="Đến ngày"
             type="date"
+            className="h-12 !border-stone-200 !bg-white"
             value={scheduledToInput}
             min={scheduledFromInput || undefined}
             onChange={(event) => setScheduledToInput(event.target.value)}
           />
           <div className="flex gap-2 md:col-span-2 xl:col-span-1">
-            <Button className="flex-1 xl:flex-none" onClick={applyFilters}>
+            <Button className="h-12 flex-1 !bg-[#a64e00] !text-white hover:!bg-[#893f00] xl:flex-none" onClick={applyFilters}>
               Lọc
             </Button>
             <Button
-              className="flex-1 xl:flex-none"
-              variant="outline"
+              className="h-12 flex-1 !text-stone-600 xl:flex-none"
+              variant="ghost"
               onClick={resetFilters}
             >
               Đặt lại
             </Button>
           </div>
         </div>
-      </Card>
+      </div>
       {error && !handoverTarget && !rejectTarget && !noShowTarget && !detailTarget && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
           {error}

@@ -69,7 +69,6 @@ export default function CustomerRenewalRequestModal({
   const [quoteError, setQuoteError] = useState<unknown>()
   const [quoteBusy, setQuoteBusy] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
-  const [startInfoOpen, setStartInfoOpen] = useState(false)
   const command = useRenewalCommand()
   const isConflictOpenRenewal = isOpenRenewalConflict(command.error)
   const [existingRenewalId, setExistingRenewalId] = useState<string>()
@@ -186,44 +185,9 @@ export default function CustomerRenewalRequestModal({
               </select>
             </label>
 
-            <div>
-              <div className="flex h-7 items-center gap-1">
-                <label htmlFor="renewal-start-date" className="text-[15px] font-semibold text-stone-900">Ngày bắt đầu</label>
-                <div className="relative" onMouseEnter={() => setStartInfoOpen(true)} onMouseLeave={() => setStartInfoOpen(false)} onKeyDown={(event) => {
-                  if (event.key === "Escape" && startInfoOpen) {
-                    event.stopPropagation()
-                    setStartInfoOpen(false)
-                  }
-                }}>
-                  <button
-                    type="button"
-                    aria-label="Giải thích ngày bắt đầu gia hạn"
-                    aria-describedby={startInfoOpen ? "renewal-start-policy" : undefined}
-                    onFocus={() => setStartInfoOpen(true)}
-                    onBlur={() => setStartInfoOpen(false)}
-                    className="flex h-7 w-7 items-center justify-center rounded-full text-stone-500 hover:bg-stone-100 hover:text-stone-800 focus-visible:outline-2 focus-visible:outline-amber-600"
-                  >
-                    <span className="text-xs font-semibold text-stone-500">[?]</span>
-                  </button>
-                  <div hidden={!startInfoOpen} className="absolute right-0 top-full z-20 w-64 max-w-[calc(100vw-4rem)] pt-1">
-                  <p id="renewal-start-policy" role="tooltip" className="rounded-lg border border-stone-200 bg-white p-3 text-sm leading-relaxed text-stone-600 shadow-md">
-                    Ngày bắt đầu kỳ mới nối tiếp ngày kết thúc kỳ thuê hiện tại.
-                  </p>
-                  </div>
-                </div>
-              </div>
-              <input
-                id="renewal-start-date"
-                type="text"
-                className="mt-1 h-11 w-full min-w-0 rounded-lg border border-stone-300 bg-white px-3 py-2 text-[15px]"
-                value={quote ? rentalDate(quote.extensionStartDate) : ""}
-                placeholder="dd/mm/yyyy"
-                readOnly
-                aria-describedby="renewal-start-policy"
-              />
-            </div>
           </div>
           {quote && <div className="mt-3 px-2"><QuoteLine label="Thời gian gia hạn" value={<>{rentalDate(quote.extensionStartDate)} - {rentalDate(quote.newEndDate)}</>} /></div>}
+          <p className="mt-2 text-xs text-stone-600">Ngày bắt đầu kỳ mới nối tiếp ngày kết thúc kỳ thuê hiện tại.</p>
           </section>
         )}
         {options.data?.length === 0 && (
