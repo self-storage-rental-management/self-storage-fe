@@ -255,6 +255,9 @@ export interface RenewalCustomerIdentity {
   customerId: string
   fullName: string | null
   identityDocumentNumber: string | null
+  phone?: string | null
+  unitCode?: string | null
+  rentalMonths?: number | null
 }
 export async function getRenewalCustomerIdentity(id: string) {
   return readRentalEnvelope<RenewalCustomerIdentity>(
