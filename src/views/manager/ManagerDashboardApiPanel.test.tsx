@@ -47,6 +47,17 @@ describe('Manager dashboard uses the current facility report', () => {
     expect(verified).not.toContain('Chưa đủ dữ liệu')
     expect(verified).toContain('>0<')
   })
+  it('shows Vietnamese business labels instead of raw return type codes', () => {
+    state.cashflow = { data: { ...(state.cashflow.data as object), settlements: [{
+      id: 'return-1', reservationCode: 'RSV-1', customerName: 'Khách',
+      status: 'completed', reason: 'EARLY_RETURN', deposit: 100, rentalCredit: 0,
+      deductions: 0, refund: 100, paidAt: '2026-11-24T00:00:00Z',
+      reference: 'RF-1', payoutRecorded: true,
+    }] } }
+    const html = render()
+    expect(html).toContain('Trả kho trước hạn')
+    expect(html).not.toContain('EARLY_RETURN')
+  })
   it.each(['loading', 'error'])('hides stale metrics while %s without inventing zero amounts', status => {
     state.summary = {
       data: { ...summary, monthlyRecurringRevenue: 888888888 },
