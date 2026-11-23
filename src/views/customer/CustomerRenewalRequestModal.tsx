@@ -10,7 +10,6 @@ import {
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import { useRenewalCommand } from "../../hooks/useRenewalCommand"
 import type { RenewalApiOption, RenewalApiQuote, RenewalApiRecord } from "../../types/renewalApi"
-import { DEFAULT_PACKAGE_DISCOUNTS } from "../../domain/packageRules"
 import ApiReadState from "../rental-api/ApiReadState"
 import RenewalRiskNotice from "../rental-api/RenewalRiskNotice"
 import {
@@ -18,6 +17,16 @@ import {
   rentalError,
   rentalMoney,
 } from "../rental-api/presentation"
+
+const discountPercent = new Intl.NumberFormat("vi-VN", { style: "percent", maximumFractionDigits: 2 })
+
+export function renewalOptionLabel(option: RenewalApiOption) {
+  const name = option.pricingPackageName?.trim().replace(/^gói\s+thuê(?=\s|\p{P}|$)/iu, "Gói gia hạn")
+    || `Gói gia hạn ${option.rentalMonths} tháng`
+  return option.discountRate === undefined
+    ? name
+    : `${name} – giảm ${discountPercent.format(option.discountRate)}`
+}
 
 function isOpenRenewalConflict(error: unknown): boolean {
   if (!error) return false
@@ -29,28 +38,6 @@ function isOpenRenewalConflict(error: unknown): boolean {
     msg.includes("open renewal") ||
     msg.includes("đã có yêu cầu gia hạn")
   )
-}
-
-export function formatRenewalOptionLabel(option: RenewalApiOption): string {
-  let name = option.pricingPackageName?.trim() || `Gói gia hạn ${option.rentalMonths} tháng`
-  if (/^gói\s+thuê(?:\s+|$)/i.test(name)) {
-    name = name.replace(/^gói\s+thuê(?:\s+|$)/i, "Gói gia hạn ")
-  } else if (/^gói(?:\s+|$)/i.test(name) && !/^gói\s+gia\s+hạn(?:\s+|$)/i.test(name)) {
-    name = name.replace(/^gói(?:\s+|$)/i, "Gói gia hạn ")
-  }
-  name = name.trim().replace(/gói\s+thuê/gi, "gói gia hạn")
-
-  let discountPercent = 0
-  if (option.discountRate !== undefined && option.discountRate !== null) {
-    discountPercent = option.discountRate <= 1 ? Math.round(option.discountRate * 100) : Math.round(option.discountRate)
-  } else {
-    discountPercent = DEFAULT_PACKAGE_DISCOUNTS[option.rentalMonths] ?? 0
-  }
-
-  if (!name.includes("%")) {
-    return `${name} (Giảm ${discountPercent}%)`
-  }
-  return name
 }
 
 export default function CustomerRenewalRequestModal({
@@ -167,7 +154,7 @@ export default function CustomerRenewalRequestModal({
                 <option value="">Chọn gói gia hạn</option>
                 {options.data.map((o) => (
                   <option key={o.pricingPackageCode} value={o.pricingPackageCode}>
-                    {formatRenewalOptionLabel(o)}
+                    {renewalOptionLabel(o)}
                   </option>
                 ))}
               </select>
@@ -216,7 +203,7 @@ export default function CustomerRenewalRequestModal({
         {options.data?.length === 0 && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-950 space-y-2">
             <p className="font-semibold text-sm text-amber-900">
-              Cơ sở hiện chưa có gói gia hạn còn hiệu lực để gia hạn.
+              Cơ sở hiện chưa có gói gia hạn còn hiệu lực.
             </p>
             <p className="text-xs text-amber-800 leading-relaxed">
               Kho này hiện chưa có gói ưu đãi gia hạn trực tuyến nào còn hiệu lực. Vui lòng liên hệ hotline cơ sở hoặc nhắn tin qua mục <b>Hỗ trợ</b> để được gán gói gia hạn phù hợp.
@@ -235,7 +222,7 @@ export default function CustomerRenewalRequestModal({
                 <QuoteLine label={`Tạm tính (${quote.rentalMonths} tháng)`} value={rentalMoney(quote.subtotal, quote.currency)} />
                 {quote.discountAmount > 0 && (
                   <QuoteLine
-                    label={`Ưu đãi gói (${Math.round(quote.discountRate * 100)}%)`}
+                    label={`Ưu đãi gói (${discountPercent.format(quote.discountRate)})`}
                     value={`- ${rentalMoney(quote.discountAmount, quote.currency)}`}
                     valueClassName="!text-emerald-700"
                   />
@@ -253,7 +240,7 @@ export default function CustomerRenewalRequestModal({
                 <p className="font-semibold text-sm text-emerald-900">Thanh toán trực tuyến và ký tại cơ sở</p>
               </div>
               <p className="text-xs text-emerald-800 leading-relaxed">
-                Sau khi gửi yêu cầu, bạn có thể chọn lịch ký và thanh toán qua VNPay trong chi tiết hồ sơ. Kỳ thuê mới có hiệu lực sau khi nhân viên đối soát đủ tiền và hoàn tất ký tại cơ sở.
+                Sau khi gửi yêu cầu, hãy lưu lịch ký rồi trả trước 20% qua VNPay. Bạn thanh toán phần còn lại tại cơ sở khi ký phụ lục gia hạn.
               </p>
             </div>
             <details className="mt-3 text-sm text-stone-500">
@@ -261,7 +248,7 @@ export default function CustomerRenewalRequestModal({
               <div className="mt-2 space-y-2 leading-5 text-xs text-stone-600 rounded-lg border border-stone-200 bg-stone-50 p-3">
                 <p>• Tiền gia hạn được tính theo biểu giá ưu đãi đã niêm yết của cơ sở.</p>
                 <p>• Tiền cọc bảo đảm kho hiện tại được giữ nguyên để bảo đảm cho kỳ thuê mới mà không cần thu lại.</p>
-                <p>• Kỳ thuê mới có hiệu lực liên tục tiếp nối kỳ thuê hiện tại sau khi xác nhận thanh toán.</p>
+                <p>• Kỳ mới nối tiếp kỳ hiện tại nếu bạn hoàn tất gia hạn trước khi quá hạn. Nếu đã quá hạn, kỳ mới bắt đầu vào ngày hoàn tất ký tại cơ sở.</p>
 
               </div>
             </details>

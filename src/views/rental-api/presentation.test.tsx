@@ -7,6 +7,7 @@ import {
   rentalDate,
   rentalError,
   rentalMoney,
+  renewalDisplayLabel,
   unknown,
 } from "./presentation"
 import { RenewalAttempt, newRenewalIdempotencyKey } from "../../hooks/useRenewalCommand"
@@ -14,6 +15,15 @@ import { ApiClientError } from "../../services/apiClient"
 import { manager, rental, renewal, quote } from "../../../tests/rentalApiFixtures"
 
 describe("Rental/Renewal business presentation", () => {
+  it.each([
+    [{ rentalDisplayCode: "SH-184033", renewalSequence: 2 }, "SH-184033 · Gia hạn lần 2"],
+    [{ rentalDisplayCode: "SH-184033" }, "SH-184033 · Gia hạn"],
+    [{ renewalSequence: 2 }, "Hồ sơ thuê · Gia hạn lần 2"],
+    [{}, "Yêu cầu gia hạn"],
+  ])("uses the rental dossier as the public renewal identity", (identity, label) => {
+    expect(renewalDisplayLabel(identity)).toBe(label)
+  })
+
   it.each(["active", "ACTIVE"])("translates access status %s without changing its value or exposing credentials", status => {
     const detail = { ...rental, access: { completeness: "COMPLETE", status, reason: "PRIVATE_SOURCE_REASON" } }
     const html = renderToStaticMarkup(<RentalDetail rental={detail} />)

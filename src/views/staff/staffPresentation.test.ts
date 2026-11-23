@@ -3,6 +3,7 @@ import {
   compareStaffTaskSchedule,
   formatStaffDate,
   parseEmptyStorageHandover,
+  inventoryReportNote,
   staffCheckInStatusLabel,
   staffErrorMessage,
   staffGoodsCategoryLabel,
@@ -10,6 +11,12 @@ import {
 } from "./staffPresentation"
 
 describe("trình bày dữ liệu cho giao diện nhân viên", () => {
+  it("đọc đúng ghi chú kiểm kê mới và biên bản cũ ghép ghi chú xác minh", () => {
+    expect(inventoryReportNote("Ghi chú kiểm kê: Thiếu một kiện")).toBe("Thiếu một kiện")
+    expect(inventoryReportNote("Ghi chú xác minh: Đã xem CCCD\nGhi chú bàn giao: Kiện 2 bị móp", "Đã xem CCCD")).toBe("Kiện 2 bị móp")
+    expect(inventoryReportNote("Ghi chú xác minh: Đã xem CCCD", "Đã xem CCCD")).toBe("")
+    expect(inventoryReportNote("Nội dung cũ")).toBe("Nội dung cũ")
+  })
   it("giữ mã tệp bàn giao khi khách thêm ghi chú có dấu phẩy", () => {
     const first = "84ec5e47-685e-4ff5-abc5-76d81be44742"
     const last = "23ca7b74-54ff-4b46-811c-a98dd06516b6"

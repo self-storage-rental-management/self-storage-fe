@@ -6,12 +6,12 @@ import { Button, Card, Modal } from '../../components/ui'
 import VietnameseDateInput from '../../components/VietnameseDateInput'
 import { formatVndAmount as formatVnd } from '../../i18n/currency'
 import { confirmCustomerReceipt, downloadBookingDocument, downloadCustomerCheckInDocument, downloadCustomerReservationGoodsImage, generateBookingDocument, getCustomerCheckInDocuments, getCustomerReservation, markCustomerPreparationComplete, setCustomerCheckInAppointment, updateSetupGoods, type BookingDocument, type CheckInDocument, type CustomerFacility, type CustomerReservation, type CustomerReservationDetail, type CustomerUnitType, type GoodsItemInput, type ReservationPaymentResult } from '../../services/customerReservationApi'
-import { paymentCountdown, reservationProgress, reservationStatusLabels } from './reservationPresentation'
+import { goodsReviewLabels, paymentCountdown, reservationProgress, reservationStatusLabels } from './reservationPresentation'
 import CustomerPaymentComplaint from './CustomerPaymentComplaint'
 import CustomerReservationPayment from './CustomerReservationPayment'
 import ReservationReceipt from './ReservationReceipt'
 import { paymentMethodLabel } from './paymentLabels'
-import { formatPolicyDateTime, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyDateTimeInput, policyTimeInput } from '../../domain/reservationCheckInPolicy'
+import { formatPolicyDateTime, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyDateTimeInput, policyTimeInput, STAFF_REVIEW_HOURS } from '../../domain/reservationCheckInPolicy'
 import ReservationQuoteSummary from './ReservationQuoteSummary'
 import type { Facility, UnitType } from '../../types/storageHub'
 import { totalGoodsVolumeM3, formatGoodsVolume } from '../../domain/goodsMeasurements'
@@ -63,6 +63,35 @@ interface Props {
   visualTone?: 'active' | 'expired' | 'completed'
 }
 
+export function ReservationPreparationNotice({ checkInStatus, submitting, onReady }: {
+  checkInStatus: string | null | undefined
+  submitting: boolean
+  onReady: () => void
+}) {
+  const waitingForInventory = checkInStatus === 'setup_completed' || checkInStatus === 'completed'
+  const canReportPreparation = checkInStatus === 'setup_in_progress' || checkInStatus === 'handover_pending_receipt'
+
+  return (
+    <div className="rounded-lg border border-violet-300 bg-violet-50 p-3 text-right text-xs text-violet-950">
+      {waitingForInventory ? (
+        <p className="font-bold">{checkInStatus === 'completed' ? 'Đã hoàn tất kiểm kê' : 'Đang chờ nhân viên kiểm kê'}</p>
+      ) : (
+        <>
+          <p className="font-bold">Đang chuẩn bị hàng hóa</p>
+          {canReportPreparation && (
+            <>
+              <p className="mt-1">Sau khi sắp xếp hàng hóa xong, nhấn nút để báo nhân viên có thể kiểm kê.</p>
+              <Button type="button" className="mt-2" size="sm" disabled={submitting} onClick={onReady}>
+                {submitting ? 'Đang gửi…' : 'Sẵn sàng để kiểm kê'}
+              </Button>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 export default function CustomerReservationCard({ reservation: r, facilityName, unitTypeName, facilityDetails, unitTypeDetails, facility, unitType, onVerify, onCancel, onDelete, onRefresh, onReceiptConfirmed, onRequestSupport, visualTone = 'active' }: Props) {
   const [activeSection, setActiveSection] = useState<'information' | 'quote'>('information')
   const [detail, setDetail] = useState<CustomerReservationDetail | null>(null)
@@ -105,6 +134,8 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     r.goodsReviewStatus !== 'NOT_REQUIRED',
   )
   const progress = reservationProgress(r.status)
+  const checkInStatus = detail?.reservation.id === r.id ? detail.checkInStatus : undefined
+  const awaitingInventory = r.status === 'PREPARING' && (checkInStatus === 'setup_completed' || checkInStatus === 'completed')
   const inactive = progress === null
   const remainingPayment = detail?.payments?.find(payment => payment.purpose === 'RENTAL_BALANCE' && payment.paymentStatus === 'PAID') || null
   const goodsItems = detail?.goodsItems ?? []
@@ -155,7 +186,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     } finally { setBusy(false) }
   }
   const steps = [
-    { label: 'Phê duyệt hồ sơ', detail: r.goodsReviewStatus === 'PENDING' ? 'Nhân viên kiểm tra hàng hóa' : 'Hồ sơ được duyệt tự động' },
+    { label: 'Phê duyệt hồ sơ', detail: goodsReviewLabels[r.goodsReviewStatus] },
     { label: ['PAYMENT_GRACE', 'PAYMENT_REVIEW'].includes(r.status) ? 'Đối soát thanh toán' : 'Thanh toán phí giữ chỗ', detail: r.status === 'PAYMENT_GRACE' ? 'Chờ khách hàng gửi chứng từ' : r.status === 'PAYMENT_REVIEW' ? 'Đang kiểm tra chứng từ thanh toán' : 'Hoàn tất phí giữ chỗ' },
     { label: 'Quản lý phân kho', detail: r.assignedUnitCode ? `Đã phân ${r.assignedUnitCode}` : 'Chờ phân gian kho cụ thể' },
     { label: 'Nhận kho và ký', detail: 'Đối chiếu và ký tại cơ sở' },
@@ -216,12 +247,16 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     preparationLock.current = true
     setConfirmingPreparation(true); setMessage(null)
     try {
-      await markCustomerPreparationComplete(r.id, 'Khách hàng đã sắp xếp hàng và sẵn sàng để nhân viên kiểm kê.')
-      setMessage('Đã báo sẵn sàng để kiểm kê. Nhân viên sẽ thực hiện kiểm kê hàng hóa.')
+      const updated = await markCustomerPreparationComplete(r.id, 'Khách hàng đã sắp xếp hàng và sẵn sàng để nhân viên kiểm kê.')
+      setDetail(updated)
       try { await onRefresh() } catch { /* The preparation command has already succeeded. */ }
     } catch (error) {
       setMessage(userFacingError(error, 'Không thể báo đã chuẩn bị xong.'))
-      try { await onRefresh() } catch { /* Preserve the command error if readback is also unavailable. */ }
+      try {
+        const current = await getCustomerReservation(r.id)
+        setDetail(current)
+        if (current.checkInStatus === 'setup_completed' || current.checkInStatus === 'completed') setMessage(null)
+      } catch { /* Preserve the command error if readback is also unavailable. */ }
     }
     finally { preparationLock.current = false; setConfirmingPreparation(false) }
   }
@@ -341,7 +376,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         <h3 className="mt-4 mb-3 text-base font-bold text-stone-900">Thông tin đơn giữ kho</h3>
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-bold text-amber-700">{r.reservationCode}</span>
-          <span className={`rounded px-2.5 py-1 text-xs font-bold ${progress !== null && progress >= 3 ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{reservationStatusLabels[r.status]}</span>
+          <span className={`rounded px-2.5 py-1 text-xs font-bold ${progress !== null && progress >= 3 ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{awaitingInventory ? (checkInStatus === 'completed' ? 'Đã kiểm kê' : 'Chờ kiểm kê') : reservationStatusLabels[r.status]}</span>
         </div>
         <h2 className="mt-1 text-lg font-bold text-stone-900">{displayedUnitTypeName} · {displayedFacilityName}</h2>
         <div className="mt-3 space-y-2">
@@ -351,10 +386,15 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
       </div>
         <div className="reservation-card-actions flex w-full min-w-0 flex-col items-end gap-2 md:w-64 md:shrink-0">
         <div className="text-right"><p className="text-xs text-stone-500">Tổng thu cả kỳ (gồm tiền cọc đảm bảo kho)</p><p className="text-xl font-bold text-stone-900">{(r.totalInitialObligation == null ? "Chưa xác định" : formatVnd(r.totalInitialObligation))}</p><p className="text-xs text-amber-800">Trả lúc giữ chỗ: {(r.reservationDepositAmount == null ? "Chưa xác định" : formatVnd(r.reservationDepositAmount))}</p></div>
-        {r.status === 'AWAITING_REVIEW' && <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950"><p className="font-bold">Đang chờ nhân viên cơ sở duyệt hàng hóa</p><p className="mt-1">Thời gian giữ hồ sơ còn lại</p><p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{countdown.text}</p><p className="mt-1">Tối đa 24 giờ từ khi gửi yêu cầu.</p></div>}
+        {r.status === 'AWAITING_REVIEW' && <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950">
+          <p className="font-bold">Đang chờ nhân viên cơ sở duyệt hàng hóa</p>
+          <p className="mt-1">Thời gian duyệt còn lại</p>
+          <p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{countdown.text}</p>
+          <p className="mt-1">Nhân viên duyệt trong tối đa {STAFF_REVIEW_HOURS} giờ từ khi gửi đơn. Sau khi được duyệt, bạn có thể thanh toán cọc.</p>
+        </div>}
         <CustomerReservationPayment reservation={r} facilityName={displayedFacilityName} unitTypeName={displayedUnitTypeName} paymentExpiresAt={detail?.paymentExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />
         {r.status === 'AWAITING_CUSTOMER_RECEIPT' && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-right text-xs text-amber-950"><p className="font-bold">Nhân viên đã hoàn tất bàn giao</p><p className="mt-1">Vui lòng kiểm tra kho và mã ra vào, sau đó nhấn nút để báo đã sẵn sàng bàn giao.</p><Button type="button" className="mt-2" size="sm" disabled={confirmingReceipt} onClick={() => void confirmReceipt()}>{confirmingReceipt ? 'Đang xác nhận…' : 'Sẵn sàng bàn giao'}</Button></div>}
-        {r.status === 'PREPARING' && <div className="rounded-lg border border-violet-300 bg-violet-50 p-3 text-right text-xs text-violet-950"><p className="font-bold">Đang chuẩn bị hàng hóa</p><p className="mt-1">Sau khi đưa và sắp xếp hàng hóa xong, nhấn nút để Staff chuyển sang kiểm kê.</p><Button type="button" className="mt-2" size="sm" disabled={confirmingPreparation} onClick={() => void confirmPreparation()}>{confirmingPreparation ? 'Đang gửi…' : 'Sẵn sàng để kiểm kê'}</Button></div>}
+        {r.status === 'PREPARING' && <ReservationPreparationNotice checkInStatus={checkInStatus} submitting={confirmingPreparation} onReady={() => void confirmPreparation()} />}
         {documentAvailable && <Button variant="outline" size="sm" className="reservation-action reservation-action-document min-h-10 w-full justify-center" disabled={busy} onClick={() => void prepareBookingDocument()}>{busy ? 'Đang chuẩn bị…' : 'Xem phiếu giữ kho'}</Button>}
         {handoverDocumentsAvailable && <Button variant="outline" size="sm" className="min-h-10 w-full justify-center" disabled={busy} onClick={() => void loadHandoverDocuments()}>{busy ? 'Đang tải…' : 'Xem hợp đồng đã ký'}</Button>}
         {onRequestSupport && <Button type="button" variant="outline" size="sm" className="min-h-10 w-full justify-center" onClick={onRequestSupport}>Hỗ trợ đơn này</Button>}

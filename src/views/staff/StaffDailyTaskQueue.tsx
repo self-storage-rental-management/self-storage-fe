@@ -4,6 +4,7 @@ import { Badge, Button, Card, Input, Modal, Select, Table, Tbody, Td, Th, Thead,
 import { getAuthenticatedActor } from "../../services/authApi"
 import {
   completeMaintenanceTask,
+  formatMaintenanceTaskTitle,
   listStaffMaintenanceTasks,
   startMaintenanceTask,
   uploadMaintenanceEvidence,
@@ -109,6 +110,49 @@ function compareQueueRows(left: QueueRow, right: QueueRow, sort: StaffTaskSort) 
     : dueDifference || priorityDifference || left.title.localeCompare(right.title, "vi")
 }
 
+function TaskGroup({ title, rows, loading, renderRow }: {
+  title: string
+  rows: QueueRow[]
+  loading: boolean
+  renderRow: (row: QueueRow) => React.ReactNode
+}) {
+  const [page, setPage] = useState(1)
+  const pagination = paginateStaffItems(rows, page)
+  return (
+    <section aria-label={title}>
+      <Card className="overflow-hidden">
+        <div className="flex items-center justify-between gap-2 border-b border-stone-200 px-4 py-3">
+          <h3 className="text-sm font-semibold text-stone-900">{title}</h3>
+          <span className="text-xs text-stone-500">{rows.length} nhiệm vụ</span>
+        </div>
+        {rows.length > 0 ? (
+          <>
+            <Table tableClassName="min-w-[1040px] table-fixed">
+              <Thead>
+                <tr>
+                  <Th className="w-[30%]">Nhiệm vụ</Th>
+                  <Th className="w-[12%]">Nhóm</Th>
+                  <Th className="w-[17%]">Ghi chú / khách hàng</Th>
+                  <Th className="w-[10%]">Hạn xử lý</Th>
+                  <Th className="w-[9%]">Ưu tiên</Th>
+                  <Th className="w-[11%]">Trạng thái</Th>
+                  <Th className="w-[11%] text-right">Thao tác</Th>
+                </tr>
+              </Thead>
+              <Tbody>{pagination.items.map(renderRow)}</Tbody>
+            </Table>
+            <StaffPagination {...pagination} total={rows.length} onPageChange={setPage} />
+          </>
+        ) : (
+          <p className="px-4 py-8 text-center text-sm text-stone-500">
+            {loading ? "Đang tải nhiệm vụ…" : "Không có nhiệm vụ phù hợp bộ lọc."}
+          </p>
+        )}
+      </Card>
+    </section>
+  )
+}
+
 export default function StaffDailyTaskQueue({
   assignedTasks,
   operationalTasks,
@@ -146,7 +190,6 @@ export default function StaffDailyTaskQueue({
       ? listStaffMaintenanceTasks({ assignedStaffId: actor.id, page: 0, pageSize: 100 })
       : Promise.resolve(emptyMaintenancePage()),
   )
-  const [queuePage, setQueuePage] = useState(1)
   const [maintenanceCompletionTarget, setMaintenanceCompletionTarget] = useState<MaintenanceTaskApi | null>(null)
   const [maintenanceResult, setMaintenanceResult] = useState("")
   const [maintenanceEvidence, setMaintenanceEvidence] = useState<File[]>([])
@@ -161,10 +204,10 @@ export default function StaffDailyTaskQueue({
     const maintenanceRows: QueueRow[] = maintenanceTasks.map((task) => ({
       id: `maintenance-${task.id}`,
       kind: "maintenance",
-      title: `${task.title} · ${task.unitCode}`,
-      customer: task.facilityName,
+      title: formatMaintenanceTaskTitle(task),
+      customer: task.customerName?.trim() || "",
       sourceLabel: task.taskType === "inventory_check" ? "Kiểm kê đầu vào" : "Bảo trì",
-      notes: task.reason,
+      notes: task.taskType === "inventory_check" ? "" : task.reason,
       dueAt: task.dueAt || task.createdAt,
       priority: task.priority,
       status: task.status,
@@ -174,7 +217,7 @@ export default function StaffDailyTaskQueue({
       id: `assigned-${task.id}`,
       kind: "assigned",
       title: task.title,
-      customer: task.assignedStaffName || "Nhiệm vụ được giao",
+      customer: "",
       sourceLabel: taskTypeLabels[task.type],
       notes: task.notes || task.cancellationReason || "",
       dueAt: task.dueAt,
@@ -204,7 +247,6 @@ export default function StaffDailyTaskQueue({
     .filter((row) => priorityFilter === "all" || row.priority === priorityFilter)
     .sort((left, right) => compareQueueRows(left, right, sort)),
   [dateFilter, priorityFilter, rows, sort])
-  const pagination = paginateStaffItems(filteredRows, queuePage)
 
   const runMaintenance = async (work: () => Promise<MaintenanceTaskApi>, success: string) => {
     if (busyRef.current) return
@@ -243,78 +285,75 @@ export default function StaffDailyTaskQueue({
       : `Đã ghi nhận sửa chữa gian ${maintenanceCompletionTarget.unitCode}.`)
   }
 
-  const resetPageAnd = <T,>(callback: (value: T) => void, value: T) => {
-    setQueuePage(1)
-    callback(value)
+  const renderRow = (row: QueueRow) => {
+    const assigned = row.assignedTask
+    const maintenance = row.maintenanceTask
+    const operational = row.operationalTask
+    return (
+      <Tr key={row.id}>
+        <Td className="[overflow-wrap:anywhere]"><p className="font-semibold text-stone-900">{row.title}</p><p className="text-xs text-stone-400">{assigned?.id || maintenance?.id || operational?.id}</p></Td>
+        <Td><Badge variant="muted">{row.sourceLabel}</Badge></Td>
+        <Td className="text-xs [overflow-wrap:anywhere]">
+          {row.customer && <p>{row.customer}</p>}
+          {row.notes && <p className="text-stone-500">{row.notes}</p>}
+          {!row.customer && !row.notes && "—"}
+        </Td>
+        <Td className={`text-xs ${!isFinished(row.status) && new Date(row.dueAt).getTime() < Date.now() ? "font-semibold text-red-700" : ""}`}>{row.dueAt ? formatStaffDate(row.dueAt) : "Không đặt hạn"}</Td>
+        <Td><Badge variant={priorityVariant(row.priority)}>{priorityLabels[row.priority]}</Badge></Td>
+        <Td><Badge variant={queueStatusVariant(row.status)}>{queueStatusLabel(row.status)}</Badge></Td>
+        <Td className="text-right">
+          {assigned?.status === "open" && <Button size="sm" onClick={() => onAssignedStatus(assigned, "in_progress")}>Nhận việc</Button>}
+          {assigned?.status === "in_progress" && <Button size="sm" onClick={() => onOpenAssignedCompletion(assigned)}>Hoàn thành</Button>}
+          {maintenance?.taskType === "inventory_check" && !isFinished(maintenance.status) && <span className="text-xs font-semibold text-amber-700">Hoàn tất trong quy trình nhận kho</span>}
+          {maintenance?.taskType !== "inventory_check" && maintenance?.status === "open" && <Button size="sm" disabled={busy} onClick={() => void runMaintenance(() => startMaintenanceTask(maintenance.id), `Đã bắt đầu bảo trì gian ${maintenance.unitCode}.`)}>Bắt đầu</Button>}
+          {maintenance?.taskType !== "inventory_check" && maintenance?.status === "in_progress" && <Button size="sm" disabled={busy} onClick={() => { setMaintenanceCompletionTarget(maintenance); setMaintenanceResult(maintenance.resultReport || ""); setMaintenanceEvidence([]); setMakeUnitAvailable(true) }}>Hoàn thành</Button>}
+          {maintenance?.status === "completed" && <span className="text-xs font-semibold text-emerald-700">Đã gửi kết quả</span>}
+          {maintenance?.status === "cancelled" && <span className="text-xs font-semibold text-red-700">Đã hủy</span>}
+          {operational && <Button size="sm" variant="outline" onClick={() => onOpenOperational(operational)}>Mở hồ sơ</Button>}
+        </Td>
+      </Tr>
+    )
   }
 
   return (
-    <Card>
-      <div className="border-b border-stone-200 p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h3 className="font-bold text-stone-900">Danh sách nhiệm vụ cần xử lý</h3>
-            <p className="mt-1 text-xs text-stone-500">
-              Bảo trì, nhiệm vụ quản lý giao và hồ sơ vận hành được gom chung, quá hạn và ưu tiên cao nằm trên cùng.
-            </p>
+    <div className="space-y-4">
+      <Card>
+        <div className="border-b border-stone-200 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="font-bold text-stone-900">Danh sách nhiệm vụ ca làm</h3>
+            </div>
+            <Button variant="outline" size="sm" disabled={maintenanceRead.loading} onClick={() => maintenanceRead.refresh()}>
+              Tải lại
+            </Button>
           </div>
-          <Button variant="outline" size="sm" disabled={maintenanceRead.loading} onClick={() => maintenanceRead.refresh()}>
-            Tải lại
-          </Button>
         </div>
-      </div>
-      <div className="grid gap-3 border-b border-stone-200 p-4 sm:grid-cols-3">
-        <Input label="Ngày đến hạn" type="date" value={dateFilter} onChange={(event) => resetPageAnd(onDateFilterChange, event.target.value)} />
-        <Select label="Mức ưu tiên" value={priorityFilter} onChange={(event) => resetPageAnd(onPriorityFilterChange, event.target.value)}>
-          <option value="all">Tất cả mức ưu tiên</option>
-          <option value="high">Khẩn cấp</option>
-          <option value="medium">Trung bình</option>
-          <option value="low">Thông thường</option>
-        </Select>
-        <Select label="Sắp xếp" value={sort} onChange={(event) => resetPageAnd(onSortChange, event.target.value as StaffTaskSort)}>
-          <option value="priority">Ưu tiên xử lý trước</option>
-          <option value="due-asc">Đến hạn trước</option>
-        </Select>
-      </div>
+        <div className="grid gap-3 p-4 sm:grid-cols-3">
+          <Input label="Ngày đến hạn" type="date" value={dateFilter} onChange={(event) => onDateFilterChange(event.target.value)} />
+          <Select label="Mức ưu tiên" value={priorityFilter} onChange={(event) => onPriorityFilterChange(event.target.value)}>
+            <option value="all">Tất cả mức ưu tiên</option>
+            <option value="high">Khẩn cấp</option>
+            <option value="medium">Trung bình</option>
+            <option value="low">Thông thường</option>
+          </Select>
+          <Select label="Sắp xếp" value={sort} onChange={(event) => onSortChange(event.target.value as StaffTaskSort)}>
+            <option value="priority">Ưu tiên xử lý trước</option>
+            <option value="due-asc">Đến hạn trước</option>
+          </Select>
+        </div>
+      </Card>
       {Boolean(maintenanceRead.error) && <div className="border-b border-red-200 bg-red-50 p-3 text-sm text-red-800">{staffErrorMessage(maintenanceRead.error, "Không thể tải nhiệm vụ bảo trì.")}</div>}
-      <Table>
-        <Thead>
-          <tr><Th>Nhiệm vụ</Th><Th>Nhóm</Th><Th>Ghi chú / khách hàng</Th><Th>Hạn xử lý</Th><Th>Ưu tiên</Th><Th>Trạng thái</Th><Th /></tr>
-        </Thead>
-        <Tbody>
-          {pagination.items.map((row) => {
-            const assigned = row.assignedTask
-            const maintenance = row.maintenanceTask
-            const operational = row.operationalTask
-            return (
-              <Tr key={row.id}>
-                <Td><p className="font-semibold text-stone-900">{row.title}</p><p className="text-xs text-stone-400">{assigned?.id || maintenance?.id || operational?.id}</p></Td>
-                <Td><Badge variant="muted">{row.sourceLabel}</Badge></Td>
-                <Td className="max-w-xs text-xs"><p>{row.customer}</p><p className="mt-1 text-stone-500">{row.notes || "-"}</p></Td>
-                <Td className={`text-xs ${!isFinished(row.status) && new Date(row.dueAt).getTime() < Date.now() ? "font-semibold text-red-700" : ""}`}>{row.dueAt ? formatStaffDate(row.dueAt) : "Không đặt hạn"}</Td>
-                <Td><Badge variant={priorityVariant(row.priority)}>{priorityLabels[row.priority]}</Badge></Td>
-                <Td><Badge variant={queueStatusVariant(row.status)}>{queueStatusLabel(row.status)}</Badge></Td>
-                <Td className="text-right">
-                  {assigned?.status === "open" && <Button size="sm" onClick={() => onAssignedStatus(assigned, "in_progress")}>Nhận việc</Button>}
-                  {assigned?.status === "in_progress" && <Button size="sm" onClick={() => onOpenAssignedCompletion(assigned)}>Hoàn thành</Button>}
-                  {maintenance?.taskType === "inventory_check" && !isFinished(maintenance.status) && <span className="text-xs font-semibold text-amber-700">Hoàn tất trong quy trình nhận kho</span>}
-                  {maintenance?.taskType !== "inventory_check" && maintenance?.status === "open" && <Button size="sm" disabled={busy} onClick={() => void runMaintenance(() => startMaintenanceTask(maintenance.id), `Đã bắt đầu bảo trì gian ${maintenance.unitCode}.`)}>Bắt đầu</Button>}
-                  {maintenance?.taskType !== "inventory_check" && maintenance?.status === "in_progress" && <Button size="sm" disabled={busy} onClick={() => { setMaintenanceCompletionTarget(maintenance); setMaintenanceResult(maintenance.resultReport || ""); setMaintenanceEvidence([]); setMakeUnitAvailable(true) }}>Hoàn thành</Button>}
-                  {maintenance?.status === "completed" && <span className="text-xs font-semibold text-emerald-700">Đã gửi kết quả</span>}
-                  {maintenance?.status === "cancelled" && <span className="text-xs font-semibold text-red-700">Đã hủy</span>}
-                  {operational && <Button size="sm" variant="outline" onClick={() => onOpenOperational(operational)}>Mở hồ sơ</Button>}
-                </Td>
-              </Tr>
-            )
-          })}
-          {!pagination.items.length && <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-stone-500">{maintenanceRead.loading ? "Đang tải nhiệm vụ…" : "Không có nhiệm vụ phù hợp bộ lọc."}</td></tr>}
-        </Tbody>
-      </Table>
-      <StaffPagination {...pagination} total={filteredRows.length} onPageChange={setQueuePage} />
+      {[
+        { title: "Đang diễn ra", rows: filteredRows.filter(row => !isFinished(row.status)) },
+        { title: "Đã xử lý", rows: filteredRows.filter(row => isFinished(row.status)) },
+      ].map(group => (
+        <TaskGroup key={JSON.stringify([group.title, dateFilter, priorityFilter, sort])}
+          title={group.title} rows={group.rows} loading={maintenanceRead.loading} renderRow={renderRow} />
+      ))}
 
       <Modal open={Boolean(maintenanceCompletionTarget)} onClose={() => { if (!busy) setMaintenanceCompletionTarget(null) }} title="Hoàn thành nhiệm vụ bảo trì">
         {maintenanceCompletionTarget && <div className="space-y-4 p-1">
-          <div className="rounded-lg bg-stone-50 p-3 text-sm"><b>{maintenanceCompletionTarget.title} · {maintenanceCompletionTarget.unitCode}</b><p className="mt-1 text-xs text-stone-500">Mã nhiệm vụ: {maintenanceCompletionTarget.id}</p></div>
+          <div className="rounded-lg bg-stone-50 p-3 text-sm"><b>{formatMaintenanceTaskTitle(maintenanceCompletionTarget)}</b><p className="mt-1 text-xs text-stone-500">Mã nhiệm vụ: {maintenanceCompletionTarget.id}</p></div>
           <label className="block text-sm font-medium text-stone-700">Báo cáo kết quả<textarea className="mt-1 block min-h-24 w-full rounded border border-stone-300 p-2" maxLength={4000} disabled={busy} value={maintenanceResult} onChange={(event) => setMaintenanceResult(event.target.value)} placeholder="Mô tả hạng mục đã kiểm tra, sửa chữa và kết quả nghiệm thu…" /></label>
           <label className="block text-sm font-medium text-stone-700">Ảnh sửa chữa / nghiệm thu<input className="mt-1 block w-full rounded border border-stone-300 p-2 text-sm" type="file" accept="image/*" multiple disabled={busy} onChange={(event) => setMaintenanceEvidence((current) => [...current, ...Array.from(event.target.files || [])].slice(0, 10))} /></label>
           {maintenanceEvidence.length > 0 && <ul className="list-disc pl-5 text-xs text-stone-600">{maintenanceEvidence.map((file, index) => <li key={`${file.name}:${file.lastModified}:${index}`}>{file.name}</li>)}</ul>}
@@ -322,6 +361,6 @@ export default function StaffDailyTaskQueue({
           <div className="flex justify-end gap-2"><Button variant="outline" disabled={busy} onClick={() => setMaintenanceCompletionTarget(null)}>Đóng</Button><Button disabled={busy || !maintenanceResult.trim()} onClick={completeMaintenance}>{busy ? "Đang lưu…" : "Gửi báo cáo và hoàn thành"}</Button></div>
         </div>}
       </Modal>
-    </Card>
+    </div>
   )
 }
