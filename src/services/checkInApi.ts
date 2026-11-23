@@ -1,4 +1,5 @@
 import { ApiClientError, apiDownload, apiRequest } from './apiClient'
+import type { GoodsItemInput, GoodsCategory } from './customerReservationApi'
 import { isCheckInStatus, isReservationStatus, isPaymentStatus, type CheckInStatus as WorkflowCheckInStatus, type ReservationStatus, type PaymentStatus } from '../types/statusContracts'
 
 export type CheckInStatus = WorkflowCheckInStatus | null
@@ -25,6 +26,7 @@ export interface CheckInChecklist {
 }
 
 export interface CheckInInventoryLine {
+  actualGoods?: GoodsItemInput | null
   goodsItemId: string
   actualQuantity: number
   condition: 'INTACT' | 'DAMAGED' | 'NOT_PRESENT'
@@ -72,6 +74,13 @@ export interface CheckInCase {
     name: string | null
     categoryName?: string | null
     materialName?: string | null
+    catalogCategoryId?: string | null
+    catalogMaterialId?: string | null
+    category?: GoodsCategory | null
+    fragile?: boolean
+    stackable?: boolean
+    allowHorizontalPlacement?: boolean
+    maxStackLayers?: number
     quantity: number
     lengthCm: number | null
     widthCm: number | null

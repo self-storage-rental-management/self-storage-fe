@@ -1,3 +1,4 @@
+import { apiRequest } from '../../services/apiClient'
 import ReturnPolicyNotice from '../../components/ReturnPolicyNotice'
 import EmergencyContactsPanel from '../../components/EmergencyContactsPanel'
 import { useEffect, useRef, useState } from 'react'
@@ -244,6 +245,10 @@ function ReturnWorkspace({
 
   const rows = (read.data?.data.filter((item) => !rentalId || item.rentalId === rentalId) ?? [])
     .sort((left, right) => {
+      const due = (i: ApiReturn) => Date.parse(i.managerReviewDueAt || i.customerConfirmationDueAt || '')
+      const leftDue = due(left), rightDue = due(right)
+      if (Number.isFinite(leftDue) || Number.isFinite(rightDue))
+        return (Number.isFinite(leftDue) ? leftDue : Infinity) - (Number.isFinite(rightDue) ? rightDue : Infinity)
       const urgency = (item: ApiReturn) => item.status === 'recovery_required' ? 0 : item.status !== 'completed' && item.scheduledDate < today ? 1 : item.status === 'completed' ? 3 : 2
       return urgency(left) - urgency(right) || left.scheduledDate.localeCompare(right.scheduledDate)
     })
@@ -398,6 +403,15 @@ function ReturnWorkspace({
                 <span className="text-xs text-stone-500">
                   Hạn trả: <strong className="text-stone-700">{rentalDate(record.scheduledDate)}</strong>
                 </span>
+                {(record.managerReviewDueAt || record.customerConfirmationDueAt) && <span className="rounded bg-red-50 px-2 py-1 text-xs font-bold text-red-800">
+                  {record.managerReviewDueAt ? 'Hạn Manager duyệt 6 giờ' : 'Hạn xác nhận 72 giờ'}: {new Date(record.managerReviewDueAt || record.customerConfirmationDueAt!).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}
+                  {' · '}{Date.parse(record.managerReviewDueAt || record.customerConfirmationDueAt!) <= Date.now() ? 'Đã quá hạn' : `Còn ${Math.ceil((Date.parse(record.managerReviewDueAt || record.customerConfirmationDueAt!) - Date.now()) / 60_000)} phút`}
+                </span>}
+                {role === 'staff' && ['requested', 'scheduled'].includes(record.status) && <button type="button" disabled={busy} className="rounded border px-2 py-1 text-xs" onClick={async e => {
+                  e.stopPropagation()
+                  try { await apiRequest(`/api/intake-workflow/reservations/returns/${encodeURIComponent(record.id)}/arrival`, { method: 'POST' }); setFeedback('Đã ghi nhận khách bàn giao đủ điều kiện. Hạn nghiệm thu là 4 giờ làm việc.'); read.refresh() }
+                  catch { setFeedback('Chưa thể ghi nhận bàn giao. Vui lòng kiểm tra hồ sơ và thử lại.') }
+                }}>Ghi nhận bàn giao đủ điều kiện nghiệm thu</button>}
               </div>
 
               <div className="flex items-center gap-2.5 ml-auto">

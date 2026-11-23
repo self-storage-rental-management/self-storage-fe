@@ -736,6 +736,7 @@ export interface ReturnCase {
   customerDecisionNote?: string
   proposedUnitStatus?: 'available' | 'maintenance'
   inspectedAt?: string
+  managerApprovalRequired?: boolean
   completedAt?: string
   staffId?: string
   returnedItems?: { key: boolean; card: boolean; lock: boolean }

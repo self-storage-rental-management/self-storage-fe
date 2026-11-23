@@ -221,7 +221,7 @@ export default function StaffDailyTaskQueue({
   const maintenanceTasks = maintenanceRead.data?.data ?? []
   const witnessRead = useRentalApiResource(
     `${maintenanceIdentity}:recovery-witnesses:${maintenanceCompletionTarget?.facilityId ?? ''}`,
-    () => maintenanceCompletionTarget?.recoveryType === "INVENTORY_OVERDUE"
+    () => maintenanceCompletionTarget && ['INVENTORY_OVERDUE', 'SETUP_OVERDUE', 'MISMATCH_REMOVAL'].includes(maintenanceCompletionTarget.recoveryType || '')
       ? listMaintenanceStaff(maintenanceCompletionTarget.facilityId)
       : Promise.resolve([]),
     { retainDataOnRefresh: true },
@@ -315,7 +315,7 @@ export default function StaffDailyTaskQueue({
         makeUnitAvailable,
         unitVacated: maintenanceCompletionTarget.recoveryRequired ? true : undefined,
         recoveryHandoverLocation: maintenanceCompletionTarget.recoveryRequired ? recoveryHandoverLocation.trim() : undefined,
-        recoveryWitnessStaffId: maintenanceCompletionTarget.recoveryType === "INVENTORY_OVERDUE" ? recoveryWitnessStaffId : undefined,
+        recoveryWitnessStaffId: ['INVENTORY_OVERDUE', 'SETUP_OVERDUE', 'MISMATCH_REMOVAL'].includes(maintenanceCompletionTarget.recoveryType || '') ? recoveryWitnessStaffId : undefined,
       })
     }, makeUnitAvailable
       ? `Đã hoàn thành bảo trì gian ${maintenanceCompletionTarget.unitCode}.`
@@ -397,12 +397,12 @@ export default function StaffDailyTaskQueue({
           <div className="rounded-lg bg-stone-50 p-3 text-sm"><b>{formatMaintenanceTaskTitle(maintenanceCompletionTarget)}</b><p className="mt-1 text-xs text-stone-500">Mã nhiệm vụ: {maintenanceCompletionTarget.id}</p></div>
           {maintenanceCompletionTarget.recoveryRequired && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-xs font-semibold text-red-900">Cần có bằng chứng kiểm kê và bàn giao hàng. Gian kho chưa được mở lại ở bước này.</p>}
           {maintenanceCompletionTarget.recoveryRequired && <label className="block text-sm font-medium text-stone-700">Khu vực lưu tạm và người nhận bàn giao<input className="mt-1 block w-full rounded border border-stone-300 p-2" maxLength={500} disabled={busy} value={recoveryHandoverLocation} onChange={(event) => setRecoveryHandoverLocation(event.target.value)} placeholder="Ví dụ: Khu lưu tạm A, kệ 02, nhân viên nhận bàn giao" /></label>}
-          {maintenanceCompletionTarget.recoveryType === "INVENTORY_OVERDUE" && <label className="block text-sm font-medium text-stone-700">Nhân viên thứ hai xác nhận thu hồi<select className="mt-1 block w-full rounded border border-stone-300 bg-white p-2" disabled={busy || witnessRead.loading} value={recoveryWitnessStaffId} onChange={(event) => setRecoveryWitnessStaffId(event.target.value)}><option value="">Chọn nhân viên cùng cơ sở</option>{witnessOptions.map((witness) => <option key={witness.id} value={witness.id}>{witness.fullName}</option>)}</select></label>}
+          {['INVENTORY_OVERDUE', 'SETUP_OVERDUE', 'MISMATCH_REMOVAL'].includes(maintenanceCompletionTarget.recoveryType || '') && <label className="block text-sm font-medium text-stone-700">Nhân viên thứ hai xác nhận thu hồi<select className="mt-1 block w-full rounded border border-stone-300 bg-white p-2" disabled={busy || witnessRead.loading} value={recoveryWitnessStaffId} onChange={(event) => setRecoveryWitnessStaffId(event.target.value)}><option value="">Chọn nhân viên cùng cơ sở</option>{witnessOptions.map((witness) => <option key={witness.id} value={witness.id}>{witness.fullName}</option>)}</select></label>}
           <label className="block text-sm font-medium text-stone-700">Báo cáo kết quả<textarea className="mt-1 block min-h-24 w-full rounded border border-stone-300 p-2" maxLength={4000} disabled={busy} value={maintenanceResult} onChange={(event) => setMaintenanceResult(event.target.value)} placeholder="Mô tả hạng mục đã kiểm tra, sửa chữa và kết quả nghiệm thu…" /></label>
           <label className="block text-sm font-medium text-stone-700">Ảnh sửa chữa / nghiệm thu<input className="mt-1 block w-full rounded border border-stone-300 p-2 text-sm" type="file" accept="image/*" multiple disabled={busy} onChange={(event) => setMaintenanceEvidence((current) => [...current, ...Array.from(event.target.files || [])].slice(0, 10))} /></label>
           {maintenanceEvidence.length > 0 && <ul className="list-disc pl-5 text-xs text-stone-600">{maintenanceEvidence.map((file, index) => <li key={`${file.name}:${file.lastModified}:${index}`}>{file.name}</li>)}</ul>}
           <label className="block text-sm font-medium text-stone-700">Trạng thái gian sau bảo trì<select className="mt-1 block w-full rounded border border-stone-300 p-2" disabled={busy || maintenanceCompletionTarget.recoveryRequired} value={makeUnitAvailable ? "available" : "maintenance"} onChange={(event) => setMakeUnitAvailable(event.target.value === "available")}><option value="available">Đã sẵn sàng khai thác</option><option value="maintenance">Vẫn cần bảo trì</option></select></label>
-          <div className="flex justify-end gap-2"><Button variant="outline" disabled={busy} onClick={() => setMaintenanceCompletionTarget(null)}>Đóng</Button><Button disabled={busy || !maintenanceResult.trim() || maintenanceCompletionTarget.recoveryRequired && (!recoveryHandoverLocation.trim() || maintenanceCompletionTarget.recoveryType === "INVENTORY_OVERDUE" && !recoveryWitnessStaffId)} onClick={completeMaintenance}>{busy ? "Đang lưu…" : "Gửi báo cáo và hoàn thành"}</Button></div>
+          <div className="flex justify-end gap-2"><Button variant="outline" disabled={busy} onClick={() => setMaintenanceCompletionTarget(null)}>Đóng</Button><Button disabled={busy || !maintenanceResult.trim() || maintenanceCompletionTarget.recoveryRequired && (!recoveryHandoverLocation.trim() || ['INVENTORY_OVERDUE', 'SETUP_OVERDUE', 'MISMATCH_REMOVAL'].includes(maintenanceCompletionTarget.recoveryType || '') && !recoveryWitnessStaffId)} onClick={completeMaintenance}>{busy ? "Đang lưu…" : "Gửi báo cáo và hoàn thành"}</Button></div>
         </div>}
       </Modal>
     </div>

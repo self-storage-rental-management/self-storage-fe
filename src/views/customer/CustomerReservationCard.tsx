@@ -1,4 +1,6 @@
 import { rentalEndDateForDisplay } from '../../domain/rentalTimeline'
+import IntakeWorkflowPanel from '../../components/IntakeWorkflowPanel'
+import type { CheckInInventoryLine } from '../../services/checkInApi'
 import { formatCustomerDate, formatCustomerDateTime } from '../../i18n/customerDate'
 import { userFacingError } from '../../presentation/userFacingError'
 import { savedReservationQuote, MISSING_RESERVATION_SNAPSHOT } from '../../services/reservationSnapshot'
@@ -159,18 +161,25 @@ function InventoryResolutionNotice({ detail, now, submitting, onResolve }: {
   submitting: boolean
   onResolve: (decision: 'ACCEPT_FULL' | 'ACCEPT_PARTIAL' | 'CANCEL_AND_RETURN', scheduledDate?: string) => void
 }) {
-  const countdown = inventoryDeadlineText(detail.inventoryFinalDeadlineAt, now)
+  const activeDeadline = detail.inventoryRemovalDeadlineAt || detail.inventoryFinalDeadlineAt
+  const countdown = inventoryDeadlineText(activeDeadline, now)
   const partialAccepted = detail.inventoryResolutionStatus === 'PARTIAL_ACCEPTED'
   const returnRequested = detail.inventoryResolutionStatus === 'RETURN_REQUESTED'
+  const hasVariance = Boolean(detail.inventoryMismatchSummary) || !detail.inventoryFullFit
   const comparison = inventoryComparison(detail.inventoryMismatchJson)
   const displayValue = (value: unknown) => value == null || value === '' ? 'Chưa ghi nhận' : String(value)
   const today = policyDateInput(new Date())
+  const removalFirst = detail.inventoryRemovalPublishedAt
+    ? policyDateInput(new Date(new Date(detail.inventoryRemovalPublishedAt).getTime() + 86_400_000)) : today
+  const removalLast = detail.inventoryRemovalDeadlineAt
+    ? policyDateInput(new Date(new Date(detail.inventoryRemovalDeadlineAt).getTime() - 1)) : undefined
+  const minReturnDate = removalFirst > today ? removalFirst : today
   const [returnDate, setReturnDate] = useState(today)
   const [returnPlannerOpen, setReturnPlannerOpen] = useState(false)
   const [returnDateError, setReturnDateError] = useState('')
   if (!['PENDING_CUSTOMER', 'PARTIAL_ACCEPTED', 'RETURN_REQUESTED'].includes(detail.inventoryResolutionStatus || '')) return null
   const confirmInventoryReturn = () => {
-    if (!returnDate || returnDate < today) {
+    if (!returnDate || returnDate < minReturnDate || (removalLast && returnDate > removalLast)) {
       setReturnDateError('Vui lòng chọn ngày trả kho hợp lệ.')
       return
     }
@@ -179,13 +188,13 @@ function InventoryResolutionNotice({ detail, now, submitting, onResolve }: {
     onResolve('CANCEL_AND_RETURN', returnDate)
   }
   return (
-    <div className={`rounded-lg border p-3 text-left text-xs ${countdown === 'Đã quá hạn xử lý' ? 'border-red-400 bg-red-50 text-red-950' : 'border-red-300 bg-red-50/70 text-red-950'}`}>
+    <div className={`rounded-lg border p-3 text-left text-xs ${hasVariance || countdown === 'Đã quá hạn xử lý' ? 'border-red-300 bg-red-50 text-red-950' : 'border-blue-300 bg-blue-50 text-blue-950'}`}>
       <p className="font-bold">{returnRequested ? 'Đã yêu cầu trả kho do kiểm kê sai lệch' : partialAccepted ? 'Đang chờ Staff xác nhận phần hàng dư' : 'Kiểm kê cần bạn xác nhận'}</p>
       <p className="mt-1">{partialAccepted
         ? 'Bạn đã chọn nhận phần hàng có thể xếp. Vui lòng đưa phần còn lại ra khỏi gian kho và chờ Staff xác nhận bằng chứng.'
         : returnRequested
-          ? 'Cơ sở đã tiếp nhận yêu cầu trả kho. Ngày bạn chọn là ngày hẹn kiểm kê và là mốc cuối để Manager lập quyết toán; nếu bạn không đến và không hẹn lại, hồ sơ chuyển sang quy trình khách không đến.'
-        : `Nhân viên đã ghi nhận sai lệch giữa hàng thực tế và thông tin đặt kho. ${detail.inventoryMismatchSummary || 'Vui lòng chọn phương án xử lý.'}`}</p>
+          ? 'Cơ sở đã tiếp nhận yêu cầu trả kho. Nếu lỡ lịch hẹn, bạn vẫn có thể đổi lịch trong hạn trả hàng. Hết hạn, hồ sơ chuyển sang chờ thu hồi.'
+        : hasVariance ? `Nhân viên đã ghi nhận sai lệch giữa hàng thực tế và thông tin đặt kho. ${detail.inventoryMismatchSummary || 'Vui lòng chọn phương án xử lý.'}` : 'Hàng hóa đã được kiểm kê và phù hợp với khai báo. Vui lòng xem và xác nhận kết quả.'}</p>
       {returnRequested && detail.reservation.setupReturnScheduledDate && <p className="mt-1 font-semibold">Ngày hẹn trả kho: {formatDisplayDate(detail.reservation.setupReturnScheduledDate)}</p>}
       {detail.inventorySuggestedPackageCount != null && <p className="mt-1">Số kiện có thể tiếp nhận theo phương án xếp: <b>{detail.inventorySuggestedPackageCount}</b></p>}
       {comparison && (
@@ -197,22 +206,24 @@ function InventoryResolutionNotice({ detail, now, submitting, onResolve }: {
       {!partialAccepted && (returnPlannerOpen || returnRequested) && <div className="mt-2 rounded-lg border border-orange-300 bg-orange-50 p-3 text-orange-950">
         <p className="font-bold">Trả kho do hàng hóa sai khai báo</p>
         <ul className="mt-1 list-disc space-y-1 pl-5">
-          <li>Tính tiền từ ngày xác nhận nhận kho đến ngày hẹn trả kho dự kiến.</li>
-          <li>Manager lập quyết toán, khách xác nhận trước khi hoàn tiền hoặc thu thêm.</li>
+          <li>Tính tiền theo ngày lịch từ ngày nhận kho đến ngày bàn giao kho trống, tính cả hai ngày. Không cộng ngày cơ sở chậm thu hồi sau hạn trả hàng.</li>
+          <li>Tiền sử dụng = đơn giá tháng × số ngày / 30, khấu trừ vào tiền đã đóng. Không thu phí chấm dứt sớm cố định.</li>
+          <li>Manager duyệt bảng kê, khách xác nhận trước khi hoàn tiền hoặc thu thêm.</li>
         </ul>
         {detail.reservation.monthlyPrice != null && <p className="mt-1 font-semibold">Đơn giá tham chiếu: {formatVnd(detail.reservation.monthlyPrice)} / tháng.</p>}
       </div>}
-      {detail.inventoryFinalDeadlineAt && <p className="mt-1 font-bold">{countdown || 'Hạn xử lý'} · {formatCustomerDateTime(new Date(detail.inventoryFinalDeadlineAt))}</p>}
+      {activeDeadline && <p className="mt-1 font-bold">{countdown || 'Hạn xử lý'} · {formatCustomerDateTime(new Date(activeDeadline))}</p>}
       {!partialAccepted && !returnRequested && !returnPlannerOpen && <div className="mt-3 flex flex-wrap justify-end gap-2">
         {detail.inventoryFullFit && <Button size="sm" disabled={submitting} onClick={() => onResolve('ACCEPT_FULL')}>Nhận toàn bộ hàng</Button>}
         {detail.inventoryPartialFitAvailable && <Button size="sm" variant="outline" disabled={submitting} onClick={() => onResolve('ACCEPT_PARTIAL')}>Nhận phần có thể xếp</Button>}
-        <Button size="sm" variant="danger" disabled={submitting} onClick={() => setReturnPlannerOpen(true)}>Yêu cầu trả kho</Button>
+        {!detail.inventoryFullFit && <Button size="sm" variant="danger" disabled={submitting} onClick={() => setReturnPlannerOpen(true)}>Yêu cầu trả kho</Button>}
       </div>}
       {!partialAccepted && !returnRequested && returnPlannerOpen && <div className="mt-3 space-y-3 rounded-lg border border-red-300 bg-white p-3">
         <p className="font-bold text-red-950">Chọn ngày trả kho dự kiến</p>
-        <VietnameseDateInput label="Ngày hẹn trả kho" value={returnDate} min={today} onChange={(value) => { setReturnDate(value); setReturnDateError('') }} />
+        <VietnameseDateInput label="Ngày hẹn trả kho" value={returnDate} min={minReturnDate} max={removalLast} onChange={(value) => { setReturnDate(value); setReturnDateError('') }} />
+        {removalLast && <p className="font-semibold">Hạn cuối trả hàng: {formatDisplayDate(removalLast)}. Đổi lịch không kéo dài hạn này.</p>}
         {returnDateError && <p role="alert" className="font-semibold text-red-700">{returnDateError}</p>}
-        <p className="text-red-950">Ngày này là mốc hẹn để cơ sở cùng bạn kiểm kê và nhận lại kho. Tiền sử dụng được tính theo ngày lịch từ ngày bạn xác nhận nhận kho đến ngày hẹn này; Manager sẽ chốt bảng kê và bạn xác nhận quyết toán.</p>
+        <p className="text-red-950">Ngày chọn là lịch hẹn bàn giao. Tiền dự kiến có thể thay đổi theo ngày bàn giao thực tế nhưng không cộng ngày cơ sở chậm thu hồi sau hạn. Bạn được xem và xác nhận bảng kê trước khi hoàn tiền hoặc thu thêm.</p>
         <div className="flex flex-wrap justify-end gap-2">
           <Button size="sm" variant="outline" disabled={submitting} onClick={() => setReturnPlannerOpen(false)}>Hủy</Button>
           <Button size="sm" variant="danger" disabled={submitting || !returnDate} onClick={confirmInventoryReturn}>{submitting ? 'Đang gửi…' : 'Xác nhận yêu cầu trả kho'}</Button>
@@ -220,6 +231,33 @@ function InventoryResolutionNotice({ detail, now, submitting, onResolve }: {
       </div>}
     </div>
   )
+}
+
+export function InventoryLineInspectionResult({ detail }: { detail: CustomerReservationDetail }) {
+  let lines: CheckInInventoryLine[] = []
+  try {
+    const value: unknown = detail.inventoryActualJson ? JSON.parse(detail.inventoryActualJson) : null
+    if (value && typeof value === 'object' && 'lines' in value && Array.isArray(value.lines))
+      lines = value.lines.filter((line): line is CheckInInventoryLine => Boolean(line && typeof line === 'object' && typeof line.goodsItemId === 'string' && typeof line.actualQuantity === 'number'))
+  } catch { return null }
+  if (!lines.length) return null
+  return <section className="space-y-2 rounded-lg border border-stone-300 p-3 text-left text-sm">
+    <h4 className="font-bold">Đối chiếu kiểm kê từng dòng hàng</h4>
+    {lines.map((line, index) => {
+      const declared = detail.goodsItems?.find(item => item.id === line.goodsItemId)
+      const actual = line.actualGoods
+      const matches = declared && actual && declared.catalogCategoryId === actual.catalogCategoryId && declared.catalogMaterialId === actual.catalogMaterialId && declared.quantity === line.actualQuantity
+      return <div key={line.goodsItemId} className="space-y-1 border-t border-stone-200 pt-2">
+        <p className="font-semibold">Dòng {index + 1} · {matches ? 'Khớp loại hàng, chất liệu và số kiện' : 'Xem kết quả đối chiếu thực tế'}</p>
+        <p>Đã khai: {declared?.categoryName || declared?.description || 'Chưa ghi nhận'} · {declared?.materialName || declared?.customMaterial || 'Chưa ghi nhận'} · {declared?.quantity ?? 'Chưa ghi nhận'} kiện</p>
+        <p>Thực tế: {line.actualQuantity === 0 ? 'Không có hàng' : `${actual?.categoryName || actual?.customGoodsName || 'Chưa ghi nhận loại hàng'} · ${actual?.materialName || actual?.customMaterial || 'Không áp dụng hoặc chưa ghi nhận chất liệu'}`} · {line.actualQuantity} kiện</p>
+        {line.measurements && <p>Kích thước mỗi kiện: {line.measurements.lengthCm} × {line.measurements.widthCm} × {line.measurements.heightCm} cm · Khối lượng cả dòng: {line.measurements.weightKg} kg</p>}
+        {actual && <p>Điều kiện thực tế: {actual.fragile ? 'Dễ vỡ' : 'Không dễ vỡ'} · {actual.stackable ? `Xếp chồng tối đa ${actual.maxStackLayers || 1} lớp` : 'Không xếp chồng'} · {actual.allowHorizontalPlacement ? 'Được đặt nằm ngang' : 'Giữ chiều đứng'}</p>}
+        <p>Tình trạng: {line.condition === 'INTACT' ? 'Nguyên vẹn' : line.condition === 'DAMAGED' ? 'Có hư hỏng' : 'Không có kiện nào'}</p>
+        {line.note && <p>Ghi nhận: {line.note}</p>}
+      </div>
+    })}
+  </section>
 }
 
 export function PackagingInspectionResult({ detail }: { detail: CustomerReservationDetail }) {
@@ -580,6 +618,8 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         </div>}
         {r.status === 'PREPARING' && <ReservationPreparationNotice checkInStatus={checkInStatus} submitting={confirmingPreparation} onReady={() => void confirmPreparation()} />}
         {detail && <PackagingInspectionResult detail={detail} />}
+        {detail && <InventoryLineInspectionResult detail={detail} />}
+        {detail && ['PREPARING', 'COMPLETED'].includes(detail.reservation.status) && <IntakeWorkflowPanel reservationId={detail.reservation.id} role="CUSTOMER" />}
         {detail && <InventoryResolutionNotice detail={detail} now={now} submitting={resolvingInventory} onResolve={(decision, scheduledDate) => void resolveInventoryDecision(decision, scheduledDate)} />}
         {documentAvailable && <Button variant="outline" size="sm" className="reservation-action reservation-action-document min-h-10 w-full justify-center" disabled={busy} onClick={() => void prepareBookingDocument()}>{busy ? 'Đang chuẩn bị…' : 'Xem phiếu giữ kho'}</Button>}
         {handoverDocumentsAvailable && <Button variant="outline" size="sm" className="min-h-10 w-full justify-center" disabled={busy} onClick={() => void loadHandoverDocuments()}>{busy ? 'Đang tải…' : 'Xem hợp đồng đã ký'}</Button>}

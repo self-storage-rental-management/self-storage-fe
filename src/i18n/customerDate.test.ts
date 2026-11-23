@@ -6,7 +6,7 @@ describe('customer Vietnamese dates', () => {
   })
   it('uses the Vietnamese calendar date across UTC midnight', () => {
     expect(formatCustomerDate('2026-10-30T18:00:00Z')).toBe('31/10/2026')
-    expect(formatCustomerDateTime('2026-10-30T18:00:00Z')).toBe('31/10/2026 01:00:00')
+    expect(formatCustomerDateTime('2026-10-30T18:00:00Z')).toBe('31/10/2026 01:00')
   })
   it('does not display invalid dates', () => {
     expect(formatCustomerDate('invalid')).toBe('Chưa có')

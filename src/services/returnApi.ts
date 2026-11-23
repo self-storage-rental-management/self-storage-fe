@@ -81,6 +81,9 @@ export interface ApiReturn {
   customerNotes?: string | null
   customerDecisionNote?: string | null
   inspectedAt?: string | null
+  managerReviewDueAt?: string | null
+  managerApprovalRequired?: boolean
+  customerConfirmationDueAt?: string | null
   depositAmount: number | null; totalDeductions: number; netRefundAmount: number | null; amountDueFromCustomer: number | null
   settlementBlocker?: string | null; customerConfirmed: boolean
   damageFee: number; cleaningFee: number; lostItemFee: number; overdueFee: number; outstandingFee: number
