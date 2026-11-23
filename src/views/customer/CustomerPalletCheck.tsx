@@ -302,7 +302,7 @@ function CompatiblePalletResult({ check, plan, goodsItems, unitTypeName }: {
   const freeCompartments = Math.max(0, totalCompartments - occupiedCompartments)
   return <div className="space-y-4 rounded-xl border border-stone-200 bg-white p-4">
     <div className="border-b border-stone-200 pb-4">
-      <h4 className="flex items-center gap-2 text-base font-semibold text-stone-900"><span aria-hidden="true" className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-[10px] font-bold leading-none text-white">✓</span>Hàng của bạn vừa {unitTypeName || 'kho đã chọn'}</h4>
+      <h4 className="flex items-center gap-2 text-base font-semibold text-stone-900"><span aria-hidden="true" className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-[10px] font-bold leading-none text-white">✓</span>Hàng của bạn vừa kho! {unitTypeName ? `(${unitTypeName})` : ''}</h4>
       <p className="mt-1 text-xs text-stone-500">{unitTypeName || 'Loại kho đã chọn'} · {n(totalQuantity)} kiện hàng</p>
       <div className="mt-4 grid grid-cols-2 gap-4">
         <div><p className="text-xs text-stone-500">Khối lượng hàng</p><p className="mt-1 text-lg font-semibold text-stone-900">{n(totalWeight)} / {n(unitLimit)} kg</p><ProgressBar value={totalWeight} maximum={unitLimit} /><p className="mt-1 text-[11px] text-stone-500">Còn {n(freeWeight)} kg hạn mức</p></div>
@@ -316,6 +316,7 @@ function CompatiblePalletResult({ check, plan, goodsItems, unitTypeName }: {
     </details>
     <p className="flex items-center gap-2 text-xs text-emerald-800"><span aria-hidden="true" className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-emerald-700 text-[10px] font-bold leading-none text-emerald-700">✓</span>Đáp ứng giới hạn kích thước và tải trọng.</p>
     {check.staffReviewRequired && <p className="text-xs text-amber-800">Hàng cần nhân viên cơ sở xét duyệt trước khi nhận.</p>}
+    <p className="text-[11px] text-stone-500">Phương án lưu trữ dự kiến. Nhân viên sẽ đối chiếu khi tiếp nhận hàng.</p>
   </div>
 }
 

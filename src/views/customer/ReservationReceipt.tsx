@@ -22,9 +22,9 @@ export default function ReservationReceipt({ payment, reservationCode }: { payme
   const isRemainingRental = payment.purpose === 'RENTAL_BALANCE'
   const gatewayPaidAt = formatGatewayPayDate(payment.gatewayPayDate)
   return <PaymentReceiptCard
-    title={isRemainingRental ? 'Biên lai thanh toán phần còn lại khi nhận kho' : accepted ? 'Biên lai thanh toán trước 20% (giữ chỗ)' : 'Chi tiết giao dịch cần đối soát'}
+    title={isRemainingRental ? 'Biên lai thanh toán phần còn lại khi nhận kho' : accepted ? 'Biên lai đặt cọc giữ chỗ (thanh toán trước 20%)' : 'Chi tiết giao dịch cần đối soát'}
     reference={reservationCode} confirmed={accepted || isRemainingRental}
-    status={isRemainingRental ? 'Đã ghi nhận thanh toán nhận kho' : accepted ? 'Đơn đã xác nhận khoản trả trước' : 'Đơn chưa xác nhận'}
+    status={isRemainingRental ? 'Đã ghi nhận thanh toán nhận kho' : accepted ? 'Đơn đã xác nhận cọc (khoản trả trước)' : 'Đơn chưa xác nhận'}
     fields={[
       ['Mã giao dịch StorageHub', payment.paymentId], [isRemainingRental ? 'Mã tham chiếu thanh toán' : 'Mã tham chiếu VNPay', payment.transactionReference],
       [isRemainingRental ? 'Mã phiếu thu hoặc giao dịch' : 'Mã giao dịch VNPay', payment.gatewayTransactionNo || '-'], ['Đơn giữ kho', reservationCode],
