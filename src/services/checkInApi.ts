@@ -5,6 +5,13 @@ export type CheckInStatus = WorkflowCheckInStatus | null
 export type CheckInListStatus = 'UNSCHEDULED' | NonNullable<CheckInStatus>
 export type CheckInGroup = 'ONGOING' | 'PROCESSED'
 export type CheckInReservationStatus = ReservationStatus
+export type InventoryResolutionStatus =
+  | 'NOT_STARTED'
+  | 'PENDING_CUSTOMER'
+  | 'ACCEPTED'
+  | 'PARTIAL_ACCEPTED'
+  | 'RETURN_REQUESTED'
+  | 'RECOVERY_REQUIRED'
 
 export interface CheckInChecklist {
   identityVerified: boolean
@@ -49,6 +56,8 @@ export interface CompleteCheckInRequest {
   packageCount: number
   goodsCategory: string
   goodsMaterial: string
+  actualPackagingMethod?: string | null
+  packagingCondition?: 'INTACT' | 'MINOR_DAMAGE' | 'MAJOR_DAMAGE' | 'UNPACKAGED' | null
   evidenceReferences: string[]
   handedOverItems: string[]
   notes: string
@@ -89,7 +98,24 @@ export interface CheckInCase {
   setupCompletedAt: string | null
   inventoryVerifiedAt: string | null
   inventoryDueAt: string | null
+  inventoryFinalDeadlineAt?: string | null
   inventoryPending: boolean
+  inventoryResolutionStatus?: InventoryResolutionStatus | null
+  inventoryFullFit?: boolean
+  inventoryPartialFitAvailable?: boolean
+  inventorySuggestedPackageCount?: number | null
+  inventoryMismatchSummary?: string | null
+  inventoryAcceptedQuantitiesJson?: string | null
+  inventoryRemainderRemovedAt?: string | null
+  inventoryRemainderRemovalNote?: string | null
+  inventoryActualJson?: string | null
+  inventoryMismatchJson?: string | null
+  inventorySuggestedQuantitiesJson?: string | null
+  receiptConfirmationDueAt: string | null
+  receiptConfirmationOverdue: boolean
+  receiptConfirmationReleaseAt?: string | null
+  receiptReleaseEligible?: boolean
+  declaredPackagingMethod?: string | null
   lockReference: string | null
   readinessNote: string | null
   rejectionReason: string | null
@@ -123,6 +149,13 @@ export interface CheckInCase {
   declaredGoodsHeightCm: number | null
   dueAtCheckIn: number | null
   handover: CompleteCheckInRequest | null
+}
+
+export interface ReceiptReminderResponse {
+  sent: boolean
+  sentAt: string | null
+  receiptConfirmationDueAt: string | null
+  receiptConfirmationOverdue: boolean
 }
 
 export interface CheckInPage {
@@ -280,6 +313,24 @@ export async function listCheckIns(params: {
   return assertPage(await apiRequest<unknown>(`/api/staff/check-ins?${query}`))
 }
 
+export async function sendCustomerReceiptReminder(checkInId: string): Promise<ReceiptReminderResponse> {
+  const payload = await apiRequest<ApiEnvelope<ReceiptReminderResponse>>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/receipt-reminder`,
+    { method: 'POST' },
+  )
+  if (!payload?.data || typeof payload.data.sent !== 'boolean' || typeof payload.data.receiptConfirmationOverdue !== 'boolean') {
+    throw new ApiClientError('Không thể gửi nhắc xác nhận nhận kho.', { code: 'INVALID_API_RESPONSE' })
+  }
+  return payload.data
+}
+
+export async function releaseCustomerReceiptTimeout(checkInId: string): Promise<CheckInCase> {
+  return assertEnvelope(await apiRequest<unknown>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/receipt-release`,
+    { method: 'POST' },
+  ))
+}
+
 export async function scheduleCheckIn(
   reservationId: string,
   request: {
@@ -400,6 +451,17 @@ export async function rejectCheckIn(
 ) {
   return assertEnvelope(await apiRequest<unknown>(
     `/api/staff/check-ins/${encodeURIComponent(checkInId)}/reject`,
+    { method: 'POST', body: JSON.stringify(request) },
+  ))
+}
+
+export async function confirmPartialInventoryRemoval(checkInId: string, request: {
+  remainderRemoved: boolean
+  evidenceReferences: string[]
+  notes: string
+}) {
+  return assertEnvelope(await apiRequest<unknown>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/inventory-partial-removal`,
     { method: 'POST', body: JSON.stringify(request) },
   ))
 }

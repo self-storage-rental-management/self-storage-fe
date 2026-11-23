@@ -22,10 +22,23 @@ const check: CompatibilityCheckResult = {
 
 it('explains the actual plan returned by the backend', () => {
   const html = renderToStaticMarkup(<CustomerPalletCheck check={check} />)
-  for (const text of ['Hàng của bạn vừa kho!', '1 / 6', 'Tại sao cần 1 khoang?', '15 kiện hàng', '75 / 600 kg']) {
+  for (const text of ['Hàng của bạn vừa kho đã chọn', '1 / 6', 'Tại sao cần 1 khoang?', '15 kiện hàng', '75 / 600 kg']) {
     expect(html).toContain(text)
   }
   expect(html).not.toContain('80%')
+})
+
+it('keeps the existing result visible during a background refresh', () => {
+  const html = renderToStaticMarkup(<CustomerPalletCheck check={check} loading />)
+  expect(html).toContain('Hàng của bạn vừa kho đã chọn')
+  expect(html).toContain('aria-busy="true"')
+  expect(html).not.toContain('Đang tính theo cấu hình kệ')
+})
+
+it('still shows initial loading when no matching result exists', () => {
+  const html = renderToStaticMarkup(<CustomerPalletCheck loading />)
+  expect(html).toContain('Đang tính theo cấu hình kệ')
+  expect(html).not.toContain('Hàng của bạn vừa kho đã chọn')
 })
 it('does not count a shared pallet twice when two goods lines use one compartment', () => {
   const capacity = {

@@ -303,7 +303,7 @@ export function extractStaffFieldErrors(error: unknown): Record<string, string> 
     fieldErrors.lengthCm = "Kích thước hàng hóa đo đạc thực tế không vừa gian kho"
   }
   if (msg.includes("variance is not accepted")) {
-    fieldErrors.varianceAccepted = "Cần đánh dấu xác nhận chấp thuận chênh lệch với khách"
+    fieldErrors.varianceAccepted = "Cần ghi nhận cách xử lý chênh lệch trước khi hoàn tất"
   }
   if (msg.includes("identityDocumentNumber is required")) {
     fieldErrors.identityDocumentNumber = "Số CCCD/CMND không được để trống"

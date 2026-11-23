@@ -93,7 +93,7 @@ describe('customer reservation layout regression', () => {
     expect(render('AWAITING_CUSTOMER_RECEIPT')).not.toContain('Lưu lịch nhận kho')
   })
   it('shows the two customer gates before inventory', () => {
-    expect(render('AWAITING_CUSTOMER_RECEIPT')).toContain('Sẵn sàng bàn giao')
+    expect(render('AWAITING_CUSTOMER_RECEIPT')).toContain('Xác nhận đã nhận kho')
     expect(render('PREPARING')).not.toContain('Sẵn sàng để kiểm kê')
 
     const notice = (checkInStatus: string) => renderToStaticMarkup(

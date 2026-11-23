@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Button, Card, Modal } from '../../components/ui'
 import VietnameseDateInput from '../../components/VietnameseDateInput'
 import { formatVndAmount as formatVnd } from '../../i18n/currency'
-import { confirmCustomerReceipt, downloadBookingDocument, downloadCustomerCheckInDocument, downloadCustomerReservationGoodsImage, generateBookingDocument, getCustomerCheckInDocuments, getCustomerReservation, markCustomerPreparationComplete, setCustomerCheckInAppointment, updateSetupGoods, type BookingDocument, type CheckInDocument, type CustomerFacility, type CustomerReservation, type CustomerReservationDetail, type CustomerUnitType, type GoodsItemInput, type ReservationPaymentResult } from '../../services/customerReservationApi'
+import { confirmCustomerReceipt, downloadBookingDocument, downloadCustomerCheckInDocument, downloadCustomerReservationGoodsImage, generateBookingDocument, getCustomerCheckInDocuments, getCustomerReservation, markCustomerPreparationComplete, resolveCustomerInventory, setCustomerCheckInAppointment, updateSetupGoods, type BookingDocument, type CheckInDocument, type CustomerFacility, type CustomerReservation, type CustomerReservationDetail, type CustomerUnitType, type GoodsItemInput, type ReservationPaymentResult } from '../../services/customerReservationApi'
 import { goodsReviewLabels, paymentCountdown, reservationProgress, reservationStatusLabels } from './reservationPresentation'
 import CustomerPaymentComplaint from './CustomerPaymentComplaint'
 import CustomerReservationPayment from './CustomerReservationPayment'
@@ -93,6 +93,151 @@ export function ReservationPreparationNotice({ checkInStatus, submitting, onRead
   )
 }
 
+function inventoryDeadlineText(value: string | null | undefined, now: number) {
+  if (!value) return null
+  const remaining = new Date(value).getTime() - now
+  if (!Number.isFinite(remaining)) return null
+  if (remaining <= 0) return 'Đã quá hạn xử lý'
+  const minutes = Math.ceil(remaining / 60_000)
+  const days = Math.floor(minutes / 1_440)
+  const hours = Math.floor((minutes % 1_440) / 60)
+  const rest = minutes % 60
+  return `Còn ${days > 0 ? `${days} ngày ` : ''}${hours > 0 ? `${hours} giờ ` : ''}${rest} phút`
+}
+
+function receiptConfirmationCountdown(value: string | null | undefined, now: number) {
+  if (!value) return { text: null, expired: false, urgent: false }
+  const remaining = new Date(value).getTime() - now
+  if (!Number.isFinite(remaining)) return { text: 'Chưa xác định', expired: false, urgent: true }
+  if (remaining <= 0) return { text: 'Đã quá hạn xác nhận', expired: true, urgent: true }
+  const minutes = Math.ceil(remaining / 60_000)
+  const days = Math.floor(minutes / 1_440)
+  const hours = Math.floor((minutes % 1_440) / 60)
+  const rest = minutes % 60
+  return {
+    text: `Còn ${days > 0 ? `${days} ngày ` : ''}${hours > 0 ? `${hours} giờ ` : ''}${rest} phút`,
+    expired: false,
+    urgent: remaining <= 2 * 60 * 60_000,
+  }
+}
+
+function receiptReleaseCountdown(value: string | null | undefined, now: number) {
+  if (!value) return { text: null, eligible: false }
+  const remaining = new Date(value).getTime() - now
+  if (!Number.isFinite(remaining) || remaining <= 0) {
+    return { text: 'Manager có thể giải phóng gian kho', eligible: true }
+  }
+  const minutes = Math.ceil(remaining / 60_000)
+  const days = Math.floor(minutes / 1_440)
+  const hours = Math.floor((minutes % 1_440) / 60)
+  const rest = minutes % 60
+  const parts = [
+    days > 0 ? days + ' ngày ' : '',
+    hours > 0 ? hours + ' giờ ' : '',
+    rest + ' phút',
+  ].join('')
+  return {
+    text: 'Manager có thể xử lý giải phóng sau ' + parts + ' nếu bạn chưa xác nhận',
+    eligible: false,
+  }
+}
+
+function inventoryComparison(value: string | null | undefined) {
+  if (!value) return null
+  try {
+    const parsed = JSON.parse(value) as { declared?: Record<string, unknown>; actual?: Record<string, unknown> }
+    if (!parsed || typeof parsed !== 'object' || !parsed.declared || !parsed.actual) return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+function InventoryResolutionNotice({ detail, now, submitting, onResolve }: {
+  detail: CustomerReservationDetail
+  now: number
+  submitting: boolean
+  onResolve: (decision: 'ACCEPT_FULL' | 'ACCEPT_PARTIAL' | 'CANCEL_AND_RETURN', scheduledDate?: string) => void
+}) {
+  const countdown = inventoryDeadlineText(detail.inventoryFinalDeadlineAt, now)
+  const partialAccepted = detail.inventoryResolutionStatus === 'PARTIAL_ACCEPTED'
+  const returnRequested = detail.inventoryResolutionStatus === 'RETURN_REQUESTED'
+  const comparison = inventoryComparison(detail.inventoryMismatchJson)
+  const displayValue = (value: unknown) => value == null || value === '' ? 'Chưa ghi nhận' : String(value)
+  const today = policyDateInput(new Date())
+  const [returnDate, setReturnDate] = useState(today)
+  const [returnPlannerOpen, setReturnPlannerOpen] = useState(false)
+  const [returnDateError, setReturnDateError] = useState('')
+  if (!['PENDING_CUSTOMER', 'PARTIAL_ACCEPTED', 'RETURN_REQUESTED'].includes(detail.inventoryResolutionStatus || '')) return null
+  const confirmInventoryReturn = () => {
+    if (!returnDate || returnDate < today) {
+      setReturnDateError('Vui lòng chọn ngày trả kho hợp lệ.')
+      return
+    }
+    setReturnDateError('')
+    setReturnPlannerOpen(false)
+    onResolve('CANCEL_AND_RETURN', returnDate)
+  }
+  return (
+    <div className={`rounded-lg border p-3 text-left text-xs ${countdown === 'Đã quá hạn xử lý' ? 'border-red-400 bg-red-50 text-red-950' : 'border-red-300 bg-red-50/70 text-red-950'}`}>
+      <p className="font-bold">{returnRequested ? 'Đã yêu cầu trả kho do kiểm kê sai lệch' : partialAccepted ? 'Đang chờ Staff xác nhận phần hàng dư' : 'Kiểm kê cần bạn xác nhận'}</p>
+      <p className="mt-1">{partialAccepted
+        ? 'Bạn đã chọn nhận phần hàng có thể xếp. Vui lòng đưa phần còn lại ra khỏi gian kho và chờ Staff xác nhận bằng chứng.'
+        : returnRequested
+          ? 'Cơ sở đã tiếp nhận yêu cầu trả kho. Ngày bạn chọn là ngày hẹn kiểm kê và là mốc cuối để Manager lập quyết toán; nếu bạn không đến và không hẹn lại, hồ sơ chuyển sang quy trình khách không đến.'
+        : `Nhân viên đã ghi nhận sai lệch giữa hàng thực tế và thông tin đặt kho. ${detail.inventoryMismatchSummary || 'Vui lòng chọn phương án xử lý.'}`}</p>
+      {returnRequested && detail.reservation.setupReturnScheduledDate && <p className="mt-1 font-semibold">Ngày hẹn trả kho: {formatDisplayDate(detail.reservation.setupReturnScheduledDate)}</p>}
+      {detail.inventorySuggestedPackageCount != null && <p className="mt-1">Số kiện có thể tiếp nhận theo phương án xếp: <b>{detail.inventorySuggestedPackageCount}</b></p>}
+      {comparison && (
+        <div className="mt-2 grid gap-2 rounded-lg border border-red-200 bg-white/70 p-2 sm:grid-cols-2">
+          <div><p className="font-semibold">Thông tin đã khai báo</p><p>Số kiện: {displayValue(comparison.declared?.packageCount)} · Khối lượng: {displayValue(comparison.declared?.weightKg)} kg · Thể tích: {displayValue(comparison.declared?.volumeM3)} m³</p><p>Loại hàng: {Array.isArray(comparison.declared?.category) ? comparison.declared?.category.join(', ') || 'Chưa ghi nhận' : displayValue(comparison.declared?.category)}</p><p>Chất liệu chính: {Array.isArray(comparison.declared?.material) ? comparison.declared?.material.join(', ') || 'Chưa ghi nhận' : displayValue(comparison.declared?.material)}</p></div>
+          <div><p className="font-semibold">Thông tin kiểm kê thực tế</p><p>Số kiện: {displayValue(comparison.actual?.packageCount)} · Khối lượng: {displayValue(comparison.actual?.weightKg)} kg · Thể tích: {displayValue(comparison.actual?.volumeM3)} m³</p><p>Loại hàng: {displayValue(comparison.actual?.category)}</p><p>Chất liệu chính: {displayValue(comparison.actual?.material)}</p></div>
+        </div>
+      )}
+      {!partialAccepted && (returnPlannerOpen || returnRequested) && <div className="mt-2 rounded-lg border border-orange-300 bg-orange-50 p-3 text-orange-950">
+        <p className="font-bold">Trả kho do hàng hóa sai khai báo</p>
+        <ul className="mt-1 list-disc space-y-1 pl-5">
+          <li>Tính tiền từ ngày xác nhận nhận kho đến ngày hẹn trả kho dự kiến.</li>
+          <li>Manager lập quyết toán, khách xác nhận trước khi hoàn tiền hoặc thu thêm.</li>
+        </ul>
+        {detail.reservation.monthlyPrice != null && <p className="mt-1 font-semibold">Đơn giá tham chiếu: {formatVnd(detail.reservation.monthlyPrice)} / tháng.</p>}
+      </div>}
+      {detail.inventoryFinalDeadlineAt && <p className="mt-1 font-bold">{countdown || 'Hạn xử lý'} · {formatCustomerDateTime(new Date(detail.inventoryFinalDeadlineAt))}</p>}
+      {!partialAccepted && !returnRequested && !returnPlannerOpen && <div className="mt-3 flex flex-wrap justify-end gap-2">
+        {detail.inventoryFullFit && <Button size="sm" disabled={submitting} onClick={() => onResolve('ACCEPT_FULL')}>Nhận toàn bộ hàng</Button>}
+        {detail.inventoryPartialFitAvailable && <Button size="sm" variant="outline" disabled={submitting} onClick={() => onResolve('ACCEPT_PARTIAL')}>Nhận phần có thể xếp</Button>}
+        <Button size="sm" variant="danger" disabled={submitting} onClick={() => setReturnPlannerOpen(true)}>Yêu cầu trả kho</Button>
+      </div>}
+      {!partialAccepted && !returnRequested && returnPlannerOpen && <div className="mt-3 space-y-3 rounded-lg border border-red-300 bg-white p-3">
+        <p className="font-bold text-red-950">Chọn ngày trả kho dự kiến</p>
+        <VietnameseDateInput label="Ngày hẹn trả kho" value={returnDate} min={today} onChange={(value) => { setReturnDate(value); setReturnDateError('') }} />
+        {returnDateError && <p role="alert" className="font-semibold text-red-700">{returnDateError}</p>}
+        <p className="text-red-950">Ngày này là mốc hẹn để cơ sở cùng bạn kiểm kê và nhận lại kho. Tiền sử dụng được tính theo ngày lịch từ ngày bạn xác nhận nhận kho đến ngày hẹn này; Manager sẽ chốt bảng kê và bạn xác nhận quyết toán.</p>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button size="sm" variant="outline" disabled={submitting} onClick={() => setReturnPlannerOpen(false)}>Hủy</Button>
+          <Button size="sm" variant="danger" disabled={submitting || !returnDate} onClick={confirmInventoryReturn}>{submitting ? 'Đang gửi…' : 'Xác nhận yêu cầu trả kho'}</Button>
+        </div>
+      </div>}
+    </div>
+  )
+}
+
+export function PackagingInspectionResult({ detail }: { detail: CustomerReservationDetail }) {
+  let actual: { packagingMethod?: string; packagingCondition?: string } | null = null
+  try { actual = detail.inventoryActualJson ? JSON.parse(detail.inventoryActualJson) : null } catch { return null }
+  if (!actual?.packagingMethod && !actual?.packagingCondition) return null
+  const conditions: Record<string, string> = { INTACT: 'Nguyên vẹn', MINOR_DAMAGE: 'Hư hỏng nhẹ', MAJOR_DAMAGE: 'Hư hỏng nặng', UNPACKAGED: 'Chưa đóng gói' }
+  const declared = detail.goodsCondition
+  const mismatch = Boolean(declared && actual.packagingMethod && declared.trim().toLocaleLowerCase('vi') !== actual.packagingMethod.trim().toLocaleLowerCase('vi'))
+  return <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-left text-xs text-stone-800">
+    <p className="font-bold">Kết quả kiểm kê đóng gói</p>
+    <p className="mt-1">Phương thức đã khai: <b>{declared || 'Chưa ghi nhận'}</b></p>
+    <p className="mt-1">Phương thức thực tế: <b>{actual.packagingMethod || 'Chưa ghi nhận'}</b></p>
+    {declared && actual.packagingMethod && <p className={mismatch ? 'mt-1 font-semibold text-red-700' : 'mt-1 font-semibold text-emerald-700'}>{mismatch ? 'Không khớp phương thức đã khai báo' : 'Khớp phương thức đã khai báo'}</p>}
+    <p className="mt-1">Tình trạng đóng gói: <b>{conditions[actual.packagingCondition || ''] || 'Chưa ghi nhận'}</b></p>
+  </div>
+}
+
 export default function CustomerReservationCard({ reservation: r, facilityName, unitTypeName, facilityDetails, unitTypeDetails, facility, unitType, onVerify, onCancel, onDelete, onRefresh, onReceiptConfirmed, onRequestSupport, visualTone = 'active' }: Props) {
   const [activeSection, setActiveSection] = useState<'information' | 'quote'>('information')
   const [detail, setDetail] = useState<CustomerReservationDetail | null>(null)
@@ -101,6 +246,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const [confirmingReceipt, setConfirmingReceipt] = useState(false)
   const receiptLock = useRef(false)
   const [confirmingPreparation, setConfirmingPreparation] = useState(false)
+  const [resolvingInventory, setResolvingInventory] = useState(false)
   const preparationLock = useRef(false)
   const [bookingDocument, setBookingDocument] = useState<BookingDocument | null>(null)
   const [bookingDocumentOpen, setBookingDocumentOpen] = useState(false)
@@ -130,6 +276,8 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     return () => { disposed = true }
   }, [r.id, r.status])
   const countdown = paymentCountdown(detail?.paymentExpiresAt || r.holdExpiresAt, now)
+  const receiptCountdown = receiptConfirmationCountdown(detail?.receiptConfirmationDueAt, now)
+  const receiptRelease = receiptReleaseCountdown(detail?.receiptConfirmationReleaseAt, now)
   const appointmentWindow = plannedCheckInWindow(
     r.createdAt,
     r.goodsReviewStatus !== 'NOT_REQUIRED',
@@ -139,6 +287,9 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const progress = reservationProgress(r.status)
   const checkInStatus = detail?.reservation.id === r.id ? detail.checkInStatus : undefined
   const awaitingInventory = r.status === 'PREPARING' && (checkInStatus === 'setup_completed' || checkInStatus === 'completed')
+  const partialInventoryPending = detail?.inventoryResolutionStatus === 'PARTIAL_ACCEPTED'
+  const inventoryReturnRequested = detail?.inventoryResolutionStatus === 'RETURN_REQUESTED'
+  const inventoryMismatchPending = detail?.inventoryResolutionStatus === 'PENDING_CUSTOMER' || inventoryReturnRequested
   const prepaymentPaid = detail?.payments?.some(item => item.purpose === 'RESERVATION_DEPOSIT' && item.paymentStatus === 'PAID')
     || ['CONFIRMED', 'UNIT_RESERVED', 'READY_FOR_CHECKIN', 'AWAITING_CUSTOMER_RECEIPT', 'PREPARING', 'COMPLETED'].includes(r.status)
   const inactive = progress === null
@@ -265,6 +416,27 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     }
     finally { preparationLock.current = false; setConfirmingPreparation(false) }
   }
+  const resolveInventoryDecision = async (decision: 'ACCEPT_FULL' | 'ACCEPT_PARTIAL' | 'CANCEL_AND_RETURN', scheduledDate?: string) => {
+    if (resolvingInventory) return
+    setResolvingInventory(true)
+    setMessage(null)
+    try {
+      const updated = await resolveCustomerInventory(r.id, decision,
+        decision === 'CANCEL_AND_RETURN' ? 'Khách yêu cầu xử lý trả kho do kết quả kiểm kê không phù hợp.' : undefined,
+        scheduledDate)
+      setDetail(updated)
+      setMessage(decision === 'CANCEL_AND_RETURN'
+        ? 'Đã gửi yêu cầu trả kho. Cơ sở sẽ tiếp nhận và kiểm tra hiện trạng theo quy trình trả kho.'
+        : decision === 'ACCEPT_PARTIAL'
+          ? 'Đã xác nhận nhận phần hàng có thể xếp trong gian kho.'
+          : 'Đã xác nhận nhận toàn bộ hàng hóa.')
+      try { await onRefresh() } catch { /* The resolution command has already succeeded. */ }
+    } catch (error) {
+      setMessage(userFacingError(error, 'Không thể ghi nhận phương án xử lý kiểm kê.'))
+    } finally {
+      setResolvingInventory(false)
+    }
+  }
   const documentAvailable = ['CONFIRMED', 'UNIT_RESERVED', 'READY_FOR_CHECKIN', 'AWAITING_CUSTOMER_RECEIPT', 'COMPLETED'].includes(r.status)
   const handoverDocumentsAvailable = ['AWAITING_CUSTOMER_RECEIPT', 'COMPLETED'].includes(r.status)
   const saveAppointment = async () => {
@@ -364,8 +536,12 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     className={`p-6 !border-l-8 transition-all duration-200 ${
       inactive
         ? 'border-l-stone-300 text-stone-500'
-        : 'border-l-amber-500'
-    } ${visualTone === 'expired'
+        : inventoryMismatchPending
+          ? 'border-l-red-700 bg-red-50/20'
+          : 'border-l-amber-500'
+    } ${inventoryMismatchPending
+      ? '!border-l-red-700 hover:!border-l-red-900'
+      : visualTone === 'expired'
       ? '!border-l-red-400 hover:!border-l-red-700'
       : visualTone === 'completed'
         ? '!border-l-emerald-400 hover:!border-l-emerald-700'
@@ -376,7 +552,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-bold text-amber-700">{r.reservationCode}</span>
-          <span className={`rounded px-2.5 py-1 text-xs font-bold ${awaitingInventory ? (checkInStatus === 'completed' ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900') : visualTone === 'completed' ? 'bg-emerald-700 text-white' : visualTone === 'expired' ? 'bg-red-100 text-red-900' : progress !== null && progress >= 3 ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{awaitingInventory ? (checkInStatus === 'completed' ? 'Đã kiểm kê' : 'Chờ kiểm kê') : reservationStatusLabels[r.status]}</span>
+          <span className={`rounded px-2.5 py-1 text-xs font-bold ${inventoryMismatchPending ? 'bg-red-700 text-white' : awaitingInventory ? (partialInventoryPending ? 'bg-amber-100 text-amber-900' : checkInStatus === 'completed' ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900') : visualTone === 'completed' ? 'bg-emerald-700 text-white' : visualTone === 'expired' ? 'bg-red-100 text-red-900' : progress !== null && progress >= 3 ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{inventoryReturnRequested ? 'Buộc trả kho do kiểm kê sai lệch' : inventoryMismatchPending ? 'Cần xử lý sai lệch kiểm kê' : awaitingInventory ? (partialInventoryPending ? 'Chờ xử lý phần hàng dư' : checkInStatus === 'completed' ? 'Đã kiểm kê' : 'Chờ kiểm kê') : reservationStatusLabels[r.status]}</span>
         </div>
         <h2 className="mt-1 text-lg font-bold text-stone-900">{displayedUnitTypeName} · {displayedFacilityName}</h2>
         <div className="mt-3 space-y-2">
@@ -393,8 +569,18 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
           <p className="mt-1">Nhân viên duyệt trong tối đa {STAFF_REVIEW_HOURS} giờ từ khi gửi đơn. Sau khi được duyệt, bạn có thể thanh toán cọc.</p>
         </div>}
         <CustomerReservationPayment reservation={r} facilityName={displayedFacilityName} unitTypeName={displayedUnitTypeName} paymentExpiresAt={detail?.paymentExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />
-        {r.status === 'AWAITING_CUSTOMER_RECEIPT' && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-right text-xs text-amber-950"><p className="font-bold">Nhân viên đã hoàn tất bàn giao</p><p className="mt-1">Vui lòng kiểm tra kho và mã ra vào, sau đó nhấn nút để báo đã sẵn sàng bàn giao.</p><Button type="button" className="mt-2" size="sm" disabled={confirmingReceipt} onClick={() => void confirmReceipt()}>{confirmingReceipt ? 'Đang xác nhận…' : 'Sẵn sàng bàn giao'}</Button></div>}
+        {r.status === 'AWAITING_CUSTOMER_RECEIPT' && <div className={`rounded-lg border p-3 text-right text-xs ${receiptCountdown.expired ? 'border-red-400 bg-red-50 text-red-950' : receiptCountdown.urgent ? 'border-red-300 bg-red-50/70 text-red-950' : 'border-amber-300 bg-amber-50 text-amber-950'}`}>
+          <p className="font-bold">Nhân viên đã hoàn tất bàn giao kho trống</p>
+          <p className="mt-1">Vui lòng kiểm tra kho và mã ra vào, sau đó xác nhận đã nhận kho để bắt đầu thời gian chuẩn bị.</p>
+          {detail?.handoverCompletedAt && <p className="mt-1">Bàn giao lúc: <b>{formatCustomerDateTime(new Date(detail.handoverCompletedAt))}</b></p>}
+          {detail?.receiptConfirmationDueAt && <p className="mt-1 font-bold">{receiptCountdown.text} · Hạn xác nhận: {formatCustomerDateTime(new Date(detail.receiptConfirmationDueAt))}</p>}
+          {receiptRelease.text && <p className={`mt-1 font-semibold ${receiptRelease.eligible ? 'text-red-700' : 'text-amber-800'}`}>{receiptRelease.text} · Chỉ Manager được thao tác giải phóng.</p>}
+          {receiptCountdown.expired && <p className="mt-1 font-semibold">Hồ sơ đang chờ cơ sở xử lý tiếp. Bạn vẫn có thể xác nhận nhận kho hoặc liên hệ cơ sở để được hỗ trợ.</p>}
+          <Button type="button" className="mt-2" size="sm" disabled={confirmingReceipt} onClick={() => void confirmReceipt()}>{confirmingReceipt ? 'Đang xác nhận…' : 'Xác nhận đã nhận kho'}</Button>
+        </div>}
         {r.status === 'PREPARING' && <ReservationPreparationNotice checkInStatus={checkInStatus} submitting={confirmingPreparation} onReady={() => void confirmPreparation()} />}
+        {detail && <PackagingInspectionResult detail={detail} />}
+        {detail && <InventoryResolutionNotice detail={detail} now={now} submitting={resolvingInventory} onResolve={(decision, scheduledDate) => void resolveInventoryDecision(decision, scheduledDate)} />}
         {documentAvailable && <Button variant="outline" size="sm" className="reservation-action reservation-action-document min-h-10 w-full justify-center" disabled={busy} onClick={() => void prepareBookingDocument()}>{busy ? 'Đang chuẩn bị…' : 'Xem phiếu giữ kho'}</Button>}
         {handoverDocumentsAvailable && <Button variant="outline" size="sm" className="min-h-10 w-full justify-center" disabled={busy} onClick={() => void loadHandoverDocuments()}>{busy ? 'Đang tải…' : 'Xem hợp đồng đã ký'}</Button>}
         {onRequestSupport && <Button type="button" variant="outline" size="sm" className="min-h-10 w-full justify-center" onClick={onRequestSupport}>Hỗ trợ đơn này</Button>}
@@ -445,7 +631,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
                 <div className="rounded-lg border border-stone-200 bg-white p-3"><span className="text-xs text-stone-500">Tổng kích thước cần dùng</span><b className="mt-1 block text-base text-stone-900">{formatMeasurement(calculatedGoodsVolumeM3)} m³</b></div>
                 <div className="rounded-lg border border-stone-200 bg-white p-3"><span className="text-xs text-stone-500">Tổng cân nặng</span><b className="mt-1 block text-base text-stone-900">{formatMeasurement(calculatedGoodsWeightKg)} kg</b></div>
               </div>
-              <div className="mt-3 rounded-lg border border-stone-200 bg-white p-3"><b className="text-stone-900">Tình trạng đóng gói chung:</b> {detail.goodsCondition || 'Không có mô tả'}</div>
+              <div className="mt-3 rounded-lg border border-stone-200 bg-white p-3"><b className="text-stone-900">Phương thức đóng gói chung:</b> {detail.goodsCondition || 'Không có mô tả'}</div>
               <div className="mt-3 space-y-3">
                 {goodsItems.map((item, index) => {
                   const itemVolumeM3 = item.lengthCm * item.widthCm * item.heightCm / 1_000_000

@@ -52,6 +52,7 @@ export interface RentalApiRecord {
   inventoryVerifiedAt?: string | null
   canConfirmRentalStart?: boolean
   inventoryDueAt?: string | null
+  inventoryFinalDeadlineAt?: string | null
   setupStartedAt?: string | null
   setupEndsAt?: string | null
   moveInCompletedAt?: string | null

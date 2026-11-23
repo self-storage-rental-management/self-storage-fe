@@ -40,6 +40,7 @@ const statusLabels: Record<string, BilingualLabel> = {
   closing: labels('Closing', 'Đang tất toán'),
   requested: labels('Requested', 'Đã yêu cầu'),
   inspected: labels('Inspected', 'Đã nghiệm thu'),
+  awaiting_business_review: labels('Awaiting settlement approval', 'Chờ Manager duyệt quyết toán'),
   disputed: labels('Disputed - Needs BO Resolution', 'Đang khiếu nại - Cần bộ phận vận hành giải quyết'),
   refund_pending: labels('Refund pending', 'Chờ hoàn tiền'),
   payment_due: labels('Payment due', 'Chờ thanh toán'),
