@@ -1,4 +1,5 @@
 import { ApiClientError, apiDownload, apiRequest } from './apiClient'
+import type { GoodsItemInput, GoodsCategory } from './customerReservationApi'
 import { isCheckInStatus, isReservationStatus, isPaymentStatus, type CheckInStatus as WorkflowCheckInStatus, type ReservationStatus, type PaymentStatus } from '../types/statusContracts'
 
 export type CheckInStatus = WorkflowCheckInStatus | null
@@ -32,8 +33,7 @@ export interface CheckInChecklist {
 }
 
 export interface CheckInInventoryLine {
-  actualCategoryId?: string | null
-  actualMaterialId?: string | null
+  actualGoods?: GoodsItemInput | null
   goodsItemId: string
   actualQuantity: number
   condition: 'INTACT' | 'DAMAGED' | 'NOT_PRESENT'
@@ -83,6 +83,11 @@ export interface CheckInCase {
     materialName?: string | null
     catalogCategoryId?: string | null
     catalogMaterialId?: string | null
+    category?: GoodsCategory | null
+    fragile?: boolean
+    stackable?: boolean
+    allowHorizontalPlacement?: boolean
+    maxStackLayers?: number
     quantity: number
     lengthCm: number | null
     widthCm: number | null
@@ -102,6 +107,7 @@ export interface CheckInCase {
   identityVerificationNote: string | null
   contractSignedAt: string | null
   contractEvidenceReference: string | null
+  paymentEvidenceReference: string | null
   paymentCollectedAt: string | null
   setupStartedAt: string | null
   setupDueAt: string | null
@@ -128,6 +134,14 @@ export interface CheckInCase {
   receiptConfirmationReleaseAt?: string | null
   receiptReleaseEligible?: boolean
   declaredPackagingMethod?: string | null
+  storageCapacity?: {
+    volumeM3: number | null
+    maxLoadKg: number | null
+    maxCargoLengthCm?: number | null
+    maxCargoWidthCm?: number | null
+    maxCargoHeightCm?: number | null
+    maxCargoWeightKg?: number | null
+  } | null
   lockReference: string | null
   readinessNote: string | null
   rejectionReason: string | null
@@ -161,6 +175,7 @@ export interface CheckInCase {
   declaredGoodsHeightCm: number | null
   dueAtCheckIn: number | null
   handover: CompleteCheckInRequest | null
+  checkInDeadline?: string | null
 }
 
 export interface ReceiptReminderResponse {
@@ -416,6 +431,13 @@ export async function completeCheckInSetup(checkInId: string, note?: string) {
   ))
 }
 
+export async function archiveCompletedCheckIn(checkInId: string) {
+  return assertEnvelope(await apiRequest<unknown>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}`,
+    { method: 'DELETE' },
+  ))
+}
+
 export interface CheckInPayment {
   paymentId: string
   reservationId: string
@@ -424,7 +446,7 @@ export interface CheckInPayment {
   purpose: 'RENTAL_BALANCE'
   status: PaymentStatus
   transactionReference: string
-  paymentMethod: string
+  paymentMethod: CheckInPaymentMethod
   paidAt: string | null
   processedAt: string | null
   initiatedByName: string
@@ -433,9 +455,11 @@ export interface CheckInPayment {
   invoiceIssuedAt: string | null
 }
 
+export type CheckInPaymentMethod = 'CASH' | 'BANK_TRANSFER'
+
 export async function recordCheckInRemainingPayment(checkInId: string, request: {
   amount: number
-  paymentMethod: string
+  paymentMethod: CheckInPaymentMethod
   paymentEvidenceFileId: string
   transactionReference?: string
   note?: string

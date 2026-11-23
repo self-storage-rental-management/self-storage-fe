@@ -34,7 +34,7 @@ describe('staff inventory visit', () => {
   it('shows the recorded verifier and opens the restricted evidence only by action', () => {
     const html = render({ ...visit, arrivedAt, identityVerifiedAt: '2026-11-03T02:50:00Z',
       verifiedByName: 'Nhân viên A', photoId: 'private-identity-file' })
-    expect(html).toContain('Đã xác minh lúc 03/11/2026 09:50 bởi Nhân viên A.')
+    expect(html).toContain('Đã xác minh lúc 03/11/2026 09:50:00 bởi Nhân viên A.')
     expect(html).toContain('Xem ảnh xác minh')
     expect(html).not.toContain('private-identity-file')
   })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { rentalDeadlineState, RentalDeadlineBanner } from './RentalDeadlineNotice'
+import { rentalDeadlineState, RentalDeadlineBanner, getRentalRenewalEligibility } from './RentalDeadlineNotice'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { RentalApiRecord } from '../../types/rentalApi'
@@ -48,5 +48,66 @@ describe('rental deadline notices', () => {
   it('clearly labels the final permitted day', () => {
     const html = renderToStaticMarkup(createElement(RentalDeadlineBanner, { rental: rental('2026-10-14'), role: 'customer', now }))
     expect(html).toContain('Hết hạn hôm nay · còn 0 ngày')
+  })
+
+  describe('getRentalRenewalEligibility', () => {
+    it('disables renewal button when contract has more than 7 days left', () => {
+      // Contract ends in 10 days (2026-10-24, now is 2026-10-14)
+      const res = getRentalRenewalEligibility({ id: 'r1', status: 'active', contractEndDate: '2026-10-24' }, [], now)
+      expect(res.canRenew).toBe(false)
+      expect(res.remainingDays).toBe(10)
+      expect(res.reason).toBe('Chỉ có thể gia hạn khi hợp đồng còn 7 ngày trước ngày hết hạn.')
+    })
+
+    it('enables renewal button when contract has 7 days or less remaining', () => {
+      // Exactly 7 days (2026-10-21)
+      const res7 = getRentalRenewalEligibility({ id: 'r1', status: 'active', contractEndDate: '2026-10-21' }, [], now)
+      expect(res7.canRenew).toBe(true)
+      expect(res7.remainingDays).toBe(7)
+
+      // 3 days (2026-10-17)
+      const res3 = getRentalRenewalEligibility({ id: 'r1', status: 'active', contractEndDate: '2026-10-17' }, [], now)
+      expect(res3.canRenew).toBe(true)
+      expect(res3.remainingDays).toBe(3)
+
+      // Today (2026-10-14)
+      const res0 = getRentalRenewalEligibility({ id: 'r1', status: 'active', contractEndDate: '2026-10-14' }, [], now)
+      expect(res0.canRenew).toBe(true)
+      expect(res0.remainingDays).toBe(0)
+    })
+
+    it('disables renewal when contract status is not active', () => {
+      const res = getRentalRenewalEligibility({ id: 'r1', status: 'setup', contractEndDate: '2026-10-16' }, [], now)
+      expect(res.canRenew).toBe(false)
+      expect(res.reason).toBe('Chỉ có thể gia hạn khi hợp đồng đang hoạt động.')
+    })
+
+    it('detects open renewal and disables duplicate renewal request', () => {
+      const openRenewals = [{ rentalId: 'r1', status: 'pending' }]
+      const res = getRentalRenewalEligibility(
+        { id: 'r1', status: 'active', contractEndDate: '2026-10-16' },
+        openRenewals,
+        now
+      )
+      expect(res.canRenew).toBe(false)
+      expect(res.hasOpenRenewal).toBe(true)
+      expect(res.reason).toBe('Hợp đồng này đã có yêu cầu gia hạn đang được xử lý.')
+    })
+
+    it('ignores terminal renewal status (completed, rejected, cancelled, payment_expired)', () => {
+      const closedRenewals = [
+        { rentalId: 'r1', status: 'cancelled' },
+        { rentalId: 'r1', status: 'rejected' },
+        { rentalId: 'r1', status: 'completed' },
+        { rentalId: 'r1', status: 'payment_expired' },
+      ]
+      const res = getRentalRenewalEligibility(
+        { id: 'r1', status: 'active', contractEndDate: '2026-10-16' },
+        closedRenewals,
+        now
+      )
+      expect(res.canRenew).toBe(true)
+      expect(res.hasOpenRenewal).toBe(false)
+    })
   })
 })

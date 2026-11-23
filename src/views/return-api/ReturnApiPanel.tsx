@@ -1,3 +1,4 @@
+import { apiRequest } from '../../services/apiClient'
 import ReturnPolicyNotice from '../../components/ReturnPolicyNotice'
 import EmergencyContactsPanel from '../../components/EmergencyContactsPanel'
 import { useEffect, useRef, useState } from 'react'
@@ -244,6 +245,10 @@ function ReturnWorkspace({
 
   const rows = (read.data?.data.filter((item) => !rentalId || item.rentalId === rentalId) ?? [])
     .sort((left, right) => {
+      const due = (i: ApiReturn) => Date.parse(i.managerReviewDueAt || i.customerConfirmationDueAt || '')
+      const leftDue = due(left), rightDue = due(right)
+      if (Number.isFinite(leftDue) || Number.isFinite(rightDue))
+        return (Number.isFinite(leftDue) ? leftDue : Infinity) - (Number.isFinite(rightDue) ? rightDue : Infinity)
       const urgency = (item: ApiReturn) => item.status === 'recovery_required' ? 0 : item.status !== 'completed' && item.scheduledDate < today ? 1 : item.status === 'completed' ? 3 : 2
       return urgency(left) - urgency(right) || left.scheduledDate.localeCompare(right.scheduledDate)
     })
@@ -301,7 +306,7 @@ function ReturnWorkspace({
               </span>
             )}
           </div>
-          {rows.length > 0 && (
+          {rows.length > 0 && role !== 'customer' && (
             <div className="flex items-center gap-2">
               <Button
                 type="button"
@@ -316,7 +321,7 @@ function ReturnWorkspace({
           )}
         </div>
       ) : (
-        rows.length > 1 && (
+        rows.length > 1 && role !== 'customer' && (
           <div className="flex justify-end pb-1">
             <Button
               type="button"
@@ -365,7 +370,7 @@ function ReturnWorkspace({
       {feedback && <p role="status">{feedback}</p>}
       {!read.loading && !read.error && rows.length === 0 && <p className="rounded-xl bg-stone-50 p-5 text-center text-sm text-stone-500">Chưa có yêu cầu trả kho.</p>}
       {rows.map((record) => {
-        const isExpanded = expandedIds.has(record.id)
+        const isExpanded = role === 'customer' || expandedIds.has(record.id)
         const isCompleted = record.status === 'completed'
         const inventoryMismatch = record.returnType === 'INVENTORY_MISMATCH'
         const badgeClass =
@@ -381,14 +386,16 @@ function ReturnWorkspace({
 
         return (
           <div key={record.id} className="rounded-xl border border-stone-200 bg-white shadow-xs transition overflow-hidden">
-            {/* ─── Compact Summary Header (Clickable) ─── */}
+            {/* ─── Compact Summary Header (Clickable for staff/manager) ─── */}
             <div
               className={`flex flex-wrap items-center justify-between gap-3 p-3.5 cursor-pointer transition select-none ${
-                inventoryMismatch
-                  ? isExpanded ? 'bg-red-50/80 border-b border-red-200' : 'bg-red-50/40 hover:bg-red-50/80'
-                  : isExpanded ? 'bg-stone-50/80 border-b border-stone-200' : 'hover:bg-stone-50/60'
-              }`}
-              onClick={() => toggleExpand(record.id)}
+                role === 'customer'
+                  ? 'bg-stone-50/80 border-b border-stone-200'
+                  : inventoryMismatch
+                    ? isExpanded ? 'bg-red-50/80 border-b border-red-200' : 'bg-red-50/40 hover:bg-red-50/80'
+                    : isExpanded ? 'bg-stone-50/80 border-b border-stone-200' : 'hover:bg-stone-50/60'
+              } ${role === 'customer' ? '' : 'cursor-pointer'}`}
+              onClick={role === 'customer' ? undefined : () => toggleExpand(record.id)}
             >
               <div className="flex flex-wrap items-center gap-2.5">
                 <span className="text-sm font-bold text-stone-900 bg-stone-100 px-2.5 py-1 rounded-md border border-stone-200 font-mono">
@@ -405,11 +412,15 @@ function ReturnWorkspace({
                 <span className="text-xs text-stone-500">
                   Ngày hẹn trả: <strong className="text-stone-700">{rentalDate(record.scheduledDate)}</strong>
                 </span>
-                {record.inventoryRemovalDeadlineAt && (
-                  <span className="text-xs text-stone-600">
-                    Hạn đưa hàng ra <strong>{new Date(record.inventoryRemovalDeadlineAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</strong>
-                  </span>
-                )}
+                {(record.managerReviewDueAt || record.customerConfirmationDueAt) && <span className="rounded bg-red-50 px-2 py-1 text-xs font-bold text-red-800">
+                  {record.managerReviewDueAt ? 'Hạn Manager duyệt 6 giờ' : 'Hạn xác nhận 72 giờ'}: {new Date(record.managerReviewDueAt || record.customerConfirmationDueAt!).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}
+                  {' · '}{Date.parse(record.managerReviewDueAt || record.customerConfirmationDueAt!) <= Date.now() ? 'Đã quá hạn' : `Còn ${Math.ceil((Date.parse(record.managerReviewDueAt || record.customerConfirmationDueAt!) - Date.now()) / 60_000)} phút`}
+                </span>}
+                {role === 'staff' && ['requested', 'scheduled'].includes(record.status) && <button type="button" disabled={busy} className="rounded border px-2 py-1 text-xs" onClick={async e => {
+                  e.stopPropagation()
+                  try { await apiRequest(`/api/intake-workflow/reservations/returns/${encodeURIComponent(record.id)}/arrival`, { method: 'POST' }); setFeedback('Đã ghi nhận khách bàn giao đủ điều kiện. Hạn nghiệm thu là 4 giờ làm việc.'); read.refresh() }
+                  catch { setFeedback('Chưa thể ghi nhận bàn giao. Vui lòng kiểm tra hồ sơ và thử lại.') }
+                }}>Ghi nhận bàn giao đủ điều kiện nghiệm thu</button>}
               </div>
 
               <div className="flex items-center gap-2.5 ml-auto">
@@ -427,21 +438,23 @@ function ReturnWorkspace({
                   {inventoryMismatch ? `Trả kho do kiểm kê sai lệch · ${statusLabel(record)}` : statusLabel(record)}
                 </span>
 
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    toggleExpand(record.id)
-                  }}
-                  className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium transition cursor-pointer ${
-                    isExpanded
-                      ? 'border-stone-300 bg-white text-stone-700 hover:bg-stone-100'
-                      : 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 font-semibold'
-                  }`}
-                  title={isExpanded ? 'Thu gọn hồ sơ này' : 'Trải ra xem chi tiết và xử lý'}
-                >
-                  {isExpanded ? 'Thu gọn' : 'Trải ra'}
-                </button>
+                {role !== 'customer' && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      toggleExpand(record.id)
+                    }}
+                    className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium transition cursor-pointer ${
+                      isExpanded
+                        ? 'border-stone-300 bg-white text-stone-700 hover:bg-stone-100'
+                        : 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 font-semibold'
+                    }`}
+                    title={isExpanded ? 'Thu gọn hồ sơ này' : 'Trải ra xem chi tiết và xử lý'}
+                  >
+                    {isExpanded ? 'Thu gọn' : 'Trải ra'}
+                  </button>
+                )}
               </div>
             </div>
 
@@ -485,15 +498,17 @@ function ReturnWorkspace({
                     </Button>
                   </div>
                 )}
-                <div className="flex justify-end border-t border-stone-100 pt-3">
-                  <button
-                    type="button"
-                    onClick={() => toggleExpand(record.id)}
-                    className="inline-flex items-center gap-1 text-xs font-medium text-stone-500 hover:text-stone-800 hover:underline cursor-pointer"
-                  >
-                    Thu gọn hồ sơ {record.unitNumber}
-                  </button>
-                </div>
+                {role !== 'customer' && (
+                  <div className="flex justify-end border-t border-stone-100 pt-3">
+                    <button
+                      type="button"
+                      onClick={() => toggleExpand(record.id)}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-stone-500 hover:text-stone-800 hover:underline cursor-pointer"
+                    >
+                      Thu gọn hồ sơ {record.unitNumber}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

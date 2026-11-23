@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { renderToStaticMarkup } from "react-dom/server"
-import CustomerRenewalRequestModal from "./CustomerRenewalRequestModal"
+import CustomerRenewalRequestModal, { renewalOptionLabel } from "./CustomerRenewalRequestModal"
 import { ApiClientError } from "../../services/apiClient"
 
 const commandState = vi.hoisted(() => ({
@@ -105,6 +105,10 @@ describe("CustomerRenewalRequestModal UI improvement", () => {
     expect(html).toContain("Hủy")
     expect(html).toContain("Xác nhận và xem yêu cầu")
     expect(html).toMatch(/<button[^>]*class="[^"]*renewal-confirm-button[^"]*"[^>]*disabled=""[^>]*>Xác nhận và xem yêu cầu<\/button>/)
+
+    // Dropdown contains package name with 'Gói gia hạn' and accurate discount percent
+    expect(html).toContain("Gói gia hạn 1 tháng – giảm 0%")
+    expect(html).not.toContain("Gói thuê")
 
     // No conflict alert card
     expect(html).not.toContain("Gian kho này đã có yêu cầu gia hạn đang mở")

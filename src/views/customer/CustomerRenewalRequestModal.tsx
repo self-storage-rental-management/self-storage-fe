@@ -21,10 +21,10 @@ import {
 
 const discountPercent = new Intl.NumberFormat("vi-VN", { style: "percent", maximumFractionDigits: 2 })
 
-function renewalOptionLabel(option: RenewalApiOption) {
+export function renewalOptionLabel(option: RenewalApiOption) {
   const name = option.pricingPackageName?.trim().replace(/^gói\s+thuê(?=\s|\p{P}|$)/iu, "Gói gia hạn")
     || `Gói gia hạn ${option.rentalMonths} tháng`
-  return option.discountRate === undefined
+  return option.discountRate == null
     ? name
     : `${name}, giảm ${discountPercent.format(option.discountRate)}`
 }

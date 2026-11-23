@@ -509,6 +509,7 @@ export interface CustomerReservationDetail {
   reservation: CustomerReservation
   goodsCondition: string | null
   notes: string | null
+  paymentStartedAt: string | null
   paymentExpiresAt: string | null
   complaintExpiresAt: string | null
   archivedAt: string | null
@@ -533,6 +534,9 @@ export interface CustomerReservationDetail {
   rentalStatus?: string | null
   inventoryDueAt?: string | null
   inventoryFinalDeadlineAt?: string | null
+  inventoryResultPublishedAt?: string | null
+  inventoryRemainderDeadlineAt?: string | null
+  inventoryRemovalPublishedAt?: string | null
   inventoryRemovalDeadlineAt?: string | null
   inventoryEscalatedAt?: string | null
   setupCompletedAt?: string | null

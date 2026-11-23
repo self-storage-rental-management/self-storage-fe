@@ -20,6 +20,7 @@ export function returnScreenRecord(record: ApiReturn): ReturnCase {
     staffNotes: record.inspectionNotes ?? undefined, evidence: record.evidencePhotos ?? [],
     customerConfirmed: record.customerConfirmed, customerDecisionNote: record.customerDecisionNote ?? undefined,
     proposedUnitStatus: record.proposedUnitStatus ?? undefined, inspectedAt: record.inspectedAt ?? undefined,
+    managerApprovalRequired: record.managerApprovalRequired,
     completedAt: record.completedAt ?? undefined, settlementPaymentId: record.settlementPaymentId ?? undefined,
     settlementPaidAt: record.settlementPaidAt ?? undefined,
     returnedItems: { key: record.returnedKey === true, card: record.returnedCard === true, lock: record.returnedLock === true },

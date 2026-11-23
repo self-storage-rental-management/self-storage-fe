@@ -11,6 +11,6 @@ export function formatCustomerDateTime(value: string | number | Date | null | un
   if (value == null || value === '') return 'Chưa có'
   const date = parseVietnamDate(value)
   if (!Number.isFinite(date.getTime())) return 'Chưa có'
-  const time = new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: VIETNAM_TIME_ZONE }).format(date)
+  const time = new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: VIETNAM_TIME_ZONE }).format(date)
   return `${formatCustomerDate(date)} ${time}`
 }
