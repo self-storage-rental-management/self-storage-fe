@@ -134,6 +134,14 @@ export interface CheckInCase {
   receiptConfirmationReleaseAt?: string | null
   receiptReleaseEligible?: boolean
   declaredPackagingMethod?: string | null
+  storageCapacity?: {
+    volumeM3: number | null
+    maxLoadKg: number | null
+    maxCargoLengthCm?: number | null
+    maxCargoWidthCm?: number | null
+    maxCargoHeightCm?: number | null
+    maxCargoWeightKg?: number | null
+  } | null
   lockReference: string | null
   readinessNote: string | null
   rejectionReason: string | null
@@ -167,6 +175,7 @@ export interface CheckInCase {
   declaredGoodsHeightCm: number | null
   dueAtCheckIn: number | null
   handover: CompleteCheckInRequest | null
+  checkInDeadline?: string | null
 }
 
 export interface ReceiptReminderResponse {
