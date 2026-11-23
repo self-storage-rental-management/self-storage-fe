@@ -1786,7 +1786,7 @@ export default function StaffCheckInOperationsPanel({
                   try {
                     const updated = await correctCheckInIdentity(handoverTarget.checkInId, { identityDocumentNumber: normalizeCccd(identityDocumentNumber), note: verificationNotes.trim(), adulthoodConfirmed })
                     setHandoverTarget(updated)
-                    setItems(current => current.map(item => item.checkInId === updated.checkInId ? updated : item))
+                    refresh()
                     setError(null)
                   } catch (reason) { fail(reason, 'Không thể sửa CCCD.') }
                   finally { setSubmitting(false) }

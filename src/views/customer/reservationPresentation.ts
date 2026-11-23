@@ -9,13 +9,22 @@ export const goodsReviewLabels: Record<CustomerReservation['goodsReviewStatus'],
 
 export function paymentCountdown(deadline: string | null | undefined, now: number) {
   const timestamp = deadline ? Date.parse(deadline) : NaN
-  if (!Number.isFinite(timestamp)) return { text: 'Đang tải thời hạn…', expired: true, urgency: 'normal' as const }
+  if (!Number.isFinite(timestamp)) return { text: 'Đang tải thời hạn…', expired: true }
   const seconds = Math.max(0, Math.ceil((timestamp - now) / 1000))
   const hours = Math.floor(seconds / 3600)
   const minutes = Math.floor((seconds % 3600) / 60)
-  const text = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
+  const text = hours > 0
+    ? `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
+    : `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
 
-  return { text, expired: seconds === 0, urgency: seconds < 60 ? 'danger' as const : seconds < 300 ? 'warning' as const : 'normal' as const }
+  return { text, expired: seconds === 0 }
+}
+
+export function paymentCountdownUrgency(deadline: string | null | undefined, now: number): 'danger' | 'warning' | 'normal' {
+  const timestamp = deadline ? Date.parse(deadline) : NaN
+  if (!Number.isFinite(timestamp)) return 'normal'
+  const seconds = Math.max(0, Math.ceil((timestamp - now) / 1000))
+  return seconds < 60 ? 'danger' : seconds < 300 ? 'warning' : 'normal'
 }
 
 export const reservationStatusLabels: Record<ReservationStatus, string> = {
