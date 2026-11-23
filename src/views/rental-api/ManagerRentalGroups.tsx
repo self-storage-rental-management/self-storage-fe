@@ -4,6 +4,7 @@ import type { RenewalApiRecord } from '../../types/renewalApi'
 import { rentalDate, rentalLabels, rentalRecordLabel, renewalLabels } from './presentation'
 import { renewalWorkflowLabel } from './renewalStatusPresentation'
 import ManagerContractPreview from './ManagerContractPreview'
+import { RenewalDetailIcon, RenewalPreviewIcon, renewalBadgeClass, renewalDetailClass, renewalPreviewClass, renewalStatusTone, renewalTableHeadClass } from './renewalListStyles'
 
 type RecordRow = RentalApiRecord | RenewalApiRecord
 type Kind = 'rental' | 'renewal'
@@ -51,7 +52,7 @@ export default function ManagerRentalGroups({ kind, rows, onDetail }: {
           {kind === 'renewal'
             ? <colgroup><col className="w-[15%]"/><col className="w-[9%]"/><col className="w-[20%]"/><col className="w-[18%]"/><col className="w-[13%]"/><col className="w-[16%]"/><col className="w-[9%]"/></colgroup>
             : <colgroup><col className="w-[19%]"/><col className="w-[23%]"/><col className="w-[19%]"/><col className="w-[14%]"/><col className="w-[16%]"/><col className="w-[9%]"/></colgroup>}
-          <thead className="bg-stone-50 text-xs text-stone-500"><tr>
+          <thead className={`text-xs ${kind === 'renewal' ? renewalTableHeadClass : 'bg-stone-50 text-stone-500'}`}><tr>
             {(kind === 'renewal'
               ? ['Hồ sơ thuê', 'Lần gia hạn', 'Gian kho / Cơ sở', 'Trạng thái', 'Kết thúc kỳ']
               : ['Mã hồ sơ', 'Gian kho / Cơ sở', 'Trạng thái', 'Kết thúc kỳ'])
@@ -59,7 +60,7 @@ export default function ManagerRentalGroups({ kind, rows, onDetail }: {
             <th scope="col" className="px-4 py-3 text-center font-medium">Xem trước hợp đồng</th>
             <th scope="col" className="px-2 py-3 text-center font-medium">Chi tiết</th>
           </tr></thead>
-          <tbody className="divide-y divide-stone-100">
+          <tbody className={`divide-y ${kind === 'renewal' ? 'divide-stone-200' : 'divide-stone-100'}`}>
             {group.rows.map(row => {
               const renewal = kind === 'renewal' ? row as RenewalApiRecord : null
               const rental = kind === 'rental' ? row as RentalApiRecord : null
@@ -72,14 +73,17 @@ export default function ManagerRentalGroups({ kind, rows, onDetail }: {
                 : managerRecordIsHistory(row, kind) ? 'bg-stone-100 text-stone-700'
                 : row.status === 'payment_failed' || row.status === 'payment_expired' ? 'bg-rose-50 text-rose-800'
                 : 'bg-amber-50 text-amber-800'
-              return <tr key={row.id} className="hover:bg-amber-50/40">
+              return <tr key={row.id} className={renewal ? "hover:bg-stone-50/70" : "hover:bg-amber-50/40"}>
                 <td className="px-4 py-3"><span className="block truncate font-medium text-stone-900" title={dossierLabel}>{dossierLabel}</span></td>
                 {renewal && <td className="whitespace-nowrap px-4 py-3 text-center font-semibold text-stone-700">{renewal.renewalSequence ? `Lần ${renewal.renewalSequence}` : '—'}</td>}
                 <td className="px-4 py-3"><span className="block truncate font-medium text-stone-900" title={row.storageUnit.code}>{row.storageUnit.code}</span><span className="block truncate text-xs text-stone-500" title={row.facility.name}>{row.facility.name}</span></td>
-                <td className="px-4 py-3"><span className={`mx-auto flex min-h-8 w-[95%] items-center justify-center rounded-full px-2 text-center text-xs font-medium ${tone}`}><span className="truncate">{statusLabel || row.status}</span></span></td>
+                <td className="px-4 py-3">{renewal
+                  ? <span className={`${renewalBadgeClass} ${renewalStatusTone(renewal)}`}>{statusLabel || row.status}</span>
+                  : <span className={`mx-auto flex min-h-8 w-[95%] items-center justify-center rounded-full px-2 text-center text-xs font-medium ${tone}`}><span className="truncate">{statusLabel || row.status}</span></span>}
+                </td>
                 <td className="whitespace-nowrap px-4 py-3 tabular-nums text-stone-700">{displayedEnd ? rentalDate(displayedEnd) : 'Chưa xác định'}</td>
-                <td className="px-4 py-3 text-center"><button type="button" className="inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-md border-0 bg-amber-200 px-3 text-sm !font-extrabold text-amber-900 hover:bg-amber-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700" aria-label={`Xem trước hợp đồng ${recordLabel}`} onClick={() => setContractId(row.id)}>Xem trước</button></td>
-                <td className="px-1 py-3 text-center"><button type="button" title="Xem chi tiết hồ sơ" className="inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-md border-0 bg-stone-200 px-2 text-sm !font-extrabold text-stone-700 hover:bg-stone-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-600" aria-label={`Xem chi tiết ${recordLabel}`} onClick={() => onDetail(row.id)}>Chi tiết</button></td>
+                <td className="px-4 py-3 text-center"><button type="button" className={renewal ? renewalPreviewClass : "inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-md border-0 bg-amber-200 px-3 text-sm !font-extrabold text-amber-900 hover:bg-amber-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700"} aria-label={`Xem trước hợp đồng ${recordLabel}`} onClick={() => setContractId(row.id)}>{renewal && <RenewalPreviewIcon />}Xem trước</button></td>
+                <td className="px-1 py-3 text-center"><button type="button" title="Xem chi tiết hồ sơ" className={renewal ? renewalDetailClass : "inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-md border-0 bg-stone-200 px-2 text-sm !font-extrabold text-stone-700 hover:bg-stone-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-600"} aria-label={`Xem chi tiết ${recordLabel}`} onClick={() => onDetail(row.id)}>Chi tiết{renewal && <RenewalDetailIcon />}</button></td>
               </tr>
             })}
             {group.rows.length === 0 && <tr><td colSpan={kind === 'renewal' ? 7 : 6} className="px-4 py-8 text-center text-sm text-stone-500">{rows.length === 0 ? 'Không có dữ liệu' : group.id === 'ongoing' ? 'Không có hồ sơ đang xử lý trên trang này.' : 'Không có hồ sơ lịch sử trên trang này.'}</td></tr>}

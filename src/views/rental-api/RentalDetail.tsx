@@ -69,11 +69,25 @@ export default function RentalDetail({
   const [startError, setStartError] = useState<string>()
   const [preparationSubmitting, setPreparationSubmitting] = useState(false)
   const [preparationError, setPreparationError] = useState<string>()
+  const [inventoryDetail, setInventoryDetail] = useState<CustomerReservationDetail>()
+  const [inventoryReadError, setInventoryReadError] = useState('')
+  const [inventoryReload, setInventoryReload] = useState(0)
+  const inventoryReservationId = role === 'customer' && rental.inventoryPending && rental.moveInCompletedAt
+    ? rental.reservationId : null
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000)
     return () => window.clearInterval(timer)
   }, [])
+  useEffect(() => {
+    if (!inventoryReservationId) return
+    let active = true
+    setInventoryReadError('')
+    void getCustomerReservation(inventoryReservationId)
+      .then(value => { if (active) setInventoryDetail(value) })
+      .catch(error => { if (active) setInventoryReadError(userFacingError(error, 'Không tải được lịch kiểm kê.')) })
+    return () => { active = false }
+  }, [inventoryReservationId, inventoryReload])
   const labelClass = "text-xs font-medium text-stone-500"
   const valueClass = "mt-1 text-sm font-semibold text-stone-900"
 
@@ -189,10 +203,19 @@ export default function RentalDetail({
             </dd>
           </div> : rental.inventoryPending && <div>
             <dt>Kiểm kê đầu vào</dt>
-            <dd><Badge variant="warning">Chưa kiểm kê</Badge>
+            <dd>{role === 'customer' && inventoryDetail?.reservation.id === rental.reservationId
+              && inventoryDetail?.inventoryFinalDeadlineAt ? (
+                <InventoryAppointmentPanel detail={inventoryDetail} now={now} onSaved={setInventoryDetail} />
+              ) : <>
+              <Badge variant="warning">Chưa kiểm kê</Badge>
               <p className="mt-2 text-xs leading-5 text-stone-500">Kỳ thuê vẫn tính theo mốc đã bàn giao, hồ sơ kiểm kê cần được hoàn tất trước hạn xử lý.</p>
               {rental.inventoryDueAt && <p className="mt-1 text-xs text-stone-500">Mốc nhắc kiểm kê: {new Date(rental.inventoryDueAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</p>}
               {rental.inventoryFinalDeadlineAt && <p className={`mt-1 text-xs font-bold ${new Date(rental.inventoryFinalDeadlineAt).getTime() <= now ? 'text-red-700' : 'text-stone-700'}`}>{new Date(rental.inventoryFinalDeadlineAt).getTime() <= now ? 'Đã quá hạn kiểm kê' : 'Hạn hoàn tất kiểm kê'}: {new Date(rental.inventoryFinalDeadlineAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</p>}
+              {inventoryReadError && <div className="mt-2">
+                <p role="alert" className="text-xs text-red-700">{inventoryReadError}</p>
+                <Button size="sm" variant="outline" onClick={() => setInventoryReload(value => value + 1)}>Tải lại lịch kiểm kê</Button>
+              </div>}
+              </>}
             </dd>
           </div>}
           {rental.setupExitReviewRequired && <div>

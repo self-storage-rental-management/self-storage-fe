@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { isVietnamesePhone } from '../domain/vietnamesePhone'
-import { normalizeCccd, validateCccd, maskCccd } from '../domain/cccd'
+import { maskCccd } from '../domain/cccd'
+import { normalizeRentalIdentity, validateRentalIdentity } from '../domain/rentalIdentity'
 import type { CustomerProfileDetails, User } from '../types'
 
 type Profile = Pick<User, 'name' | 'phone' | 'permanentAddress' | 'emergencyContactName' | 'emergencyContactPhone' | 'profileDetails'>
@@ -27,7 +28,7 @@ export function contactErrors(user: Profile, second = false) {
 export function validateEmergencyProfile(user: Profile): string | null {
   const d = user.profileDetails || {}
   if (d.identityDocumentNumber) {
-    const result = validateCccd(d.identityDocumentNumber)
+    const result = validateRentalIdentity(d.identityDocumentNumber)
     if (!result.ok) return result.error!
   }
   const primaryPresent = !!(user.emergencyContactName || user.emergencyContactPhone || d.emergencyContactRelationship || d.emergencyContactEmail || d.emergencyContactConsent)
@@ -41,7 +42,7 @@ function checklist(user: Profile) {
   return [
     { label: 'Số điện thoại', id: 'profile-phone', ok: isVietnamesePhone(user.phone || '') },
     { label: 'Địa chỉ', id: 'profile-address', ok: (user.permanentAddress || '').trim().length >= 5 },
-    { label: 'CCCD', id: 'profile-identity', ok: !!d.identityDocumentNumber && validateCccd(d.identityDocumentNumber).ok },
+    { label: 'Giấy tờ tùy thân', id: 'profile-identity', ok: !!d.identityDocumentNumber && validateRentalIdentity(d.identityDocumentNumber).ok },
     { label: 'Người liên hệ khẩn cấp', id: 'profile-contact-1', ok: !Object.keys(first).some(k => k !== 'consent') && !Object.keys(second).some(k => k !== 'consent') },
     { label: 'Đồng ý cung cấp thông tin NLHKC', id: !d.emergencyContactConsent ? 'profile-contact-1-consent' : 'profile-contact-2-consent', ok: !first.consent && !second.consent },
   ]
@@ -77,23 +78,23 @@ export function CustomerProfileFields({ value, onChange, user, onNameChange, onP
   const set = (key: keyof CustomerProfileDetails, next: string | boolean) => onChange({ ...value, [key]: next })
   const input = 'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm'
   const identity = value.identityDocumentNumber || ''
-  const result = identity ? validateCccd(identity) : null
+  const result = identity ? validateRentalIdentity(identity) : null
   const locked = !!value.identityVerifiedAt
   const errorLine = (error?: string) => error && <p className="text-xs text-red-700" role="alert">{error}</p>
   return <div className="space-y-5">
     <fieldset id="profile-identity" className="space-y-3 rounded-xl border border-stone-200 p-4">
       <legend className="px-1 font-semibold">Danh tính</legend>
-      <label htmlFor="profile-cccd" className="block text-sm font-medium">Số CCCD (12 chữ số)</label>
-      <div className="flex gap-2"><input id="profile-cccd" className={input} inputMode="numeric" autoComplete="off" readOnly={locked || (!!identity && !editingIdentity)}
+      <label htmlFor="profile-cccd" className="block text-sm font-medium">Số CCCD hoặc hộ chiếu</label>
+      <div className="flex gap-2"><input id="profile-cccd" className={input} autoComplete="off" readOnly={locked || (!!identity && !editingIdentity)}
         value={editingIdentity || showIdentity || !identity ? identity : maskCccd(identity)}
         aria-invalid={identityTouched && !!result && !result.ok} aria-describedby="profile-cccd-feedback"
-        onChange={e => { setEditingIdentity(true); setIdentityTouched(true); set('identityDocumentNumber', normalizeCccd(e.target.value)) }}
+        onChange={e => { setEditingIdentity(true); setIdentityTouched(true); set('identityDocumentNumber', normalizeRentalIdentity(e.target.value)) }}
         onBlur={() => { setIdentityTouched(true); setEditingIdentity(false); setShowIdentity(false) }} />
         {!!identity && <button type="button" className="shrink-0 text-sm underline" onClick={() => setShowIdentity(!showIdentity)}>{showIdentity ? 'Ẩn' : 'Xem'}</button>}
         {!locked && <button type="button" className="shrink-0 text-sm underline" onClick={() => { setEditingIdentity(true); setShowIdentity(true); document.getElementById('profile-cccd')?.focus() }}>Sửa</button>}
       </div>
       <div id="profile-cccd-feedback">{identityTouched && errorLine(result?.error)}{result?.warning && <p className="text-xs text-amber-800">{result.warning}</p>}</div>
-      {locked && <p className="text-xs text-stone-600">Staff đã đối chiếu giấy tờ gốc. Vui lòng liên hệ Staff nếu cần sửa CCCD.</p>}
+      {locked && <p className="text-xs text-stone-600">Staff đã đối chiếu giấy tờ gốc. Vui lòng liên hệ Staff nếu cần sửa.</p>}
     </fieldset>
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">{[false, true].map(second => {
       const index = second ? 2 : 1

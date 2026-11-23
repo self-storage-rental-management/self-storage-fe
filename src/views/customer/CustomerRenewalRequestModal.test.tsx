@@ -76,7 +76,7 @@ describe("CustomerRenewalRequestModal UI improvement", () => {
 
     // Verify rich alert card is rendered
     expect(html).toContain("Gian kho này đã có yêu cầu gia hạn đang mở")
-    expect(html).toContain("Hợp đồng thuê này đã được tạo một yêu cầu gia hạn trước đó")
+    expect(html).toContain("Vui lòng xem hoặc thanh toán yêu cầu hiện có trước khi tạo yêu cầu mới.")
 
     // Verify old confusing buttons are gone
     expect(html).not.toContain("Xác nhận và xem yêu cầu")
@@ -104,6 +104,7 @@ describe("CustomerRenewalRequestModal UI improvement", () => {
     expect(html).toContain("Gói gia hạn")
     expect(html).toContain("Hủy")
     expect(html).toContain("Xác nhận và xem yêu cầu")
+    expect(html).toMatch(/<button[^>]*class="[^"]*renewal-confirm-button[^"]*"[^>]*disabled=""[^>]*>Xác nhận và xem yêu cầu<\/button>/)
 
     // Dropdown contains package name with 'Gói gia hạn' and accurate discount percent
     expect(html).toContain("Gói gia hạn 1 tháng – giảm 0%")
@@ -117,10 +118,37 @@ describe("CustomerRenewalRequestModal UI improvement", () => {
     const html = renderToStaticMarkup(
       <CustomerRenewalRequestModal actorId="cust-1" rentalId="rent-1" onClose={vi.fn()} onSuccess={vi.fn()} />,
     )
-    expect(html).toContain('<option value="PKG_1M">Gói gia hạn 1 tháng – giảm 0%</option>')
-    expect(html).toContain('<option value="LOYAL">Khách thân thiết – giảm 7,25%</option>')
-    expect(html).toContain('<option value="PKG_6M">Gói gia hạn 6 tháng – giảm 10,5%</option>')
+    expect(html).toContain('<option value="PKG_1M">Gói gia hạn 1 tháng, giảm 0%</option>')
+    expect(html).toContain('<option value="LOYAL">Khách thân thiết, giảm 7,25%</option>')
+    expect(html).toContain('<option value="PKG_6M">Gói gia hạn 6 tháng, giảm 10,5%</option>')
     expect(html).toContain('<option value="LEGACY">Gói gia hạn 12 tháng</option>')
     expect(html).not.toContain("Gói thuê")
+  })
+
+  it("offers only shorter packages supplied by the backend for a booking conflict", () => {
+    commandState.conflict = true
+    commandState.error = new ApiClientError("Ô kho đã có lịch đặt trùng", {
+      status: 409,
+      details: { reason: "RENEWAL_BOOKING_CONFLICT", shorterPackageCodes: ["PKG_1M"] },
+    })
+    const html = renderToStaticMarkup(
+      <CustomerRenewalRequestModal actorId="cust-1" rentalId="rent-1" onClose={vi.fn()} onSuccess={vi.fn()} onBrowseUnits={vi.fn()} />,
+    )
+    expect(html).toContain("Bạn có thể chọn gói ngắn hơn")
+    expect(html).not.toContain("Tìm ô kho khác")
+    expect(html).not.toContain("Tải lại hồ sơ")
+  })
+
+  it("offers the warehouse browser when no shorter package fits", () => {
+    commandState.conflict = true
+    commandState.error = new ApiClientError("Ô kho đã có lịch đặt trùng", {
+      status: 409,
+      details: { reason: "RENEWAL_BOOKING_CONFLICT", shorterPackageCodes: [] },
+    })
+    const html = renderToStaticMarkup(
+      <CustomerRenewalRequestModal actorId="cust-1" rentalId="rent-1" onClose={vi.fn()} onSuccess={vi.fn()} onBrowseUnits={vi.fn()} />,
+    )
+    expect(html).toContain("Tìm ô kho khác")
+    expect(html).not.toContain("Bạn có thể chọn gói ngắn hơn")
   })
 })
