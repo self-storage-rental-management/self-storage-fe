@@ -42,6 +42,7 @@ import StaffDailyTaskQueue from "./StaffDailyTaskQueue"
 import RecoveryTaskDetail from "../rental-api/RecoveryTaskDetail"
 import ReturnApiPanel from "../return-api/ReturnApiPanel"
 import {
+  archiveCompletedCheckIn,
   listCheckIns,
   listCredentialAlerts,
   revokeAccessCredential,
@@ -2927,10 +2928,17 @@ export default function StaffApp({
                           <Button
                             variant="danger"
                             size="sm"
-                            onClick={() => {
+                            onClick={async () => {
                               if (window.confirm(`Xác nhận xóa đơn ${r.id} của khách hàng ${r.customer}? Hệ thống sẽ lưu trữ hồ sơ và không xóa vật lý dữ liệu.`)) {
-                                setReservations((current) => current.filter((item) => item.id !== r.id))
-                                showToast(`Đã xóa đơn ${r.id} (đã lưu trữ và ghi nhận lịch sử).`)
+                                try {
+                                  if (isApiAuthenticated()) {
+                                    await archiveCompletedCheckIn(r.id)
+                                  }
+                                  setReservations((current) => current.filter((item) => item.id !== r.id))
+                                  showToast(`Đã xóa đơn ${r.id} (đã lưu trữ và ghi nhận lịch sử).`)
+                                } catch (error) {
+                                  showToast(staffErrorMessage(error, `Không thể lưu trữ đơn ${r.id}.`))
+                                }
                               }
                             }}
                           >

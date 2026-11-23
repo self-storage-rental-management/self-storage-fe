@@ -3073,7 +3073,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                               const end = parseCustomerDate(rental.endDate)
                               const today = new Date(now); today.setHours(0, 0, 0, 0)
                               const remainingDays = end ? Math.round((end.getTime() - today.getTime()) / 86_400_000) : Infinity
-                              const isWithin7Days = Number.isFinite(remainingDays) && remainingDays <= 7
+                              const isWithin7Days = Number.isFinite(remainingDays) && remainingDays === 7
                               const hasOpenRenewal = renewals.some(item => item.rentalId === rental.id && !['cancelled', 'rejected', 'completed', 'payment_expired'].includes(item.status))
                               const canRenew = isWithin7Days && !hasOpenRenewal
 
