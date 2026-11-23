@@ -250,6 +250,14 @@ export async function updateCurrentProfileWithApi(input: {
   return currentActor!
 }
 
+export async function refreshCurrentProfileWithApi(): Promise<ApiActor> {
+  const response = await apiRequest<ApiEnvelope<ApiActor>>('/api/auth/me')
+  if (!response?.data) throw new Error('Backend trả về dữ liệu hồ sơ không hợp lệ.')
+  persistActor(normalizeApiActor(response.data))
+  window.dispatchEvent(new Event('storagehub:actor-updated'))
+  return currentActor!
+}
+
 export async function listMySessions(): Promise<ApiSession[]> {
   const response = await apiRequest<ApiEnvelope<ApiSession[]>>('/api/auth/sessions')
   if (!response?.data) throw new Error('Backend trả về dữ liệu phiên đăng nhập không hợp lệ.')

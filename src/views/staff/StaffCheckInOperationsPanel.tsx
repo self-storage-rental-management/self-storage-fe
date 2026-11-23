@@ -6,6 +6,7 @@ import {
   completeCheckInSetup,
   confirmCheckInPayment,
   downloadCheckInEvidence,
+  listStaffAccessCredentials,
   listCheckIns,
   markCheckInNoShow,
   recordCheckInRemainingPayment,
@@ -1010,6 +1011,22 @@ export default function StaffCheckInOperationsPanel({
         if (!emptyStorageHandoverReady) {
           throw new Error("Cần nhập mã ổ khóa, ghi nhận hiện trạng và chọn ít nhất một ảnh hoặc PDF bằng chứng kho trống.")
         }
+        const lockReference = keyLockReference.trim()
+        const activeCredentials = await listStaffAccessCredentials({
+          facilityId: handoverTarget.facilityId,
+          q: lockReference,
+          status: "ACTIVE",
+          pageSize: 100,
+        })
+        const normalizedLockReference = lockReference.replace(/\s+/g, " ").toLocaleUpperCase("vi-VN")
+        const duplicateLock = activeCredentials.data.some((credential) =>
+          credential.type === "LOCK"
+          && credential.reservationId !== handoverTarget.reservationId
+          && credential.reference.trim().replace(/\s+/g, " ").toLocaleUpperCase("vi-VN") === normalizedLockReference,
+        )
+        if (duplicateLock) {
+          throw new Error("Mã ổ khóa đang được sử dụng tại cơ sở này.")
+        }
         const emptyStorageEvidence = checkInEvidenceAssetIds(evidenceReferences)
         for (const file of evidenceFiles) {
           const asset = await uploadCheckInEvidence(handoverTarget.checkInId, file)
@@ -1667,7 +1684,7 @@ export default function StaffCheckInOperationsPanel({
                         <span className="mt-1 block">
                           {handoverTarget.setupEarlyExitFee == null
                             ? 'Chưa xác định được mức phí trả kho trong thời gian chuẩn bị. Cần đối soát trước khi tiếp tục.'
-                            : <>Nếu khách trả kho trong thời gian chuẩn bị, khoản phí áp dụng một lần là <strong>{handoverTarget.setupEarlyExitFee.toLocaleString('vi-VN')} đồng</strong>.</>}
+                            : <>Nếu khách trả kho trong thời gian chuẩn bị, hệ thống giữ lại <strong>{handoverTarget.setupEarlyExitFee.toLocaleString('vi-VN')} đồng</strong> (20% tiền thuê sau ưu đãi) và hoàn 80% tiền thuê; tiền cọc đảm bảo quyết toán riêng.</>}
                         </span>
                       </span>
                     </label>}

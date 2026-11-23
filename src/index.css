@@ -619,3 +619,57 @@ main textarea:focus) {
 .customer-role-layout [data-layout-scroll-container] { scrollbar-gutter: stable; }
 .customer-role-layout [data-layout-scroll-container].fade-in,
 .customer-role-layout .customer-page .fade-in { animation: none; }
+
+/* === STORAGEHUB BUTTON SYSTEM (CHỐNG CẦU VỒNG NÚT BẤM & 3-TIER ACTION HIERARCHY) === */
+.sh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  transition: all 0.15s ease-in-out;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sh-btn-primary {
+  background-color: #d97706; /* amber-600 */
+  color: #ffffff !important;
+  border: 1px solid transparent;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+.sh-btn-primary:hover {
+  background-color: #b45309; /* amber-700 */
+}
+.sh-btn-success {
+  background-color: #059669; /* emerald-600 */
+  color: #ffffff !important;
+  border: 1px solid transparent;
+}
+.sh-btn-success:hover {
+  background-color: #047857; /* emerald-700 */
+}
+.sh-btn-secondary {
+  background-color: #ffffff;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+}
+.sh-btn-secondary:hover {
+  background-color: #f8fafc;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+.sh-btn-icon {
+  padding: 0.5rem;
+  border-radius: 0.75rem;
+  background-color: transparent;
+  border: 1px solid #e2e8f0;
+  color: #64748b;
+}
+.sh-btn-icon:hover {
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+
