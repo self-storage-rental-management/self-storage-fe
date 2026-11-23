@@ -13,7 +13,7 @@ import {
   type CustomerReservation,
   type ReservationPaymentResult,
 } from '../../services/customerReservationApi'
-import { paymentCountdown } from './reservationPresentation'
+import { paymentCountdown, paymentCountdownUrgency } from './reservationPresentation'
 import ReservationReceipt from './ReservationReceipt'
 import ReservationQuoteSummary from './ReservationQuoteSummary'
 import { bookingDepositAccepted } from './paymentPresentation'
@@ -39,13 +39,14 @@ interface Props {
   reservation: CustomerReservation
   facilityName: string
   unitTypeName: string
+  paymentStartedAt?: string | null
   paymentExpiresAt?: string | null
   now: number
   onMessage: (message: string) => void
   onRefresh: () => Promise<void>
 }
 
-export default function CustomerReservationPayment({ reservation, facilityName, unitTypeName, paymentExpiresAt, now, onMessage, onRefresh }: Props) {
+export default function CustomerReservationPayment({ reservation, facilityName, unitTypeName, paymentStartedAt, paymentExpiresAt, now, onMessage, onRefresh }: Props) {
   const [payment, setPayment] = useState<ReservationPaymentResult | null>(null)
   const [payOpen, setPayOpen] = useState(false)
   const [confirmModalOpen, setConfirmModalOpen] = useState(false)
@@ -145,11 +146,16 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
     }
   }
 
-  const timerTone = countdown.urgency === 'danger' ? 'bg-red-700 text-white' : countdown.urgency === 'warning' ? 'border border-amber-300 bg-amber-50 text-amber-950' : 'border border-stone-200 bg-stone-50 text-stone-800'
+  const urgency = paymentCountdownUrgency(paymentExpiresAt || reservation.holdExpiresAt, now)
+  const timerTone = urgency === 'danger' ? 'bg-red-700 text-white' : urgency === 'warning' ? 'border border-amber-300 bg-amber-50 text-amber-950' : 'border border-stone-200 bg-stone-50 text-stone-800'
   if (!snapshot) return <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{MISSING_RESERVATION_SNAPSHOT}</p>
   return <>
     {reservation.status === 'AWAITING_PAYMENT' && <div className={`rounded-lg p-3 text-right text-xs ${timerTone}`}>
-      <p className="font-bold">Hạn thanh toán trước 20% (giữ chỗ) · giờ:phút:giây</p>
+      <p className="font-bold">Thời gian thanh toán đặt cọc giữ chỗ còn lại · Hạn thanh toán trước 20% (giữ chỗ)</p>
+      {(paymentStartedAt || paymentExpiresAt) && <div className="mt-2 space-y-0.5 text-left text-[11px] text-inherit">
+        {paymentStartedAt && <p>Bắt đầu tính 15 phút: <b>{formatDisplayDateTime(paymentStartedAt)}</b></p>}
+        {paymentExpiresAt && <p>Hạn cuối: <b>{formatDisplayDateTime(paymentExpiresAt)}</b></p>}
+      </div>}
       <p role="timer" className="mt-1 text-2xl font-extrabold tabular-nums">{countdown.text}</p>
       <p className="mt-1">{countdown.expired ? 'Đã hết thời hạn. Đang chờ cập nhật trạng thái đơn.' : 'Vui lòng hoàn tất thanh toán trước khi hết thời hạn.'}</p>
       <div className="mt-2 rounded border border-amber-300/40 bg-amber-500/20 px-2 py-1.5 text-center text-[11px] font-semibold text-inherit">
@@ -162,7 +168,7 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
           return
         }
         setAcceptedNoRefund(false); setPayOpen(true)
-      }}>Thanh toán trước 20% (giữ chỗ)</Button>
+      }}>Thanh toán đặt cọc giữ chỗ</Button>
     </div>}
     {payment?.paymentStatus === 'PAID' && <Button variant="outline" size="sm" className="reservation-action reservation-action-receipt min-h-10 w-full justify-center" onClick={() => setReceiptOpen(true)}>{bookingDepositAccepted(payment) ? 'Xem biên lai thanh toán' : 'Xem giao dịch cần đối soát'}</Button>}
     <Modal size="2xl" open={payOpen} onClose={() => { if (!busy) { setPayOpen(false); setConfirmModalOpen(false); setAcceptedNoRefund(false) } }} title="Thanh toán trước 20% (giữ chỗ)">
