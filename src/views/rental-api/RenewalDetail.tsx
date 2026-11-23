@@ -95,7 +95,7 @@ export default function RenewalDetail({
         { label: "Kiểm tra & báo giá", detail: "Hệ thống xác minh điều kiện và ghi nhận điều khoản" },
         { label: "Thanh toán", detail: hasDeposit ? "Thanh toán tiền thuê gia hạn trả trước" : "Thanh toán tiền gia hạn" },
         { label: "Hẹn lịch ký", detail: "Chọn thời gian đến cơ sở" },
-        { label: "Đối chiếu & ký", detail: "Staff xác minh, nhận tiền còn lại và lưu hợp đồng đã ký" },
+        { label: "Đối chiếu & ký", detail: "Nhân viên xác minh, nhận tiền còn lại và lưu hợp đồng đã ký" },
       ]
 
   const workflowStage = r.statusSummary?.workflowStatus
