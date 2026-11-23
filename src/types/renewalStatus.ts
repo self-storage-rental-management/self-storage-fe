@@ -4,7 +4,7 @@ import { isInvoiceStatus, isInvoiceRefundStatus, isPaymentTransactionStatus, isR
 export const renewalWorkflowLabels = {
   UNDER_REVIEW: 'Đang kiểm tra', AWAITING_PAYMENT: 'Chờ thanh toán',
   AWAITING_RECONCILIATION: 'Chờ đối soát', AWAITING_SIGNING: 'Chờ ký gia hạn',
-  SIGNING_IN_PROGRESS: 'Đang hoàn tất ký', SIGNING_EXPIRED: 'Hết hạn ký',
+  SIGNING_IN_PROGRESS: 'Đang hoàn tất ký', NO_SHOW: 'Khách không đến, chờ đối soát', SIGNING_EXPIRED: 'Hết hạn ký',
   PAYMENT_WINDOW_EXPIRED: 'Hết hạn thanh toán', ON_HOLD: 'Tạm dừng xử lý',
   COMPLETED: 'Gia hạn hoàn tất', CANCELLED: 'Đã hủy', REJECTED: 'Đã đóng',
 } as const satisfies Record<RenewalWorkflowStatus, string>

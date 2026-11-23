@@ -30,6 +30,7 @@ import {
   rentalDate,
   rentalMoney,
   rentalLabels,
+  rentalRecordLabel,
   rentalStatusLabel,
   rentalPeriodText,
   renewalLabels,
@@ -37,7 +38,7 @@ import {
 
 const inputClass =
   "rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
-const customerRentalColumns = 'grid grid-cols-[minmax(165px,1.3fr)_minmax(145px,1fr)_minmax(135px,0.9fr)_minmax(135px,0.9fr)_minmax(125px,0.8fr)_minmax(315px,1.4fr)]'
+const customerRentalColumns = 'grid grid-cols-[minmax(220px,max-content)_minmax(110px,max-content)_minmax(170px,max-content)_minmax(130px,max-content)_minmax(150px,max-content)_minmax(340px,max-content)] justify-between'
 function recordStatusTone(status: string) {
   if (status === 'payment_failed') return 'error'
   if (['active', 'deposit_paid', 'full_rent_paid'].includes(status)) return 'success'
@@ -481,7 +482,7 @@ function WorkspaceData({
               <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${group.active ? 'bg-amber-50 text-amber-800' : 'bg-stone-100 text-stone-600'}`}>{group.rows.length} hồ sơ</span>
             </header>
             {group.rows.length ? <div className="overflow-x-auto bg-stone-50/60 p-4">
-            <div className="min-w-[1050px] space-y-2">
+            <div className="min-w-[1120px] space-y-2">
             <div className={`${customerRentalColumns} border-l-4 border-transparent px-1 text-xs font-semibold text-stone-500`}>
               {['Kho / Cơ sở', 'Mã hồ sơ', 'Trạng thái', 'Thời hạn thuê', 'Giá thuê / tháng', 'Thao tác'].map(label => <div key={label} className={`px-3 py-2 ${label === 'Trạng thái' ? 'text-center' : ''}`}>{label}</div>)}
             </div>
@@ -492,7 +493,7 @@ function WorkspaceData({
                 className={`min-w-0 overflow-hidden rounded-xl border border-stone-200 border-l-4 border-l-amber-500 bg-white shadow-sm transition-colors duration-200 hover:border-amber-300 hover:bg-white hover:shadow-md focus-within:border-l-amber-500 ${focused ? 'outline outline-2 outline-amber-400' : ''}`}>
                 <div className={`${customerRentalColumns} items-center divide-x divide-stone-100 px-1 py-2`}>
                     <div className="min-w-0 px-3"><p className="text-sm font-bold text-stone-900">{row.storageUnit.code}</p><h3 className="mt-0.5 text-xs font-medium text-stone-700">{row.facility.name}</h3><p className="mt-0.5 text-xs text-stone-500">{copy(row.unitType.name)}</p></div>
-                    <div className="min-w-0 px-3"><span className="block max-w-[24ch] truncate font-mono text-xs leading-5 text-stone-500" title={row.id}>{row.id}</span></div>
+                    <div className="min-w-0 px-3"><span className="block max-w-[24ch] truncate font-mono text-xs leading-5 text-stone-500" title={rentalRecordLabel(row)}>{rentalRecordLabel(row)}</span></div>
                     <div className="flex flex-col items-center gap-1.5 px-3 [&_.ui-badge]:!flex [&_.ui-badge]:!min-h-8 [&_.ui-badge]:!w-[95%] [&_.ui-badge]:!items-center [&_.ui-badge]:!justify-center [&_.ui-badge]:!border-0 [&_.ui-badge]:!text-center">
                       <Badge variant={recordStatusTone(row.status)}>{copy(rentalStatusLabel(row))}</Badge>
                       {row.status === 'setup' && row.inventoryVerifiedAt && row.startDate && (
@@ -502,7 +503,7 @@ function WorkspaceData({
                     </div>
                   <div className="px-3 text-xs font-medium text-stone-800"><p>{rentalDate(row.startDate)}</p><p className="text-xs font-normal text-stone-400">đến</p><p>{rentalDate(row.dateSemantics?.lastPermittedDate || row.contractEndDate)}</p></div>
                   <div className="px-3 text-xs font-bold text-stone-900">{row.monthlyPrice == null ? 'Chưa xác định' : rentalMoney(row.monthlyPrice, row.currency)}</div>
-                  <div className="flex flex-wrap items-center justify-end gap-2 whitespace-nowrap px-3 [&>button]:shrink-0">
+                  <div className="grid grid-cols-2 gap-2 px-3 [&>button]:!h-10 [&>button]:min-w-0 [&>button]:justify-center [&>button]:!whitespace-nowrap [&>button]:!px-2 [&>button]:!py-0 [&>button]:!text-sm">
                     <Button size="sm" variant="outline" onClick={() => setDetail({ kind: 'rental', id: row.id })}>{row.canConfirmRentalStart ? 'Xem & xác nhận' : 'Chi tiết hồ sơ'}</Button>
                     {(() => {
                       const eligibility = getRentalRenewalEligibility(row, customerRenewals.data || [])
@@ -578,9 +579,9 @@ function WorkspaceData({
                     <td className="px-4 py-2.5 align-middle">
                       <code
                         className="block max-w-[24ch] truncate font-mono text-xs leading-5 text-stone-600"
-                        title={"rentalId" in row ? row.displayCode || row.id : row.id}
+                        title={rentalRecordLabel(row)}
                       >
-                        {"rentalId" in row ? row.displayCode || row.id : row.id}
+                        {rentalRecordLabel(row)}
                       </code>
                     </td>
                     <td className="px-4 py-2.5 align-middle">

@@ -31,6 +31,7 @@ export function renewalProgress(r: RenewalApiRecord, p: RenewalVnpayPaymentRespo
   if (p?.paymentStatus === 'PAID' && !reconciledRenewalPayment(p)) return 2
   if (stage === 'AWAITING_SIGNING' || stage === 'SIGNING_IN_PROGRESS') return 4
   if (stage === 'AWAITING_RECONCILIATION' || stage === 'ON_HOLD') return 2
+  if (stage === 'NO_SHOW') return 4
   if (stage === 'SIGNING_EXPIRED') return 4
   if (reconciledRenewalPayment(p)) return 3
   if (r.status === 'appointment_scheduled') return 4

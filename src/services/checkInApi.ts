@@ -2,7 +2,8 @@ import { ApiClientError, apiDownload, apiRequest } from './apiClient'
 import { isCheckInStatus, isReservationStatus, isPaymentStatus, type CheckInStatus as WorkflowCheckInStatus, type ReservationStatus, type PaymentStatus } from '../types/statusContracts'
 
 export type CheckInStatus = WorkflowCheckInStatus | null
-export type CheckInListStatus = 'UNSCHEDULED' | Exclude<CheckInStatus, null | 'rejected' | 'cancelled'>
+export type CheckInListStatus = 'UNSCHEDULED' | NonNullable<CheckInStatus>
+export type CheckInGroup = 'ONGOING' | 'PROCESSED'
 export type CheckInReservationStatus = ReservationStatus
 
 export interface CheckInChecklist {
@@ -47,6 +48,7 @@ export interface CompleteCheckInRequest {
   goodsCondition: string
   packageCount: number
   goodsCategory: string
+  goodsMaterial: string
   evidenceReferences: string[]
   handedOverItems: string[]
   notes: string
@@ -54,10 +56,13 @@ export interface CompleteCheckInRequest {
 }
 
 export interface CheckInCase {
+  intakeAction: 'START' | 'CONTINUE' | 'NONE'
   declaredGoodsLines?: {
     id: string
     code: string | null
     name: string | null
+    categoryName?: string | null
+    materialName?: string | null
     quantity: number
     lengthCm: number | null
     widthCm: number | null
@@ -255,6 +260,7 @@ function assertPaymentEnvelope(payload: unknown): CheckInPayment {
 }
 
 export async function listCheckIns(params: {
+  group?: CheckInGroup
   page?: number
   pageSize?: number
   q?: string
@@ -267,6 +273,7 @@ export async function listCheckIns(params: {
     pageSize: String(params.pageSize ?? 20),
   })
   if (params.q?.trim()) query.set('q', params.q.trim())
+  if (params.group) query.set('group', params.group)
   if (params.status) query.set('status', params.status)
   if (params.scheduledFrom) query.set('scheduledFrom', params.scheduledFrom)
   if (params.scheduledTo) query.set('scheduledTo', params.scheduledTo)

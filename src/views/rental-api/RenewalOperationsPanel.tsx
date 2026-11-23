@@ -64,6 +64,7 @@ const eventLabels: Record<string, string> = {
   PREPARATION_RESOLUTION: "Yêu cầu thử lại bước chuẩn bị ký",
   COMPLETION: "Hoàn tất ký gia hạn",
   ARRIVAL: "Khách đã đến",
+  NO_SHOW: "Khách không đến lịch ký",
   APPOINTMENT: "Lịch ký",
   CONFIRMATION: "Xác nhận ngoại lệ",
   EXPIRY: "Đối soát hết hạn",
@@ -136,12 +137,6 @@ export function OperationEventCard({
             ? <EvidenceDownload id={receiptFile} label="Tải biên lai" previewLabel="Xem trước" />
             : <span className="text-xs text-stone-500">Chưa có tệp đính kèm</span>}
         </div>
-        <details className="border-t border-stone-100 pt-3">
-          <summary className="cursor-pointer text-xs font-medium text-stone-500 hover:text-stone-800">Thông tin đối soát</summary>
-          <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2">
-            {[["Mã sự kiện", e.id], ["Mã bản ghi biên lai", field("reference")], ["Mã bảng kê", field("statementRef")], ["Mã thanh toán", field("paymentRef")]].filter(([, value]) => value).map(([label, value]) => <div key={label} className="min-w-0"><dt className="text-stone-500">{label}</dt><dd className="mt-1 break-words font-mono text-stone-700 [overflow-wrap:anywhere]">{value}</dd></div>)}
-          </dl>
-        </details>
       </div>
     </article>
   }
@@ -266,7 +261,11 @@ export function RenewalOperationsSummary({ state: s, role, cashRecorded = false 
   return (
     <Card className="space-y-3 p-4 text-sm">
       <h3 className="font-semibold">Lịch ký</h3>
-      {role === "staff" && <section className="space-y-3 rounded-xl border border-stone-200 bg-stone-50 p-3" aria-label="Tiến trình gia hạn cho nhân viên">
+      {role === "staff" && s.phase === "NO_SHOW" && <section className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-900" aria-label="Kết quả lịch ký gia hạn">
+        <h4 className="font-semibold">Đã ghi nhận khách không đến</h4>
+        <p className="mt-1 text-sm leading-6">Lịch ký và phần giữ chỗ cho kỳ gia hạn đã được giải phóng. Gian kho khách đang thuê vẫn giữ nguyên; khoản đã thu đang chờ đối soát theo chính sách.</p>
+      </section>}
+      {role === "staff" && s.phase !== "NO_SHOW" && <section className="space-y-3 rounded-xl border border-stone-200 bg-stone-50 p-3" aria-label="Tiến trình gia hạn cho nhân viên">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h4 className="font-semibold">Tiến trình gia hạn</h4>
@@ -294,20 +293,20 @@ export function RenewalOperationsSummary({ state: s, role, cashRecorded = false 
       <dl className="grid gap-3 sm:grid-cols-3">
         <div><dt className="text-xs text-stone-500">Trạng thái</dt><dd className="font-semibold">{copy(phaseLabels[s.phase])}</dd></div>
         <div><dt className="text-xs text-stone-500">Giờ hẹn đến ký</dt><dd className="font-medium">{s.appointmentRef ? rentalDate(s.appointmentStart) : "Chưa đặt lịch"}</dd></div>
-        <div><dt className="text-xs text-stone-500">Khách đến</dt><dd className="font-medium">{s.arrivalRef ? "Đã ghi nhận" : "Chưa ghi nhận"}</dd></div>
+        <div><dt className="text-xs text-stone-500">Khách đến</dt><dd className="font-medium">{s.phase === "NO_SHOW" ? "Khách không đến" : s.arrivalRef ? "Đã ghi nhận" : "Chưa ghi nhận"}</dd></div>
       </dl>
       <details>
-        <summary className="cursor-pointer text-xs font-semibold text-stone-600">Các mốc cần lưu ý</summary>
+        <summary className="cursor-pointer text-xs font-semibold text-stone-600">Thời hạn gia hạn</summary>
         <div className="mt-2 space-y-3 text-xs text-stone-600">
           <div>
-            <p className="font-semibold text-stone-800">Bạn cần hoàn tất ký trước: {rentalDate(s.effectiveSigningDeadline)}</p>
-            <p>Đổi lịch ký không tự kéo dài hạn hoàn tất này.</p>
-            <p className="mt-1">Vui lòng đến cơ sở, thanh toán phần còn lại và ký hợp đồng trước thời điểm này. Nếu không kịp, hãy liên hệ cơ sở để được hỗ trợ. Kỳ thuê mới chỉ được xác nhận khi hoàn tất thủ tục.</p>
+            <p className="font-semibold text-stone-800">Hạn ký hợp đồng: {rentalDate(s.effectiveSigningDeadline)}</p>
+            <p>Đến cơ sở thanh toán phần còn lại và ký hợp đồng.</p>
+            <p className="mt-1">Đổi lịch hẹn vẫn giữ nguyên hạn ký. Nếu không kịp, hãy liên hệ cơ sở.</p>
           </div>
-          {s.originalSigningDeadline && s.originalSigningDeadline !== s.effectiveSigningDeadline && <p>Hạn hoàn tất trước khi được điều chỉnh: {rentalDate(s.originalSigningDeadline)}</p>}
+          {s.originalSigningDeadline && s.originalSigningDeadline !== s.effectiveSigningDeadline && <p>Hạn ký ban đầu: {rentalDate(s.originalSigningDeadline)}</p>}
           <div>
-            <p className="font-semibold text-stone-800">Cơ sở tiếp nhận gia hạn đến: {rentalDate(s.recoveryCutoff)}</p>
-            <p className="mt-1">Nếu hợp đồng hiện tại đã hết hạn, bạn cần hoàn tất gia hạn chậm nhất vào thời điểm này để tiếp tục thuê kho. Sau đó, hãy liên hệ cơ sở để sắp xếp trả kho và thanh toán các khoản còn thiếu.</p>
+            <p className="font-semibold text-stone-800">Hạn gia hạn hợp đồng đã hết hạn: {rentalDate(s.recoveryCutoff)}</p>
+            <p className="mt-1">Sau mốc này, liên hệ cơ sở để trả kho và thanh toán khoản còn thiếu.</p>
           </div>
         </div>
       </details>
@@ -366,12 +365,12 @@ function EventTimeline({
             {e.kind === "ARRIVAL" && (() => {
               const data = e.data && typeof e.data === "object" ? e.data as Record<string, unknown> : {}
               const ids = Array.isArray(data.evidenceFileIds) ? data.evidenceFileIds.filter((value): value is string => typeof value === "string" && isUuid(value)) : []
-              return ids.length ? ids.map((fileId, index) => <EvidenceDownload key={fileId} id={fileId} index={index + 1} label={`Tải minh chứng ${index + 1}`} previewLabel={`Xem trước ${index + 1}`} />) : <span className="text-stone-500">Không có tệp đính kèm</span>
+              return ids.length ? ids.map((fileId, index) => <EvidenceDownload key={fileId} id={fileId} index={index + 1} label="Tải" previewLabel="Xem trước" />) : <span className="text-stone-500">Không có tệp đính kèm</span>
             })()}
             {e.kind === "COMPLETION" && (() => {
               const data = e.data && typeof e.data === "object" ? e.data as Record<string, unknown> : {}
               return typeof data.signedDocumentFileId === "string" && isUuid(data.signedDocumentFileId)
-                ? <EvidenceDownload id={data.signedDocumentFileId} label="Tải hợp đồng" previewLabel="Xem trước PDF" />
+                ? <EvidenceDownload id={data.signedDocumentFileId} label="Tải" previewLabel="Xem trước" />
                 : <span className="text-stone-500">Không có hợp đồng đính kèm</span>
             })()}
           </div>
@@ -451,7 +450,7 @@ export default function RenewalOperationsPanel({
   )
   const [now, setNow] = useState(Date.now)
   useEffect(() => {
-    if (role !== "customer") return
+    if (role !== "customer" && role !== "staff") return
     const timer = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(timer)
   }, [role])
@@ -462,7 +461,7 @@ export default function RenewalOperationsPanel({
           ...(!appointmentOnly && read.data?.pendingExceptionRef ? ["confirmation" as const] : []),
         ]
       : role === "staff"
-        ? ["arrival", "cash", "completion", "incident"]
+        ? ["arrival", "cash", "completion", "noShow"]
         : ["exception", "refund"]
   const lock = useCallback((value: boolean) => {
     lockRef.current = value
@@ -515,7 +514,7 @@ export default function RenewalOperationsPanel({
                   proposalRead.data,
                   now,
                 )
-                const reason = role === "staff" && read.data?.phase === "COMPLETED" && action !== "incident"
+                const reason = role === "staff" && read.data?.phase === "COMPLETED"
                   ? action === "arrival" ? "Đã ghi nhận khách đến." : action === "cash" ? "Đã hoàn tất đối soát thanh toán." : "Gia hạn đã hoàn tất."
                   : action === "cash"
                   ? cashRecorded
@@ -527,16 +526,15 @@ export default function RenewalOperationsPanel({
                         : blockedReason
                   : blockedReason
                 return (
-                  <div key={action} className={role === "staff" ? action === "incident" ? "flex flex-wrap items-center justify-between gap-2 border-t border-stone-200 pt-3 lg:col-span-3" : "flex min-w-0 flex-col gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3" : undefined}>
-                    {role === "staff" && action !== "incident" && <div className="flex items-center gap-2 text-sm font-semibold text-stone-700">
-                      <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-xs ring-1 ring-stone-200">{action === "arrival" ? 1 : action === "cash" ? 2 : 3}</span>
-                      {action === "arrival" ? "Khách đến cơ sở" : action === "cash" ? "Thanh toán còn lại" : "Hoàn tất gia hạn"}
+                  <div key={action} className={role === "staff" ? `flex min-w-0 flex-col gap-3 rounded-lg border p-3 ${action === "noShow" ? "border-rose-200 bg-rose-50 lg:col-span-3" : "border-stone-200 bg-stone-50"}` : undefined}>
+                    {role === "staff" && <div className="flex items-center gap-2 text-sm font-semibold text-stone-700">
+                      <span className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-xs ring-1 ${action === "noShow" ? "text-rose-700 ring-rose-200" : "ring-stone-200"}`}>{action === "arrival" ? 1 : action === "cash" ? 2 : action === "completion" ? 3 : "!"}</span>
+                      {action === "arrival" ? "Khách đến cơ sở" : action === "cash" ? "Thanh toán còn lại" : action === "completion" ? "Hoàn tất gia hạn" : "Ngoại lệ lịch hẹn"}
                     </div>}
-                    {role === "staff" && action === "incident" && <p className="text-sm text-stone-500">Có vấn đề phát sinh trong quá trình xử lý?</p>}
                     <Button
                       type="button"
-                      variant="outline"
-                      className={role === "staff" ? action === "incident" ? "shrink-0" : "mt-auto w-full" : undefined}
+                      variant={action === "noShow" ? "danger" : "outline"}
+                      className={role === "staff" ? "mt-auto w-full" : undefined}
                       disabled={!!reason || locked}
                       onClick={() => {
                         if (lockRef.current || reason) return
@@ -593,7 +591,8 @@ export default function RenewalOperationsPanel({
               setSuccessMessage(typeof reference === "string" ? `Đã ghi nhận thanh toán. Mã biên lai: ${reference}` : "Đã ghi nhận thanh toán.")
             }
             if (selected.action === "completion") setSuccessMessage("Gia hạn đã hoàn tất. Hệ thống đã đối chiếu các khoản thu và biên lai đã lưu.")
-            if (e.kind === "ARRIVAL" || e.kind === "COMPLETION") onDocumentEvent?.(e)
+            if (selected.action === "noShow") setSuccessMessage("Đã ghi nhận khách không đến. Gian kho đang thuê và khoản đã thu được giữ nguyên để đối soát.")
+            if (e.kind === "ARRIVAL" || e.kind === "NO_SHOW" || e.kind === "COMPLETION") onDocumentEvent?.(e)
             if (selected.action === "appointment" || selected.action === "reschedule")
               setSuccessMessage(selected.action === "reschedule" ? "Đổi lịch ký đã lưu thành công." : "Lịch ký đã lưu thành công.")
             setSelected(undefined)
@@ -718,7 +717,7 @@ function OperationForm({
     onLocked(interactionLock.current)
   }, [locked, onLocked]) // Parent cannot dismiss/reload an uncertain mutation.
   const files = evidence.split(/[\s,;]+/).filter(Boolean)
-  const needReason = ["incident", "exception", "refund"].includes(
+  const needReason = ["noShow", "incident", "exception", "refund"].includes(
     action,
   )
   const needFiles = ["arrival", "incident", "exception", "refund"].includes(
@@ -767,6 +766,17 @@ function OperationForm({
             ...base,
             appointmentRef: s.appointmentRef,
             evidenceFileIds: files,
+          },
+        }
+      case "noShow":
+        if (!s.appointmentRef) throw new Error("Thiếu lịch ký.")
+        if (!attested) throw new Error("Cần xác nhận khách không đến và đã hiểu phạm vi xử lý.")
+        return {
+          action,
+          body: {
+            ...base,
+            appointmentRef: s.appointmentRef,
+            reason,
           },
         }
       case "incident":
@@ -868,6 +878,16 @@ function OperationForm({
             </dl>
           </>}
         </section>}
+        {action === "noShow" && <>
+          <section className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm leading-6 text-rose-900" aria-label="Phạm vi ghi nhận khách không đến">
+            <p className="font-semibold">Thao tác này kết thúc nhánh ký gia hạn hiện tại.</p>
+            <p className="mt-1">Hệ thống chỉ giải phóng lịch ký và phần giữ chỗ cho kỳ gia hạn. Gian kho khách đang sử dụng không bị giải phóng; khoản đã thu không tự mất hoặc tự hoàn mà chuyển sang đối soát.</p>
+          </section>
+          <label className="flex items-start gap-3 rounded-lg border border-stone-200 bg-white p-3 text-sm leading-6 text-stone-700">
+            <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-rose-600" checked={attested} onChange={e => setAttested(e.target.checked)} />
+            Tôi xác nhận lịch ký đã kết thúc, khách không có mặt và chưa từng được ghi nhận đã đến.
+          </label>
+        </>}
         {action === "confirmation" && <>
           {proposal && <RenewalExceptionProposalCard proposal={proposal} />}
           <label><input type="checkbox" checked={attested} onChange={e => setAttested(e.target.checked)} />{" "}
@@ -980,7 +1000,7 @@ function OperationForm({
             <textarea
               className={operationsInputClass}
               value={reason}
-              maxLength={2000}
+              maxLength={action === "noShow" ? 1000 : 2000}
               onChange={(e) => setReason(e.target.value)}
             />
           </label>
@@ -1064,11 +1084,13 @@ function OperationForm({
         {appointmentOnly && <p className="mr-auto text-sm text-stone-500">{scheduleReady ? "Đã chọn đủ ngày và giờ" : "Chưa chọn đủ ngày và giờ"}</p>}
         <Button
           size={appointmentOnly ? "md" : undefined}
+          variant={action === "noShow" ? "danger" : undefined}
           className={appointmentOnly ? "rounded-full px-5 disabled:!bg-stone-100 disabled:!text-stone-400" : undefined}
           disabled={
             command.busy || uploading || command.conflict || decisionMissing.length > 0 ||
             (!command.uncertain && ["appointment", "reschedule"].includes(action) && !scheduleReady) ||
             (!command.uncertain && action === "completion" && (!isUuid(signedDocumentFile) || cash.loading || !!cash.error || !cash.data || cash.data.amount !== 0 || !cash.data.effectiveStartDate)) ||
+            (action === "noShow" && !command.uncertain && !attested) ||
             (action === "confirmation" && !command.uncertain && (!attested || !!exceptionConfirmationBlockedReason(s, proposal)))
           }
           onClick={() => {
@@ -1111,10 +1133,10 @@ function OperationForm({
           }}
         >
           {command.busy
-            ? ["appointment", "reschedule"].includes(action) ? "Đang lưu lịch ký…" : "Đang gửi…"
+            ? ["appointment", "reschedule"].includes(action) ? "Đang lưu lịch ký…" : action === "noShow" ? "Đang ghi nhận…" : "Đang gửi…"
             : command.uncertain
               ? "Thử lại cùng yêu cầu"
-              : ["appointment", "reschedule"].includes(action) ? "Lưu lịch ký" : action === "completion" ? "Hoàn tất gia hạn" : action === "cash" ? "Xác nhận đã thu tiền" : "Gửi yêu cầu"}
+              : ["appointment", "reschedule"].includes(action) ? "Lưu lịch ký" : action === "completion" ? "Hoàn tất gia hạn" : action === "cash" ? "Xác nhận đã thu tiền" : action === "noShow" ? "Xác nhận khách không đến" : "Gửi yêu cầu"}
         </Button>
         {!["appointment", "reschedule"].includes(action) && <Button
           variant="outline"

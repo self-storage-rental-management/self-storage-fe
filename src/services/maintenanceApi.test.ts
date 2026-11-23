@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { clearAuthTokens } from './apiClient'
 import {
   completeMaintenanceTask,
+  formatMaintenanceTaskTitle,
   listStaffMaintenanceTasks,
   startMaintenanceTask,
   uploadMaintenanceEvidence,
@@ -23,6 +24,12 @@ function envelope(data: unknown) {
 }
 
 describe('maintenanceApi', () => {
+  it('shows the unit code once for both generated inventory titles and maintenance titles', () => {
+    const inventoryTitle = 'Kiểm kê hàng hóa đầu vào · A-01'
+    expect(formatMaintenanceTaskTitle({ ...task, title: inventoryTitle })).toBe(inventoryTitle)
+    expect(formatMaintenanceTaskTitle(task)).toBe('Sửa khóa cửa · A-01')
+  })
+
   afterEach(() => {
     clearAuthTokens()
     vi.unstubAllGlobals()

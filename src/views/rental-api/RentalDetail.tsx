@@ -1,3 +1,4 @@
+import { invoiceNumberLabel } from '../customer/paymentLabels'
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { useEffect, useState } from "react"
 import RenewalRiskNotice from "./RenewalRiskNotice"
@@ -6,7 +7,7 @@ import { Badge, Button, Card, Modal } from "../../components/ui"
 import BookingTransactionReceipt from "./BookingTransactionReceipt"
 import type { RentalApiDetail, RentalApiRole } from "../../types/rentalApi"
 import { bookingPaymentPurposes, bookingPaymentStatuses } from "../../services/rentalBookingEvidence"
-import { rentalStatusLabel, rentalMoney, unknown, rentalDataWarning, rentalPeriodText, rentalDate, accessStatusLabels } from "./presentation"
+import { rentalRecordLabel, rentalStatusLabel, rentalMoney, unknown, rentalDataWarning, rentalPeriodText, rentalDate, accessStatusLabels } from "./presentation"
 import { downloadCheckInEvidence } from "../../services/checkInApi"
 import { confirmCustomerRentalStart, markCustomerPreparationComplete, previewCustomerRentalStart, type RentalStartConfirmation } from "../../services/customerReservationApi"
 import { userFacingError } from "../../presentation/userFacingError"
@@ -71,6 +72,7 @@ export default function RentalDetail({
   const labelClass = "text-xs font-medium text-stone-500"
   const valueClass = "mt-1 text-sm font-semibold text-stone-900"
 
+  const displayCode = rental.displayCode
   const evidence = rental.bookingEvidence
   const agreed = evidence?.agreedAmounts
   const warnings = rental.dataWarnings.filter(warning => warning.field !== "contractEndDate")
@@ -135,19 +137,19 @@ export default function RentalDetail({
           <div>
             <dt className={labelClass}>Mã hồ sơ thuê</dt>
             <dd className={`${valueClass} flex items-center gap-2`}>
-              <span className="break-all font-mono text-xs sm:text-sm" title={rental.id}>{rental.id}</span>
-              <button
+              <span className="break-all font-mono text-xs sm:text-sm" title={displayCode || undefined}>{rentalRecordLabel(rental)}</span>
+              {displayCode && <button
                 type="button"
                 aria-label="Sao chép mã hồ sơ thuê"
                 title="Sao chép mã hồ sơ"
                 className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-                onClick={() => { void navigator.clipboard?.writeText(rental.id) }}
+                onClick={() => { void navigator.clipboard?.writeText(displayCode) }}
               >
                 <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                   <rect x="8" y="8" width="12" height="12" rx="2" strokeWidth="1.7" />
                   <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" strokeWidth="1.7" />
                 </svg>
-              </button>
+              </button>}
             </dd>
           </div>
           <div>
@@ -285,7 +287,7 @@ export default function RentalDetail({
                   <p className="text-sm font-medium text-stone-600">{bookingPaymentPurposes[payment.purpose]}</p>
                   <p className="mt-1 text-xl font-bold text-stone-900">{rentalMoney(payment.amount, evidence.currency)}</p>
                   <p className="mt-2 text-sm"><strong>Trạng thái:</strong> {bookingPaymentStatuses[payment.status]}</p>
-                  {payment.invoiceNumber && <p className="mt-1 text-sm"><strong>Hóa đơn:</strong> {payment.invoiceNumber} · {payment.invoiceStatus}</p>}
+                  <p className="mt-1 text-sm"><strong>Số hóa đơn:</strong> {invoiceNumberLabel(payment.invoiceNumber)}{payment.invoiceNumber?.trim() && ` · ${payment.invoiceStatus}`}</p>
                   {role === 'customer' && payment.status === 'PAID' && rental.reservationId && <Button variant="outline" size="sm" className="mt-3" onClick={() => setReceiptPayment(payment.id)}>Xem biên lai</Button>}
                 </li>
               ))}

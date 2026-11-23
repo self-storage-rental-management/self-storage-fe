@@ -20,6 +20,8 @@ export interface FacilityGeneralInfoProps {
   isEditing: boolean
   code: string
   onChangeCode: (code: string) => void
+  autoCode?: boolean
+  onChangeAutoCode?: (enabled: boolean) => void
   city: string
   onChangeCity: (city: string) => void
   name: string
@@ -106,7 +108,7 @@ export function generateFacilityCode(
   existingFacilities: { id: string; code?: string }[],
   currentFacilityId?: string,
 ): string {
-  const prefix = generateFacilityPrefix(name, city)
+  const prefix = generateFacilityPrefix(name, city).slice(0, 28)
   const existingCodes = new Set(
     (existingFacilities || [])
       .filter(f => !currentFacilityId || f.id !== currentFacilityId)
@@ -132,6 +134,8 @@ export const FacilityGeneralInfo: React.FC<FacilityGeneralInfoProps> = ({
   isEditing,
   code,
   onChangeCode,
+  autoCode = true,
+  onChangeAutoCode,
   city,
   onChangeCity,
   name,
@@ -146,7 +150,7 @@ export const FacilityGeneralInfo: React.FC<FacilityGeneralInfoProps> = ({
   lang = 'vi',
 }) => {
   const [isCityListOpen, setIsCityListOpen] = useState(false)
-  const [isAutoCode, setIsAutoCode] = useState(!isEditing)
+  const isAutoCode = !isEditing && autoCode
 
   // Tự động cập nhật mã khi ở chế độ tạo mới và đang bật Auto
   useEffect(() => {
@@ -161,10 +165,8 @@ export const FacilityGeneralInfo: React.FC<FacilityGeneralInfoProps> = ({
   }, [name, city, isAutoCode, isEditing, existingFacilities, currentFacilityId])
 
   const toggleAutoCode = () => {
-    if (isAutoCode) {
-      setIsAutoCode(false)
-    } else {
-      setIsAutoCode(true)
+    onChangeAutoCode?.(!isAutoCode)
+    if (!isAutoCode) {
       const nextCode = generateFacilityCode(name, city, existingFacilities, currentFacilityId)
       onChangeCode(nextCode)
     }

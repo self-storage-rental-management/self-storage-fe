@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
-import CustomerReservationCard from './CustomerReservationCard'
+import CustomerReservationCard, { ReservationPreparationNotice } from './CustomerReservationCard'
 import { paymentCountdown, reservationProgress, reservationStatusLabels } from './reservationPresentation'
 import ReservationReceipt from './ReservationReceipt'
 import type { CustomerReservation, ReservationPaymentResult, ReservationStatus } from '../../services/customerReservationApi'
@@ -16,11 +16,24 @@ const base: CustomerReservation = {
   dueAtCheckIn: 3400000, totalInitialObligation: 4000000, totalGoodsVolumeM3: 0.1,
   totalGoodsWeightKg: 10, holdExpiresAt: '2026-11-01T10:00:00Z', createdAt: '2026-11-01T09:50:00Z',
 }
-function render(status: ReservationStatus) {
-  return renderToStaticMarkup(<CustomerReservationCard reservation={{ ...base, status }} facilityName="Kho HCM" unitTypeName="Kho nhỏ"
+function render(status: ReservationStatus, overrides: Partial<CustomerReservation> = {}) {
+  return renderToStaticMarkup(<CustomerReservationCard reservation={{ ...base, status, ...overrides }} facilityName="Kho HCM" unitTypeName="Kho nhỏ"
     onVerify={() => {}} onCancel={() => {}} onRefresh={async () => {}} />)
 }
 describe('customer reservation layout regression', () => {
+  it('keeps the selected appointment visible while goods await review and after staff approval', () => {
+    const appointmentAt = '2026-11-24T03:00:00Z'
+    const waiting = render('AWAITING_REVIEW', { appointmentAt, goodsReviewStatus: 'PENDING' })
+    const approved = render('AWAITING_PAYMENT', { appointmentAt, goodsReviewStatus: 'APPROVED' })
+    for (const html of [waiting, approved]) {
+      expect(html).toContain('24/11/2026')
+      expect(html).toContain('10:00')
+    }
+    expect(waiting).toContain('tối đa 6 giờ')
+    expect(waiting).not.toContain('>Thanh toán đặt cọc giữ chỗ</button>')
+    expect(approved).toContain('Nhân viên cơ sở đã duyệt hàng hóa')
+    expect(approved).toContain('>Thanh toán đặt cọc giữ chỗ</button>')
+  })
   it('counts down against the backend deadline and blocks expired or invalid deadlines', () => {
     const deadline = '2026-11-01T10:00:00Z'
     const timestamp = Date.parse(deadline)
@@ -81,7 +94,16 @@ describe('customer reservation layout regression', () => {
   })
   it('shows the two customer gates before inventory', () => {
     expect(render('AWAITING_CUSTOMER_RECEIPT')).toContain('Sẵn sàng bàn giao')
-    expect(render('PREPARING')).toContain('Sẵn sàng để kiểm kê')
+    expect(render('PREPARING')).not.toContain('Sẵn sàng để kiểm kê')
+
+    const notice = (checkInStatus: string) => renderToStaticMarkup(
+      <ReservationPreparationNotice checkInStatus={checkInStatus} submitting={false} onReady={() => {}} />,
+    )
+    expect(notice('setup_in_progress')).toContain('Sẵn sàng để kiểm kê')
+    expect(notice('handover_pending_receipt')).toContain('Sẵn sàng để kiểm kê')
+    expect(notice('setup_completed')).toContain('Đang chờ nhân viên kiểm kê')
+    expect(notice('setup_completed')).not.toContain('Sẵn sàng để kiểm kê')
+    expect(notice('completed')).toContain('Đã hoàn tất kiểm kê')
   })
   it('requires an explicit cancellation confirmation', () => {
     const html = render('AWAITING_EMAIL')

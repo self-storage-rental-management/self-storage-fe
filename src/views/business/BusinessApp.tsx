@@ -79,6 +79,7 @@ import {
 import { resolveBusinessFacilityIds } from "../../domain/businessFacilityIds"
 import {
   FacilityGeneralInfo,
+  generateFacilityCode,
   FacilityOperations,
   FacilityImageManager,
   FacilityStatusTag,
@@ -1946,7 +1947,7 @@ export default function BusinessApp({
         setBackendPricingUnitTypes(editableUnitTypes)
         setBackendPricingValues(Object.fromEntries(editableUnitTypes.map(unitType => [unitType.id, {
           monthlyPrice: isUnitTypePricingPending(unitType.status, unitType.monthlyPrice) ? 0 : Number(unitType.monthlyPrice) || 0,
-          securityDepositAmount: isUnitTypePricingPending(unitType.status, unitType.monthlyPrice) ? 0 : Number(unitType.securityDepositAmount) || 0,
+          securityDepositAmount: isUnitTypePricingPending(unitType.status, unitType.monthlyPrice) ? 0 : Number(unitType.monthlyPrice) || 0,
         }])))
       } catch (error) {
         setBackendPricingUnitTypes([])
@@ -1972,15 +1973,20 @@ export default function BusinessApp({
       }
       const invalid = editableUnitTypes.some(unitType => {
         const value = backendPricingValues[unitType.id]
-        return !value || value.monthlyPrice <= 0 || value.securityDepositAmount < 0
+        return !value || value.monthlyPrice <= 0
       })
       if (invalid) {
-        showToast('Giá thuê phải lớn hơn 0 và tiền cọc đảm bảo kho không được âm.')
+        showToast('Giá thuê phải lớn hơn 0. Tiền cọc được tự động lấy bằng giá thuê 1 tháng.')
         return
       }
       try {
-        await Promise.all(editableUnitTypes.map(unitType =>
-          priceBusinessUnitTypeApi(unitType.id, backendPricingValues[unitType.id])))
+        await Promise.all(editableUnitTypes.map(unitType => {
+          const value = backendPricingValues[unitType.id]
+          return priceBusinessUnitTypeApi(unitType.id, {
+            monthlyPrice: value.monthlyPrice,
+            securityDepositAmount: value.monthlyPrice,
+          })
+        }))
       } catch (error) {
         showToast(error instanceof Error ? error.message : 'Không thể lưu biểu giá lên backend.')
         return
@@ -2408,6 +2414,7 @@ export default function BusinessApp({
   // Form thêm / sửa cơ sở
 
   const [formFacCode, setFormFacCode] = useState<string>("HN-F01")
+  const [formFacAutoCode, setFormFacAutoCode] = useState(true)
 
   const [formFacName, setFormFacName] = useState<string>("")
 
@@ -2676,6 +2683,7 @@ export default function BusinessApp({
   // Mở modal thêm cơ sở mới với thông tin nhận diện để trống cho BO khai báo.
 
   const handleOpenCreateFacility = () => {
+    setFormFacAutoCode(true)
     const apiMode = isApiAuthenticated()
     setFormFacCode("")
     setFormFacName("")
@@ -2746,7 +2754,9 @@ export default function BusinessApp({
   }
 
   const handleCreateFacility = async () => {
-    const code = formFacCode.trim().toUpperCase()
+    let code = formFacAutoCode
+      ? generateFacilityCode(formFacName, formFacCity, facilitiesList)
+      : formFacCode.trim().toUpperCase()
 
     if (!code) {
       showToast(
@@ -2851,6 +2861,7 @@ export default function BusinessApp({
     try {
       const apiRes = await createFacilityApi({
         code,
+        autoCode: formFacAutoCode,
         name: formFacName.trim(),
         address: formFacAddress.trim(),
         city: formFacCity.trim(),
@@ -2861,6 +2872,7 @@ export default function BusinessApp({
         securityDescription: formFacSecurity.trim() || null,
       })
       if (apiRes?.id) {
+        code = apiRes.code
         backendFacilityId = apiRes.id
         backendFacilityStatus = apiRes.status
       }
@@ -5044,7 +5056,7 @@ export default function BusinessApp({
                                   </Td>
                                   <Td className="font-mono">
                                     {type.monthlyPrice > 0
-                                      ? formatVndAmount(type.securityDepositAmount)
+                                      ? formatVndAmount(type.monthlyPrice)
                                       : "Chưa cấu hình"}
                                   </Td>
                                 </Tr>
@@ -5270,7 +5282,7 @@ export default function BusinessApp({
                           onChange={e => {
                             const raw = e.target.value.replace(/\D/g, '')
                             const num = raw ? parseInt(raw, 10) : 0
-                            setBackendPricingValues(prev => ({ ...prev, [unitType.id]: { ...value, monthlyPrice: num } }))
+                            setBackendPricingValues(prev => ({ ...prev, [unitType.id]: { ...value, monthlyPrice: num, securityDepositAmount: num } }))
                           }}
                           className="w-full rounded-lg border border-stone-300 px-2.5 py-2 pr-7 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500"
                         />
@@ -5279,25 +5291,12 @@ export default function BusinessApp({
                         </span>
                       </div>
                     </label>
-                    <label className="text-[11px] font-semibold text-slate-700">Tiền cọc đảm bảo kho (VNĐ)
-                      <div className="relative mt-1">
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          value={value.securityDepositAmount > 0 ? value.securityDepositAmount.toLocaleString('vi-VN') : ''}
-                          placeholder="0"
-                          onChange={e => {
-                            const raw = e.target.value.replace(/\D/g, '')
-                            const num = raw ? parseInt(raw, 10) : 0
-                            setBackendPricingValues(prev => ({ ...prev, [unitType.id]: { ...value, securityDepositAmount: num } }))
-                          }}
-                          className="w-full rounded-lg border border-stone-300 px-2.5 py-2 pr-7 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500"
-                        />
-                        <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs font-bold text-slate-400">
-                          ₫
-                        </span>
+                    <div className="text-[11px] font-semibold text-slate-700">Tiền cọc đảm bảo kho (VNĐ)
+                      <div className="mt-1 rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-2 font-mono text-xs font-bold text-slate-900">
+                        {value.monthlyPrice > 0 ? `${value.monthlyPrice.toLocaleString('vi-VN')} ₫` : 'Tự động theo giá thuê 1 tháng'}
                       </div>
-                    </label>
+                      <p className="mt-1 text-[10px] font-normal text-stone-500">Luôn bằng giá thuê 1 tháng.</p>
+                    </div>
                   </div>
                 })}
               </div>
@@ -6443,6 +6442,8 @@ export default function BusinessApp({
                   isEditing={false}
                   code={formFacCode}
                   onChangeCode={setFormFacCode}
+                  autoCode={formFacAutoCode}
+                  onChangeAutoCode={setFormFacAutoCode}
                   city={formFacCity}
                   onChangeCity={setFormFacCity}
                   name={formFacName}

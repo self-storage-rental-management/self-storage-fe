@@ -15,6 +15,7 @@ import {
 } from "../manager/ManagerOverdueApiPanel"
 import { rentalError } from "./presentation"
 import { ApiClientError } from "../../services/apiClient"
+import { isOperationEvent, isOperationState } from "../../services/renewalOperationsApi"
 import {
   isUncertainRenewalOutcome,
   RenewalAttempt,
@@ -40,9 +41,9 @@ describe("D3 operation prerequisites and truthful UI", () => {
     expect(html).toContain("08:00:00")
     expect(html).not.toContain("08:30:00")
     expect(html).not.toContain("Khách hàng cần đổi lịch")
-    expect(html).toContain("Bạn cần hoàn tất ký trước")
-    expect(html).toContain("Nếu không kịp, hãy liên hệ cơ sở để được hỗ trợ")
-    expect(html).toContain("Cơ sở tiếp nhận gia hạn đến")
+    expect(html).toContain("Hạn ký hợp đồng")
+    expect(html).toContain("Nếu không kịp, hãy liên hệ cơ sở")
+    expect(html).toContain("Hạn gia hạn hợp đồng đã hết hạn")
     expect(html).not.toContain("Hạn xử lý trước khi chuyển sang thu hồi kho")
   })
   it.each([null, 500, 502, 503])(
@@ -107,6 +108,7 @@ describe("D3 operation prerequisites and truthful UI", () => {
   })
   it.each([
     "SIGNING_EXPIRY_PENDING",
+    "NO_SHOW",
     "SIGNING_EXPIRED",
     "PAYMENT_EXPIRED",
     "COMPLETED",
@@ -119,6 +121,31 @@ describe("D3 operation prerequisites and truthful UI", () => {
         operationsActor("staff"),
       ),
     ).not.toBeNull()
+  })
+  it("enables no-show only after the appointment ends and before any arrival", () => {
+    const appointmentEnd = Date.parse(signingState.appointmentEnd!)
+    expect(operationBlockedReason(signingState, "staff", "noShow", operationsActor("staff"), undefined, undefined, undefined, appointmentEnd - 1))
+      .toContain("sau khi lịch ký kết thúc")
+    expect(operationBlockedReason(signingState, "staff", "noShow", operationsActor("staff"), undefined, undefined, undefined, appointmentEnd))
+      .toBeNull()
+    expect(operationBlockedReason({ ...signingState, phase: "SIGNING_EXPIRY_PENDING" }, "staff", "noShow", operationsActor("staff"), undefined, undefined, undefined, appointmentEnd))
+      .toBeNull()
+    expect(operationBlockedReason({ ...signingState, arrivalRef: ids.event }, "staff", "noShow", operationsActor("staff"), undefined, undefined, undefined, appointmentEnd))
+      .toContain("Đã ghi nhận khách đến")
+  })
+  it("accepts the strict no-show state/event shape and presents the safety boundary", () => {
+    const state = { ...signingState, phase: "NO_SHOW" as const }
+    expect(isOperationState(state)).toBe(true)
+    expect(isOperationEvent({
+      ...operationEvent,
+      kind: "NO_SHOW",
+      actorId: ids.staff,
+      data: { appointmentRef: ids.event, reason: "Khách không có mặt", disposition: "REVIEW_REQUIRED", occupiedUnitReleased: false },
+    })).toBe(true)
+    const html = renderToStaticMarkup(<RenewalOperationsSummary state={state} role="staff" />)
+    expect(html).toContain("Đã ghi nhận khách không đến")
+    expect(html).toContain("Gian kho khách đang thuê vẫn giữ nguyên")
+    expect(html).toContain("khoản đã thu đang chờ đối soát")
   })
   it("requires Manager actual MANAGE scope and base permission, not name", () => {
     const actor = operationsActor("manager")

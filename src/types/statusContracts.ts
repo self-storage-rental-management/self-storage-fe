@@ -27,7 +27,7 @@ export type PaymentTransactionStatus = (typeof paymentTransactionStatusValues)[n
 
 export const renewalWorkflowStatusValues = [
   'UNDER_REVIEW', 'AWAITING_PAYMENT', 'AWAITING_RECONCILIATION', 'AWAITING_SIGNING',
-  'SIGNING_IN_PROGRESS', 'SIGNING_EXPIRED', 'PAYMENT_WINDOW_EXPIRED', 'ON_HOLD',
+  'SIGNING_IN_PROGRESS', 'NO_SHOW', 'SIGNING_EXPIRED', 'PAYMENT_WINDOW_EXPIRED', 'ON_HOLD',
   'COMPLETED', 'CANCELLED', 'REJECTED',
 ] as const
 export type RenewalWorkflowStatus = (typeof renewalWorkflowStatusValues)[number]
