@@ -2,8 +2,8 @@ import { formatVndAmount } from '../i18n/currency'
 
 type Terms = { setupEarlyExitFee?: number | null; earlyTerminationFee?: number | null; earlyTerminationNoticeDays?: number | null }
 export default function ReturnPolicyNotice({ terms, business = false }: { terms?: Terms; business?: boolean }) {
-  return <details className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 text-sm leading-6 text-stone-800">
-    <summary className="cursor-pointer font-semibold text-amber-950">Quy định phí trả kho, nghiệm thu và hoàn cọc{terms?.earlyTerminationFee != null ? ` · Phí chấm dứt sớm theo báo giá: ${formatVndAmount(terms.earlyTerminationFee)}` : ''}</summary>
+  return <details className={`rounded-xl border p-4 text-sm leading-6 text-stone-800 ${business ? 'border-stone-200 bg-white' : 'border-amber-200 bg-amber-50/60'}`}>
+    <summary className={`cursor-pointer font-semibold ${business ? 'text-stone-800' : 'text-amber-950'}`}>Quy định phí trả kho, nghiệm thu và hoàn cọc{terms?.earlyTerminationFee != null ? ` · Phí chấm dứt sớm theo báo giá: ${formatVndAmount(terms.earlyTerminationFee)}` : ''}</summary>
     <div className="mt-3 space-y-3">
       <p><b>Trả kho đúng hạn:</b> không tự động chịu phí chấm dứt sớm. Tiền cọc đảm bảo được quyết toán sau khi đối chiếu công nợ và hiện trạng kho.</p>
       <p><b>Trả trong thời gian chuẩn bị:</b> áp dụng phí chấm dứt một lần theo báo giá đã chấp nhận{terms?.setupEarlyExitFee != null ? ` (${formatVndAmount(terms.setupEarlyExitFee)})` : ''}. Nếu đã chuyển hàng vào, có thể tính thêm số ngày sử dụng theo đơn giá niêm yết. Nếu chưa chuyển hàng vào, không tính khoản sử dụng hàng trong thời gian chuẩn bị.</p>

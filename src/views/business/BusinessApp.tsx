@@ -691,6 +691,7 @@ export default function BusinessApp({
 
   const [page, setPage] = useState(() => getInitialPage(NAV, "facilities"))
   const [integrationLocked, setIntegrationLocked] = useState(false)
+  const [returnsRefreshVersion, setReturnsRefreshVersion] = useState(0)
 
   const [pricingModal, setPricingModal] = useState(false)
   const [pricingCollapsedMap, setPricingCollapsedMap] = useState<Record<string, boolean>>({})
@@ -3829,9 +3830,15 @@ export default function BusinessApp({
                 ? "Theo dõi, giám sát và thẩm định hồ sơ nghiệm thu trả kho toàn hệ thống"
                 : "Monitor, supervise, and resolve warehouse return cases and deposit settlements across all facilities"
             }
+            action={
+              <Button variant="outline" size="sm" onClick={() => setReturnsRefreshVersion((version) => version + 1)}>
+                <span className="mr-1.5 inline-flex" aria-hidden="true"><svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M20 7v5h-5"/><path d="M19 12a7 7 0 1 1-2-4.9L20 12"/></svg></span>
+                Làm mới
+              </Button>
+            }
           />
-          <BusinessRefundRequestsPanel />
-          <BusinessReturnsPanel user={user} />
+          <BusinessRefundRequestsPanel refreshVersion={returnsRefreshVersion} />
+          <BusinessReturnsPanel user={user} refreshVersion={returnsRefreshVersion} />
         </div>
       )}
       {/* ── QUẢN LÝ CƠ SỞ (CRUD FACILITIES) ──────────────────── */}
