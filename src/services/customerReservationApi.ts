@@ -533,6 +533,8 @@ export interface CustomerReservationDetail {
   rentalStatus?: string | null
   inventoryDueAt?: string | null
   inventoryFinalDeadlineAt?: string | null
+  inventoryRemovalPublishedAt?: string | null
+  inventoryRemovalDeadlineAt?: string | null
   inventoryResolutionStatus?: InventoryResolutionStatus | null
   inventoryFullFit?: boolean
   inventoryPartialFitAvailable?: boolean

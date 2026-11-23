@@ -1,3 +1,5 @@
+import IntakeWorkflowPanel from '../../components/IntakeWorkflowPanel'
+import { getGoodsCatalog, type GoodsCatalogCategory } from '../../services/customerReservationApi'
 import { validateCccd, normalizeCccd, maskCccd } from '../../domain/cccd'
 import { useEffect, useId, useMemo, useState } from "react"
 import { isCheckInHandoverExpired, staffCheckInActions } from "../../domain/reservationCheckInPolicy"
@@ -243,6 +245,12 @@ function compareGoodsLabel(actual: string, declared: string[]) {
 }
 
 type InventoryDraft = {
+  catalogCategoryId?: string
+  catalogMaterialId?: string
+  fragile?: boolean
+  stackable?: boolean
+  allowHorizontalPlacement?: boolean
+  maxStackLayers?: number
   quantity: string
   condition: CheckInInventoryLine["condition"] | ""
   note: string
@@ -270,6 +278,12 @@ function inventoryFromDeclaration(line: DeclaredInventoryLine): InventoryDraft {
   const quantity = formatInputNumber(line.quantity)
   return {
     ...emptyInventory,
+    catalogCategoryId: line.catalogCategoryId || '',
+    catalogMaterialId: line.catalogMaterialId || '',
+    fragile: line.fragile ?? false,
+    stackable: line.stackable ?? false,
+    allowHorizontalPlacement: line.allowHorizontalPlacement ?? false,
+    maxStackLayers: line.maxStackLayers ?? 1,
     quantity,
     lengthCm: formatInputNumber(line.lengthCm),
     widthCm: formatInputNumber(line.widthCm),
@@ -304,6 +318,9 @@ function compareInventory(line: DeclaredInventoryLine, entry: InventoryDraft) {
     ? Number(line.lengthCm) * Number(line.widthCm) * Number(line.heightCm) * line.quantity / 1_000_000
     : NaN
   const badges = [
+    { label: "Loại hàng", matches: entry.catalogCategoryId ? entry.catalogCategoryId === line.catalogCategoryId : null },
+    { label: "Chất liệu chính", matches: entry.catalogMaterialId ? entry.catalogMaterialId === line.catalogMaterialId : !line.catalogMaterialId ? true : null },
+    { label: "Điều kiện xếp", matches: Boolean(entry.fragile) === Boolean(line.fragile) && Boolean(entry.stackable) === Boolean(line.stackable) && Boolean(entry.allowHorizontalPlacement) === Boolean(line.allowHorizontalPlacement) },
     { label: "Số kiện", matches: Number.isInteger(quantity) ? quantity === line.quantity : null },
     { label: "Khối lượng", matches: measured && quantity > 0 && line.weightPerPackageKg != null
       ? !hasMaterialVariance(entry.weightKg, line.weightPerPackageKg * line.quantity, 0.1) : null },
@@ -609,6 +626,14 @@ export default function StaffCheckInOperationsPanel({
 
   const [packageCount, setPackageCount] = useState("1")
   const [inventoryDraft, setInventoryDraft] = useState<Record<string, InventoryDraft>>({})
+  const [inventoryCatalog, setInventoryCatalog] = useState<GoodsCatalogCategory[]>([])
+  const [inventoryCatalogError, setInventoryCatalogError] = useState(false)
+  useEffect(() => {
+    let active = true
+    getGoodsCatalog().then(c => { if (active) setInventoryCatalog(c.categories.filter(x => x.status === 'ACTIVE')) })
+      .catch(() => { if (active) setInventoryCatalogError(true) })
+    return () => { active = false }
+  }, [])
 
   const [goodsCategory, setGoodsCategory] = useState("")
 
@@ -706,6 +731,7 @@ export default function StaffCheckInOperationsPanel({
   const inventoryLinesComplete = inventoryRows.every(({ entry, comparison }) => {
     const { quantity, measured, needsNote } = comparison
     return entry.checked && Number.isInteger(quantity) && quantity >= 0 && quantity <= 2147483647
+      && (quantity === 0 || Boolean(entry.catalogCategoryId))
       && Boolean(entry.condition) && (quantity === 0 ? entry.condition === "NOT_PRESENT" : measured && Number.isFinite(comparison.volume) && entry.condition !== "NOT_PRESENT")
       && (!needsNote || Boolean(entry.note.trim()))
   })
@@ -1121,6 +1147,18 @@ export default function StaffCheckInOperationsPanel({
         inventoryLines: lineInventory ? inventoryRows.map(({ line, entry, comparison }) => ({
           goodsItemId: line.id,
           actualQuantity: comparison.quantity,
+          actualGoods: comparison.quantity > 0 ? {
+            category: inventoryCatalog.find(c => c.id === entry.catalogCategoryId)?.reservationCategory || 'OTHER',
+            catalogCategoryId: entry.catalogCategoryId,
+            catalogMaterialId: entry.catalogMaterialId || null,
+            description: line.name || 'Hàng hóa thực tế',
+            customGoodsName: line.name,
+            quantity: comparison.quantity,
+            lengthCm: comparison.dimensions[0], widthCm: comparison.dimensions[1], heightCm: comparison.dimensions[2],
+            weightPerItemKg: comparison.weight / comparison.quantity,
+            fragile: Boolean(entry.fragile), stackable: Boolean(entry.stackable),
+            allowHorizontalPlacement: Boolean(entry.allowHorizontalPlacement), maxStackLayers: entry.maxStackLayers || 1,
+          } : null,
           condition: entry.condition as CheckInInventoryLine["condition"],
           note: entry.note.trim() || null,
           measurements: comparison.quantity > 0 ? {
@@ -1131,9 +1169,9 @@ export default function StaffCheckInOperationsPanel({
           } : null,
         })) : [],
 
-        goodsCategory: goodsCategory.trim(),
+        goodsCategory: lineInventory ? [...new Set(inventoryRows.filter(r => r.comparison.quantity > 0).map(r => inventoryCatalog.find(c => c.id === r.entry.catalogCategoryId)?.label || goodsCategory.trim()))].join(', ') : goodsCategory.trim(),
 
-        goodsMaterial: goodsMaterial.trim(),
+        goodsMaterial: lineInventory ? [...new Set(inventoryRows.filter(r => r.comparison.quantity > 0).map(r => inventoryCatalog.find(c => c.id === r.entry.catalogCategoryId)?.materials.find(m => m.id === r.entry.catalogMaterialId)?.label || 'Không áp dụng'))].join(', ') : goodsMaterial.trim(),
         actualPackagingMethod: actualPackagingMethod.trim(),
         packagingCondition: packagingCondition || null,
 
@@ -1460,6 +1498,9 @@ export default function StaffCheckInOperationsPanel({
     const savedLines = item.handover?.inventoryLines ?? []
     setInventoryDraft(Object.fromEntries(savedLines.map(line => [line.goodsItemId, {
       quantity: String(line.actualQuantity), condition: line.condition, note: line.note ?? "",
+      catalogCategoryId: line.actualGoods?.catalogCategoryId || '', catalogMaterialId: line.actualGoods?.catalogMaterialId || '',
+      fragile: line.actualGoods?.fragile, stackable: line.actualGoods?.stackable,
+      allowHorizontalPlacement: line.actualGoods?.allowHorizontalPlacement, maxStackLayers: line.actualGoods?.maxStackLayers || 1,
       lengthCm: formatInputNumber(line.measurements?.lengthCm),
       widthCm: formatInputNumber(line.measurements?.widthCm),
       heightCm: formatInputNumber(line.measurements?.heightCm),
@@ -1760,6 +1801,7 @@ export default function StaffCheckInOperationsPanel({
       >
         {handoverTarget && (
           <div className="space-y-5">
+            <IntakeWorkflowPanel reservationId={handoverTarget.reservationId} checkInId={handoverTarget.checkInId} role="STAFF" />
             <dl className="grid gap-3 rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
               {[
                 ['Mã đơn giữ kho', handoverTarget.reservationCode], ['Mã gian kho bàn giao', handoverTarget.storageUnitCode],
@@ -2142,8 +2184,10 @@ export default function StaffCheckInOperationsPanel({
                 <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-950"><b>Kiểm kê hàng hóa</b><p className="mt-1 text-xs">Đối chiếu số kiện, khối lượng, thể tích, kích thước, loại hàng, chất liệu chính và tình trạng hàng hóa sau khi khách đã sắp xếp xong. Hiện trạng kho trống đã được ghi nhận ở bước bàn giao.</p>{handoverTarget.inventoryDueAt && <p className="mt-1 text-xs">Mốc nhắc xử lý: <b>{formatStaffDateTime(handoverTarget.inventoryDueAt)}</b></p>}{handoverTarget.inventoryFinalDeadlineAt && <p className={`mt-1 text-xs font-bold ${new Date(handoverTarget.inventoryFinalDeadlineAt).getTime() <= now ? 'text-red-700' : 'text-indigo-900'}`}>{new Date(handoverTarget.inventoryFinalDeadlineAt).getTime() <= now ? 'Đã quá hạn kiểm kê' : 'Hạn hoàn tất kiểm kê'}: <b>{formatStaffDateTime(handoverTarget.inventoryFinalDeadlineAt)}</b></p>}</div>
                 {lineInventory ? (
                   <div className="space-y-5">
+                    {inventoryCatalogError && <p role="alert" className="text-red-800">Chưa tải được danh mục loại hàng và chất liệu. Vui lòng tải lại trước khi hoàn tất kiểm kê.</p>}
                     {inventoryRows.map(({ line, entry, comparison }, index) => {
                       const absent = comparison.quantity === 0
+                      const actualCategory = inventoryCatalog.find(c => c.id === entry.catalogCategoryId)
                       const errorKey = `inventory-${line.id}`
                       return (
                         <fieldset key={line.id} className="min-w-0 space-y-3 rounded-lg border border-stone-200 px-4 pb-4" disabled={isReviewingCompletedStep || submitting}>
@@ -2174,6 +2218,17 @@ export default function StaffCheckInOperationsPanel({
                             }} />
                           </div>
                           {fieldErrors[`${errorKey}-measurements`] && <p className="text-xs text-red-700">{fieldErrors[`${errorKey}-measurements`]}</p>}
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <Select label="Loại hàng thực tế của dòng *" value={entry.catalogCategoryId || ''} disabled={absent} onChange={event => updateInventoryLine(line, { catalogCategoryId: event.target.value, catalogMaterialId: '' })}>
+                              <option value="">Chọn loại hàng trong danh mục</option>{inventoryCatalog.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                            </Select>
+                            <Select label="Chất liệu chính thực tế của dòng" value={entry.catalogMaterialId || ''} disabled={absent || !actualCategory} onChange={event => updateInventoryLine(line, { catalogMaterialId: event.target.value })}>
+                              <option value="">Chọn chất liệu hoặc không áp dụng</option>{actualCategory?.materials.filter(m => m.status === 'ACTIVE').map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                            </Select>
+                            <p className="text-xs text-stone-600 sm:col-span-2">Đã khai: {line.categoryName || line.name || 'Chưa ghi nhận'} · {line.materialName || 'Chưa ghi nhận'}</p>
+                            {(['fragile', 'stackable', 'allowHorizontalPlacement'] as const).map((key, i) => <label key={key} className="flex gap-2"><input type="checkbox" disabled={absent} checked={Boolean(entry[key])} onChange={event => updateInventoryLine(line, { [key]: event.target.checked })} />{['Hàng dễ vỡ', 'Được xếp chồng', 'Được đặt nằm ngang'][i]}</label>)}
+                            {entry.stackable && <Input label="Số lớp xếp tối đa thực tế" type="number" min="1" max="100" value={String(entry.maxStackLayers || 1)} onChange={event => updateInventoryLine(line, { maxStackLayers: Number(event.target.value) })} />}
+                          </div>
                           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                             {comparison.badges.map(({ label, matches }) => (
                               <div key={label} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 px-3 py-2 text-sm">

@@ -12,6 +12,7 @@ import RecoveryTaskDetail, { recoveryStatusLabels } from '../rental-api/Recovery
 import { rentalDate } from '../rental-api/presentation'
 import { managerFacilityNotice, singleManagerFacility } from './managerFacilityUi'
 import ManagerCheckInReminderPanel from './ManagerCheckInReminderPanel'
+import ManagerIntakeWorkflowPanel from './ManagerIntakeWorkflowPanel'
 import {
   assignMaintenanceTask,
   cancelMaintenanceTask,
@@ -259,6 +260,7 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
       />
 
       <ManagerCheckInReminderPanel showToast={showToast} />
+      <ManagerIntakeWorkflowPanel />
 
       {!loading && !taskError && !staffReadFailed && !staff.length && <ManagerActionNotice tone="info">Chưa có nhân viên được phân công để nhận nhiệm vụ tại cơ sở này.</ManagerActionNotice>}
       {!loading && !taskError && !unitReadFailed && !units.length && <ManagerActionNotice tone="info">Chưa có gian kho khả dụng để tạo nhiệm vụ bảo trì.</ManagerActionNotice>}
