@@ -81,6 +81,7 @@ export interface CheckInCase {
   identityVerificationNote: string | null
   contractSignedAt: string | null
   contractEvidenceReference: string | null
+  paymentEvidenceReference: string | null
   paymentCollectedAt: string | null
   setupStartedAt: string | null
   setupDueAt: string | null
@@ -306,11 +307,18 @@ export async function completeCheckIn(checkInId: string, request: CompleteCheckI
 export async function verifyCheckInIdentity(checkInId: string, request: {
   identityDocumentNumber: string
   note?: string
+  adulthoodConfirmed?: boolean
 }) {
   return assertEnvelope(await apiRequest<unknown>(
     `/api/staff/check-ins/${encodeURIComponent(checkInId)}/identity-verification`,
     { method: 'POST', body: JSON.stringify(request) },
   ))
+}
+
+export async function correctCheckInIdentity(checkInId: string, request: { identityDocumentNumber: string; note: string; adulthoodConfirmed?: boolean }) {
+  return assertEnvelope(await apiRequest<unknown>(`/api/staff/check-ins/${encodeURIComponent(checkInId)}/identity-correction`, {
+    method: 'POST', body: JSON.stringify(request),
+  }))
 }
 
 export async function signCheckInContract(checkInId: string, contractEvidenceFileId: string, confirmedSetupEarlyExitPolicyVersion?: string | null) {

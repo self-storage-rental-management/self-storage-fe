@@ -22,9 +22,9 @@ export default function ReservationReceipt({ payment, reservationCode }: { payme
   const isRemainingRental = payment.purpose === 'RENTAL_BALANCE'
   const gatewayPaidAt = formatGatewayPayDate(payment.gatewayPayDate)
   return <PaymentReceiptCard
-    title={isRemainingRental ? 'Biên lai thanh toán phần còn lại khi nhận kho' : accepted ? 'Biên lai đặt cọc giữ chỗ' : 'Chi tiết giao dịch cần đối soát'}
+    title={isRemainingRental ? 'Biên lai thanh toán phần còn lại khi nhận kho' : accepted ? 'Biên lai thanh toán trước 20% (giữ chỗ)' : 'Chi tiết giao dịch cần đối soát'}
     reference={reservationCode} confirmed={accepted || isRemainingRental}
-    status={isRemainingRental ? 'Đã ghi nhận thanh toán nhận kho' : accepted ? 'Đơn đã xác nhận cọc' : 'Đơn chưa xác nhận'}
+    status={isRemainingRental ? 'Đã ghi nhận thanh toán nhận kho' : accepted ? 'Đơn đã xác nhận khoản trả trước' : 'Đơn chưa xác nhận'}
     fields={[
       ['Mã giao dịch StorageHub', payment.paymentId], [isRemainingRental ? 'Mã tham chiếu thanh toán' : 'Mã tham chiếu VNPay', payment.transactionReference],
       [isRemainingRental ? 'Mã phiếu thu hoặc giao dịch' : 'Mã giao dịch VNPay', payment.gatewayTransactionNo || '-'], ['Đơn giữ kho', reservationCode],
@@ -32,9 +32,9 @@ export default function ReservationReceipt({ payment, reservationCode }: { payme
       ['Thời điểm StorageHub xử lý', payment.processedAt ? formatCustomerDateTime(new Date(payment.processedAt)) : '-'],
       ['Phương thức thanh toán', paymentMethodLabel(payment.paymentMethod, !isRemainingRental)],
       ['Người ghi nhận', payment.initiatedByName || '-'],
-      ['Nội dung', isRemainingRental ? 'Thanh toán phần còn lại khi nhận kho' : accepted ? 'Đặt cọc giữ chỗ đã được đơn xác nhận' : 'Giao dịch đặt cọc giữ chỗ cần đối soát'], ['Số tiền', formatVnd(payment.amount)], ['Tiền tệ', paymentCurrencyLabel(payment.currency)],
+      ['Nội dung', isRemainingRental ? 'Thanh toán phần còn lại khi nhận kho' : accepted ? 'Thanh toán trước 20% (giữ chỗ) đã được đơn xác nhận' : 'Giao dịch thanh toán trước 20% (giữ chỗ) cần đối soát'], ['Số tiền', formatVnd(payment.amount)], ['Tiền tệ', paymentCurrencyLabel(payment.currency)],
       ['Số hóa đơn', invoiceNumberLabel(payment.invoiceNumber)], ['Trạng thái hóa đơn', payment.invoiceStatus || 'DRAFT'],
       ['Ngày phát hành hóa đơn', payment.invoiceIssuedAt ? formatCustomerDateTime(new Date(payment.invoiceIssuedAt)) : '-'],
     ]}
-    footer={isRemainingRental || accepted ? 'Biên lai được lưu cùng đơn giữ kho để đối chiếu thanh toán.' : 'Hệ thống đã ghi nhận giao dịch, trạng thái đơn cần được kiểm tra trước khi tính là cọc được chấp nhận.'} />
+    footer={isRemainingRental || accepted ? 'Biên lai được lưu cùng đơn giữ kho để đối chiếu thanh toán.' : 'Hệ thống đã ghi nhận giao dịch, trạng thái đơn cần được kiểm tra trước khi tính là khoản trả trước được chấp nhận.'} />
 }

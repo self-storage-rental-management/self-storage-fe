@@ -129,6 +129,7 @@ function MainContent() {
           permanentAddress: canonicalRecord.permanentAddress,
           emergencyContactName: canonicalRecord.emergencyContactName,
           emergencyContactPhone: canonicalRecord.emergencyContactPhone,
+          profileDetails: canonicalRecord.profileDetails,
           avatar: canonicalRecord.avatar,
           role: canonicalRecord.role as User['role'],
           facility: canonicalRecord.facility,

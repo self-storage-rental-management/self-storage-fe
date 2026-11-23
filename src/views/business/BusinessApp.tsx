@@ -1,4 +1,5 @@
-﻿import { useState, useMemo, useCallback, useEffect } from "react"
+import ReturnPolicyNotice from '../../components/ReturnPolicyNotice'
+import { useState, useMemo, useCallback, useEffect } from "react"
 import DuongPolicyWorkspace from "../rental-support-integration/DuongPolicyWorkspace"
 import UnitTypeReviewModal from "./UnitTypeReviewModal"
 import { listFacilityContentPolicies, saveFacilityContentPolicies, type FacilityContentPolicy } from "../../services/facilityContentPolicyApi"
@@ -4196,6 +4197,8 @@ export default function BusinessApp({
       {/* ── RENTAL POLICIES & PACKAGES ───────────────────────── */}
       {page === "policies" && (
         <div className="fade-in space-y-6">
+          <ReturnPolicyNotice business />
+
           <SectionHeader
             title={
               lang === "vi"
