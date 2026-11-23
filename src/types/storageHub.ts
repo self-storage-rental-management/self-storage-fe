@@ -708,6 +708,7 @@ export interface ReturnCase {
   customerPhone: string
   requestedAt: string
   scheduledDate: string
+  returnType?: 'CANCELLED_IN_SETUP' | 'RETURN_IN_SETUP' | 'INVENTORY_MISMATCH' | 'EARLY_RETURN' | 'NORMAL'
   status: ReturnStatus
   initialConditionSnapshot: string
   initialConditionSnapshotEn?: string
@@ -735,6 +736,7 @@ export interface ReturnCase {
   customerDecisionNote?: string
   proposedUnitStatus?: 'available' | 'maintenance'
   inspectedAt?: string
+  managerApprovalRequired?: boolean
   completedAt?: string
   staffId?: string
   returnedItems?: { key: boolean; card: boolean; lock: boolean }

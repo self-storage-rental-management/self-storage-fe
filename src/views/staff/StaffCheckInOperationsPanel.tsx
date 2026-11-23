@@ -1,7 +1,12 @@
+import IntakeWorkflowPanel from '../../components/IntakeWorkflowPanel'
+import { getGoodsCatalog, type GoodsCatalogCategory } from '../../services/customerReservationApi'
+import { validateCccd, normalizeCccd, maskCccd } from '../../domain/cccd'
 import { useEffect, useId, useMemo, useState } from "react"
+import { isCheckInHandoverExpired, staffCheckInActions } from "../../domain/reservationCheckInPolicy"
 
 import {
   completeCheckIn,
+  confirmPartialInventoryRemoval,
   completeCheckInSetup,
   confirmCheckInPayment,
   downloadCheckInEvidence,
@@ -10,13 +15,16 @@ import {
   recordCheckInRemainingPayment,
   rejectCheckIn,
   scheduleCheckIn,
+  sendCustomerReceiptReminder,
   signCheckInContract,
   startCheckInSetup,
   uploadCheckInEvidence,
   verifyCheckInIdentity,
+  correctCheckInIdentity,
   checkInEvidenceAssetIds,
   type CheckInCase,
   type CheckInPaymentMethod,
+  type CheckInGroup,
   type CheckInChecklist,
   type CheckInInventoryLine,
   type CheckInListStatus,
@@ -42,6 +50,7 @@ import {
   extractStaffFieldErrors,
   formatStaffDateTime,
   parseEmptyStorageHandover,
+  inventoryReportNote,
   staffCheckInStatusLabel,
   staffErrorMessage,
   staffStorageUnitStatusLabel,
@@ -109,9 +118,9 @@ function dimensionsMatch(
 function localDateBoundary(date: string, nextDay = false) {
   if (!date) return undefined
 
-  const boundary = new Date(`${date}T00:00:00`)
+  const boundary = new Date(`${date}T00:00:00+07:00`)
 
-  if (nextDay) boundary.setDate(boundary.getDate() + 1)
+  if (nextDay) boundary.setUTCDate(boundary.getUTCDate() + 1)
 
   return boundary.toISOString()
 }
@@ -154,6 +163,48 @@ function HandoverWorkflowHelp() {
   )
 }
 
+const appointmentScheduleNote = "Lịch do khách hàng đặt. Có thể bàn giao sớm."
+
+function AppointmentScheduleHelp() {
+  const [visible, setVisible] = useState(false)
+  const tooltipId = useId()
+
+  return (
+    <span className="relative inline-flex normal-case tracking-normal" onMouseLeave={() => setVisible(false)}>
+      <button
+        type="button"
+        aria-label={appointmentScheduleNote}
+        aria-describedby={visible ? tooltipId : undefined}
+        onMouseEnter={() => setVisible(true)}
+        onFocus={() => setVisible(true)}
+        onBlur={() => setVisible(false)}
+        onClick={() => setVisible(current => !current)}
+        onKeyDown={event => {
+          if (event.key === "Escape" && visible) {
+            event.stopPropagation()
+            setVisible(false)
+          }
+        }}
+        className="inline-flex h-6 w-6 items-center justify-center rounded-full text-stone-500 transition hover:bg-stone-200 hover:text-stone-700 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-amber-600"
+      >
+        <svg aria-hidden="true" className="show-icon h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 10.5v6m0-9h.01" />
+        </svg>
+      </button>
+      {visible && (
+        <span
+          id={tooltipId}
+          role="tooltip"
+          className="absolute left-1/2 top-full z-20 mt-1 w-64 -translate-x-1/2 rounded-lg bg-stone-900 px-3 py-2 text-left text-xs font-normal leading-5 text-white shadow-lg"
+        >
+          {appointmentScheduleNote}
+        </span>
+      )}
+    </span>
+  )
+}
+
 function ComparisonBadge({ matches }: { matches: boolean | null }) {
   if (matches === null) {
     return <Badge variant="muted">Chưa đủ dữ liệu</Badge>
@@ -166,7 +217,41 @@ function ComparisonBadge({ matches }: { matches: boolean | null }) {
   )
 }
 
+function normalizeGoodsLabel(value: string | null | undefined) {
+  return value?.trim().replace(/\s+/g, " ").toLocaleLowerCase("vi-VN") || ""
+}
+
+function uniqueGoodsLabels(values: Array<string | null | undefined>) {
+  const labels = new Map<string, string>()
+  values.forEach(value => {
+    const label = value?.trim()
+    const normalized = normalizeGoodsLabel(label)
+    if (label && normalized && !labels.has(normalized)) labels.set(normalized, label)
+  })
+  return Array.from(labels.values())
+}
+
+function declaredGoodsCategoryValues(lines: CheckInCase["declaredGoodsLines"] | undefined) {
+  return uniqueGoodsLabels(lines?.map(line => line.categoryName || line.name) ?? [])
+}
+
+function declaredGoodsMaterialValues(lines: CheckInCase["declaredGoodsLines"] | undefined) {
+  return uniqueGoodsLabels(lines?.map(line => line.materialName) ?? [])
+}
+
+function compareGoodsLabel(actual: string, declared: string[]) {
+  const normalizedActual = normalizeGoodsLabel(actual)
+  if (!normalizedActual || declared.length === 0) return null
+  return declared.some(value => normalizeGoodsLabel(value) === normalizedActual)
+}
+
 type InventoryDraft = {
+  catalogCategoryId?: string
+  catalogMaterialId?: string
+  fragile?: boolean
+  stackable?: boolean
+  allowHorizontalPlacement?: boolean
+  maxStackLayers?: number
   quantity: string
   condition: CheckInInventoryLine["condition"] | ""
   note: string
@@ -194,6 +279,12 @@ function inventoryFromDeclaration(line: DeclaredInventoryLine): InventoryDraft {
   const quantity = formatInputNumber(line.quantity)
   return {
     ...emptyInventory,
+    catalogCategoryId: line.catalogCategoryId || '',
+    catalogMaterialId: line.catalogMaterialId || '',
+    fragile: line.fragile ?? false,
+    stackable: line.stackable ?? false,
+    allowHorizontalPlacement: line.allowHorizontalPlacement ?? false,
+    maxStackLayers: line.maxStackLayers ?? 1,
     quantity,
     lengthCm: formatInputNumber(line.lengthCm),
     widthCm: formatInputNumber(line.widthCm),
@@ -228,6 +319,9 @@ function compareInventory(line: DeclaredInventoryLine, entry: InventoryDraft) {
     ? Number(line.lengthCm) * Number(line.widthCm) * Number(line.heightCm) * line.quantity / 1_000_000
     : NaN
   const badges = [
+    { label: "Loại hàng", matches: entry.catalogCategoryId ? entry.catalogCategoryId === line.catalogCategoryId : null },
+    { label: "Chất liệu chính", matches: entry.catalogMaterialId ? entry.catalogMaterialId === line.catalogMaterialId : !line.catalogMaterialId ? true : null },
+    { label: "Điều kiện xếp", matches: Boolean(entry.fragile) === Boolean(line.fragile) && Boolean(entry.stackable) === Boolean(line.stackable) && Boolean(entry.allowHorizontalPlacement) === Boolean(line.allowHorizontalPlacement) },
     { label: "Số kiện", matches: Number.isInteger(quantity) ? quantity === line.quantity : null },
     { label: "Khối lượng", matches: measured && quantity > 0 && line.weightPerPackageKg != null
       ? !hasMaterialVariance(entry.weightKg, line.weightPerPackageKg * line.quantity, 0.1) : null },
@@ -249,13 +343,11 @@ const validateUploadFile = (file: File | null, label: string, onError: (msg: str
   return true
 }
 
-type MeasurementComparisonKey = "packageCount" | "weight" | "volume" | "dimensions"
+type MeasurementComparisonKey = "packageCount" | "weight" | "volume" | "dimensions" | "goodsCategory" | "goodsMaterial"
 
 const emptyMeasurementChecks = (): Record<MeasurementComparisonKey, boolean> => ({
-  packageCount: false,
-  weight: false,
-  volume: false,
-  dimensions: false,
+  packageCount: false, weight: false, volume: false, dimensions: false,
+  goodsCategory: false, goodsMaterial: false,
 })
 
 function formatVolume(value: number) {
@@ -287,6 +379,62 @@ function stepForCheckIn(item: CheckInCase) {
   }
 }
 
+const handoverDeadlineMessage = "Đã hết hạn nhận kho. Không thể tiếp tục bàn giao."
+
+function handoverExpired(item: CheckInCase, now = Date.now()) {
+  return stepForCheckIn(item) <= 4 && isCheckInHandoverExpired(item.appointmentAt || item.scheduledAt, now)
+}
+
+function receiptConfirmationState(item: CheckInCase, now = Date.now()) {
+  if (item.checkInStatus !== "handover_pending_receipt" || !item.receiptConfirmationDueAt) {
+    return { text: null, expired: false, urgent: false }
+  }
+  const remaining = new Date(item.receiptConfirmationDueAt).getTime() - now
+  if (!Number.isFinite(remaining) || remaining <= 0) {
+    return { text: "Đã quá hạn xác nhận", expired: true, urgent: true }
+  }
+  const minutes = Math.ceil(remaining / 60_000)
+  const days = Math.floor(minutes / 1_440)
+  const hours = Math.floor((minutes % 1_440) / 60)
+  const rest = minutes % 60
+  return {
+    text: `Còn ${days > 0 ? `${days} ngày ` : ""}${hours > 0 ? `${hours} giờ ` : ""}${rest} phút`,
+    expired: false,
+    urgent: remaining <= 2 * 60 * 60_000,
+  }
+}
+
+function receiptReleaseState(item: CheckInCase, now = Date.now()) {
+  if (item.checkInStatus !== "handover_pending_receipt" || !item.receiptConfirmationReleaseAt) {
+    return { text: null, eligible: false }
+  }
+  const remaining = new Date(item.receiptConfirmationReleaseAt).getTime() - now
+  if (!Number.isFinite(remaining) || remaining <= 0) {
+    return { text: "Đã đủ điều kiện để Manager giải phóng kho", eligible: true }
+  }
+  const minutes = Math.ceil(remaining / 60_000)
+  const days = Math.floor(minutes / 1_440)
+  const hours = Math.floor((minutes % 1_440) / 60)
+  const rest = minutes % 60
+  return {
+    text: "Manager có thể giải phóng sau "
+      + (days > 0 ? days + " ngày " : "")
+      + (hours > 0 ? hours + " giờ " : "")
+      + rest + " phút",
+    eligible: false,
+  }
+}
+
+function receiptConfirmationPriority(item: CheckInCase, now = Date.now()) {
+  const state = receiptConfirmationState(item, now)
+  const releaseState = receiptReleaseState(item, now)
+  if (releaseState.eligible) return 0
+  if (state.expired) return 1
+  if (state.urgent) return 2
+  if (item.checkInStatus === "handover_pending_receipt") return 3
+  return 4
+}
+
 const workflowStepLabels = [
   "Xác minh khách",
   "Ký hợp đồng",
@@ -297,36 +445,134 @@ const workflowStepLabels = [
 
 ]
 
+type CheckInFilters = Pick<NonNullable<Parameters<typeof listCheckIns>[0]>, "q" | "status" | "scheduledFrom" | "scheduledTo">
+
+const checkInTableColumnWidths = ["16%", "15%", "13%", "16%", "10%", "30%"] as const
+
+function CheckInTableColumns() {
+  return (
+    <colgroup>
+      {checkInTableColumnWidths.map((width, index) => (
+        <col key={index} style={{ width }} />
+      ))}
+    </colgroup>
+  )
+}
+
+function CheckInWorkList({ group, filters, refreshKey, now, renderRow }: {
+  group: CheckInGroup
+  filters: CheckInFilters
+  refreshKey: number
+  now: number
+  renderRow: (item: CheckInCase, group: CheckInGroup) => React.ReactNode
+}) {
+  const [page, setPage] = useState(0)
+  const [result, setResult] = useState<Awaited<ReturnType<typeof listCheckIns>> | null>(null)
+  const [error, setError] = useState("")
+  useEffect(() => {
+    let active = true
+    setResult(null)
+    setError("")
+    void listCheckIns({ ...filters, group, page, pageSize: 20 }).then(response => {
+      if (!active) return
+      if (page > 0 && page >= response.pagination.totalPages) {
+        setPage(Math.max(0, response.pagination.totalPages - 1))
+      } else {
+        setResult(response)
+      }
+    }).catch(reason => {
+      if (active) setError(staffErrorMessage(reason, "Không thể tải danh sách nhận kho."))
+    })
+    return () => { active = false }
+  }, [filters, group, page, refreshKey])
+
+  const { totalItems = 0, totalPages = 0 } = result?.pagination ?? {}
+  const title = group === "ONGOING" ? "Đang diễn ra" : "Đã xử lý"
+  return (
+    <section aria-label={title}>
+      <Card className="overflow-hidden">
+        <div className="flex items-center justify-between gap-2 border-b border-stone-200 px-4 py-3">
+          <h2 className="text-sm font-semibold text-stone-900">{title}</h2>
+          {result && <span className="text-xs text-stone-500">{totalItems} hồ sơ</span>}
+        </div>
+        {error ? <p role="alert" className="p-4 text-sm text-red-800">{error}</p>
+          : !result ? <p className="py-8 text-center text-sm text-stone-500">Đang tải hồ sơ…</p>
+          : result.data.length === 0 ? (
+            <p className="px-4 py-8 text-center text-sm text-stone-500">
+              {group === "ONGOING" ? "Không có đơn đang diễn ra phù hợp." : "Không có đơn đã xử lý phù hợp."}
+            </p>
+          ) : (
+            <Table tableClassName="min-w-[1420px] table-fixed">
+              <CheckInTableColumns />
+              <Thead>
+                <Tr>
+                  <Th>Đơn đặt giữ kho</Th>
+                  <Th>Khách hàng</Th>
+                  <Th>Gian kho</Th>
+                  <Th>
+                    <span className="inline-flex items-center gap-1">
+                      Lịch nhận
+                      <AppointmentScheduleHelp />
+                    </span>
+                  </Th>
+                  <Th>Trạng thái</Th>
+                  <Th className="text-right">Thao tác</Th>
+                </Tr>
+              </Thead>
+              <Tbody>
+                {[...result.data]
+                  .sort((left, right) => receiptConfirmationPriority(left, now) - receiptConfirmationPriority(right, now))
+                  .map(item => renderRow(item, group))}
+              </Tbody>
+            </Table>
+          )}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-end gap-2 border-t border-stone-200 p-4 text-sm text-stone-500">
+            <span>
+              {totalItems} hồ sơ · Trang {page + 1}/{totalPages}
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={page === 0}
+              onClick={() => setPage((value) => value - 1)}
+            >
+              Trước
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={page + 1 >= totalPages}
+              onClick={() => setPage((value) => value + 1)}
+            >
+              Sau
+            </Button>
+          </div>
+        )}
+      </Card>
+    </section>
+  )
+}
+
 export default function StaffCheckInOperationsPanel({
   showToast,
 }: {
   showToast: (message: string) => void
 }) {
-  const [items, setItems] = useState<CheckInCase[]>([])
-
-  const [page, setPage] = useState(0)
-
-  const [totalItems, setTotalItems] = useState(0)
-
-  const [totalPages, setTotalPages] = useState(0)
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
+  const [filters, setFilters] = useState<CheckInFilters>({})
 
   const [queryInput, setQueryInput] = useState("")
 
-  const [query, setQuery] = useState("")
-
   const [statusInput, setStatusInput] = useState<CheckInListStatus | "">("")
-
-  const [status, setStatus] = useState<CheckInListStatus | "">("")
 
   const [scheduledFromInput, setScheduledFromInput] = useState("")
 
-  const [scheduledFrom, setScheduledFrom] = useState("")
-
   const [scheduledToInput, setScheduledToInput] = useState("")
-
-  const [scheduledTo, setScheduledTo] = useState("")
-
-  const [loading, setLoading] = useState(true)
 
   const [error, setError] = useState<string | null>(null)
 
@@ -350,6 +596,7 @@ export default function StaffCheckInOperationsPanel({
     })
   }
 
+  const [adulthoodConfirmed, setAdulthoodConfirmed] = useState(false)
   const [identityDocumentNumber, setIdentityDocumentNumber] = useState("")
 
   const [verificationNotes, setVerificationNotes] = useState("")
@@ -380,8 +627,20 @@ export default function StaffCheckInOperationsPanel({
 
   const [packageCount, setPackageCount] = useState("1")
   const [inventoryDraft, setInventoryDraft] = useState<Record<string, InventoryDraft>>({})
+  const [inventoryCatalog, setInventoryCatalog] = useState<GoodsCatalogCategory[]>([])
+  const [inventoryCatalogError, setInventoryCatalogError] = useState(false)
+  useEffect(() => {
+    let active = true
+    getGoodsCatalog().then(c => { if (active) setInventoryCatalog(c.categories.filter(x => x.status === 'ACTIVE')) })
+      .catch(() => { if (active) setInventoryCatalogError(true) })
+    return () => { active = false }
+  }, [])
 
-  const [goodsCategory, setGoodsCategory] = useState("Hàng hóa đã khai báo")
+  const [goodsCategory, setGoodsCategory] = useState("")
+
+  const [goodsMaterial, setGoodsMaterial] = useState("")
+  const [actualPackagingMethod, setActualPackagingMethod] = useState("")
+  const [packagingCondition, setPackagingCondition] = useState<'' | 'INTACT' | 'MINOR_DAMAGE' | 'MAJOR_DAMAGE' | 'UNPACKAGED'>('')
 
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([])
 
@@ -409,6 +668,10 @@ export default function StaffCheckInOperationsPanel({
 
   const [noShowReason, setNoShowReason] = useState("")
 
+  const [partialRemovalTarget, setPartialRemovalTarget] = useState<CheckInCase | null>(null)
+  const [partialRemovalNotes, setPartialRemovalNotes] = useState("")
+  const [partialRemovalFiles, setPartialRemovalFiles] = useState<File[]>([])
+
   const [rejectTarget, setRejectTarget] = useState<CheckInCase | null>(null)
 
   const [rejectReason, setRejectReason] = useState("")
@@ -434,6 +697,7 @@ export default function StaffCheckInOperationsPanel({
   } | null>(null)
 
   const [submitting, setSubmitting] = useState(false)
+  const [remindingCustomerCheckInId, setRemindingCustomerCheckInId] = useState<string | null>(null)
   const [showCustomerReadyModal, setShowCustomerReadyModal] = useState(false)
 
   useEffect(() => {
@@ -444,49 +708,18 @@ export default function StaffCheckInOperationsPanel({
     }
   }, [])
 
-  useEffect(() => {
-    let active = true
-
-    setLoading(true)
-
-    setError(null)
-
-    void listCheckIns({
-      page,
-      pageSize: 20,
-      q: query,
-      status: status || undefined,
-      scheduledFrom: localDateBoundary(scheduledFrom),
-      scheduledTo: localDateBoundary(scheduledTo, true),
-    })
-
-      .then((response) => {
-        if (!active) return
-
-        setItems(response.data)
-
-        setTotalItems(response.pagination.totalItems)
-
-        setTotalPages(response.pagination.totalPages)
-      })
-
-      .catch((reason) => {
-        if (active)
-          setError(
-            staffErrorMessage(reason, "Không thể tải danh sách nhận kho."),
-          )
-      })
-
-      .finally(() => {
-        if (active) setLoading(false)
-      })
-
-    return () => {
-      active = false
-    }
-  }, [page, query, refreshKey, scheduledFrom, scheduledTo, status])
-
   const declaredLines = handoverTarget?.declaredGoodsLines ?? []
+  const declaredCategoryValues = useMemo(
+    () => declaredGoodsCategoryValues(declaredLines),
+    [declaredLines],
+  )
+  const declaredMaterialValues = useMemo(
+    () => declaredGoodsMaterialValues(declaredLines),
+    [declaredLines],
+  )
+  const goodsCategoryMatches = compareGoodsLabel(goodsCategory, declaredCategoryValues)
+  const goodsMaterialMatches = compareGoodsLabel(goodsMaterial, declaredMaterialValues)
+  const goodsDeclarationVariance = goodsCategoryMatches === false || goodsMaterialMatches === false
   const lineInventory = declaredLines.length > 0 && (
     handoverTarget?.checkInStatus !== "completed" || Boolean(handoverTarget.handover?.inventoryLines?.some(line => line.measurements))
   )
@@ -499,6 +732,7 @@ export default function StaffCheckInOperationsPanel({
   const inventoryLinesComplete = inventoryRows.every(({ entry, comparison }) => {
     const { quantity, measured, needsNote } = comparison
     return entry.checked && Number.isInteger(quantity) && quantity >= 0 && quantity <= 2147483647
+      && (quantity === 0 || Boolean(entry.catalogCategoryId))
       && Boolean(entry.condition) && (quantity === 0 ? entry.condition === "NOT_PRESENT" : measured && Number.isFinite(comparison.volume) && entry.condition !== "NOT_PRESENT")
       && (!needsNote || Boolean(entry.note.trim()))
   })
@@ -599,7 +833,10 @@ export default function StaffCheckInOperationsPanel({
     }))
     setVarianceAccepted(false)
   }
-  const measurementVariance = lineInventory
+  const packagingMethodMismatch = Boolean(actualPackagingMethod.trim() && handoverTarget?.declaredPackagingMethod
+    && actualPackagingMethod.trim().toLocaleLowerCase('vi') !== handoverTarget.declaredPackagingMethod.trim().toLocaleLowerCase('vi'))
+  const measurementVariance = goodsDeclarationVariance || packagingMethodMismatch
+    || packagingCondition === 'MINOR_DAMAGE' || packagingCondition === 'MAJOR_DAMAGE' || (lineInventory
     ? inventoryRows.some(({ comparison }) => comparison.badges.some(badge => badge.matches === false))
       || (inventoryLinesComplete && packageCountValid && (totalPackages !== handoverTarget?.declaredPackageCount
         || hasMaterialVariance(String(actualWeight), handoverTarget?.declaredGoodsWeightKg ?? NaN, 0.1)
@@ -607,11 +844,12 @@ export default function StaffCheckInOperationsPanel({
         || dimensionsMatch([actualDimensions[0], actualDimensions[1], actualDimensions[2]], [
           handoverTarget?.declaredGoodsLengthCm ?? null, handoverTarget?.declaredGoodsWidthCm ?? null, handoverTarget?.declaredGoodsHeightCm ?? null,
         ]) === false))
-    : checkInComparison?.hasVariance ?? false
+    : checkInComparison?.hasVariance ?? false)
   const hasEmptyStorageEvidence = evidenceFiles.length > 0 || evidenceReferences.length > 0
   const emptyStorageHandoverReady = Boolean(keyLockReference.trim() && initialCondition.trim() && hasEmptyStorageEvidence)
 
   const workflowCurrentStep = handoverTarget ? stepForCheckIn(handoverTarget) : 1
+  const handoverDeadlinePassed = handoverTarget ? handoverExpired(handoverTarget, now) : false
   const isReviewingCompletedStep = Boolean(
     handoverTarget &&
       (handoverTarget.checkInStatus === "completed" || handoverStep < workflowCurrentStep ||
@@ -714,15 +952,12 @@ export default function StaffCheckInOperationsPanel({
 
     setError(null)
 
-    setPage(0)
-
-    setQuery(queryInput.trim())
-
-    setStatus(statusInput)
-
-    setScheduledFrom(scheduledFromInput)
-
-    setScheduledTo(scheduledToInput)
+    setFilters({
+      q: queryInput.trim(),
+      status: statusInput || undefined,
+      scheduledFrom: localDateBoundary(scheduledFromInput),
+      scheduledTo: localDateBoundary(scheduledToInput, true),
+    })
   }
 
   const resetFilters = () => {
@@ -734,15 +969,7 @@ export default function StaffCheckInOperationsPanel({
 
     setScheduledToInput("")
 
-    setQuery("")
-
-    setStatus("")
-
-    setScheduledFrom("")
-
-    setScheduledTo("")
-
-    setPage(0)
+    setFilters({})
 
     setError(null)
 
@@ -757,6 +984,21 @@ export default function StaffCheckInOperationsPanel({
     const message = staffErrorMessage(reason, fallback)
     setError(message)
     showToast(message)
+  }
+
+  const remindCustomerReceipt = async (item: CheckInCase) => {
+    if (!item.checkInId || item.checkInStatus !== "handover_pending_receipt" || remindingCustomerCheckInId) return
+    setRemindingCustomerCheckInId(item.checkInId)
+    try {
+      const result = await sendCustomerReceiptReminder(item.checkInId)
+      showToast(result.sent
+        ? `Đã gửi nhắc khách xác nhận nhận kho cho đơn ${item.reservationCode}.`
+        : `Nhân viên đã nhắc đơn ${item.reservationCode} trong 2 giờ gần đây. Vui lòng thử lại sau.`)
+    } catch (reason) {
+      fail(reason, "Không thể gửi nhắc khách xác nhận nhận kho.")
+    } finally {
+      setRemindingCustomerCheckInId(null)
+    }
   }
 
   const submitHandover = async () => {
@@ -808,14 +1050,17 @@ export default function StaffCheckInOperationsPanel({
       errors.packageCount = "Tổng số kiện thực tế phải là số nguyên từ 1 đến 2.147.483.647"
     }
     if (!goodsCategory.trim()) errors.goodsCategory = "Vui lòng nhập loại hàng"
+    if (!goodsMaterial.trim()) errors.goodsMaterial = "Vui lòng nhập chất liệu chính"
+    if (!actualPackagingMethod.trim()) errors.actualPackagingMethod = "Vui lòng ghi nhận phương thức đóng gói thực tế"
+    if (!packagingCondition) errors.packagingCondition = "Vui lòng chọn tình trạng đóng gói thực tế"
     if (!initialCondition.trim()) errors.initialCondition = "Cần ghi nhận hiện trạng kho ở bước bàn giao"
     if (!keyLockReference.trim()) errors.lockReference = "Cần ghi nhận mã ổ khóa hoặc chìa khóa ở bước bàn giao"
     if ((!lineInventory || inventoryLinesComplete) && !allChecksComplete && !Object.keys(errors).length) {
       errors.handoverChecklist = "Cần hoàn tất các bước xác nhận trước khi kiểm kê"
     }
     if (measurementVariance) {
-      if (!varianceAccepted) {
-        errors.varianceAccepted = "Cần trao đổi với khách và đánh dấu chấp nhận chênh lệch"
+      if (!lineInventory && !varianceAccepted) {
+        errors.varianceAccepted = "Cần ghi nhận chấp thuận chênh lệch ở biểu mẫu cũ"
       }
       if (!varianceReason.trim()) {
         errors.varianceReason = "Vui lòng nhập lý do chênh lệch khi hàng hóa khác đơn đặt"
@@ -833,8 +1078,8 @@ export default function StaffCheckInOperationsPanel({
     const providedIdentity = normalizeIdentityDocument(identityDocumentNumber)
     if (!providedIdentity) {
       errors.identityDocumentNumber = "Số CCCD/CMND không được để trống"
-    } else if (!/^(?:\d{9}|\d{12})$/.test(providedIdentity)) {
-      errors.identityDocumentNumber = "CCCD/CMND phải gồm đúng 9 hoặc 12 chữ số"
+    } else if (!validateCccd(providedIdentity).ok) {
+      errors.identityDocumentNumber = validateCccd(providedIdentity).error || "Vui lòng nhập CCCD 12 số."
     }
 
     if (Object.keys(errors).length > 0) {
@@ -872,7 +1117,7 @@ export default function StaffCheckInOperationsPanel({
         setEvidenceFiles([])
       }
 
-      await completeCheckIn(handoverTarget.checkInId, {
+      const completed = await completeCheckIn(handoverTarget.checkInId, {
         checklist: lineInventory ? { ...checklist, measurementVerified: true, conditionRecorded: true } : checklist,
 
         identityDocumentNumber: identityDocumentNumber.trim(),
@@ -890,7 +1135,7 @@ export default function StaffCheckInOperationsPanel({
 
           actualVolumeM3: lineInventory ? actualVolume : Number(volumeM3),
 
-          varianceAccepted: measurementVariance && varianceAccepted,
+          varianceAccepted: lineInventory ? measurementVariance : measurementVariance && varianceAccepted,
         },
 
         varianceReason: measurementVariance ? varianceReason.trim() : null,
@@ -903,6 +1148,18 @@ export default function StaffCheckInOperationsPanel({
         inventoryLines: lineInventory ? inventoryRows.map(({ line, entry, comparison }) => ({
           goodsItemId: line.id,
           actualQuantity: comparison.quantity,
+          actualGoods: comparison.quantity > 0 ? {
+            category: inventoryCatalog.find(c => c.id === entry.catalogCategoryId)?.reservationCategory || 'OTHER',
+            catalogCategoryId: entry.catalogCategoryId,
+            catalogMaterialId: entry.catalogMaterialId || null,
+            description: line.name || 'Hàng hóa thực tế',
+            customGoodsName: line.name,
+            quantity: comparison.quantity,
+            lengthCm: comparison.dimensions[0], widthCm: comparison.dimensions[1], heightCm: comparison.dimensions[2],
+            weightPerItemKg: comparison.weight / comparison.quantity,
+            fragile: Boolean(entry.fragile), stackable: Boolean(entry.stackable),
+            allowHorizontalPlacement: Boolean(entry.allowHorizontalPlacement), maxStackLayers: entry.maxStackLayers || 1,
+          } : null,
           condition: entry.condition as CheckInInventoryLine["condition"],
           note: entry.note.trim() || null,
           measurements: comparison.quantity > 0 ? {
@@ -913,7 +1170,11 @@ export default function StaffCheckInOperationsPanel({
           } : null,
         })) : [],
 
-        goodsCategory: goodsCategory.trim(),
+        goodsCategory: lineInventory ? [...new Set(inventoryRows.filter(r => r.comparison.quantity > 0).map(r => inventoryCatalog.find(c => c.id === r.entry.catalogCategoryId)?.label || goodsCategory.trim()))].join(', ') : goodsCategory.trim(),
+
+        goodsMaterial: lineInventory ? [...new Set(inventoryRows.filter(r => r.comparison.quantity > 0).map(r => inventoryCatalog.find(c => c.id === r.entry.catalogCategoryId)?.materials.find(m => m.id === r.entry.catalogMaterialId)?.label || 'Không áp dụng'))].join(', ') : goodsMaterial.trim(),
+        actualPackagingMethod: actualPackagingMethod.trim(),
+        packagingCondition: packagingCondition || null,
 
         evidenceReferences: uploadedEvidence,
 
@@ -922,16 +1183,7 @@ export default function StaffCheckInOperationsPanel({
           `Ổ khóa ${keyLockReference.trim()}`,
         ],
 
-        notes: [
-          verificationNotes.trim()
-            ? `Ghi chú xác minh: ${verificationNotes.trim()}`
-            : "",
-          handoverNotes.trim()
-            ? `Ghi chú bàn giao: ${handoverNotes.trim()}`
-            : "",
-        ]
-          .filter(Boolean)
-          .join("\n"),
+        notes: handoverNotes.trim() ? `Ghi chú kiểm kê: ${handoverNotes.trim()}` : "",
         lockReference: keyLockReference.trim(),
       })
 
@@ -940,9 +1192,9 @@ export default function StaffCheckInOperationsPanel({
 
       setPaymentEvidenceFile(null)
 
-      showToast(
-        `Đã hoàn tất bàn giao ${handoverTarget.storageUnitCode}. Hồ sơ vẫn được lưu trong Nhận kho & bàn giao để xem lại.`,
-      )
+      showToast(completed.inventoryResolutionStatus === "PENDING_CUSTOMER"
+        ? `Đã ghi nhận sai lệch cho ${handoverTarget.storageUnitCode}. Đang chờ khách xác nhận phương án xử lý.`
+        : `Đã hoàn tất bàn giao ${handoverTarget.storageUnitCode}. Hồ sơ vẫn được lưu trong Nhận kho & bàn giao để xem lại.`)
 
       setCustomerWaitTarget(null)
       setHandoverTarget(null)
@@ -957,6 +1209,10 @@ export default function StaffCheckInOperationsPanel({
 
   const submitWorkflowStep = async () => {
     if (!handoverTarget?.checkInId) return
+    if (!staffCheckInActions(handoverTarget).canOpen) {
+      setError(handoverExpired(handoverTarget) ? handoverDeadlineMessage : "Hồ sơ chưa đủ điều kiện nhận kho.")
+      return
+    }
     setSubmitting(true)
     setError(null)
     setFieldErrors({})
@@ -964,15 +1220,16 @@ export default function StaffCheckInOperationsPanel({
       let updated: CheckInCase | null = null
       if (handoverStep === 1) {
         const normalized = normalizeIdentityDocument(identityDocumentNumber)
-        if (!normalized || !/^(?:\d{9}|\d{12})$/.test(normalized)) {
-          setFieldErrors({ identityDocumentNumber: "CCCD/CMND phải gồm đúng 9 hoặc 12 chữ số." })
-          setError("Số CCCD/CMND trên giấy tờ gốc không hợp lệ. Vui lòng nhập đúng 9 hoặc 12 chữ số.")
+        if (!validateCccd(normalized).ok) {
+          setFieldErrors({ identityDocumentNumber: validateCccd(normalized).error || "Vui lòng nhập CCCD 12 số." })
+          setError(validateCccd(normalized).error || "Vui lòng nhập CCCD 12 số.")
           setSubmitting(false)
           return
         }
         updated = await verifyCheckInIdentity(handoverTarget.checkInId, {
           identityDocumentNumber: identityDocumentNumber.trim(),
           note: verificationNotes.trim() || undefined,
+          adulthoodConfirmed,
         })
         setChecklist((current) => ({ ...current, identityVerified: true, reservationMatched: true }))
       } else if (handoverStep === 2) {
@@ -1049,7 +1306,7 @@ export default function StaffCheckInOperationsPanel({
   }
 
   const submitRejection = async () => {
-    if (!rejectTarget?.checkInId || !rejectReason.trim()) return
+    if (!rejectTarget?.checkInId || !rejectReason.trim() || !staffCheckInActions(rejectTarget).canReject) return
 
     setSubmitting(true)
 
@@ -1122,7 +1379,7 @@ export default function StaffCheckInOperationsPanel({
   }
 
   const submitNoShow = async () => {
-    if (!noShowTarget?.checkInId || !noShowReason.trim()) return
+    if (!noShowTarget?.checkInId || !noShowReason.trim() || !staffCheckInActions(noShowTarget).canMarkAbsent) return
 
     setSubmitting(true)
 
@@ -1143,6 +1400,34 @@ export default function StaffCheckInOperationsPanel({
     }
   }
 
+  const submitPartialRemoval = async () => {
+    if (!partialRemovalTarget?.checkInId || !partialRemovalNotes.trim() || !partialRemovalFiles.length) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      const evidenceReferences: string[] = []
+      for (const file of partialRemovalFiles) {
+        if (!validateUploadFile(file, "bằng chứng đưa phần hàng dư ra", setError)) return
+        const asset = await uploadCheckInEvidence(partialRemovalTarget.checkInId, file)
+        evidenceReferences.push(asset.id)
+      }
+      await confirmPartialInventoryRemoval(partialRemovalTarget.checkInId, {
+        remainderRemoved: true,
+        evidenceReferences,
+        notes: partialRemovalNotes.trim(),
+      })
+      showToast(`Đã xác nhận phần hàng dư của ${partialRemovalTarget.reservationCode} đã được đưa khỏi gian kho.`)
+      setPartialRemovalTarget(null)
+      setPartialRemovalNotes("")
+      setPartialRemovalFiles([])
+      refresh()
+    } catch (reason) {
+      fail(reason, "Không thể xác nhận phần hàng dư đã được đưa ra.")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const openHandover = (item: CheckInCase) => {
     setError(null)
     setFieldErrors({})
@@ -1156,6 +1441,7 @@ export default function StaffCheckInOperationsPanel({
     )
 
     setHandoverStep(stepForCheckIn(item))
+    setHandoverNotes(inventoryReportNote(item.handover?.notes, item.handover?.identityVerificationNote))
 
     const restoredChecklist = item.handover?.checklist ?? emptyChecklist()
     setChecklist({
@@ -1164,13 +1450,14 @@ export default function StaffCheckInOperationsPanel({
       reservationMatched: Boolean(item.identityVerifiedAt) || restoredChecklist.reservationMatched,
       contractVerified: Boolean(item.contractSignedAt) || restoredChecklist.contractVerified,
       paymentVerified: Boolean(item.paymentCollectedAt) || restoredChecklist.paymentVerified,
-      accessHandedOver: Boolean(item.setupStartedAt) || restoredChecklist.accessHandedOver,
-      unitWalkthrough: Boolean(item.setupStartedAt) || restoredChecklist.unitWalkthrough,
+      accessHandedOver: Boolean(item.checkedInAt) || restoredChecklist.accessHandedOver,
+      unitWalkthrough: Boolean(item.checkedInAt) || restoredChecklist.unitWalkthrough,
     })
 
     setIdentityDocumentNumber(item.identityDocumentNumber || "")
 
     setVerificationNotes("")
+    setAdulthoodConfirmed(false)
 
     setEvidenceFiles([])
 
@@ -1192,6 +1479,13 @@ export default function StaffCheckInOperationsPanel({
 
     setHandedOverItems("Biên nhận bàn giao")
 
+    const declaredCategories = declaredGoodsCategoryValues(item.declaredGoodsLines)
+    const declaredMaterials = declaredGoodsMaterialValues(item.declaredGoodsLines)
+    setGoodsCategory(item.handover?.goodsCategory?.trim() || (declaredCategories.length === 1 ? declaredCategories[0] : ""))
+    setGoodsMaterial(item.handover?.goodsMaterial?.trim() || (item.checkInStatus === "completed" ? "" : declaredMaterials.length === 1 ? declaredMaterials[0] : ""))
+    setActualPackagingMethod(item.handover?.actualPackagingMethod || '')
+    setPackagingCondition(item.handover?.packagingCondition || '')
+
     setLengthCm(formatInputNumber(item.declaredGoodsLengthCm))
 
     setWidthCm(formatInputNumber(item.declaredGoodsWidthCm))
@@ -1205,6 +1499,9 @@ export default function StaffCheckInOperationsPanel({
     const savedLines = item.handover?.inventoryLines ?? []
     setInventoryDraft(Object.fromEntries(savedLines.map(line => [line.goodsItemId, {
       quantity: String(line.actualQuantity), condition: line.condition, note: line.note ?? "",
+      catalogCategoryId: line.actualGoods?.catalogCategoryId || '', catalogMaterialId: line.actualGoods?.catalogMaterialId || '',
+      fragile: line.actualGoods?.fragile, stackable: line.actualGoods?.stackable,
+      allowHorizontalPlacement: line.actualGoods?.allowHorizontalPlacement, maxStackLayers: line.actualGoods?.maxStackLayers || 1,
       lengthCm: formatInputNumber(line.measurements?.lengthCm),
       widthCm: formatInputNumber(line.measurements?.widthCm),
       heightCm: formatInputNumber(line.measurements?.heightCm),
@@ -1221,7 +1518,11 @@ export default function StaffCheckInOperationsPanel({
   }
 
   const beginHandover = async (item: CheckInCase) => {
-    if (item.checkInStatus && !["completed", "rejected", "no_show", "cancelled"].includes(item.checkInStatus)) {
+    if (!staffCheckInActions(item).canOpen) {
+      setError(handoverExpired(item) ? handoverDeadlineMessage : "Hồ sơ chưa đủ điều kiện nhận kho.")
+      return
+    }
+    if (item.checkInId) {
       openHandover(item)
       return
     }
@@ -1263,22 +1564,165 @@ export default function StaffCheckInOperationsPanel({
     setRejectEvidenceReferences([])
   }
 
+  const openPartialRemoval = (item: CheckInCase) => {
+    setError(null)
+    setPartialRemovalTarget(item)
+    setPartialRemovalNotes("")
+    setPartialRemovalFiles([])
+  }
+
+  const renderRow = (item: CheckInCase, group: CheckInGroup) => {
+    const actions = staffCheckInActions(item, now)
+    const receiptState = receiptConfirmationState(item, now)
+    const receiptRelease = receiptReleaseState(item, now)
+    return (
+    <Tr key={item.reservationId}>
+      <Td>
+        <b className="font-mono">{item.reservationCode}</b>
+        <p className="mt-1 text-xs text-stone-500">
+          {item.facilityName}
+        </p>
+      </Td>
+      <Td>
+        <b>{item.customerName}</b>
+        <p className="mt-1 text-xs text-stone-500">
+          {item.customerEmail}
+        </p>
+      </Td>
+      <Td>
+        <b className="font-mono">{item.storageUnitCode}</b>
+        <p className="mt-1 text-xs text-stone-500">
+          {staffStorageUnitStatusLabel(item.storageUnitStatus)}
+        </p>
+      </Td>
+      <Td>
+        <span>{formatStaffDateTime(item.appointmentAt || item.scheduledAt)}</span>
+        {group === "ONGOING" && stepForCheckIn(item) <= 4 && (item.appointmentAt || item.scheduledAt) && handoverExpired(item, now) && (
+          <p className="mt-1 text-[11px] font-medium text-red-700">Đã hết hạn nhận kho</p>
+        )}
+        {item.checkInStatus === "handover_pending_receipt" && item.receiptConfirmationDueAt && (
+          <p className={`mt-1 text-[11px] font-semibold ${receiptState.expired || receiptState.urgent ? "text-red-700" : "text-amber-700"}`}>
+            {receiptState.text} · Hạn {formatStaffDateTime(item.receiptConfirmationDueAt)}
+          </p>
+        )}
+        {receiptRelease.text && (
+          <p className={receiptRelease.eligible ? "mt-1 text-[11px] font-semibold text-red-700" : "mt-1 text-[11px] font-semibold text-amber-700"}>
+            {receiptRelease.text}
+          </p>
+        )}
+      </Td>
+      <Td>
+        <Badge
+          variant={
+            receiptRelease.eligible || receiptState.expired
+              ? "error"
+              : item.checkInStatus === "completed"
+              ? "success"
+              : item.checkInStatus === "no_show" ||
+                  item.checkInStatus === "rejected"
+                ? "error"
+                : item.checkInStatus === "scheduled"
+                  ? "info"
+                  : "warning"
+          }
+        >
+          {receiptRelease.eligible
+            ? "Đủ điều kiện để Manager giải phóng kho"
+            : receiptState.expired
+            ? "Đã quá hạn xác nhận nhận kho"
+            : staffCheckInStatusLabel(item.checkInStatus, item.reservationStatus)}
+        </Badge>
+      </Td>
+      <Td className="min-w-[320px] whitespace-nowrap text-right">
+        <div className="flex flex-nowrap items-center justify-end gap-1 whitespace-nowrap">
+          {group === "ONGOING" && item.checkInStatus !== "completed" && (
+            <>
+              {item.checkInStatus === "handover_pending_receipt" && item.checkInId && <Button
+                className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
+                size="sm"
+                variant="outline"
+                disabled={submitting || Boolean(remindingCustomerCheckInId)}
+                onClick={() => void remindCustomerReceipt(item)}
+              >
+                {remindingCustomerCheckInId === item.checkInId ? "Đang gửi…" : "Nhắc khách xác nhận"}
+              </Button>}
+              {item.inventoryResolutionStatus === "PARTIAL_ACCEPTED" && <Button
+                className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
+                size="sm"
+                variant="danger"
+                disabled={submitting}
+                onClick={() => openPartialRemoval(item)}
+              >
+                Xác nhận đã đưa phần dư ra
+              </Button>}
+              <Button
+                className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
+                size="sm"
+                disabled={submitting || !actions.canOpen}
+                onClick={() => beginHandover(item)}
+              >
+                {actions.label}
+              </Button>
+              {actions.canReject && <Button
+                className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
+                size="sm"
+                variant="danger"
+                disabled={submitting}
+                onClick={() => openRejection(item)}
+              >
+                Từ chối nhận kho
+              </Button>}
+              <Button
+                className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
+                size="sm"
+                variant="danger"
+                disabled={submitting || !actions.canMarkAbsent}
+                onClick={() => {
+                  setNoShowTarget(item)
+                  setNoShowReason("")
+                }}
+              >
+                Khách không đến
+              </Button>
+            </>
+          )}
+          {["handover_pending_receipt", "setup_in_progress", "setup_completed"].includes(item.checkInStatus || "") && (
+            <Button size="sm" variant="outline" onClick={() => setDetailTarget(item)}>Xem biên bản</Button>
+          )}
+          {item.checkInStatus === "completed" && (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => openHandover(item)}
+              >
+                Xem lại các bước
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setDetailTarget(item)}
+              >
+                Xem biên bản
+              </Button>
+            </>
+          )}
+          {group === "PROCESSED" && item.checkInStatus !== "completed" && (
+            <span className="max-w-60 whitespace-normal text-xs text-stone-600">{item.rejectionReason || staffCheckInStatusLabel(item.checkInStatus, item.reservationStatus)}</span>
+          )}
+        </div>
+      </Td>
+    </Tr>
+    )
+  }
+
   return (
     <div className="fade-in space-y-5">
       <SectionHeader
         title="Nhận kho & bàn giao"
         subtitle="Xác minh, ký hợp đồng, thu tiền và ghi nhận bàn giao kho trống. Nhân viên kiểm kê sau khi khách báo đã chuẩn bị hàng xong."
       />
-      <Card className="border-stone-200/80 bg-white p-4 shadow-sm sm:p-5">
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-bold text-stone-900">Bộ lọc hồ sơ nhận kho</p>
-            <p className="mt-1 text-xs text-stone-500">Tìm nhanh theo đơn, khách hàng, gian kho hoặc lịch hẹn.</p>
-          </div>
-          <span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-semibold text-stone-600">
-            {loading ? "Đang tải…" : `${totalItems} hồ sơ`}
-          </span>
-        </div>
+      <Card className="p-4">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(260px,1.7fr)_minmax(180px,1fr)_minmax(150px,.8fr)_minmax(150px,.8fr)_auto] xl:items-end">
           <Input
             label="Tìm kiếm"
@@ -1309,6 +1753,8 @@ export default function StaffCheckInOperationsPanel({
             <option value="setup_completed">Chờ kiểm kê hàng hóa</option>
             <option value="no_show">Khách không đến</option>
             <option value="completed">Đã hoàn tất kiểm kê</option>
+            <option value="rejected">Từ chối nhận kho</option>
+            <option value="cancelled">Đã hủy</option>
           </Select>
           <Input
             label="Lịch nhận từ ngày"
@@ -1342,170 +1788,10 @@ export default function StaffCheckInOperationsPanel({
           {error}
         </div>
       )}
-      <Card className="overflow-visible border-stone-200/80 shadow-sm">
-        <Table tableClassName="min-w-[1080px]">
-          <Thead>
-            <Tr>
-              <Th>Đơn đặt giữ kho</Th>
-              <Th>Khách hàng</Th>
-              <Th>Gian kho</Th>
-              <Th>Lịch nhận</Th>
-              <Th>Trạng thái</Th>
-              <Th className="text-right">Thao tác</Th>
-            </Tr>
-          </Thead>
-          <Tbody>
-            {items.map((item) => (
-              <Tr key={item.reservationId}>
-                <Td>
-                  <b className="font-mono">{item.reservationCode}</b>
-                  <p className="mt-1 text-xs text-stone-500">
-                    {item.facilityName}
-                  </p>
-                </Td>
-                <Td>
-                  <b>{item.customerName}</b>
-                  <p className="mt-1 text-xs text-stone-500">
-                    {item.customerEmail}
-                  </p>
-                </Td>
-                <Td>
-                  <b className="font-mono">{item.storageUnitCode}</b>
-                  <p className="mt-1 text-xs text-stone-500">
-                    {staffStorageUnitStatusLabel(item.storageUnitStatus)}
-                  </p>
-                </Td>
-                <Td>
-                  <span>{formatStaffDateTime(item.appointmentAt || item.scheduledAt)}</span>
-                  <p className="mt-1 text-[11px] text-stone-500">Lịch do khách hàng đặt. Có thể bàn giao sớm.</p>
-                </Td>
-                <Td>
-                  <Badge
-                    variant={
-                      item.checkInStatus === "completed"
-                        ? "success"
-                        : item.checkInStatus === "no_show" ||
-                            item.checkInStatus === "rejected"
-                          ? "error"
-                          : item.checkInStatus === "scheduled"
-                            ? "info"
-                            : "warning"
-                    }
-                  >
-                    {staffCheckInStatusLabel(
-                      item.checkInStatus,
-                      item.reservationStatus,
-                    )}
-                  </Badge>
-                </Td>
-                <Td className="min-w-[320px] whitespace-nowrap text-right">
-                  <div className="flex flex-nowrap items-center justify-end gap-1 whitespace-nowrap">
-                    {item.checkInStatus !== "completed" && (
-                      <>
-                        <Button
-                          className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
-                          size="sm"
-                          disabled={item.checkInStatus === "rejected" || item.checkInStatus === "no_show" || item.checkInStatus === "cancelled"}
-                          onClick={() => beginHandover(item)}
-                        >
-                          {item.checkInStatus ? "Tiếp tục nhận kho" : "Bắt đầu nhận kho"}
-                        </Button>
-                        <Button
-                          className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
-                          size="sm"
-                          variant="danger"
-                          disabled={item.checkInStatus !== "scheduled"}
-                          onClick={() => openRejection(item)}
-                        >
-                          Từ chối nhận kho
-                        </Button>
-                        <Button
-                          className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
-                          size="sm"
-                          variant="danger"
-                          disabled={
-                            item.checkInStatus !== "scheduled" ||
-                            !item.checkInId ||
-                            !item.scheduledAt ||
-                            new Date(item.scheduledAt).getTime() > Date.now()
-                          }
-                          onClick={() => {
-                            setNoShowTarget(item)
-                            setNoShowReason("")
-                          }}
-                        >
-                          Khách không đến
-                        </Button>
-                      </>
-                    )}
-                    {item.checkInStatus === "completed" && (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => openHandover(item)}
-                        >
-                          Xem lại các bước
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setDetailTarget(item)}
-                        >
-                          Xem biên bản
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </Td>
-              </Tr>
-            ))}
-            {!loading && !items.length && (
-              <tr>
-                <td
-                  colSpan={6}
-                  className="px-4 py-10 text-center text-sm text-stone-500"
-                >
-                  Không có hồ sơ nhận kho trong phạm vi cơ sở.
-                </td>
-              </tr>
-            )}
-            {loading && (
-              <tr>
-                <td
-                  colSpan={6}
-                  className="px-4 py-10 text-center text-sm text-stone-500"
-                >
-                  Đang tải hồ sơ…
-                </td>
-              </tr>
-            )}
-          </Tbody>
-        </Table>
-        {totalPages > 1 && (
-          <div className="flex items-center justify-end gap-2 border-t border-stone-200 p-4 text-sm text-stone-500">
-            <span>
-              {totalItems} hồ sơ · Trang {page + 1}/{totalPages}
-            </span>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={page === 0}
-              onClick={() => setPage((value) => value - 1)}
-            >
-              Trước
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={page + 1 >= totalPages}
-              onClick={() => setPage((value) => value + 1)}
-            >
-              Sau
-            </Button>
-          </div>
-        )}
-      </Card>
+      {(["ONGOING", "PROCESSED"] as const).map(group => (
+        <CheckInWorkList key={group + JSON.stringify(filters)} group={group} filters={filters}
+          refreshKey={refreshKey} now={now} renderRow={renderRow} />
+      ))}
 
       <Modal
         open={Boolean(handoverTarget)}
@@ -1516,12 +1802,14 @@ export default function StaffCheckInOperationsPanel({
       >
         {handoverTarget && (
           <div className="space-y-5">
+            <IntakeWorkflowPanel reservationId={handoverTarget.reservationId} checkInId={handoverTarget.checkInId} role="STAFF" />
             <dl className="grid gap-3 rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
               {[
                 ['Mã đơn giữ kho', handoverTarget.reservationCode], ['Mã gian kho bàn giao', handoverTarget.storageUnitCode],
                 ['Khách hàng nhận kho', handoverTarget.customerName], ['Tên cơ sở', handoverTarget.facilityName || 'StorageHub'],
               ].map(([label, value]) => <div key={label}><dt className="text-xs text-stone-500">{label}</dt><dd className="mt-1 break-words font-semibold text-stone-900">{value || 'Chưa cập nhật'}</dd></div>)}
             </dl>
+            {handoverDeadlinePassed && <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm font-medium text-amber-900">{handoverDeadlineMessage}</p>}
             {error && (
               <div role="alert" className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800 flex items-start gap-3 shadow-sm">
                 <svg className="h-5 w-5 text-red-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1578,7 +1866,7 @@ export default function StaffCheckInOperationsPanel({
                   <div><span className="text-stone-500">Khách hàng</span><p className="font-semibold">{handoverTarget.customerName}</p></div>
                   <div>
                     <span className="text-stone-500">CCCD/CMND đã khai báo</span>
-                    <p className="font-semibold">{declaredIdentityDocument || "Chưa có dữ liệu"}</p>
+                    <p className="font-semibold">{declaredIdentityDocument ? maskCccd(declaredIdentityDocument) : "Chưa có dữ liệu"}</p>
                     {identityMismatch && !isReviewingCompletedStep && (
                       <button
                         type="button"
@@ -1596,8 +1884,9 @@ export default function StaffCheckInOperationsPanel({
                     label="CCCD/CMND trên giấy tờ gốc *"
                     error={fieldErrors.identityDocumentNumber}
                     value={identityDocumentNumber}
-                    disabled={isReviewingCompletedStep}
+                    disabled={submitting}
                     onChange={(event) => {
+                      setAdulthoodConfirmed(false)
                       clearFieldError("identityDocumentNumber")
                       setIdentityDocumentNumber(event.target.value)
                     }}
@@ -1606,17 +1895,29 @@ export default function StaffCheckInOperationsPanel({
                 {identityMismatch && (
                   <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
                     <p className="font-semibold flex items-center gap-1.5">
-                      <span>⚠️</span> Số giấy tờ gốc khác với thông tin đã khai báo ban đầu ({declaredIdentityDocument || "chưa khai báo"}).
+                      <span>⚠️</span> Số giấy tờ gốc khác với thông tin đã khai báo ban đầu ({declaredIdentityDocument ? maskCccd(declaredIdentityDocument) : "chưa khai báo"}).
                     </p>
                     <p className="mt-1 text-xs text-amber-900 leading-relaxed">
-                      Nhân viên đã đối chiếu giấy tờ gốc thực tế. Khi bấm <b>Xác nhận và tiếp tục</b>, hệ thống sẽ tự động cập nhật số CCCD/CMND mới ({identityDocumentNumber.trim()}) vào hồ sơ đơn hàng và lưu lịch sử xác minh.
+                      Nhân viên đã đối chiếu giấy tờ gốc thực tế. Khi bấm <b>Xác nhận và tiếp tục</b>, hệ thống sẽ tự động cập nhật số CCCD/CMND mới ({maskCccd(identityDocumentNumber)}) vào hồ sơ đơn hàng và lưu lịch sử xác minh.
                     </p>
                   </div>
                 )}
                 <div className="grid gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm sm:grid-cols-2">
                   <label className="flex items-center gap-2"><input type="checkbox" disabled={isReviewingCompletedStep} checked={checklist.identityVerified && checklist.reservationMatched} onChange={(event) => setChecklist((value) => ({ ...value, identityVerified: event.target.checked, reservationMatched: event.target.checked }))} />Đã kiểm tra giấy tờ gốc và đối chiếu khách hàng với đơn đặt kho *</label>
                 </div>
-                <Input label="Ghi chú xác minh" value={verificationNotes || handoverTarget.identityVerificationNote || ""} disabled={isReviewingCompletedStep} maxLength={1000} onChange={(event) => setVerificationNotes(event.target.value)} />
+                {validateCccd(identityDocumentNumber).warning && <label className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm"><input type="checkbox" checked={adulthoodConfirmed} onChange={event => setAdulthoodConfirmed(event.target.checked)} />Đã đối chiếu ngày sinh trên CCCD gốc và xác nhận khách đã đủ 18 tuổi *</label>}
+                {isReviewingCompletedStep && <Button disabled={submitting || !verificationNotes.trim() || !validateCccd(identityDocumentNumber).ok || (!!validateCccd(identityDocumentNumber).warning && !adulthoodConfirmed)} onClick={async () => {
+                  if (!handoverTarget.checkInId) return
+                  setSubmitting(true)
+                  try {
+                    const updated = await correctCheckInIdentity(handoverTarget.checkInId, { identityDocumentNumber: normalizeCccd(identityDocumentNumber), note: verificationNotes.trim(), adulthoodConfirmed })
+                    setHandoverTarget(updated)
+                    refresh()
+                    setError(null)
+                  } catch (reason) { fail(reason, 'Không thể sửa CCCD.') }
+                  finally { setSubmitting(false) }
+                }}>Sửa CCCD sau khi đối chiếu lại giấy tờ gốc</Button>}
+                <Input label="Ghi chú xác minh" value={verificationNotes} disabled={submitting} maxLength={1000} onChange={(event) => setVerificationNotes(event.target.value)} />
               </div>
             )}
 
@@ -1644,11 +1945,6 @@ export default function StaffCheckInOperationsPanel({
                       <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-amber-600" checked={confirmedSetupTerms === setupTermsKey} disabled={submitting || isReviewingCompletedStep || !contractFile || handoverTarget.setupEarlyExitFee == null} onChange={event => setConfirmedSetupTerms(event.target.checked ? setupTermsKey : null)} />
                       <span>
                         Tôi đã kiểm tra hợp đồng đã ký và xác nhận khoản phí khớp với điều khoản khách đồng ý khi đặt kho.
-                        <span className="mt-1 block">
-                          {handoverTarget.setupEarlyExitFee == null
-                            ? 'Chưa xác định được mức phí trả kho trong thời gian chuẩn bị. Cần đối soát trước khi tiếp tục.'
-                            : <>Nếu khách trả kho trong thời gian chuẩn bị, khoản phí áp dụng một lần là <strong>{handoverTarget.setupEarlyExitFee.toLocaleString('vi-VN')} đồng</strong>.</>}
-                        </span>
                       </span>
                     </label>}
                   </>
@@ -1818,7 +2114,7 @@ export default function StaffCheckInOperationsPanel({
                       </span>
                     </div>
                     <p className="mt-1 text-xs text-emerald-800">
-                      Bàn giao lúc: {formatStaffDateTime(handoverTarget.setupStartedAt)}. Khách hàng có {handoverTarget.freeSetupDays} ngày để chuyển đồ và chuẩn bị trước khi tính cước hợp đồng.
+                      Bàn giao lúc: {formatStaffDateTime(handoverTarget.checkedInAt)}. Thời gian setup chỉ bắt đầu sau khi khách xác nhận đã nhận kho.
                     </p>
                   </div>
                 )}
@@ -1831,10 +2127,16 @@ export default function StaffCheckInOperationsPanel({
                 {handoverTarget.checkInStatus === "handover_pending_receipt" ? (
                   <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 pb-3">
-                      <p className="font-bold text-base">Đang chờ khách hàng sẵn sàng bàn giao</p>
-                      <span className="rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-bold text-amber-900">Chờ khách xác nhận</span>
+                      <p className="font-bold text-base">Đang chờ khách hàng xác nhận nhận kho</p>
+                      <span className={`rounded-full border px-3 py-1 text-xs font-bold ${receiptConfirmationState(handoverTarget, now).expired ? "border-red-300 bg-red-100 text-red-900" : "border-amber-300 bg-white text-amber-900"}`}>
+                        {receiptConfirmationState(handoverTarget, now).expired ? "Đã quá hạn" : "Chờ khách xác nhận"}
+                      </span>
                     </div>
-                    <p className="mt-3 text-sm">Vui lòng chờ khách hàng nhấn <b>“Sẵn sàng bàn giao”</b>. Hệ thống sẽ tự cập nhật bước tiếp theo.</p>
+                    <p className="mt-3 text-sm">Vui lòng chờ khách hàng nhấn <b>“Xác nhận đã nhận kho”</b>. Thời gian setup chưa bắt đầu ở bước này.</p>
+                    {handoverTarget.checkedInAt && <p className="mt-2 text-xs">Bàn giao lúc: <b>{formatStaffDateTime(handoverTarget.checkedInAt)}</b></p>}
+                    {handoverTarget.receiptConfirmationDueAt && <p className={`mt-1 text-xs font-bold ${receiptConfirmationState(handoverTarget, now).expired || receiptConfirmationState(handoverTarget, now).urgent ? "text-red-700" : "text-amber-700"}`}>
+                      {receiptConfirmationState(handoverTarget, now).text} · Hạn xác nhận: {formatStaffDateTime(handoverTarget.receiptConfirmationDueAt)}
+                    </p>}
                   </div>
                 ) : (
                   <>
@@ -1849,7 +2151,7 @@ export default function StaffCheckInOperationsPanel({
 
                   <div className="mt-3 grid gap-3 sm:grid-cols-3 text-xs">
                     <div className="rounded-lg border border-violet-200 bg-white p-3">
-                      <span className="text-stone-500">Bắt đầu bàn giao:</span>
+                      <span className="text-stone-500">Bắt đầu setup:</span>
                       <p className="font-bold text-stone-900 mt-0.5">{formatStaffDateTime(handoverTarget.setupStartedAt)}</p>
                     </div>
                     <div className="rounded-lg border border-violet-200 bg-white p-3">
@@ -1880,11 +2182,13 @@ export default function StaffCheckInOperationsPanel({
 
             {handoverStep === 6 && (
               <div className="space-y-4">
-                <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-950"><b>Kiểm kê hàng hóa</b><p className="mt-1 text-xs">Chỉ đối chiếu số kiện, khối lượng, thể tích, kích thước và tình trạng hàng hóa sau khi khách đã sắp xếp xong. Hiện trạng kho trống đã được ghi nhận ở bước bàn giao.</p>{handoverTarget.inventoryDueAt && <p className="mt-1 text-xs">Hạn kiểm kê: <b>{formatStaffDateTime(handoverTarget.inventoryDueAt)}</b></p>}</div>
+                <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-950"><b>Kiểm kê hàng hóa</b><p className="mt-1 text-xs">Đối chiếu số kiện, khối lượng, thể tích, kích thước, loại hàng, chất liệu chính và tình trạng hàng hóa sau khi khách đã sắp xếp xong. Hiện trạng kho trống đã được ghi nhận ở bước bàn giao.</p>{handoverTarget.inventoryDueAt && <p className="mt-1 text-xs">Mốc nhắc xử lý: <b>{formatStaffDateTime(handoverTarget.inventoryDueAt)}</b></p>}{handoverTarget.inventoryFinalDeadlineAt && <p className={`mt-1 text-xs font-bold ${new Date(handoverTarget.inventoryFinalDeadlineAt).getTime() <= now ? 'text-red-700' : 'text-indigo-900'}`}>{new Date(handoverTarget.inventoryFinalDeadlineAt).getTime() <= now ? 'Đã quá hạn kiểm kê' : 'Hạn hoàn tất kiểm kê'}: <b>{formatStaffDateTime(handoverTarget.inventoryFinalDeadlineAt)}</b></p>}</div>
                 {lineInventory ? (
                   <div className="space-y-5">
+                    {inventoryCatalogError && <p role="alert" className="text-red-800">Chưa tải được danh mục loại hàng và chất liệu. Vui lòng tải lại trước khi hoàn tất kiểm kê.</p>}
                     {inventoryRows.map(({ line, entry, comparison }, index) => {
                       const absent = comparison.quantity === 0
+                      const actualCategory = inventoryCatalog.find(c => c.id === entry.catalogCategoryId)
                       const errorKey = `inventory-${line.id}`
                       return (
                         <fieldset key={line.id} className="min-w-0 space-y-3 rounded-lg border border-stone-200 px-4 pb-4" disabled={isReviewingCompletedStep || submitting}>
@@ -1895,6 +2199,8 @@ export default function StaffCheckInOperationsPanel({
                           </legend>
                           <p className="text-sm text-stone-600">
                             Khai báo {line.quantity} kiện
+                            {(line.categoryName || line.name) && ` · Loại: ${line.categoryName || line.name}`}
+                            {line.materialName && ` · Chất liệu: ${line.materialName}`}
                             {line.lengthCm != null && line.widthCm != null && line.heightCm != null && ` · ${line.lengthCm} × ${line.widthCm} × ${line.heightCm} cm/kiện`}
                             {line.weightPerPackageKg != null && ` · ${line.weightPerPackageKg} kg/kiện`}
                           </p>
@@ -1913,6 +2219,17 @@ export default function StaffCheckInOperationsPanel({
                             }} />
                           </div>
                           {fieldErrors[`${errorKey}-measurements`] && <p className="text-xs text-red-700">{fieldErrors[`${errorKey}-measurements`]}</p>}
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <Select label="Loại hàng thực tế của dòng *" value={entry.catalogCategoryId || ''} disabled={absent} onChange={event => updateInventoryLine(line, { catalogCategoryId: event.target.value, catalogMaterialId: '' })}>
+                              <option value="">Chọn loại hàng trong danh mục</option>{inventoryCatalog.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                            </Select>
+                            <Select label="Chất liệu chính thực tế của dòng" value={entry.catalogMaterialId || ''} disabled={absent || !actualCategory} onChange={event => updateInventoryLine(line, { catalogMaterialId: event.target.value })}>
+                              <option value="">Chọn chất liệu hoặc không áp dụng</option>{actualCategory?.materials.filter(m => m.status === 'ACTIVE').map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                            </Select>
+                            <p className="text-xs text-stone-600 sm:col-span-2">Đã khai: {line.categoryName || line.name || 'Chưa ghi nhận'} · {line.materialName || 'Chưa ghi nhận'}</p>
+                            {(['fragile', 'stackable', 'allowHorizontalPlacement'] as const).map((key, i) => <label key={key} className="flex gap-2"><input type="checkbox" disabled={absent} checked={Boolean(entry[key])} onChange={event => updateInventoryLine(line, { [key]: event.target.checked })} />{['Hàng dễ vỡ', 'Được xếp chồng', 'Được đặt nằm ngang'][i]}</label>)}
+                            {entry.stackable && <Input label="Số lớp xếp tối đa thực tế" type="number" min="1" max="100" value={String(entry.maxStackLayers || 1)} onChange={event => updateInventoryLine(line, { maxStackLayers: Number(event.target.value) })} />}
+                          </div>
                           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                             {comparison.badges.map(({ label, matches }) => (
                               <div key={label} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 px-3 py-2 text-sm">
@@ -2039,10 +2356,12 @@ export default function StaffCheckInOperationsPanel({
                             weight: event.target.checked,
                             volume: event.target.checked,
                             dimensions: event.target.checked,
+                          goodsCategory: event.target.checked,
+                          goodsMaterial: event.target.checked,
                           })
                         }}
                       />
-                      Đã đối chiếu đủ số kiện, khối lượng, thể tích và kích thước *
+                      Đã đối chiếu đủ số kiện, khối lượng, thể tích, kích thước, loại hàng và chất liệu chính *
                     </label>
                     {fieldErrors.measurementChecks && (
                       <p className="text-xs text-red-600 font-medium pl-2">{fieldErrors.measurementChecks}</p>
@@ -2063,7 +2382,7 @@ export default function StaffCheckInOperationsPanel({
                             setVarianceAccepted(event.target.checked)
                           }}
                         />
-                        Đã trao đổi với khách và chấp nhận chênh lệch *
+                        {lineInventory ? "Đã ghi nhận sai lệch để khách hàng xác nhận" : "Đã trao đổi với khách và chấp nhận chênh lệch *"}
                       </label>
                       {fieldErrors.varianceAccepted && (
                         <p className="text-xs text-red-600 font-medium mt-1 pl-6">{fieldErrors.varianceAccepted}</p>
@@ -2082,22 +2401,59 @@ export default function StaffCheckInOperationsPanel({
                   </div>
                 )}
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Input
-                    label="Loại hàng *"
-                    error={fieldErrors.goodsCategory}
-                    disabled={isReviewingCompletedStep}
-                    value={goodsCategory}
-                    onChange={(event) => {
-                      clearFieldError("goodsCategory")
-                      setGoodsCategory(event.target.value)
-                    }}
-                  />
+                  <div className="space-y-1">
+                    <Input
+                      label="Loại hàng thực tế *"
+                      error={fieldErrors.goodsCategory}
+                      disabled={isReviewingCompletedStep}
+                      value={goodsCategory}
+                      onChange={(event) => {
+                        clearFieldError("goodsCategory")
+                        setGoodsCategory(event.target.value)
+                        setVarianceAccepted(false)
+                      }}
+                    />
+                    <div className="flex items-center justify-between gap-2 px-1 text-xs text-stone-600">
+                      <span>Đã khai báo: {declaredCategoryValues.join(", ") || "Chưa có dữ liệu"}</span>
+                      <ComparisonBadge matches={goodsCategoryMatches} />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Input
+                      label="Chất liệu chính thực tế *"
+                      error={fieldErrors.goodsMaterial}
+                      disabled={isReviewingCompletedStep}
+                      value={goodsMaterial}
+                      onChange={(event) => {
+                        clearFieldError("goodsMaterial")
+                        setGoodsMaterial(event.target.value)
+                        setVarianceAccepted(false)
+                      }}
+                    />
+                    <div className="flex items-center justify-between gap-2 px-1 text-xs text-stone-600">
+                      <span>Đã khai báo: {declaredMaterialValues.join(", ") || "Chưa có dữ liệu"}</span>
+                      <ComparisonBadge matches={goodsMaterialMatches} />
+                    </div>
+                  </div>
                   <div className={`rounded-lg border ${fieldErrors.initialCondition || fieldErrors.initialUnitCondition ? 'border-red-400 bg-red-50/30' : 'border-stone-200 bg-stone-50'} px-3 py-2 text-sm`}>
                     <span className="text-stone-500">Tình trạng kho trống đã ghi nhận</span>
                     <b className="mt-1 block">{initialCondition || 'Chưa ghi nhận'}</b>
                     {(fieldErrors.initialCondition || fieldErrors.initialUnitCondition) && (
                       <p className="text-xs text-red-600 font-medium mt-1">{fieldErrors.initialCondition || fieldErrors.initialUnitCondition}</p>
                     )}
+                  </div>
+                  <div className="space-y-2 rounded-lg border border-stone-200 p-3">
+                    <p className="text-sm">Phương thức khách khai: <b>{handoverTarget?.declaredPackagingMethod || 'Chưa ghi nhận'}</b></p>
+                    <Input label="Phương thức đóng gói thực tế *" value={actualPackagingMethod} disabled={isReviewingCompletedStep}
+                      error={fieldErrors.actualPackagingMethod} onChange={event => { setActualPackagingMethod(event.target.value); clearFieldError('actualPackagingMethod') }} />
+                    {actualPackagingMethod.trim() && handoverTarget?.declaredPackagingMethod && <p className={packagingMethodMismatch ? 'text-sm font-semibold text-red-700' : 'text-sm text-emerald-700'}>{packagingMethodMismatch ? 'Không khớp phương thức đã khai báo' : 'Khớp phương thức đã khai báo'}</p>}
+                    <label className="block text-sm font-medium">Tình trạng đóng gói thực tế *
+                      <select className="mt-1 w-full rounded-lg border border-stone-300 bg-white p-2" value={packagingCondition} disabled={isReviewingCompletedStep}
+                        onChange={event => { setPackagingCondition(event.target.value as typeof packagingCondition); clearFieldError('packagingCondition') }}>
+                        <option value="">Chọn tình trạng đóng gói</option><option value="INTACT">Nguyên vẹn</option><option value="MINOR_DAMAGE">Hư hỏng nhẹ</option><option value="MAJOR_DAMAGE">Hư hỏng nặng</option><option value="UNPACKAGED">Chưa đóng gói</option>
+                      </select>
+                    </label>
+                    {fieldErrors.packagingCondition && <p className="text-xs text-red-700">{fieldErrors.packagingCondition}</p>}
                   </div>
                   {!lineInventory && (
                   <Input
@@ -2233,7 +2589,7 @@ export default function StaffCheckInOperationsPanel({
                 <div className="flex flex-wrap items-center justify-end gap-3">
                   <span className="text-xs text-stone-600">
                     {handoverTarget.checkInStatus === "handover_pending_receipt"
-                      ? "Đang chờ khách nhấn Sẵn sàng bàn giao."
+                      ? "Đang chờ khách nhấn Xác nhận đã nhận kho."
                       : "Đang chờ khách nhấn Sẵn sàng để kiểm kê sau khi sắp xếp hàng hóa xong."}
                   </span>
                   <Button variant="outline" onClick={() => void refreshHandoverTarget()} disabled={submitting}>
@@ -2270,7 +2626,7 @@ export default function StaffCheckInOperationsPanel({
                       Quay lại
                     </Button>
                   )}
-                  <Button disabled={submitting ||
+                  <Button disabled={submitting || !staffCheckInActions(handoverTarget, now).canOpen ||
                     (handoverStep === 1 && (!checklist.identityVerified || !checklist.reservationMatched || identityVerificationBlocked)) ||
                     (handoverStep === 2 && (!contractFile || !!setupTermsKey && (confirmedSetupTerms !== setupTermsKey || handoverTarget.setupEarlyExitFee == null))) ||
                     (handoverStep === 3 && (handoverTarget.dueAtCheckIn ?? 0) > 0 && !paymentEvidenceFile) ||
@@ -2299,7 +2655,7 @@ export default function StaffCheckInOperationsPanel({
       <Modal
         open={customerWaitTarget === "receipt" && Boolean(handoverTarget)}
         onClose={() => setCustomerWaitTarget(null)}
-        title="Đang chờ khách hàng sẵn sàng bàn giao"
+        title="Đang chờ khách hàng xác nhận nhận kho"
         size="md"
       >
         {handoverTarget && (
@@ -2307,11 +2663,20 @@ export default function StaffCheckInOperationsPanel({
             <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
               <p className="font-bold">Nhân viên đã xác nhận bàn giao kho trống</p>
               <p className="mt-2 leading-6">
-                Đơn <b>{handoverTarget.reservationCode}</b> đang chờ khách hàng nhấn <b>“Sẵn sàng bàn giao”</b> trên cổng khách hàng.
-                Chưa thể chuyển sang kiểm kê hàng hóa ở bước này.
+                Đơn <b>{handoverTarget.reservationCode}</b> đang chờ khách hàng nhấn <b>“Xác nhận đã nhận kho”</b> trên cổng khách hàng.
+                Chưa thể chuyển sang thời gian setup hoặc kiểm kê hàng hóa ở bước này.
               </p>
+              {handoverTarget.receiptConfirmationDueAt && <p className="mt-2 font-semibold">{receiptConfirmationState(handoverTarget, now).text} · Hạn xác nhận: {formatStaffDateTime(handoverTarget.receiptConfirmationDueAt)}</p>}
+              {receiptReleaseState(handoverTarget, now).text && <p className="mt-2 font-semibold text-red-700">{receiptReleaseState(handoverTarget, now).text} · Sau đủ 3 ngày chỉ Manager được giải phóng kho.</p>}
             </div>
             <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => void remindCustomerReceipt(handoverTarget)}
+                disabled={submitting || Boolean(remindingCustomerCheckInId)}
+              >
+                {remindingCustomerCheckInId === handoverTarget.checkInId ? "Đang gửi…" : "Nhắc khách xác nhận"}
+              </Button>
               <Button onClick={() => setCustomerWaitTarget(null)} disabled={submitting}>
                 Đóng thông báo
               </Button>
@@ -2416,7 +2781,7 @@ export default function StaffCheckInOperationsPanel({
               </Button>
               <Button
                 variant="danger"
-                disabled={submitting || !noShowReason.trim()}
+                disabled={submitting || !noShowReason.trim() || !staffCheckInActions(noShowTarget, now).canMarkAbsent}
                 onClick={() => submitNoShow()}
               >
                 Xác nhận khách không đến
@@ -2493,7 +2858,7 @@ export default function StaffCheckInOperationsPanel({
                 variant="danger"
                 disabled={
                   submitting ||
-                  !rejectReason.trim() ||
+                  !staffCheckInActions(rejectTarget, now).canReject || !rejectReason.trim() ||
                   (!rejectEvidenceFiles.length &&
                     !rejectEvidenceReferences.length)
                 }
@@ -2502,6 +2867,49 @@ export default function StaffCheckInOperationsPanel({
                 {submitting
                   ? "Đang tải bằng chứng và xử lý…"
                   : "Xác nhận từ chối"}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={Boolean(partialRemovalTarget)}
+        onClose={() => {
+          if (!submitting) {
+            setError(null)
+            setPartialRemovalTarget(null)
+          }
+        }}
+        title="Xác nhận phần hàng dư đã được đưa ra"
+      >
+        {partialRemovalTarget && (
+          <div className="space-y-4">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+              Đơn <b>{partialRemovalTarget.reservationCode}</b> · gian <b>{partialRemovalTarget.storageUnitCode}</b> đang chờ xác nhận phần hàng không được tiếp nhận đã được đưa ra khỏi gian kho.
+            </div>
+            <Input
+              label="Ghi chú bàn giao phần hàng dư"
+              value={partialRemovalNotes}
+              maxLength={2000}
+              onChange={event => setPartialRemovalNotes(event.target.value)}
+            />
+            <label className="block text-sm font-medium text-stone-700">
+              Bằng chứng đưa phần hàng dư ra (ảnh hoặc PDF)
+              <input
+                className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
+                type="file"
+                multiple
+                accept="image/jpeg,image/png,image/webp,application/pdf"
+                onChange={event => setPartialRemovalFiles(Array.from(event.target.files || []))}
+              />
+              <span className="mt-1 block text-xs font-normal text-stone-500">Cần ít nhất một tệp bằng chứng trước khi hoàn tất.</span>
+            </label>
+            {error && <div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800">{error}</div>}
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => { setError(null); setPartialRemovalTarget(null) }} disabled={submitting}>Đóng</Button>
+              <Button variant="danger" disabled={submitting || !partialRemovalNotes.trim() || !partialRemovalFiles.length} onClick={() => void submitPartialRemoval()}>
+                {submitting ? "Đang lưu…" : "Xác nhận đã đưa phần dư ra"}
               </Button>
             </div>
           </div>
@@ -2526,6 +2934,7 @@ export default function StaffCheckInOperationsPanel({
                     <div key={line.goodsItemId} className="space-y-1 p-3">
                       <p className="font-medium">{declared?.name || `Hàng hóa ${index + 1}`}{declared?.code && ` · ${declared.code}`}</p>
                       <p className="text-stone-700">{declared && `Khai báo ${declared.quantity} kiện · `}Thực tế {line.actualQuantity} kiện · {condition}</p>
+                      {declared && (declared.categoryName || declared.materialName) && <p className="text-stone-700">{declared.categoryName && `Loại: ${declared.categoryName}`}{declared.categoryName && declared.materialName && " · "}{declared.materialName && `Chất liệu: ${declared.materialName}`}</p>}
                       {line.measurements && <p className="text-stone-700">{line.measurements.lengthCm} × {line.measurements.widthCm} × {line.measurements.heightCm} cm/kiện · {line.measurements.weightKg} kg cả dòng</p>}
                       {line.note && <p className="break-words text-stone-700">{line.note}</p>}
                     </div>
@@ -2583,13 +2992,29 @@ export default function StaffCheckInOperationsPanel({
                 <span className="text-stone-500">Hàng hóa</span>
                 <p className="mt-1 font-semibold">
                   {detailTarget.handover.packageCount} kiện ·{" "}
-                  {detailTarget.handover.goodsCategory}
+                  {detailTarget.handover.goodsCategory} · {detailTarget.handover.goodsMaterial || "Chưa cập nhật chất liệu"}
                 </p>
               </div>
             </div>
             <div className="space-y-3 rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-indigo-950">
               <b>Đối chiếu với thông tin khách đã khai báo</b>
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <div className="rounded-md border border-indigo-100 bg-white p-3">
+                  <span className="text-xs text-stone-500">Loại hàng</span>
+                  <p className="mt-1 text-xs">Khai báo: {uniqueGoodsLabels(detailTarget.declaredGoodsLines?.map(item => item.categoryName || item.name) ?? []).join(", ") || "Chưa có dữ liệu"}</p>
+                  <p className="text-xs">Thực tế: {detailTarget.handover.goodsCategory || "Chưa cập nhật"}</p>
+                  <div className="mt-2">
+                    <ComparisonBadge matches={compareGoodsLabel(detailTarget.handover.goodsCategory, uniqueGoodsLabels(detailTarget.declaredGoodsLines?.map(item => item.categoryName || item.name) ?? []))} />
+                  </div>
+                </div>
+                <div className="rounded-md border border-indigo-100 bg-white p-3">
+                  <span className="text-xs text-stone-500">Chất liệu chính</span>
+                  <p className="mt-1 text-xs">Khai báo: {uniqueGoodsLabels(detailTarget.declaredGoodsLines?.map(item => item.materialName) ?? []).join(", ") || "Chưa có dữ liệu"}</p>
+                  <p className="text-xs">Thực tế: {detailTarget.handover.goodsMaterial || "Chưa cập nhật"}</p>
+                  <div className="mt-2">
+                    <ComparisonBadge matches={compareGoodsLabel(detailTarget.handover.goodsMaterial, uniqueGoodsLabels(detailTarget.declaredGoodsLines?.map(item => item.materialName) ?? []))} />
+                  </div>
+                </div>
                 <div className="rounded-md border border-indigo-100 bg-white p-3">
                   <span className="text-xs text-stone-500">Số kiện</span>
                   <p className="mt-1 text-xs">Khai báo: {detailTarget.declaredPackageCount ?? "Chưa có dữ liệu"}</p>
@@ -2652,6 +3077,12 @@ export default function StaffCheckInOperationsPanel({
                 </p>
               </div>
             </div>
+            <div className="rounded-lg border border-stone-200 p-3 text-sm">
+              <b>Đối chiếu đóng gói</b>
+              <p className="mt-1">Khách khai: {detailTarget.declaredPackagingMethod || 'Chưa ghi nhận'}</p>
+              <p className="mt-1">Thực tế: {detailTarget.handover.actualPackagingMethod || 'Chưa ghi nhận'}</p>
+              <p className="mt-1">Tình trạng: {({ INTACT: 'Nguyên vẹn', MINOR_DAMAGE: 'Hư hỏng nhẹ', MAJOR_DAMAGE: 'Hư hỏng nặng', UNPACKAGED: 'Chưa đóng gói' } as Record<string, string>)[detailTarget.handover.packagingCondition || ''] || 'Chưa ghi nhận'}</p>
+            </div>
             <div className="rounded-lg border border-stone-200 p-3">
               <b>Vật dụng/quyền truy cập đã bàn giao</b>
               <p className="mt-1 text-stone-600">
@@ -2692,14 +3123,12 @@ export default function StaffCheckInOperationsPanel({
                 )}
               </div>
             </div>
-            {detailTarget.handover.notes && (
               <div className="rounded-lg bg-stone-50 p-3">
-                <b>Ghi chú</b>
-                <p className="mt-1 text-stone-600">
-                  {detailTarget.handover.notes}
+                <b>Ghi chú kiểm kê</b>
+                <p className="mt-1 whitespace-pre-wrap break-words text-stone-600">
+                  {inventoryReportNote(detailTarget.handover.notes, detailTarget.handover.identityVerificationNote) || "Không có ghi chú."}
                 </p>
               </div>
-            )}
             {detailTarget.handover.identityVerificationNote && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
                 <b>Ghi chú xác minh CCCD</b>
@@ -2718,7 +3147,9 @@ export default function StaffCheckInOperationsPanel({
         {detailTarget && !detailTarget.handover && (
           <div className="space-y-4">
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-              Biên bản bàn giao chưa có dữ liệu chi tiết.
+              <p>{detailTarget.reservationCode} · {detailTarget.storageUnitCode}</p>
+              <p>{parseEmptyStorageHandover(detailTarget.readinessNote).condition}</p>
+              <p>{detailTarget.checkInStatus === "completed" ? "Biên bản chưa có dữ liệu chi tiết." : "Chưa kiểm kê"}</p>
             </div>
             <div className="flex justify-end">
               <Button variant="outline" onClick={() => setDetailTarget(null)}>

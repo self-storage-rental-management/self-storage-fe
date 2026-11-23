@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import type { User } from '../../types'
 import { useStorageHub } from '../../store/StorageHubContext'
 import { getPublicSupportKnowledge, PUBLIC_SUPPORT_UNKNOWN } from '../../services/supportPublicKnowledgeApi'
+import { useMovableChatLauncher } from '../../hooks/useMovableChatLauncher'
 import {
   SUPPORT_FAQS,
   matchQueryAgainstFAQ,
@@ -90,9 +91,7 @@ export default function CustomerSupportChatbot({
     })
   }, [isOpen, user.name])
 
-  const handleOpen = () => {
-    setIsOpen(true)
-  }
+  const launcherProps = useMovableChatLauncher(() => setIsOpen(true))
 
   const addMessage = (sender: 'bot' | 'user' | 'system', text: string, extra?: Partial<Message>) => {
     const now = new Date().toLocaleTimeString('vi-VN', { timeZone: VIETNAM_TIME_ZONE, hour: '2-digit', minute: '2-digit' })
@@ -293,12 +292,11 @@ export default function CustomerSupportChatbot({
       {/* ── Floating Launcher ───────────────────────────────── */}
       {!isOpen && (
         <button
+          {...launcherProps}
           type="button"
-          onClick={handleOpen}
           aria-label="Mở Trợ lý StorageHub"
-          title="Mở Trợ lý StorageHub"
           aria-haspopup="dialog"
-          className="fixed right-4 bottom-4 sm:right-6 sm:bottom-6 z-50 flex h-12 w-12 items-center justify-center rounded-full border border-amber-600/30 bg-[#181b22] text-white shadow-lg transition-colors hover:bg-[#20242d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2"
+          className="fixed right-4 bottom-4 sm:right-6 sm:bottom-6 z-50 flex h-12 w-12 touch-none cursor-grab select-none items-center justify-center rounded-full border border-amber-600/30 bg-[#181b22] text-white shadow-lg transition-colors hover:bg-[#20242d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 active:cursor-grabbing"
         >
           <svg aria-hidden="true" className="show-icon h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
             <path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H5l-3 3V11.5A7.5 7.5 0 0 1 9.5 4h3a7.5 7.5 0 0 1 7.5 7.5Z" />

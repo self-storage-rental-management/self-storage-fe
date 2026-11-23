@@ -9,7 +9,7 @@ import RentalDetail from "./RentalDetail"
 import { rentalPeriodText } from "./presentation"
 
 const exclusive: RentalApiDetail = {
-  ...rental, startDate: "2026-10-01", contractEndDate: "2026-11-01",
+  ...rental, displayCode: "SH-782345", startDate: "2026-10-01", contractEndDate: "2026-11-01",
   dateSemantics: { completeness: "COMPLETE", convention: "EXCLUSIVE", lastPermittedDate: "2026-10-31", endExclusive: "2026-11-01" },
 }
 describe("P03 canonical period FE compatibility", () => {
@@ -23,7 +23,11 @@ describe("P03 canonical period FE compatibility", () => {
     expect(html).toContain("Thỏa thuận &amp; giao dịch")
     expect(html).not.toContain("Đơn giá áp dụng / tháng")
     expect(html).not.toContain("Cọc theo thỏa thuận ban đầu")
-    expect(html).toContain(exclusive.id)
+    expect(html).toContain('title="SH-782345">SH-782345<')
+    expect(html).toContain('aria-label="Sao chép mã hồ sơ thuê"')
+    const legacyHtml = renderToStaticMarkup(<RentalDetail rental={{ ...exclusive, displayCode: null }} />)
+    expect(legacyHtml).toContain("Chưa cấp mã")
+    expect(legacyHtml).not.toContain('aria-label="Sao chép mã hồ sơ thuê"')
     expect(html).toContain(exclusive.customer.fullName)
     const unknownHtml = renderToStaticMarkup(<RentalDetail rental={{ ...exclusive, dateSemantics: null }} />)
     expect(unknownHtml).toContain('chưa xác minh ngày cuối sử dụng')

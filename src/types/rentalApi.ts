@@ -14,6 +14,7 @@ export interface RentalApiPage<T> {
 }
 export interface RentalApiRecord {
   id: string
+  displayCode?: string | null
   customer: {
     id: string
     fullName: string
@@ -51,6 +52,7 @@ export interface RentalApiRecord {
   inventoryVerifiedAt?: string | null
   canConfirmRentalStart?: boolean
   inventoryDueAt?: string | null
+  inventoryFinalDeadlineAt?: string | null
   setupStartedAt?: string | null
   setupEndsAt?: string | null
   moveInCompletedAt?: string | null

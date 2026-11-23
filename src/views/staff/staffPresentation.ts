@@ -90,6 +90,18 @@ export function staffGoodsCategoryLabel(value: string) {
   return STAFF_GOODS_CATEGORY_LABELS[value] ?? value
 }
 
+export function inventoryReportNote(notes?: string | null, identityNote?: string | null) {
+  let text = notes?.trim() || ""
+  const current = "Ghi chú kiểm kê: "
+  if (text.startsWith(current)) return text.slice(current.length)
+  if (identityNote?.trim()) {
+    const legacyIdentity = "Ghi chú xác minh: " + identityNote.trim()
+    if (text === legacyIdentity) return ""
+    if (text.startsWith(legacyIdentity + "\n")) text = text.slice(legacyIdentity.length + 1)
+  }
+  return text.replace(/^Ghi chú bàn giao: /, "")
+}
+
 export function parseEmptyStorageHandover(note: string | null | undefined) {
   const prefix = "Tình trạng kho trống:"
   const evidenceMarker = " | Bằng chứng:"
@@ -173,6 +185,8 @@ export function staffErrorMessage(error: unknown, fallback: string) {
   if (message.includes("not in disputed status"))
     return "Hồ sơ không ở trạng thái khiếu nại."
   if (status === 409) {
+    if (message.startsWith("Đã hết hạn nhận kho"))
+      return message
     if (code === "OPTIMISTIC_LOCK")
       return "Dữ liệu vừa được cập nhật ở nơi khác. Vui lòng tải lại và thử lại."
     if (message.includes("Reservation is not READY_FOR_CHECKIN"))
@@ -289,7 +303,7 @@ export function extractStaffFieldErrors(error: unknown): Record<string, string> 
     fieldErrors.lengthCm = "Kích thước hàng hóa đo đạc thực tế không vừa gian kho"
   }
   if (msg.includes("variance is not accepted")) {
-    fieldErrors.varianceAccepted = "Cần đánh dấu xác nhận chấp thuận chênh lệch với khách"
+    fieldErrors.varianceAccepted = "Cần ghi nhận cách xử lý chênh lệch trước khi hoàn tất"
   }
   if (msg.includes("identityDocumentNumber is required")) {
     fieldErrors.identityDocumentNumber = "Số CCCD/CMND không được để trống"

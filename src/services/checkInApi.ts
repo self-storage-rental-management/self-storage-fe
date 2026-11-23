@@ -1,9 +1,18 @@
 import { ApiClientError, apiDownload, apiRequest } from './apiClient'
+import type { GoodsItemInput, GoodsCategory } from './customerReservationApi'
 import { isCheckInStatus, isReservationStatus, isPaymentStatus, type CheckInStatus as WorkflowCheckInStatus, type ReservationStatus, type PaymentStatus } from '../types/statusContracts'
 
 export type CheckInStatus = WorkflowCheckInStatus | null
-export type CheckInListStatus = 'UNSCHEDULED' | Exclude<CheckInStatus, null | 'rejected' | 'cancelled'>
+export type CheckInListStatus = 'UNSCHEDULED' | NonNullable<CheckInStatus>
+export type CheckInGroup = 'ONGOING' | 'PROCESSED'
 export type CheckInReservationStatus = ReservationStatus
+export type InventoryResolutionStatus =
+  | 'NOT_STARTED'
+  | 'PENDING_CUSTOMER'
+  | 'ACCEPTED'
+  | 'PARTIAL_ACCEPTED'
+  | 'RETURN_REQUESTED'
+  | 'RECOVERY_REQUIRED'
 
 export interface CheckInChecklist {
   identityVerified: boolean
@@ -17,6 +26,7 @@ export interface CheckInChecklist {
 }
 
 export interface CheckInInventoryLine {
+  actualGoods?: GoodsItemInput | null
   goodsItemId: string
   actualQuantity: number
   condition: 'INTACT' | 'DAMAGED' | 'NOT_PRESENT'
@@ -47,6 +57,9 @@ export interface CompleteCheckInRequest {
   goodsCondition: string
   packageCount: number
   goodsCategory: string
+  goodsMaterial: string
+  actualPackagingMethod?: string | null
+  packagingCondition?: 'INTACT' | 'MINOR_DAMAGE' | 'MAJOR_DAMAGE' | 'UNPACKAGED' | null
   evidenceReferences: string[]
   handedOverItems: string[]
   notes: string
@@ -54,10 +67,20 @@ export interface CompleteCheckInRequest {
 }
 
 export interface CheckInCase {
+  intakeAction: 'START' | 'CONTINUE' | 'NONE'
   declaredGoodsLines?: {
     id: string
     code: string | null
     name: string | null
+    categoryName?: string | null
+    materialName?: string | null
+    catalogCategoryId?: string | null
+    catalogMaterialId?: string | null
+    category?: GoodsCategory | null
+    fragile?: boolean
+    stackable?: boolean
+    allowHorizontalPlacement?: boolean
+    maxStackLayers?: number
     quantity: number
     lengthCm: number | null
     widthCm: number | null
@@ -84,7 +107,24 @@ export interface CheckInCase {
   setupCompletedAt: string | null
   inventoryVerifiedAt: string | null
   inventoryDueAt: string | null
+  inventoryFinalDeadlineAt?: string | null
   inventoryPending: boolean
+  inventoryResolutionStatus?: InventoryResolutionStatus | null
+  inventoryFullFit?: boolean
+  inventoryPartialFitAvailable?: boolean
+  inventorySuggestedPackageCount?: number | null
+  inventoryMismatchSummary?: string | null
+  inventoryAcceptedQuantitiesJson?: string | null
+  inventoryRemainderRemovedAt?: string | null
+  inventoryRemainderRemovalNote?: string | null
+  inventoryActualJson?: string | null
+  inventoryMismatchJson?: string | null
+  inventorySuggestedQuantitiesJson?: string | null
+  receiptConfirmationDueAt: string | null
+  receiptConfirmationOverdue: boolean
+  receiptConfirmationReleaseAt?: string | null
+  receiptReleaseEligible?: boolean
+  declaredPackagingMethod?: string | null
   lockReference: string | null
   readinessNote: string | null
   rejectionReason: string | null
@@ -118,6 +158,13 @@ export interface CheckInCase {
   declaredGoodsHeightCm: number | null
   dueAtCheckIn: number | null
   handover: CompleteCheckInRequest | null
+}
+
+export interface ReceiptReminderResponse {
+  sent: boolean
+  sentAt: string | null
+  receiptConfirmationDueAt: string | null
+  receiptConfirmationOverdue: boolean
 }
 
 export interface CheckInPage {
@@ -255,6 +302,7 @@ function assertPaymentEnvelope(payload: unknown): CheckInPayment {
 }
 
 export async function listCheckIns(params: {
+  group?: CheckInGroup
   page?: number
   pageSize?: number
   q?: string
@@ -267,10 +315,29 @@ export async function listCheckIns(params: {
     pageSize: String(params.pageSize ?? 20),
   })
   if (params.q?.trim()) query.set('q', params.q.trim())
+  if (params.group) query.set('group', params.group)
   if (params.status) query.set('status', params.status)
   if (params.scheduledFrom) query.set('scheduledFrom', params.scheduledFrom)
   if (params.scheduledTo) query.set('scheduledTo', params.scheduledTo)
   return assertPage(await apiRequest<unknown>(`/api/staff/check-ins?${query}`))
+}
+
+export async function sendCustomerReceiptReminder(checkInId: string): Promise<ReceiptReminderResponse> {
+  const payload = await apiRequest<ApiEnvelope<ReceiptReminderResponse>>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/receipt-reminder`,
+    { method: 'POST' },
+  )
+  if (!payload?.data || typeof payload.data.sent !== 'boolean' || typeof payload.data.receiptConfirmationOverdue !== 'boolean') {
+    throw new ApiClientError('Không thể gửi nhắc xác nhận nhận kho.', { code: 'INVALID_API_RESPONSE' })
+  }
+  return payload.data
+}
+
+export async function releaseCustomerReceiptTimeout(checkInId: string): Promise<CheckInCase> {
+  return assertEnvelope(await apiRequest<unknown>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/receipt-release`,
+    { method: 'POST' },
+  ))
 }
 
 export async function scheduleCheckIn(
@@ -299,11 +366,18 @@ export async function completeCheckIn(checkInId: string, request: CompleteCheckI
 export async function verifyCheckInIdentity(checkInId: string, request: {
   identityDocumentNumber: string
   note?: string
+  adulthoodConfirmed?: boolean
 }) {
   return assertEnvelope(await apiRequest<unknown>(
     `/api/staff/check-ins/${encodeURIComponent(checkInId)}/identity-verification`,
     { method: 'POST', body: JSON.stringify(request) },
   ))
+}
+
+export async function correctCheckInIdentity(checkInId: string, request: { identityDocumentNumber: string; note: string; adulthoodConfirmed?: boolean }) {
+  return assertEnvelope(await apiRequest<unknown>(`/api/staff/check-ins/${encodeURIComponent(checkInId)}/identity-correction`, {
+    method: 'POST', body: JSON.stringify(request),
+  }))
 }
 
 export async function signCheckInContract(checkInId: string, contractEvidenceFileId: string, confirmedSetupEarlyExitPolicyVersion?: string | null) {
@@ -388,6 +462,17 @@ export async function rejectCheckIn(
 ) {
   return assertEnvelope(await apiRequest<unknown>(
     `/api/staff/check-ins/${encodeURIComponent(checkInId)}/reject`,
+    { method: 'POST', body: JSON.stringify(request) },
+  ))
+}
+
+export async function confirmPartialInventoryRemoval(checkInId: string, request: {
+  remainderRemoved: boolean
+  evidenceReferences: string[]
+  notes: string
+}) {
+  return assertEnvelope(await apiRequest<unknown>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/inventory-partial-removal`,
     { method: 'POST', body: JSON.stringify(request) },
   ))
 }

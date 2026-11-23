@@ -1,3 +1,4 @@
+import EmergencyContactsPanel from '../../components/EmergencyContactsPanel'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Badge, Button, Card, Input, Modal, SectionHeader, Select, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import { getAuthenticatedActor } from '../../services/authApi'
@@ -10,6 +11,8 @@ import { listAllRecoveryTasks, type RecoveryTask } from '../../services/recovery
 import RecoveryTaskDetail, { recoveryStatusLabels } from '../rental-api/RecoveryTaskDetail'
 import { rentalDate } from '../rental-api/presentation'
 import { managerFacilityNotice, singleManagerFacility } from './managerFacilityUi'
+import ManagerCheckInReminderPanel from './ManagerCheckInReminderPanel'
+import ManagerIntakeWorkflowPanel from './ManagerIntakeWorkflowPanel'
 import {
   assignMaintenanceTask,
   cancelMaintenanceTask,
@@ -256,6 +259,9 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
         }
       />
 
+      <ManagerCheckInReminderPanel showToast={showToast} />
+      <ManagerIntakeWorkflowPanel />
+
       {!loading && !taskError && !staffReadFailed && !staff.length && <ManagerActionNotice tone="info">Chưa có nhân viên được phân công để nhận nhiệm vụ tại cơ sở này.</ManagerActionNotice>}
       {!loading && !taskError && !unitReadFailed && !units.length && <ManagerActionNotice tone="info">Chưa có gian kho khả dụng để tạo nhiệm vụ bảo trì.</ManagerActionNotice>}
       {!loading && (unitReadFailed || staffReadFailed) && <p className="text-xs text-stone-500">Chưa tải được danh sách kho hoặc nhân viên để tạo nhiệm vụ. Dữ liệu nhiệm vụ vẫn được tải riêng.</p>}
@@ -288,7 +294,7 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
               <Tr key={task.id}>
                 <Td><p className="font-semibold text-stone-900">{task.title}</p><p className="text-xs text-stone-500">{task.id} · {taskPriorityLabel[task.priority]}</p><p className="mt-1 text-xs text-stone-500">{task.reason}</p></Td>
                 <Td><Badge variant="muted">Bảo trì</Badge></Td>
-                <Td>{task.unitCode}</Td>
+                <Td>{task.unitCode}<EmergencyContactsPanel key={task.storageUnitId} unitId={task.storageUnitId} /></Td>
                 <Td>
                   {task.status === 'completed' || task.status === 'cancelled'
                     ? (task.assignedStaffName || 'Chưa phân công')

@@ -11,7 +11,7 @@ import RenewalOperationsPanel, {
   operationsInputClass,
 } from "../rental-api/RenewalOperationsPanel"
 import { phaseLabels } from "../rental-api/operationsPresentation"
-import { rentalError } from "../rental-api/presentation"
+import { renewalDisplayLabel, rentalError } from "../rental-api/presentation"
 
 function signingDate(value: string | null, time = false) {
   if (!value || !Number.isFinite(Date.parse(value))) return "Chưa có lịch"
@@ -112,7 +112,7 @@ function StaffSession({ identity, onLocked }: { identity: string; onLocked: (val
             }
           >
             <option value="">Tất cả</option>
-            {(["SIGNING", "SIGNING_EXPIRED", "COMPLETED"] as const).map((v) => (
+            {(["SIGNING", "NO_SHOW", "SIGNING_EXPIRED", "COMPLETED"] as const).map((v) => (
               <option key={v} value={v}>
                 {phaseLabels[v]}
               </option>
@@ -135,8 +135,8 @@ function StaffSession({ identity, onLocked }: { identity: string; onLocked: (val
       )}
       {read.data && <>
         {[
-          { id: 'ongoing', title: 'Đang diễn ra', empty: 'Không có lịch ký đang diễn ra.', rows: read.data.data.filter(s => !['COMPLETED', 'SIGNING_EXPIRED', 'PAYMENT_EXPIRED'].includes(s.phase)) },
-          { id: 'finished', title: 'Đã kết thúc', empty: 'Chưa có lịch ký đã kết thúc.', rows: read.data.data.filter(s => ['COMPLETED', 'SIGNING_EXPIRED', 'PAYMENT_EXPIRED'].includes(s.phase)) },
+          { id: 'ongoing', title: 'Đang diễn ra', empty: 'Không có lịch ký đang diễn ra.', rows: read.data.data.filter(s => !['COMPLETED', 'NO_SHOW', 'SIGNING_EXPIRED', 'PAYMENT_EXPIRED'].includes(s.phase)) },
+          { id: 'finished', title: 'Đã kết thúc', empty: 'Chưa có lịch ký đã kết thúc.', rows: read.data.data.filter(s => ['COMPLETED', 'NO_SHOW', 'SIGNING_EXPIRED', 'PAYMENT_EXPIRED'].includes(s.phase)) },
         ].map(group => (
         <Card key={group.id} className="overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 px-4 py-3">
@@ -148,7 +148,7 @@ function StaffSession({ identity, onLocked }: { identity: string; onLocked: (val
               <caption className="sr-only">Lịch ký gia hạn - {group.title}</caption>
               <thead className="border-b border-stone-200 bg-stone-50 text-xs text-stone-600">
                 <tr>
-                  <th scope="col" className="px-4 py-3 font-semibold">Hồ sơ gia hạn</th>
+                  <th scope="col" className="px-4 py-3 font-semibold">Hồ sơ thuê / Lần gia hạn</th>
                   <th scope="col" className="px-4 py-3 font-semibold">Trạng thái</th>
                   <th scope="col" className="px-4 py-3 font-semibold">Lịch hẹn</th>
                   <th scope="col" className="px-4 py-3 font-semibold">Hạn ký</th>
@@ -158,10 +158,10 @@ function StaffSession({ identity, onLocked }: { identity: string; onLocked: (val
               <tbody className="divide-y divide-stone-100">
                 {group.rows.map(s => <tr key={s.renewalId} className="transition-colors hover:bg-stone-50">
                   <td className="px-4 py-4 align-middle">
-                    <span className="font-semibold text-stone-900" title={s.renewalId}>{s.displayCode || `#${s.renewalId.slice(0, 8)}`}</span>
+                    <span className="font-semibold text-stone-900" title={renewalDisplayLabel(s)}>{renewalDisplayLabel(s)}</span>
                   </td>
                   <td className="px-4 py-4 align-middle">
-                    <Badge variant={s.phase === "COMPLETED" ? "success" : ["SIGNING_EXPIRED", "PAYMENT_EXPIRED"].includes(s.phase) ? "error" : ["SIGNING", "AWAITING_DEPOSIT", "AWAITING_PAYMENT_INTENT"].includes(s.phase) ? "warning" : "muted"}>{phaseLabels[s.phase]}</Badge>
+                    <Badge variant={s.phase === "COMPLETED" ? "success" : ["NO_SHOW", "SIGNING_EXPIRED", "PAYMENT_EXPIRED"].includes(s.phase) ? "error" : ["SIGNING", "AWAITING_DEPOSIT", "AWAITING_PAYMENT_INTENT"].includes(s.phase) ? "warning" : "muted"}>{phaseLabels[s.phase]}</Badge>
                   </td>
                   <td className="px-4 py-4 align-middle">
                     <p className="whitespace-nowrap font-medium text-stone-900">{signingDate(s.appointmentStart)}</p>
@@ -176,7 +176,7 @@ function StaffSession({ identity, onLocked }: { identity: string; onLocked: (val
                   </td>
                   <td className="px-4 py-4 text-right align-middle">
                     <Button type="button" size="sm" variant="outline" className="whitespace-nowrap" onClick={() => { if (!lockRef.current) setSelected(s.renewalId) }}>
-                      {["COMPLETED", "SIGNING_EXPIRED", "PAYMENT_EXPIRED"].includes(s.phase) ? "Xem chi tiết" : "Xử lý"}
+                      {["COMPLETED", "NO_SHOW", "SIGNING_EXPIRED", "PAYMENT_EXPIRED"].includes(s.phase) ? "Xem chi tiết" : "Xử lý"}
                     </Button>
                   </td>
                 </tr>)}
