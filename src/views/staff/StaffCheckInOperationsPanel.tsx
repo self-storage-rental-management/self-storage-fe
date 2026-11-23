@@ -379,7 +379,7 @@ const workflowStepLabels = [
 
 type CheckInFilters = Pick<NonNullable<Parameters<typeof listCheckIns>[0]>, "q" | "status" | "scheduledFrom" | "scheduledTo">
 
-const checkInTableColumnWidths = ["16%", "15%", "13%", "16%", "10%", "30%"] as const
+const checkInTableColumnWidths = ["22%", "16%", "20%", "14%", "28%"] as const
 
 function CheckInTableColumns() {
   return (
@@ -433,12 +433,11 @@ function CheckInWorkList({ group, filters, refreshKey, renderRow }: {
               {group === "ONGOING" ? "Không có đơn đang diễn ra phù hợp." : "Không có đơn đã xử lý phù hợp."}
             </p>
           ) : (
-            <Table tableClassName="min-w-[1420px] table-fixed">
+            <Table tableClassName="min-w-[960px] table-fixed">
               <CheckInTableColumns />
               <Thead>
                 <Tr>
                   <Th>Đơn đặt giữ kho</Th>
-                  <Th>Khách hàng</Th>
                   <Th>Gian kho</Th>
                   <Th>
                     <span className="inline-flex items-center gap-1">
@@ -1475,17 +1474,11 @@ export default function StaffCheckInOperationsPanel({
   const renderRow = (item: CheckInCase, group: CheckInGroup) => {
     const actions = staffCheckInActions(item, now)
     return (
-    <Tr key={item.reservationId}>
+    <Tr key={item.reservationId} title={item.customerName ? `Khách hàng: ${item.customerName}` : undefined}>
       <Td>
         <b className="font-mono">{item.reservationCode}</b>
         <p className="mt-1 text-xs text-stone-500">
           {item.facilityName}
-        </p>
-      </Td>
-      <Td>
-        <b>{item.customerName}</b>
-        <p className="mt-1 text-xs text-stone-500">
-          {item.customerEmail}
         </p>
       </Td>
       <Td>
