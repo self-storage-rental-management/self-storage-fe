@@ -232,7 +232,7 @@ type InspectionDetail = {
   suggestedQuantitiesJson?: string | null
   goodsItems?: { id: string; categoryName?: string | null; materialName?: string | null; description?: string | null; customMaterial?: string | null; catalogCategoryId?: string | null; catalogMaterialId?: string | null; quantity: number }[]
 }
-export function InventoryLineInspectionResult({ detail }: { detail: InspectionDetail }) {
+export function InventoryLineInspectionResult({ detail, presentation = 'detail' }: { detail: InspectionDetail; presentation?: 'detail' | 'spreadsheet' }) {
   let lines: CheckInInventoryLine[] = []
   try {
     const value: unknown = detail.inventoryActualJson ? JSON.parse(detail.inventoryActualJson) : null
@@ -242,23 +242,52 @@ export function InventoryLineInspectionResult({ detail }: { detail: InspectionDe
   if (!lines.length) return null
   let retained: Record<string, number> | null = null
   try { retained = JSON.parse(detail.acceptedQuantitiesJson || 'null') } catch { /* Older records may lack per-line quantities. */ }
-  let suggested: Record<string, number> | null = null
-  try {
-    const parsed: unknown = JSON.parse(detail.suggestedQuantitiesJson || 'null')
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      && Object.values(parsed).every(value => typeof value === 'number' && Number.isInteger(value) && value >= 0)) {
-      suggested = parsed as Record<string, number>
-    }
-  } catch { /* Older records may lack a safe packing suggestion. */ }
-  const showSuggestedTakeHome = retained === null && suggested !== null
+  if (presentation === 'spreadsheet') return <section className="space-y-3 text-left text-sm">
+    <div>
+      <h4 className="font-bold">Bảng đối chiếu kiểm kê</h4>
+      <p className="mt-1 text-xs text-stone-600">Mỗi dòng là một loại hàng đã kiểm kê. Thông tin được gộp theo nhóm để bảng luôn nằm gọn trong khung.</p>
+    </div>
+    <div className="rounded-md border border-stone-200">
+      <table className="w-full table-fixed border-collapse text-xs">
+        <colgroup>
+          <col className="w-[7%]" />
+          <col className="w-[33%]" />
+          <col className="w-[12%]" />
+          <col className="w-[23%]" />
+          <col className="w-[25%]" />
+        </colgroup>
+        <thead className="bg-stone-100 text-left text-stone-700">
+          <tr>
+            {['Dòng', 'Hàng hóa', 'Thực tế', 'Quy cách', 'Tình trạng / ghi chú'].map(label => <th key={label} scope="col" className="border-b border-r border-stone-200 px-2 py-2 font-semibold break-words last:border-r-0">{label}</th>)}
+          </tr>
+        </thead>
+        <tbody className="text-stone-900">
+          {lines.map((line, index) => {
+            const declared = detail.goodsItems?.find(item => item.id === line.goodsItemId)
+            const actual = line.actualGoods
+            const actualName = line.actualQuantity === 0 ? 'Không có hàng' : actual?.categoryName || actual?.customGoodsName || 'Chưa ghi nhận'
+            const actualMaterial = actual?.customMaterial || actual?.materialName
+            const dimensions = line.measurements ? `${line.measurements.lengthCm} × ${line.measurements.widthCm} × ${line.measurements.heightCm} cm` : 'Chưa ghi nhận'
+            const weight = line.measurements?.weightKg == null ? 'Chưa ghi nhận' : `${line.measurements.weightKg} kg/dòng`
+            const condition = line.condition === 'INTACT' ? 'Nguyên vẹn' : line.condition === 'DAMAGED' ? 'Có hư hỏng' : 'Không có kiện nào'
+            return <tr key={line.goodsItemId} className="odd:bg-white even:bg-stone-50/70 align-top">
+              <th scope="row" className="border-b border-r border-stone-200 px-2 py-2.5 text-left font-semibold break-words">{index + 1}</th>
+              <td className="border-b border-r border-stone-200 px-2 py-2.5 break-words"><span className="block font-medium">{declared?.categoryName || declared?.description || 'Chưa ghi nhận'}</span><span className="mt-1 block text-stone-500">Khai: {declared?.materialName || declared?.customMaterial || '–'} · {declared?.quantity ?? '–'} kiện</span><span className="mt-1 block">Thực tế: {actualName}</span><span className="mt-1 block text-stone-500">{actualMaterial || 'Chưa ghi nhận'}</span></td>
+              <td className="border-b border-r border-stone-200 px-2 py-2.5 break-words tabular-nums">{line.actualQuantity}<span className="block text-stone-500">kiện</span></td>
+              <td className="border-b border-r border-stone-200 px-2 py-2.5 break-words"><span className="block">{dimensions}</span><span className="mt-1 block text-stone-500">{weight}</span></td>
+              <td className="border-b border-stone-200 px-2 py-2.5 break-words"><span className="block font-medium">{condition}</span><span className="mt-1 block whitespace-pre-wrap text-stone-600">{line.note || 'Không có ghi chú'}</span></td>
+            </tr>
+          })}
+        </tbody>
+      </table>
+    </div>
+  </section>
   return <section className="space-y-2 rounded-lg border border-stone-300 p-3 text-left text-sm">
     <h4 className="font-bold">Đối chiếu kiểm kê từng dòng hàng</h4>
-    {showSuggestedTakeHome && <p role="status" className="rounded-lg bg-amber-50 p-3 text-amber-950">Kết quả xếp kho gợi ý số kiện có thể tiếp nhận và số kiện khách cần mang về. Đây là phương án dựa trên dữ liệu kiểm kê hiện tại.</p>}
     {lines.map((line, index) => {
       const declared = detail.goodsItems?.find(item => item.id === line.goodsItemId)
       const actual = line.actualGoods
       const matches = declared?.catalogCategoryId && actual && declared.catalogCategoryId === actual.catalogCategoryId && declared.catalogMaterialId === actual.catalogMaterialId && declared.quantity === line.actualQuantity
-      const fittingQuantity = suggested?.[line.goodsItemId] ?? 0
       return <div key={line.goodsItemId} className="space-y-1 border-t border-stone-200 pt-2">
         <p className="font-semibold">Dòng {index + 1} · {matches ? 'Khớp loại hàng, chất liệu và số kiện' : 'Xem kết quả đối chiếu thực tế'}</p>
         <p>Đã khai: {declared?.categoryName || declared?.description || 'Chưa ghi nhận'} · {declared?.materialName || declared?.customMaterial || 'Chưa ghi nhận'} · {declared?.quantity ?? 'Chưa ghi nhận'} kiện</p>
@@ -269,7 +298,6 @@ export function InventoryLineInspectionResult({ detail }: { detail: InspectionDe
             ['Mô tả hàng hóa', actual?.description],
             ['Số lượng thực tế', line.actualQuantity],
             ...(retained ? [['Số kiện giữ lại', retained[line.goodsItemId] ?? 0], ['Số kiện đưa ra', Math.max(0, line.actualQuantity - (retained[line.goodsItemId] ?? 0))]] : []),
-            ...(showSuggestedTakeHome ? [['Có thể tiếp nhận theo phương án xếp', fittingQuantity], ['Khách cần mang về', Math.max(0, line.actualQuantity - fittingQuantity)]] : []),
             ['Chiều dài mỗi kiện', line.measurements && line.measurements.lengthCm + ' cm'],
             ['Chiều rộng mỗi kiện', line.measurements && line.measurements.widthCm + ' cm'],
             ['Chiều cao mỗi kiện', line.measurements && line.measurements.heightCm + ' cm'],
@@ -300,7 +328,7 @@ export function PackagingInspectionResult({ detail }: { detail: { inventoryActua
   const conditions: Record<string, string> = { INTACT: 'Nguyên vẹn', MINOR_DAMAGE: 'Hư hỏng nhẹ', MAJOR_DAMAGE: 'Hư hỏng nặng', UNPACKAGED: 'Chưa đóng gói' }
   const declared = detail.goodsCondition
   const mismatch = Boolean(declared && actual.packagingMethod && declared.trim().toLocaleLowerCase('vi') !== actual.packagingMethod.trim().toLocaleLowerCase('vi'))
-  return <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-left text-xs text-stone-800">
+  return <div className="text-left text-xs text-stone-800">
     <p className="font-bold">Kết quả kiểm kê đóng gói</p>
     <p className="mt-1">Phương thức đã khai: <b>{declared || 'Chưa ghi nhận'}</b></p>
     <p className="mt-1">Phương thức thực tế: <b>{actual.packagingMethod || 'Chưa ghi nhận'}</b></p>

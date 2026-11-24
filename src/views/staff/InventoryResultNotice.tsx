@@ -16,16 +16,16 @@ const screens = {
   UNKNOWN: { title: 'Chờ đối chiếu phương án xếp hàng', icon: '?', color: 'border-stone-300 bg-stone-50 text-stone-900', description: 'Chưa đủ dữ liệu để kết luận. Chuyển đến bước Kết quả tiếp nhận để hệ thống kiểm tra phương án xếp chính thức.' },
 }
 
-export default function InventoryResultNotice({ result, published, checkInId, packages, weight, volume, children, showAlternatives = true }: {
+export default function InventoryResultNotice({ result, published, checkInId, packages, weight, volume, children, showAlternatives = true, transferring = false }: {
   result: InventoryResult; published: boolean; checkInId: string | null
-  packages: number; weight: number; volume: number; children: ReactNode; showAlternatives?: boolean
+  packages: number; weight: number; volume: number; children: ReactNode; showAlternatives?: boolean; transferring?: boolean
 }) {
   const screen = screens[result]
   const number = (value: number, digits: number) => Number.isFinite(value) ? value.toLocaleString('vi-VN', { maximumFractionDigits: digits }) : '-'
   return <section className={`overflow-hidden rounded-2xl border ${screen.color}`} aria-label="Xác nhận hàng hóa kiểm kê" aria-live="polite">
     <header className="flex items-start gap-3 border-b border-black/10 p-5">
       <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-2xl font-bold">{screen.icon}</span>
-      <div><p className="text-xs font-bold uppercase tracking-wide">Xác nhận hàng hóa kiểm kê · {published ? 'Đã lưu' : 'Đối chiếu sơ bộ'}</p><h3 className="mt-1 text-xl font-bold">{screen.title}</h3><p className="mt-2 text-sm leading-6">{screen.description}</p></div>
+      <div><p className="text-xs font-bold uppercase tracking-wide">Xác nhận hàng hóa kiểm kê · {published ? 'Đã lưu' : 'Đối chiếu sơ bộ'}</p><h3 className="mt-1 text-xl font-bold">{transferring ? 'Hàng hóa chưa thể tiếp nhận tại gian kho này' : screen.title}</h3><p className="mt-2 text-sm leading-6">{transferring ? 'Đã tạo yêu cầu chuyển toàn bộ hàng sang kho phù hợp.' : screen.description}</p></div>
     </header>
     <div className="space-y-4 p-5">
       <div className="grid gap-3 sm:grid-cols-3">{[['Số kiện thực tế', number(packages, 0)], ['Tổng khối lượng', `${number(weight, 2)} kg`], ['Tổng thể tích', `${number(volume, 4)} m³`]].map(([label, value]) => <div key={label} className="rounded-xl border border-black/10 bg-white p-4"><p className="text-xs text-stone-500">{label}</p><p className="mt-1 text-lg font-bold text-stone-900">{value}</p></div>)}</div>

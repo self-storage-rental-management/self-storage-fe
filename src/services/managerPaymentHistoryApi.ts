@@ -28,6 +28,7 @@ function isPaymentHistoryItem(value: unknown): value is ManagerPaymentHistoryIte
   const row = value as Record<string, unknown>
   return typeof row.id === "string" && row.id.length > 0
     && typeof row.transactionReference === "string" && row.transactionReference.length > 0
+    && (row.receiptCode == null || typeof row.receiptCode === "string")
     && typeof row.customerName === "string" && row.customerName.length > 0
     && typeof row.type === "string" && types.includes(row.type as ManagerPaymentHistoryType)
     && typeof row.status === "string" && statuses.includes(row.status as ManagerPaymentHistoryStatus)
