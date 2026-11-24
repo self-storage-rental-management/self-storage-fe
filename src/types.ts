@@ -40,7 +40,21 @@ export type PermissionKey = typeof PERMISSION_KEYS[number]
 export type RolePermissions = Record<PermissionKey, boolean>
 export type RolePermissionsState = Record<Role, RolePermissions>
 
+export interface CustomerProfileDetails {
+  identityVerifiedAt?: string | null
+  identityDocumentNumber?: string
+  emergencyContactRelationship?: string
+  emergencyContactEmail?: string
+  emergencyContactConsent?: boolean
+  secondaryEmergencyContactName?: string
+  secondaryEmergencyContactPhone?: string
+  secondaryEmergencyContactRelationship?: string
+  secondaryEmergencyContactEmail?: string
+  secondaryEmergencyContactConsent?: boolean
+}
+
 export interface User {
+  profileDetails?: CustomerProfileDetails
   id: string
   name: string
   email: string

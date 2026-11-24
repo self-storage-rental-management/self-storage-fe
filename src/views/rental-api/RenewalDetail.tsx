@@ -164,7 +164,8 @@ export default function RenewalDetail({
       </dl>
       {r.reviewReason && <p>Lý do quyết định: {r.reviewReason}</p>}
       {r.cancellationReason && <p>Lý do hủy: {r.cancellationReason === "AUTO_RECOVERY_DAY_8" ? "Đã qua ngày quá hạn thứ 7, hồ sơ chuyển sang xử lý thu hồi kho. Tiền thuê trả trước đang chờ đối soát nguyên nhân." : r.cancellationReason}</p>}
-      <div className="space-y-3">
+      <section className="space-y-3 rounded-xl border border-stone-200 p-4" aria-labelledby="renewal-ledger-heading">
+          <h4 id="renewal-ledger-heading" className="font-semibold text-stone-900">Bảng kê và biên lai</h4>
           {r.statusSummary ? <RenewalStatusPanel summary={r.statusSummary} onReceipt={setReceiptPaymentId} /> : <p className="rounded-lg border border-stone-200 p-3 text-sm text-stone-600" role="status">Chưa xác định được bảng kê khoản phải thu. Cần đối soát trước khi xác nhận số tiền đã thanh toán hoặc còn phải thu.</p>}
           {role === "customer" && payment && <section className={`rounded-xl border p-4 ${payment.reconciliationRequired ? "border-amber-200 bg-amber-50/50" : "border-stone-200 bg-white"}`} aria-label="Thanh toán gia hạn" aria-live="polite">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -182,15 +183,15 @@ export default function RenewalDetail({
             {paymentDetail && <p className="mt-3 border-t border-stone-100 pt-2 text-xs leading-5 text-stone-600">{paymentDetail}</p>}
           </section>}
           {role === "customer" && paymentError && <p role="alert" className="rounded bg-amber-50 p-3 text-amber-900">{paymentError}</p>}
-      </div>
+      </section>
       {receiptPaymentId && <Modal open onClose={() => setReceiptPaymentId(null)} title="Biên lai khoản thu gia hạn" size="lg">
         <RenewalReceipt id={r.id} paymentId={receiptPaymentId} role={role} />
       </Modal>}
       {terms ? (
         <details className="rounded-xl border border-stone-200 bg-white p-4">
           <summary className="cursor-pointer font-semibold text-stone-900">Điều khoản và chi phí gia hạn</summary>
-          <div className="mt-4 space-y-5 text-sm">
-            <section aria-label="Thông tin gia hạn">
+          <div className="mt-4 grid gap-4 text-sm lg:grid-cols-2">
+            <section className="rounded-lg border border-stone-200 p-3" aria-label="Thông tin gia hạn">
               <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Thông tin gia hạn</h4>
               <dl className="grid gap-3 rounded-lg bg-stone-50 p-3 sm:grid-cols-2">
                 <div><dt className="text-stone-500">Gói gia hạn</dt><dd className="mt-1 font-semibold text-stone-900">{terms.rentalMonths} tháng</dd></div>
@@ -199,7 +200,7 @@ export default function RenewalDetail({
               </dl>
               <p className="mt-2 text-xs leading-5 text-stone-600">Chưa quá hạn: kỳ mới nối tiếp kỳ cũ. Nếu hoàn tất khi đã quá hạn: kỳ mới bắt đầu từ ngày ký, phí quá hạn tính riêng cho các ngày trước đó.</p>
             </section>
-            <section aria-label="Chi phí gia hạn">
+            <section className="rounded-lg border border-stone-200 p-3" aria-label="Chi phí gia hạn">
               <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Chi phí gia hạn</h4>
               <dl className="divide-y divide-stone-100 rounded-lg border border-stone-200 px-3">
                 <div className="flex justify-between gap-4 py-2"><dt className="text-stone-600">Đơn giá/tháng</dt><dd className="text-right font-medium text-stone-900">{rentalMoney(terms.monthlyPrice, terms.currency)}</dd></div>
@@ -208,7 +209,7 @@ export default function RenewalDetail({
                 <div className="flex justify-between gap-4 py-3"><dt className="font-semibold text-stone-900">Tổng sau điều chỉnh</dt><dd className="text-right font-bold text-stone-900">{rentalMoney(terms.totalAfterDiscount, terms.currency)}</dd></div>
               </dl>
             </section>
-            <section aria-label="Kế hoạch thanh toán">
+            <section className="rounded-lg border border-stone-200 p-3 lg:col-span-2" aria-label="Kế hoạch thanh toán">
               <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Kế hoạch thanh toán</h4>
               {isCustomer ? (
                 <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">

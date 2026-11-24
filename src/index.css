@@ -612,10 +612,64 @@ main textarea:focus) {
 .reservation-action.reservation-action-receipt:hover { border-color: #065f46; background: #065f46; }
 .reservation-action.reservation-action-document { border: 1px solid #1d4ed8; background: #1d4ed8; color: #ffffff; }
 .reservation-action.reservation-action-document:hover { border-color: #1e40af; background: #1e40af; }
-.reservation-action.reservation-action-cancel { border: 1px solid #b91c1c; background: #b91c1c; color: #ffffff; }
-.reservation-action.reservation-action-cancel:hover { border-color: #991b1b; background: #991b1b; }
+.reservation-action.reservation-action-cancel { border: 1px solid #fecaca; background: transparent; color: #b91c1c; }
+.reservation-action.reservation-action-cancel:hover { border-color: #fca5a5; background: #fef2f2; }
 
 /* Customer navigation keeps its content at the final width from the first frame. */
 .customer-role-layout [data-layout-scroll-container] { scrollbar-gutter: stable; }
 .customer-role-layout [data-layout-scroll-container].fade-in,
 .customer-role-layout .customer-page .fade-in { animation: none; }
+
+/* === STORAGEHUB BUTTON SYSTEM (CHỐNG CẦU VỒNG NÚT BẤM & 3-TIER ACTION HIERARCHY) === */
+.sh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  transition: all 0.15s ease-in-out;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sh-btn-primary {
+  background-color: #d97706; /* amber-600 */
+  color: #ffffff !important;
+  border: 1px solid transparent;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+.sh-btn-primary:hover {
+  background-color: #b45309; /* amber-700 */
+}
+.sh-btn-success {
+  background-color: #059669; /* emerald-600 */
+  color: #ffffff !important;
+  border: 1px solid transparent;
+}
+.sh-btn-success:hover {
+  background-color: #047857; /* emerald-700 */
+}
+.sh-btn-secondary {
+  background-color: #ffffff;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+}
+.sh-btn-secondary:hover {
+  background-color: #f8fafc;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+.sh-btn-icon {
+  padding: 0.5rem;
+  border-radius: 0.75rem;
+  background-color: transparent;
+  border: 1px solid #e2e8f0;
+  color: #64748b;
+}
+.sh-btn-icon:hover {
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+
