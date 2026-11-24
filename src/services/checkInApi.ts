@@ -78,6 +78,7 @@ export interface CompleteCheckInRequest {
 }
 
 export interface CheckInCase {
+  equipment?: { rackCount: number; frameCount: number; palletCount: number | null }
   intakeAction: 'START' | 'CONTINUE' | 'NONE'
   declaredGoodsLines?: {
     id: string

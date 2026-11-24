@@ -62,7 +62,7 @@ const checklistLabels: Array<[keyof CheckInChecklist, string]> = [
 
   ["measurementVerified", "Đã đo và đối chiếu hàng hóa thực tế"],
 
-  ["unitWalkthrough", "Đã bàn giao kho trống cho khách hàng"],
+  ["unitWalkthrough", "Đã bàn giao kho trống, đối chiếu đủ khung và tấm kê với khách hàng"],
 
   ["conditionRecorded", "Đã ghi nhận tình trạng hàng hóa"],
 
@@ -1724,6 +1724,9 @@ export default function StaffCheckInOperationsPanel({
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 pb-3">
                     <div>
                       <p className="text-base font-bold text-amber-950">Bàn giao gian kho trống & Kích hoạt quyền ra vào</p>
+                      <p className="mt-2 text-sm font-semibold">Thiết bị bàn giao: {handoverTarget.equipment?.palletCount != null
+                        ? <>{handoverTarget.equipment.rackCount} bộ kệ / {handoverTarget.equipment.frameCount} khung và {handoverTarget.equipment.palletCount} tấm kê. Đếm và xác nhận cùng khách; khi trả kho phải thu hồi đủ tấm kê.</>
+                        : 'Chưa có cấu hình thiết bị trong hồ sơ; cần đối soát trước khi bàn giao.'}</p>
                       <p className="text-xs text-amber-800 mt-0.5">Tiến hành dẫn khách kiểm tra kho thực tế, bàn giao mã mở khóa và xác nhận hiện trạng ban đầu.</p>
                     </div>
                     <span className="rounded-full bg-amber-100 border border-amber-300 px-3 py-1 text-xs font-bold text-amber-900">
