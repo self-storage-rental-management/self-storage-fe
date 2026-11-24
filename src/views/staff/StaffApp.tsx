@@ -910,7 +910,12 @@ export default function StaffApp({
     const loadNotifications = async () => {
       try {
         const result = await listNotifications(0, 50)
-        if (!cancelled) setBackendNotifications(result.data)
+        if (!cancelled) {
+          setBackendNotifications(result.data)
+          if (result.data.some(notification => notification.type === 'CHECKIN')) {
+            window.dispatchEvent(new Event('storagehub:checkins-refresh'))
+          }
+        }
       } catch {
         // Staff operations remain available if notifications are temporarily unavailable.
       }
