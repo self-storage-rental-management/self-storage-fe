@@ -64,6 +64,20 @@ function returnRecoveryCutoff(value: string | null | undefined) {
     : null
 }
 
+export function returnRecoveryCountdown(value: string | null | undefined, now = Date.now()) {
+  if (!value) return null
+  const deadline = Date.parse(value)
+  if (!Number.isFinite(deadline)) return null
+  const remaining = deadline - now
+  if (remaining <= 0) return 'Đã quá hạn'
+  const totalSeconds = Math.ceil(remaining / 1000)
+  const days = Math.floor(totalSeconds / 86_400)
+  const hours = Math.floor((totalSeconds % 86_400) / 3_600)
+  const minutes = Math.floor((totalSeconds % 3_600) / 60)
+  const seconds = totalSeconds % 60
+  return `Còn ${days} ngày ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}
+
 function statusLabel(record: Pick<ApiReturn, 'status' | 'returnType'>) {
   if (record.status === 'awaiting_business_review' && record.returnType === 'INVENTORY_MISMATCH') {
     return 'Chờ Manager duyệt quyết toán'
@@ -73,6 +87,12 @@ function statusLabel(record: Pick<ApiReturn, 'status' | 'returnType'>) {
 }
 
 export function ReturnSummary({ record, hideTerminationFee = false }: { record: ApiReturn; hideTerminationFee?: boolean }) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!(['requested', 'scheduled'].includes(record.status) && record.recoveryEligibleAt)) return
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [record.status, record.recoveryEligibleAt])
   if (record.sourceType === "RECOVERY") return <RecoveryReturnSummary record={record} hideTerminationFee={hideTerminationFee} />
   const inventoryMismatch = record.returnType === 'INVENTORY_MISMATCH'
   const showFixedTerminationFee = !hideTerminationFee && !inventoryMismatch
@@ -90,7 +110,7 @@ export function ReturnSummary({ record, hideTerminationFee = false }: { record: 
         <span className={`rounded-full px-3 py-1 text-xs font-semibold ${badgeClass}`}>{statusLabel(record)}</span>
       </div>
       <p className="text-sm text-stone-600">{'Ngày dự kiến trả: '}<strong className="text-stone-900">{rentalDate(record.scheduledDate)}</strong></p>
-      {['requested', 'scheduled'].includes(record.status) && record.recoveryEligibleAt && <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">Nếu khách chưa đến và chưa hoàn tất trả kho, hồ sơ sẽ chuyển sang nhiệm vụ xử lý sau <strong>{returnRecoveryCutoff(record.recoveryEligibleAt)}</strong>. Hàng chưa được tự động di chuyển.</p>}
+      {['requested', 'scheduled'].includes(record.status) && record.recoveryEligibleAt && <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">Nếu khách chưa đến và chưa hoàn tất trả kho, hồ sơ sẽ chuyển sang nhiệm vụ xử lý sau <strong>{returnRecoveryCountdown(record.recoveryEligibleAt, now) || returnRecoveryCutoff(record.recoveryEligibleAt)}</strong>. Hàng chưa được tự động di chuyển.</p>}
       {record.returnType === 'INVENTORY_MISMATCH' && <p className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-950">Đây là yêu cầu trả kho do kết quả kiểm kê không phù hợp. Phí và thời gian được quyết toán theo nhánh xử lý kiểm kê, không gộp với trả kho hợp lệ thông thường.</p>}
       {record.status === 'recovery_required' && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-950">Khách chưa đến theo lịch và đã hết thời gian ân hạn. Hàng chưa được tự động di chuyển. Cơ sở cần lập biên bản, kiểm kê và bàn giao hai người trước khi thu hồi.</p>}
       {record.status === 'recovery_required' && record.recoveryTaskDeadlineAt && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-950">Hạn xử lý nhiệm vụ thu hồi: {returnRecoveryCutoff(record.recoveryTaskDeadlineAt)}</p>}

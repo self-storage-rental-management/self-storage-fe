@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { ReturnSummary } from './ReturnApiPanel'
+import { returnRecoveryCountdown, ReturnSummary } from './ReturnApiPanel'
 import type { ApiReturn } from '../../services/returnApi'
 
 describe('Return summary', () => {
@@ -56,6 +56,11 @@ describe('Return summary', () => {
     }} />)
     expect(html).toContain('Hàng chưa được tự động di chuyển')
     expect(html).toContain('Hạn xử lý nhiệm vụ thu hồi')
+  })
+
+  it('formats the recovery deadline as a live countdown', () => {
+    expect(returnRecoveryCountdown('2026-11-26T00:00:00Z', Date.parse('2026-11-24T00:00:00Z'))).toBe('Còn 2 ngày 00:00:00')
+    expect(returnRecoveryCountdown('2026-11-24T00:00:00Z', Date.parse('2026-11-24T00:00:01Z'))).toBe('Đã quá hạn')
   })
 
 })
