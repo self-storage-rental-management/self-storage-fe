@@ -267,32 +267,40 @@ export default function StaffReservationReviews({
             <b>Phương thức đóng gói:</b> {row.goodsCondition || "-"}
           </p>
           {row.reservationNotes && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm"><b>Ghi chú của khách hàng:</b> {row.reservationNotes}</p>}
-          {row.goodsItems.map((item) => (
+          {row.goodsItems.map((item) => {
+            const itemIsOtherGoods = isOtherGoodsItem(item)
+
+            return (
             <div
               key={item.id}
-              className={`rounded-lg border p-3 text-sm ${hasOtherGoods ? "border-violet-200 bg-violet-50/70" : "border-stone-200 bg-stone-50"}`}
+              className={`rounded-lg border p-3 text-sm ${itemIsOtherGoods ? "border-violet-300 bg-violet-50/80" : "border-stone-200 bg-stone-50"}`}
             >
-              <p className="font-bold">
-                {item.customGoodsName || item.categoryName || staffGoodsCategoryLabel(item.category)}
-              </p>
-              <p>Mô tả: {item.description || "Không có"}</p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className={`font-bold ${itemIsOtherGoods ? "text-violet-950" : "text-stone-900"}`}>
+                  {item.customGoodsName || item.categoryName || staffGoodsCategoryLabel(item.category)}
+                </p>
+                <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold ${itemIsOtherGoods ? "border-violet-300 bg-violet-100 text-violet-800" : "border-stone-300 bg-white text-stone-600"}`}>
+                  {itemIsOtherGoods ? "Hàng loại khác" : "Hàng thường"}
+                </span>
+              </div>
+              <p><span className="font-semibold text-stone-900">Mô tả:</span> {item.description || "Không có"}</p>
               <p>
-                Chất liệu:{" "}
+                <span className="font-semibold text-stone-900">Chất liệu:</span>{" "}
                 {item.customMaterial || item.materialName || "Không có"}
               </p>
-              <p>Số lượng: {item.quantity} kiện</p>
+              <p><span className="font-semibold text-stone-900">Số lượng:</span> {item.quantity} kiện</p>
               <p>
-                Kích thước mỗi kiện: {item.lengthCm} × {item.widthCm} ×{" "}
+                <span className="font-semibold text-stone-900">Kích thước mỗi kiện:</span> {item.lengthCm} × {item.widthCm} ×{" "}
                 {item.heightCm} cm
               </p>
               <p>
-                Khối lượng: {item.weightPerItemKg} kg/kiện · tổng{" "}
+                <span className="font-semibold text-stone-900">Khối lượng:</span> {item.weightPerItemKg} kg/kiện · tổng{" "}
                 {(item.quantity * item.weightPerItemKg).toLocaleString("vi-VN")}{" "}
                 kg
               </p>
-              <p>Hàng dễ bể / dễ vỡ: {item.fragile ? "Có" : "Không"}</p>
+              <p><span className="font-semibold text-stone-900">Hàng dễ bể / dễ vỡ:</span> {item.fragile ? "Có" : "Không"}</p>
               {item.customerNote && (
-                <p>Ghi chú của khách hàng: {item.customerNote}</p>
+                <p><span className="font-semibold text-stone-900">Ghi chú của khách hàng:</span> {item.customerNote}</p>
               )}
               {item.images?.length > 0 && <div className="mt-3 flex flex-wrap gap-2">
                 {item.images.map((image, index) => <Button key={image.id} type="button" size="sm" variant="outline" onClick={() => void viewGoodsImage(image.id)}>
@@ -300,7 +308,8 @@ export default function StaffReservationReviews({
                 </Button>)}
               </div>}
             </div>
-          ))}
+            )
+          })}
           <Input
             label="Ghi chú / lý do từ chối"
             maxLength={1000}

@@ -178,7 +178,7 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
 
 
 
-      {context === 'reservation' && !hidePaymentNotices && <InventoryMismatchReturnNotice />}
+
       <ReturnPolicyNotice terms={q} showQuoteFees={context === 'reservation' && !hidePaymentNotices} />
 
       {/* ── FOOTER HIỆU LỰC & XÉT DUYỆT ── */}
