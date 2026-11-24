@@ -118,7 +118,7 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 pt-4">
           <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
             <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Phí Quá Hạn</span>
-            <div className="text-base font-extrabold text-amber-700 font-mono mt-1">{config ? `${formatVnd(config.lateFeeAmount)}/ngày` : '50% / ngày'}</div>
+            <div className="text-base font-extrabold text-amber-700 font-mono mt-1">Tiền thuê tháng ÷ 30 × 1,5 / ngày</div>
             <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30). Tự động tính theo số ngày trễ.</p>
           </div>
 
@@ -146,9 +146,9 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
 
           <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
             <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Gia Hạn Quá Hạn</span>
-            <div className="text-base font-extrabold text-blue-700 font-mono mt-1">{config ? `Ân hạn ${config.gracePeriodDays} ngày` : 'Tối Đa 7 Ngày'}</div>
+            <div className="text-base font-extrabold text-blue-700 font-mono mt-1">Tối đa 7 ngày</div>
             <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
-              Khách có tối đa {config?.gracePeriodDays ?? 7} ngày để hoàn tất gia hạn. Đến ngày thứ {(config?.gracePeriodDays ?? 7) + 1} chuyển thu hồi kho.
+              Khách có tối đa 7 ngày để hoàn tất gia hạn. Đến ngày thứ 8 chuyển thu hồi kho.
             </p>
           </div>
         </div>

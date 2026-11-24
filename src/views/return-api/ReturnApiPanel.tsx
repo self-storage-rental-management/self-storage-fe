@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Modal } from '../../components/ui'
 import { FilePreviewList } from '../staff/StaffFileUpload'
 import VietnameseDateInput from '../../components/VietnameseDateInput'
+import LockInspectionSelect, { lockInspectionLabels } from '../../components/LockInspectionSelect'
 import { getAuthenticatedActor } from '../../services/authApi'
 import { useRentalApiResource } from '../../hooks/useRentalApiResource'
 import { rentalDate, rentalMoney } from '../rental-api/presentation'
@@ -26,6 +27,7 @@ import {
   type ApiReturn,
   type DamageItemInput,
   type InspectionInput,
+  type LockInspectionResult,
   type ReturnFees,
   type ReturnRole,
 } from '../../services/returnApi'
@@ -116,7 +118,7 @@ export function ReturnSummary({ record, hideTerminationFee = false, hideHeader =
       )}
       {['requested', 'scheduled'].includes(record.status) && record.recoveryEligibleAt && <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">Nếu khách chưa đến và chưa hoàn tất trả kho, hồ sơ sẽ chuyển sang nhiệm vụ xử lý sau <strong>{returnRecoveryCountdown(record.recoveryEligibleAt, now) || returnRecoveryCutoff(record.recoveryEligibleAt)}</strong>. Hàng chưa được tự động di chuyển.</p>}
       {record.returnType === 'INVENTORY_MISMATCH' && <p className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-950">Yêu cầu trả kho này liên quan đến hàng hóa không khớp khai báo. Phí và thời gian được tính theo kết quả kiểm kê.</p>}
-      {record.status === 'recovery_required' && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-950">Khách chưa đến theo lịch và đã hết thời gian ân hạn. Hàng chưa được tự động di chuyển. Cơ sở cần lập biên bản, kiểm kê và bàn giao hai người trước khi thu hồi.</p>}
+      {record.status === 'recovery_required' && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-950">Khách chưa đến theo lịch và đã hết hạn xử lý. Hàng chưa được tự động di chuyển. Cơ sở cần lập biên bản, kiểm kê và bàn giao hai người trước khi thu hồi.</p>}
       {record.status === 'recovery_required' && record.recoveryTaskDeadlineAt && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-950">Hạn xử lý nhiệm vụ thu hồi: {returnRecoveryCutoff(record.recoveryTaskDeadlineAt)}</p>}
       {inventoryMismatch && record.earlyTerminationPolicy && <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-950">
         <p className="font-semibold">Trả kho do hàng hóa sai khai báo</p>
@@ -586,6 +588,7 @@ function ReturnWorkspace({
 
           {/* Form Actions / 2-Column Inspection */}
           <ReturnActions
+            key={selectedRecord.id}
             role={role}
             record={selectedRecord}
             run={run}
@@ -951,7 +954,7 @@ function getNextStepText(status: ApiReturn['status'], role: ReturnRole, recovery
       disputed: 'Hồ sơ đang có khiếu nại từ bạn. Chờ Ban điều hành hoặc Quản lý cơ sở giải quyết.',
       payment_due: 'Thanh toán khoản quyết toán còn thiếu để tiếp tục hoàn tất trả kho.',
       refund_pending: 'Cơ sở đang xử lý hoàn cọc. Khoản tiền sẽ được chuyển hoàn theo thông tin của bạn.',
-      recovery_required: 'Khách chưa đến theo lịch. Cơ sở cần xử lý hồ sơ thu hồi theo quy trình.',
+      recovery_required: 'Khách chưa đến theo lịch và đã hết hạn xử lý. Cơ sở cần xử lý hồ sơ thu hồi theo quy trình.',
       completed: 'Hồ sơ trả kho và quyết toán đã hoàn tất.',
     }
     return customerSteps[status] || 'Đang xử lý hồ sơ trả kho.'
@@ -967,7 +970,7 @@ function getNextStepText(status: ApiReturn['status'], role: ReturnRole, recovery
     disputed: 'Hồ sơ đang có khiếu nại từ khách hàng. Cần Ban điều hành hoặc Quản lý cơ sở giải quyết trước khi tiếp tục.',
     payment_due: 'Khách hàng có phụ phí vượt cọc cần thanh toán. Ghi nhận thanh toán và phát hành biên lai thu tiền.',
     refund_pending: 'Cơ sở thực hiện hoàn cọc cho khách hàng và ghi nhận biên lai hoàn tiền để hoàn tất hồ sơ.',
-    recovery_required: 'Khách chưa đến theo lịch. Cơ sở cần lập biên bản và xử lý thu hồi theo quy trình.',
+    recovery_required: 'Khách chưa đến theo lịch và đã hết hạn xử lý. Cơ sở cần lập biên bản và xử lý thu hồi theo quy trình.',
     completed: 'Hồ sơ trả kho và quyết toán đã hoàn tất.',
   }
   return staffSteps[status] || 'Đang xử lý hồ sơ trả kho.'
@@ -982,7 +985,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
   const [goodsLeft, setGoodsLeft] = useState(false)
   const [damage, setDamage] = useState<InspectionInput['damageClassification']>('no_damage')
   const [unit, setUnit] = useState<'available' | 'maintenance'>('available')
-  const [returnedLock, setReturnedLock] = useState((record.lostItemFee ?? 0) <= 0)
+  const [lockInspectionResult, setLockInspectionResult] = useState<LockInspectionResult | ''>('')
   const [vacatedReturnId, setVacatedReturnId] = useState<string | null>(null)
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([])
   const initialized = useRef(false)
@@ -990,12 +993,10 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
   useEffect(() => {
     if (record && !initialized.current) {
       initialized.current = true
-      const initialLock = record.returnedLock !== undefined ? record.returnedLock : (record.lostItemFee ?? 0) <= 0
-      setReturnedLock(initialLock)
       setFees({
         damageFee: record.damageFee,
         cleaningFee: record.cleaningFee,
-        lostItemFee: initialLock ? 0 : (record.lostItemFee || 150000),
+        lostItemFee: record.lostItemFee ?? 0,
         overdueFee: record.overdueFee,
         outstandingFee: record.outstandingFee,
       })
@@ -1003,10 +1004,10 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
     }
   }, [record])
 
-  const handleToggleLock = () => {
-    const next = !returnedLock
-    setReturnedLock(next)
-    setFees((f) => ({ ...f, lostItemFee: next ? 0 : 150000 }))
+  const missingLockFee = 150000
+  const handleLockInspection = (result: LockInspectionResult | '') => {
+    setLockInspectionResult(result)
+    setFees((f) => ({ ...f, lostItemFee: result === 'MISSING_OR_INCOMPLETE' ? missingLockFee : 0 }))
   }
 
   const handleToggleGoods = () => {
@@ -1053,6 +1054,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
         : record.status === 'refund_pending' ? 'Cơ sở thực hiện hoàn tiền và ghi nhận biên lai quyết toán. Thu hồi kho được hoàn tất riêng sau đó.' : null
   const hasEvidence = evidenceFiles.length > 0 || (Array.isArray(record.evidencePhotos) && record.evidencePhotos.length > 0)
   const submitInspection = async () => {
+    if (!lockInspectionResult) throw new Error('Vui lòng chọn kết quả kiểm tra ổ khóa và chìa khóa.')
     if (canInspect && !hasEvidence) {
       throw new Error('Vui lòng tải lên ít nhất một ảnh hiện trường (trần, vách, sàn hoặc cửa) để làm bằng chứng nghiệm thu.')
     }
@@ -1073,9 +1075,10 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       damageClassification: goodsLeft ? 'abandoned_goods' : damage,
       staffNotes: note,
       evidencePhotos,
-      returnedKey: false,
+      returnedKey: lockInspectionResult === 'RETURNED_USABLE',
       returnedCard: false,
-      returnedLock,
+      returnedLock: lockInspectionResult === 'RETURNED_USABLE' || lockInspectionResult === 'DAMAGED',
+      lockInspectionResult,
       proposedUnitStatus: unit,
       unitVacated,
     })
@@ -1097,6 +1100,9 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                 {([
                   ['Khách hàng', record.customerName], ['Lý do trả kho', record.customerNotes || 'Chưa ghi nhận'],
                   ['Ghi chú nghiệm thu', record.inspectionNotes || record.staffNotes || (record as any).notes || 'Chưa ghi nhận'],
+                  ...(role !== 'customer' && record.inspectedAt
+                    ? [['Ổ khóa và chìa khóa', lockInspectionLabels[record.lockInspectionResult ?? 'UNVERIFIED']]]
+                    : []),
                   ...(record.customerDecisionNote ? [['Ý kiến khiếu nại của khách', record.customerDecisionNote]] : []),
                   ['Kết quả xem xét', record.managerResolutionNote || 'Chưa có'],
                   ['Khách xác nhận quyết toán', record.customerConfirmed ? 'Đã xác nhận' : 'Chưa xác nhận'],
@@ -1176,58 +1182,18 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                           <h4 className="text-sm font-bold text-stone-900">
                             1. Thu hồi khóa &amp; Kiểm tra hàng hóa
                           </h4>
-                          <span className="text-[11px] font-medium text-stone-500">Chạm để đổi trạng thái</span>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <div className="p-3.5 rounded-xl border border-stone-200 bg-stone-50/40 text-left transition select-none flex flex-col justify-between">
-                            <div>
-                              <div className="flex w-full items-center justify-between gap-2">
-                                <span className="text-xs font-bold text-stone-800">Ổ khóa / Chìa khóa</span>
-                                <div className="inline-flex rounded-lg border border-stone-300 bg-stone-100 p-0.5 text-xs">
-                                  <button
-                                    type="button"
-                                    disabled={busy}
-                                    onClick={() => {
-                                      if (!returnedLock) handleToggleLock()
-                                    }}
-                                    className={`px-3 py-1 rounded-md text-xs font-semibold transition cursor-pointer ${
-                                      returnedLock
-                                        ? 'bg-white text-stone-900 shadow-xs'
-                                        : 'text-stone-500 hover:text-stone-800'
-                                    }`}
-                                  >
-                                    Đã thu hồi đủ
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={busy}
-                                    onClick={() => {
-                                      if (returnedLock) handleToggleLock()
-                                    }}
-                                    className={`px-3 py-1 rounded-md text-xs font-semibold transition cursor-pointer ${
-                                      !returnedLock
-                                        ? 'bg-white text-stone-900 shadow-xs'
-                                        : 'text-stone-500 hover:text-stone-800'
-                                    }`}
-                                  >
-                                    Làm mất / Thiếu
-                                  </button>
-                                </div>
-                              </div>
-                              <p className="text-[11px] text-stone-500 leading-tight mt-2">
-                                {returnedLock
-                                  ? 'Đã nhận lại đủ bộ khóa đã cấp.'
-                                  : 'Khách làm mất hoặc không bàn giao bộ khóa.'}
-                              </p>
-                            </div>
-                            {!returnedLock && (
-                              <div className="mt-3 pt-2.5 border-t border-stone-200 flex items-center justify-between gap-2">
-                                <span className="text-xs text-stone-600 font-medium">Phí làm lại khóa:</span>
-                                <span className="font-mono font-bold text-xs text-stone-900">
-                                  150.000 ₫
-                                </span>
-                              </div>
-                            )}
+                          <div className="p-3.5 rounded-xl border border-stone-200 bg-stone-50/40 space-y-2">
+                            <label className="block space-y-2">
+                              <span className="text-xs font-bold text-stone-800">Kết quả kiểm tra ổ khóa và chìa khóa</span>
+                              <LockInspectionSelect value={lockInspectionResult} onChange={handleLockInspection} disabled={busy}
+                                className="w-full rounded-lg border border-stone-300 bg-white px-2 py-2 text-sm text-stone-900"
+                              />
+                            </label>
+                            <p className="text-xs text-stone-600">
+                              Hệ thống chỉ cho cấp lại mã khi đã nhận đủ ổ và chìa còn dùng được.
+                            </p>
                           </div>
 
                           <div className="p-3.5 rounded-xl border border-stone-200 bg-stone-50/40 text-left transition select-none flex flex-col justify-between">
@@ -1543,7 +1509,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                       <div className="rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs text-stone-600 flex items-center justify-between">
                         <div>
                           <span className="font-semibold text-stone-800 block">Phí mất khóa đã bàn giao</span>
-                          <span className="text-[10px] text-stone-400">{returnedLock ? 'Đã nhận đủ khóa' : 'Khách làm mất / thiếu khóa'}</span>
+                          {lockInspectionResult === 'MISSING_OR_INCOMPLETE' && <span className="text-xs text-stone-600">Mất hoặc thiếu ổ / chìa</span>}
                         </div>
                         <span className={`font-mono font-bold ${fees.lostItemFee > 0 ? 'text-rose-700' : 'text-stone-700'}`}>
                           {fees.lostItemFee > 0 ? `− ${rentalMoney(fees.lostItemFee, 'VND')}` : '0 ₫'}
@@ -1562,6 +1528,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                       </div>
 
                       {/* Phí quá hạn & công nợ nếu có */}
+                      <p className="text-sm">Phí quá hạn được hệ thống tính khi lưu kết quả nghiệm thu.</p>
                       {fees.overdueFee > 0 && (
                         <div className="flex items-center justify-between rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs">
                           <span className="text-stone-600">Phí quá hạn (tự động)</span>
@@ -1631,7 +1598,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                       <Button
                         type="submit"
                         variant="primary"
-                        disabled={busy || (canReview && !note.trim()) || missingDamageItems || (canInspect && !hasEvidence) || (canInspect && !!record.setupExitRequested && (vacatedReturnId !== id || goodsLeft))}
+                        disabled={busy || (canReview && !note.trim()) || missingDamageItems || (canInspect && (!hasEvidence || !lockInspectionResult)) || (canInspect && !!record.setupExitRequested && (vacatedReturnId !== id || goodsLeft))}
                         className="w-full font-bold py-3 text-sm shadow-xs flex items-center justify-center gap-2 cursor-pointer"
                       >
                         <span>{canInspect ? 'Ghi nhận kết quả nghiệm thu' : 'Ghi nhận xem xét khiếu nại'}</span>
@@ -1641,16 +1608,15 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                         type="button"
                         disabled={busy}
                         onClick={() => {
-                          setFees({ damageFee: 0, cleaningFee: 0, lostItemFee: 0, overdueFee: 0, outstandingFee: record.outstandingFee || 0 })
+                          setFees({ damageFee: 0, cleaningFee: 0, lostItemFee: canInspect && lockInspectionResult === 'MISSING_OR_INCOMPLETE' ? missingLockFee : 0, overdueFee: 0, outstandingFee: record.outstandingFee || 0 })
                           setDamageItems([])
                           setDamage('no_damage')
                           setGoodsLeft(false)
-                          setReturnedLock(true)
                           setUnit('available')
                         }}
                         className="w-full py-1.5 text-xs font-semibold text-stone-500 hover:text-stone-800 transition cursor-pointer"
                       >
-                        Đặt lại tất cả phụ phí về 0đ
+                        {canInspect ? 'Đặt lại phí hư hỏng và vệ sinh' : 'Đặt lại tất cả phụ phí về 0đ'}
                       </button>
                     </div>
                   </div>
@@ -1671,7 +1637,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       )}
       {!recovery && record.status === 'completed' && record.settlementReceipt?.direction === 'COLLECTION' &&
         record.settlementReceipt.paymentMethod === 'CASH' && (
-          <p className="break-all text-sm text-stone-700">Mã biên lai <b>{record.settlementReceipt.transactionReference}</b></p>
+          <p className="break-all text-sm text-stone-700">Mã biên lai <b>{record.settlementReceipt.receiptCode || record.settlementReceipt.transactionReference}</b></p>
       )}
       {recovery && (role === 'staff' || role === 'manager') && record.recoveryTaskId && <RecoveryTaskLink role={role} taskId={record.recoveryTaskId} facilityId={record.facilityId} disabled={busy || recoveryLocked} onChanged={onRecoveryChanged} />}
       {write && recovery && role === 'staff' && ['payment_due', 'refund_pending'].includes(record.status) && <RecoveryReturnSettlement role={role} record={record} busy={busy} onLocked={onRecoveryLocked} onChanged={onRecoveryChanged} />}

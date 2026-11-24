@@ -3,7 +3,7 @@ import type { CheckInInventoryLine } from '../../services/checkInApi'
 import { formatCustomerDate, formatCustomerDateTime } from '../../i18n/customerDate'
 import { userFacingError } from '../../presentation/userFacingError'
 import { savedReservationQuote, MISSING_RESERVATION_SNAPSHOT } from '../../services/reservationSnapshot'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Button, Card, Modal } from '../../components/ui'
 import VietnameseDateInput from '../../components/VietnameseDateInput'
 import { formatVndAmount as formatVnd } from '../../i18n/currency'
@@ -241,11 +241,30 @@ export function InventoryLineInspectionResult({ detail }: { detail: CustomerRese
       return <div key={line.goodsItemId} className="space-y-1 border-t border-stone-200 pt-2">
         <p className="font-semibold">Dòng {index + 1} · {matches ? 'Khớp loại hàng, chất liệu và số kiện' : 'Xem kết quả đối chiếu thực tế'}</p>
         <p>Đã khai: {declared?.categoryName || declared?.description || 'Chưa ghi nhận'} · {declared?.materialName || declared?.customMaterial || 'Chưa ghi nhận'} · {declared?.quantity ?? 'Chưa ghi nhận'} kiện</p>
-        <p>Thực tế: {line.actualQuantity === 0 ? 'Không có hàng' : `${actual?.categoryName || actual?.customGoodsName || 'Chưa ghi nhận loại hàng'} · ${actual?.materialName || actual?.customMaterial || 'Không áp dụng hoặc chưa ghi nhận chất liệu'}`} · {line.actualQuantity} kiện</p>
-        {line.measurements && <p>Kích thước mỗi kiện: {line.measurements.lengthCm} × {line.measurements.widthCm} × {line.measurements.heightCm} cm · Khối lượng cả dòng: {line.measurements.weightKg} kg</p>}
-        {actual && <p>Điều kiện thực tế: {actual.fragile ? 'Dễ vỡ' : 'Không dễ vỡ'} · {actual.stackable ? `Xếp chồng tối đa ${actual.maxStackLayers || 1} lớp` : 'Không xếp chồng'} · {actual.allowHorizontalPlacement ? 'Được đặt nằm ngang' : 'Giữ chiều đứng'}</p>}
-        <p>Tình trạng: {line.condition === 'INTACT' ? 'Nguyên vẹn' : line.condition === 'DAMAGED' ? 'Có hư hỏng' : 'Không có kiện nào'}</p>
-        {line.note && <p>Ghi nhận: {line.note}</p>}
+        <dl className="divide-y divide-stone-100">
+          {[
+            ['Loại hàng thực tế', line.actualQuantity === 0 ? 'Không có hàng' : actual?.categoryName || actual?.customGoodsName],
+            ['Chất liệu chính', actual?.customMaterial || actual?.materialName],
+            ['Mô tả hàng hóa', actual?.description],
+            ['Số lượng thực tế', line.actualQuantity],
+            ['Chiều dài mỗi kiện', line.measurements && line.measurements.lengthCm + ' cm'],
+            ['Chiều rộng mỗi kiện', line.measurements && line.measurements.widthCm + ' cm'],
+            ['Chiều cao mỗi kiện', line.measurements && line.measurements.heightCm + ' cm'],
+            ['Khối lượng mỗi kiện', actual && actual.weightPerItemKg != null ? actual.weightPerItemKg + ' kg' : null],
+            ['Khối lượng cả dòng', line.measurements && line.measurements.weightKg + ' kg'],
+            ['Dễ vỡ', actual ? (actual.fragile ? 'Có' : 'Không') : null],
+            ['Được xếp chồng', actual?.stackable == null ? null : actual.stackable ? 'Có' : 'Không'],
+            ...(actual?.stackable ? [['Số lớp xếp tối đa', actual.maxStackLayers]] : []),
+            ['Được xoay và đặt nằm ngang', actual?.allowHorizontalPlacement == null ? null : actual.allowHorizontalPlacement ? 'Có' : 'Không'],
+            ['Tình trạng hàng hóa', line.condition === 'INTACT' ? 'Nguyên vẹn' : line.condition === 'DAMAGED' ? 'Có hư hỏng' : line.condition === 'NOT_PRESENT' ? 'Không có kiện nào' : null],
+            ['Ghi chú kiểm kê', line.note],
+          ].map(([label, value]) => (
+            <div key={label} className="grid gap-1 py-2 sm:grid-cols-[minmax(0,12rem)_minmax(0,1fr)] sm:gap-4">
+              <dt className="font-medium text-stone-600">{label}</dt>
+              <dd className="whitespace-pre-wrap break-words">{value || (value === 0 ? 0 : 'Chưa ghi nhận')}</dd>
+            </div>
+          ))}
+        </dl>
       </div>
     })}
   </section>
@@ -291,7 +310,32 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const [setupGoodsDraft, setSetupGoodsDraft] = useState<GoodsItemInput[]>([])
   const [moreMenuOpen, setMoreMenuOpen] = useState(false)
   const moreMenuRef = useRef<HTMLDivElement>(null)
+  const moreButtonRef = useRef<HTMLButtonElement>(null)
   const [now, setNow] = useState(Date.now())
+
+  useLayoutEffect(() => {
+    const menu = moreMenuRef.current
+    const button = moreButtonRef.current
+    if (!moreMenuOpen || !menu || !button) return
+    menu.showPopover()
+    const positionMenu = () => {
+      const rect = button.getBoundingClientRect()
+      const below = window.innerHeight - rect.bottom - 8
+      const above = rect.top - 8
+      const opensUp = menu.scrollHeight + 2 > below && above > below
+      menu.style.maxHeight = `${Math.max(0, opensUp ? above : below)}px`
+      menu.style.top = `${opensUp ? rect.top - menu.offsetHeight - 4 : rect.bottom + 4}px`
+      menu.style.left = `${Math.max(4, rect.right - menu.offsetWidth)}px`
+    }
+    positionMenu()
+    window.addEventListener('resize', positionMenu)
+    window.addEventListener('scroll', positionMenu, true)
+    return () => {
+      window.removeEventListener('resize', positionMenu)
+      window.removeEventListener('scroll', positionMenu, true)
+      menu.hidePopover()
+    }
+  }, [moreMenuOpen])
 
   useEffect(() => {
     if (!moreMenuOpen) return
@@ -641,6 +685,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
             <button
               type="button"
               aria-label="Thao tác khác"
+              ref={moreButtonRef}
               title="Thao tác khác (Xem biên lai, hợp đồng, hủy đơn...)"
               aria-haspopup="menu"
               aria-expanded={moreMenuOpen}
@@ -656,7 +701,8 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
               ref={moreMenuRef}
               role="menu"
               aria-orientation="vertical"
-              className="absolute right-0 top-full z-30 mt-1 min-w-[210px] rounded-xl border border-stone-200 bg-white py-1.5 shadow-xl text-xs"
+              popover="manual"
+              className="fixed inset-auto m-0 w-[210px] max-w-[calc(100vw-8px)] overflow-y-auto rounded-xl border border-stone-200 bg-white py-1.5 shadow-xl text-xs"
               hidden={!moreMenuOpen}
             >
               {documentAvailable && (

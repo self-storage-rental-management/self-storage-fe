@@ -450,6 +450,7 @@ export interface CheckInPayment {
   paidAt: string | null
   processedAt: string | null
   initiatedByName: string
+  receiptCode?: string | null
   invoiceNumber: string | null
   invoiceStatus: 'DRAFT' | 'PAID' | 'VOID' | 'REFUNDED'
   invoiceIssuedAt: string | null

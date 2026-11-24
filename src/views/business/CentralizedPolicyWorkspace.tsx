@@ -54,7 +54,7 @@ export const DEFAULT_MOCK_POLICY: CentralizedPolicyApi = {
   earlyTerminationFeeCoefficient: 1.0,
   earlyTerminationFeeCapMonths: 1,
   earlyTerminationMinFee: 500000,
-  gracePeriodDays: 3,
+  gracePeriodDays: 0,
   latePenaltyCalculationMethod: 'FIXED_DAILY_AMOUNT',
   lateFeeAmount: 50000,
   lateFeePercentageRate: 0.005,
@@ -196,8 +196,8 @@ export default function CentralizedPolicyWorkspace({ user, lang = 'vi', initialP
           {
             fieldKey: 'gracePeriodDays',
             fieldLabel: 'Số ngày ân hạn thanh toán',
-            oldValue: `${activePolicy?.gracePeriodDays || 3} ngày`,
-            newValue: `${formData.gracePeriodDays || 3} ngày`,
+            oldValue: `${activePolicy?.gracePeriodDays ?? 0} ngày`,
+            newValue: `${formData.gracePeriodDays ?? 0} ngày`,
             changed: activePolicy?.gracePeriodDays !== formData.gracePeriodDays,
             category: 'PAYMENT',
           },
@@ -608,11 +608,11 @@ export default function CentralizedPolicyWorkspace({ user, lang = 'vi', initialP
                       <h4 className="font-bold text-slate-900 text-sm">Phạt Thanh Toán Chậm</h4>
                     </div>
                     <p className="text-xs text-stone-600 leading-relaxed max-w-3xl">
-                      Quy định thời gian ân hạn trước khi tính phạt. Phạt quá hạn chỉ bắt đầu tính sau ngày ân hạn theo mức quy định. Tuyệt đối kích hoạt nguyên tắc chống phạt trùng lặp trên cùng một khoản nợ.
+                      Phí quá hạn bắt đầu tính từ ngày quá hạn đầu tiên. Tuyệt đối kích hoạt nguyên tắc chống phạt trùng lặp trên cùng một khoản nợ.
                     </p>
                     <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                      <span className="text-[10px] px-2 py-0.5 rounded font-medium bg-stone-100 text-stone-700">Ân hạn miễn phạt: {activePolicy?.gracePeriodDays || 3} ngày</span>
-                      <span className="text-[10px] px-2 py-0.5 rounded font-medium bg-stone-100 text-stone-700">Phạt sau ngày ân hạn</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded font-medium bg-stone-100 text-stone-700">Tính từ ngày quá hạn đầu tiên</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded font-medium bg-stone-100 text-stone-700">Không có thời gian ân hạn</span>
                       <span className="text-[10px] px-2 py-0.5 rounded font-medium bg-stone-100 text-stone-700">Khóa tính năng phạt trùng lặp</span>
                     </div>
                   </div>
@@ -620,9 +620,9 @@ export default function CentralizedPolicyWorkspace({ user, lang = 'vi', initialP
 
                 <div className="flex md:flex-col items-center md:items-end justify-between shrink-0 border-t md:border-t-0 pt-2 md:pt-0 border-stone-100">
                   <span className="text-sm font-mono font-bold text-orange-800">
-                    {formatVnd(activePolicy?.lateFeeAmount || 50000)}/ngày
+                    Tiền thuê tháng ÷ 30 × 1,5 / ngày
                   </span>
-                  <span className="text-[11px] text-stone-500 mt-0.5">Sau ân hạn {activePolicy?.gracePeriodDays || 3} ngày</span>
+                  <span className="text-[11px] text-stone-500 mt-0.5">Từ ngày quá hạn đầu tiên</span>
                 </div>
               </div>
 
@@ -948,41 +948,7 @@ export default function CentralizedPolicyWorkspace({ user, lang = 'vi', initialP
             {editSection === 'payment' && (
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-stone-700 mb-1">Thời gian ân hạn thanh toán (ngày)</label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={15}
-                      className="w-full text-xs font-mono font-bold rounded border border-stone-300 p-2 outline-none focus:border-amber-600"
-                      value={formData.gracePeriodDays ?? 3}
-                      onChange={(e) => handleFieldChange('gracePeriodDays', Number(e.target.value) || 0)}
-                    />
-                    <span className="text-[10px] text-stone-500">Phạt chỉ bắt đầu tính từ ngày thứ (ân hạn + 1)</span>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-stone-700 mb-1">Phương thức tính phạt quá hạn</label>
-                    <select
-                      className="w-full text-xs rounded border border-stone-300 p-2 outline-none focus:border-amber-600"
-                      value={formData.latePenaltyCalculationMethod || 'FIXED_DAILY_AMOUNT'}
-                      onChange={(e) => handleFieldChange('latePenaltyCalculationMethod', e.target.value)}
-                    >
-                      <option value="FIXED_DAILY_AMOUNT">Mức phí cố định theo ngày (VNĐ/ngày)</option>
-                      <option value="DAILY_PERCENTAGE">Tỷ lệ % số tiền nợ mỗi ngày</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-stone-700 mb-1">Mức phạt cố định (VNĐ/ngày)</label>
-                    <input
-                      type="number"
-                      step={10000}
-                      className="w-full text-xs font-mono font-bold rounded border border-stone-300 p-2 outline-none focus:border-amber-600"
-                      value={formData.lateFeeAmount ?? 50000}
-                      onChange={(e) => handleFieldChange('lateFeeAmount', Number(e.target.value) || 0)}
-                    />
-                  </div>
+                  <p className="text-xs">Phí mỗi ngày = tiền thuê tháng ÷ 30 × 1,5, tính từ ngày quá hạn đầu tiên.</p>
 
                   <div>
                     <label className="block text-xs font-bold text-stone-700 mb-1">Số ngày tối đa trước khi niêm phong kho</label>

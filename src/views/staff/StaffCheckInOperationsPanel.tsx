@@ -602,7 +602,7 @@ function CheckInWorkList({ group, filters, refreshKey, now, renderRow }: {
                     </span>
                   </Th>
                   <Th>Trạng thái</Th>
-                  <Th className="text-right">Thao tác</Th>
+                  <Th className="text-center">Thao tác</Th>
                 </Tr>
               </Thead>
               <Tbody>
@@ -742,6 +742,9 @@ export default function StaffCheckInOperationsPanel({
   const [handoverNotes, setHandoverNotes] = useState("")
 
   const [keyLockReference, setKeyLockReference] = useState("")
+  const lockHelpId = useId()
+  const [lockChecked, setLockChecked] = useState(false)
+  const standardLock = /^LOCK-(?!000$)[0-9]{3}$/i.test(keyLockReference.trim())
 
   const [paymentMethod, setPaymentMethod] = useState<CheckInPaymentMethod>("CASH")
 
@@ -1006,7 +1009,7 @@ export default function StaffCheckInOperationsPanel({
     checklist.unitWalkthrough
   )
   const emptyStorageHandoverReady = Boolean(
-    keyLockReference.trim() &&
+    standardLock &&
     initialCondition.trim() &&
     hasEmptyStorageEvidence &&
     isHandoverChecklistComplete
@@ -1442,8 +1445,12 @@ export default function StaffCheckInOperationsPanel({
         }
         setChecklist((current) => ({ ...current, paymentVerified: true }))
       } else if (handoverStep === 4) {
+        if (!standardLock) {
+          setLockChecked(true)
+          throw new Error("Mã bộ khóa phải có đủ 3 chữ số từ 001 đến 999.")
+        }
         if (/\b(pin|password|mật khẩu|mat khau)\b/i.test(keyLockReference)) {
-          throw new Error("Không nhập mật khẩu hoặc mã PIN vào ô Mã ổ khóa / Chìa khóa.")
+          throw new Error("Không nhập mật khẩu hoặc mã PIN vào ô Mã bộ khóa.")
         }
         if (!emptyStorageHandoverReady) {
           if (!isHandoverChecklistComplete) {
@@ -1676,6 +1683,7 @@ export default function StaffCheckInOperationsPanel({
       ...(item.handover?.evidenceReferences ?? []),
     ])))
 
+    setLockChecked(false)
     setKeyLockReference(item.lockReference || "")
 
     setPaymentMethod("CASH")
@@ -1835,13 +1843,13 @@ export default function StaffCheckInOperationsPanel({
             : staffCheckInStatusLabel(item.checkInStatus, item.reservationStatus)}
         </Badge>
       </Td>
-      <Td className="whitespace-nowrap text-right">
-        <div className="flex flex-nowrap items-center justify-end gap-1.5 whitespace-nowrap">
+      <Td className="whitespace-normal text-center">
+        <div className="mx-auto flex w-full max-w-md flex-wrap items-center justify-center gap-1.5">
           <Button size="sm" variant="outline" className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]" disabled={submitting || !canOpenInventory(item.checkInStatus, item.inventoryVisit?.appointmentAt)} title={!canOpenInventory(item.checkInStatus, item.inventoryVisit?.appointmentAt) ? "Chờ khách xác nhận lịch kiểm kê" : "Mở form kiểm kê riêng"} onClick={() => openHandover(item, true)}>Xem tiến trình kiểm kê</Button>
           {group === "ONGOING" && item.checkInStatus !== "completed" && (
             <>
               {item.checkInStatus === "handover_pending_receipt" && item.checkInId && <Button
-                className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
+                className="shrink-0 whitespace-nowrap !px-3 !py-1.5 !text-xs"
                 size="sm"
                 variant="outline"
                 disabled={submitting || Boolean(remindingCustomerCheckInId)}
@@ -1891,7 +1899,7 @@ export default function StaffCheckInOperationsPanel({
           )}
           {["handover_pending_receipt", "setup_in_progress", "setup_completed"].includes(item.checkInStatus || "") && (
             <Button
-              className="shrink-0 whitespace-nowrap !px-2.5 !py-1 !text-xs font-medium"
+              className="shrink-0 whitespace-nowrap !px-3 !py-1.5 !text-sm font-medium"
               size="sm"
               variant="outline"
               onClick={() => setDetailTarget(item)}
@@ -1902,7 +1910,7 @@ export default function StaffCheckInOperationsPanel({
           {item.checkInStatus === "completed" && (
             <>
               <Button
-                className="shrink-0 whitespace-nowrap !px-2.5 !py-1 !text-xs font-medium"
+                className="shrink-0 whitespace-nowrap !px-3 !py-1.5 !text-sm font-medium"
                 size="sm"
                 variant="outline"
                 onClick={() => openHandover(item)}
@@ -1910,7 +1918,7 @@ export default function StaffCheckInOperationsPanel({
                 Xem tiến trình bàn giao
               </Button>
               <Button
-                className="shrink-0 whitespace-nowrap !px-2.5 !py-1 !text-xs font-medium"
+                className="shrink-0 whitespace-nowrap !px-3 !py-1.5 !text-sm font-medium"
                 size="sm"
                 variant="outline"
                 onClick={() => setDetailTarget(item)}
@@ -1918,7 +1926,7 @@ export default function StaffCheckInOperationsPanel({
                 Xem biên bản
               </Button>
               <Button
-                className="shrink-0 whitespace-nowrap !px-2.5 !py-1 !text-xs font-medium"
+                className="shrink-0 whitespace-nowrap !px-3 !py-1.5 !text-sm font-medium"
                 size="sm"
                 variant="danger"
                 onClick={() => setDeleteTarget(item)}
@@ -2150,18 +2158,39 @@ export default function StaffCheckInOperationsPanel({
                   <div className="space-y-3">
                     <p className="text-xs font-bold uppercase tracking-wider text-stone-700">1. Thông tin khóa & Hiện trạng ban đầu</p>
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <Input
-                        label="Mã ổ khóa / Chìa khóa *"
-                        error={fieldErrors.keyLockReference || fieldErrors.lockReference}
-                        value={keyLockReference}
-                        disabled={isReviewingCompletedStep}
-                        onChange={(event) => {
-                          clearFieldError("keyLockReference")
-                          clearFieldError("lockReference")
-                          setKeyLockReference(event.target.value)
-                        }}
-                        placeholder="Ví dụ: LOCK-018 hoặc KEY-A04"
-                      />
+                      <div className="space-y-1">
+                        <label htmlFor={lockHelpId + "-input"} className="text-sm font-medium text-stone-700">Mã bộ khóa *</label>
+                        <div className="flex items-center overflow-hidden rounded-lg border border-stone-300 bg-white focus-within:ring-2 focus-within:ring-amber-500">
+                          {<span aria-hidden="true" className="self-stretch border-r border-stone-200 bg-stone-50 px-3 py-2 font-semibold text-stone-700">LOCK-</span>}
+                          <input
+                            id={lockHelpId + "-input"}
+                            aria-describedby={lockHelpId}
+                            aria-invalid={Boolean(fieldErrors.lockReference || fieldErrors.keyLockReference || (lockChecked && !standardLock))}
+                            className="min-w-0 flex-1 bg-transparent px-3 py-2 outline-none"
+                            inputMode="numeric"
+                            spellCheck={false}
+                            autoComplete="off"
+                            placeholder="018"
+                            value={keyLockReference.replace(/^LOCK-/i, "")}
+                            disabled={isReviewingCompletedStep}
+                            onBlur={() => setLockChecked(true)}
+                            onChange={(event) => {
+                              const input = event.target.value
+                              const digits = input.trim().replace(/^LOCK-/i, "")
+                              if (!/^[0-9]{0,3}$/.test(digits)) return
+                              clearFieldError("lockReference")
+                              clearFieldError("keyLockReference")
+                              setLockChecked(false)
+                              setKeyLockReference(digits ? "LOCK-" + digits : "")
+                            }}
+                          />
+                        </div>
+                        <p id={lockHelpId} aria-live="polite" className="text-xs text-stone-600">
+                          {fieldErrors.lockReference || fieldErrors.keyLockReference || (lockChecked && !standardLock
+                              ? "Cần nhập đủ 3 chữ số từ 001 đến 999."
+                              : "Nhập 3 số sau LOCK- trên tem ổ khóa, ví dụ 018. Không nhập PIN.")}
+                        </p>
+                      </div>
                       <Input
                         label="Hiện trạng kho trống bàn giao *"
                         error={fieldErrors.initialCondition || fieldErrors.initialUnitCondition}

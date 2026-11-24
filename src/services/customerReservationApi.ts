@@ -585,6 +585,7 @@ export interface ReservationPaymentResult {
   initiatedByName?: string | null
   createdAt?: string | null
   reservationCode?: string
+  receiptCode?: string | null
   invoiceNumber?: string | null
   invoiceStatus?: InvoiceStatus
   invoiceIssuedAt?: string | null
