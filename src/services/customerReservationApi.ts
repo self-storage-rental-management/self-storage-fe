@@ -523,6 +523,7 @@ export interface CustomerReservationDetail {
   payments: ReservationPaymentResult[]
   checkInStatus?: string | null
   handoverCompletedAt?: string | null
+  lockReference?: string | null
   receiptConfirmationDueAt?: string | null
   receiptConfirmationOverdue?: boolean
   receiptConfirmationReleaseAt?: string | null

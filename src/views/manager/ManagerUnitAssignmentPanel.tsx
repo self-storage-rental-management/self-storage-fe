@@ -242,7 +242,7 @@ export default function ManagerUnitAssignmentPanel({ showToast, embedded = false
                 <div className="grid gap-2 sm:grid-cols-2">
                   {units.map(unit => <button type="button" key={unit.storageUnitId} onClick={() => { setStorageUnitId(unit.storageUnitId); setFlow(selected.assignedStorageUnitId ? 'change' : 'confirm') }} className={`rounded-lg border p-3 text-left ${storageUnitId === unit.storageUnitId ? 'border-amber-500 bg-amber-50 ring-2 ring-amber-100' : 'border-stone-200 bg-white hover:border-amber-300'}`}>
                     <b className="font-mono">{unit.storageUnitCode}</b>
-                    <p className="mt-1 text-xs text-stone-500">Tầng {unit.floor || '-'} · Khu {unit.zone || '-'}</p>
+                    <p className="mt-1 text-xs text-stone-500">{unit.zone || '-'}</p>
                     <span className="mt-2 inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">Còn trống · Đúng điều kiện</span>
                   </button>)}
                 </div>
@@ -256,7 +256,7 @@ export default function ManagerUnitAssignmentPanel({ showToast, embedded = false
           const unit = units.find(item => item.storageUnitId === storageUnitId)!
           return <dl className="grid gap-3 rounded-lg border border-stone-200 bg-white p-3 text-sm sm:grid-cols-2">
             <div><dt className="text-xs text-stone-500">Loại gian</dt><dd className="font-semibold">{unit.unitTypeName}</dd></div>
-            <div><dt className="text-xs text-stone-500">Vị trí</dt><dd className="font-semibold">Tầng {unit.floor || '-'} · {unit.zone || 'Chưa có khu'}</dd></div>
+            <div><dt className="text-xs text-stone-500">Khu</dt><dd className="font-semibold">{unit.zone || 'Chưa có khu'}</dd></div>
             <div><dt className="text-xs text-stone-500">Kích thước</dt><dd className="font-semibold">{unit.lengthM} × {unit.widthM} × {unit.heightM} m</dd></div>
             <div><dt className="text-xs text-stone-500">Diện tích / thể tích</dt><dd className="font-semibold">{unit.areaM2} m² · {unit.volumeM3} m³</dd></div>
             <div><dt className="text-xs text-stone-500">Tải trọng tối đa</dt><dd className="font-semibold">{unit.maxLoadKg.toLocaleString('vi-VN')} kg</dd></div>
