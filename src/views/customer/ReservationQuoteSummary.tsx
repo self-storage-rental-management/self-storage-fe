@@ -16,7 +16,7 @@ function formatDisplayDate(value: string, endDate = false) {
   return displayMatch ? `${displayMatch[3]}/${displayMatch[2]}/${displayMatch[1]}` : displayEndDate.replace(/-/g, '/')
 }
 
-export default function ReservationQuoteSummary({ quote: q, needsReview, context = 'quote' }: { quote: ReservationQuote; needsReview: boolean; context?: 'quote' | 'reservation' }) {
+export default function ReservationQuoteSummary({ quote: q, needsReview, context = 'quote', hidePaymentNotices = false }: { quote: ReservationQuote; needsReview: boolean; context?: 'quote' | 'reservation'; hidePaymentNotices?: boolean }) {
   const actor = getAuthenticatedActor()
   const emailUnverified = actor?.status === 'PENDING_VERIFICATION'
   const [resending, setResending] = useState(false)
@@ -137,7 +137,7 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
 
           <div className="mt-3 flex flex-wrap items-baseline justify-between gap-2">
             <div>
-              <p className="text-sm font-bold text-stone-900">Đặt cọc giữ chỗ ({depositRatePercent}%)</p><p className={formulaClass}>Công thức: tổng {formatVndAmount(q.totalInitialObligation)} × {depositRatePercent}% = {formatVndAmount(q.reservationDepositAmount)}. Khoản này đã nằm trong tổng chi phí.</p>
+              <p className="text-sm font-bold text-stone-900">Đặt cọc giữ chỗ ({depositRatePercent}%) · Thanh toán trước {depositRatePercent}% (giữ chỗ)</p><p className={formulaClass}>{depositRatePercent}% × tổng tiền {formatVndAmount(q.totalInitialObligation)} (đã gồm tiền thuê và tiền cọc đảm bảo thuê) = {formatVndAmount(q.reservationDepositAmount)}. Khoản này đã nằm trong tổng chi phí.</p>
             </div>
             <div className="ml-auto text-right">
               <span className={`${payableAmountClass} block`}>
@@ -151,7 +151,7 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
             <p>Vui lòng xác minh email trước khi tiếp tục. Chúng tôi sẽ gửi thông báo duyệt đơn và nhắc thanh toán qua email này.</p>
             <button type="button" className="font-semibold underline disabled:opacity-50" disabled={resending || verificationSent} onClick={() => void resend()}>{resending ? 'Đang gửi…' : verificationSent ? 'Đã yêu cầu gửi lại email xác minh' : 'Gửi lại email xác minh'}</button>
             {verificationMessage && <p role="status" className="text-xs">{verificationMessage}</p>}
-          </div> : needsReview ? <div className="mt-3 space-y-1 text-sm leading-6 text-stone-700"><p className="font-bold">Trường hợp 2: đơn cần nhân viên duyệt</p><p>Đơn của bạn cần nhân viên kiểm tra trước (<b>lý do: hàng cần kiểm tra thêm</b>). Khi đơn được duyệt, bạn sẽ nhận email và có <b>15 phút</b> để thanh toán <b>{formatVndAmount(q.reservationDepositAmount)}</b>. Quá hạn, chỗ giữ được nhả và đơn hết hiệu lực.</p></div>
+          </div> : needsReview || hidePaymentNotices ? null
             : <div className="mt-3 space-y-1 text-sm leading-6 text-stone-700"><p className="font-bold">Trường hợp 1: đơn được xử lý ngay</p><p>Sau khi bạn xác nhận báo giá, bạn có <b>15 phút</b> để thanh toán <b>{formatVndAmount(q.reservationDepositAmount)}</b>. Quá hạn, chỗ giữ được nhả và đơn hết hiệu lực.</p></div>}
 <p className="mt-3 border-t border-stone-100 pt-3 text-xs text-stone-600">Khoản thanh toán trước này <b>được trừ trực tiếp</b> vào tổng tiền cần thanh toán khi bàn giao kho.</p>
           <div className="mt-2.5 rounded-lg border border-rose-200 bg-rose-50/90 p-2.5 text-sm leading-6 text-rose-900">
@@ -177,7 +177,7 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
 
 
 
-      <ReturnPolicyNotice terms={q} />
+      <ReturnPolicyNotice terms={q} showQuoteFees={context === 'reservation' && !hidePaymentNotices} />
 
       {/* ── FOOTER HIỆU LỰC & XÉT DUYỆT ── */}
       {context === 'reservation' && <p className="text-xs text-stone-500">Báo giá đã lưu khi tạo đơn. Các khoản thanh toán được đối chiếu theo số tiền đã chốt.</p>}

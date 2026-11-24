@@ -4,6 +4,7 @@ import {
   type CredentialAlert,
 } from "./checkInApi"
 import {
+  formatMaintenanceTaskTitle,
   listStaffMaintenanceTasks,
   type MaintenanceTaskApi,
 } from "./maintenanceApi"
@@ -80,19 +81,22 @@ const credentialTask = (alert: CredentialAlert): StaffDailyOperation => ({
   page: alert.action === "ISSUE" ? "checkin" : "return",
 })
 
-const checkInTask = (item: CheckInCase): StaffDailyOperation => {
-  const dueAt = item.appointmentAt || item.scheduledAt || item.startDate
+export const checkInTask = (item: CheckInCase): StaffDailyOperation => {
+  const receiptWaiting = item.checkInStatus === "handover_pending_receipt"
+  const dueAt = receiptWaiting
+    ? item.receiptConfirmationDueAt || item.checkedInAt || item.appointmentAt || item.scheduledAt || item.startDate
+    : item.appointmentAt || item.scheduledAt || item.startDate
+  const overdue = Boolean(dueAt && new Date(dueAt).getTime() <= Date.now())
   return {
     id: `checkin-${item.checkInId || item.reservationId}`,
-    title: `Nhận kho & bàn giao ${item.storageUnitCode}`,
+    title: receiptWaiting ? `Chờ xác nhận nhận kho ${item.reservationCode || item.storageUnitCode}` : `Nhận kho & bàn giao ${item.reservationCode || item.storageUnitCode}`,
     customer: item.customerName,
     time: dueAt || "",
     dueAt: dueAt || new Date().toISOString(),
-    sla:
-      item.checkInStatus === "scheduled"
-        ? "Khách cần nhận kho hôm nay"
-        : "Cần tiếp nhận",
-    priority: item.checkInStatus === "scheduled" ? "medium" : "high",
+    sla: receiptWaiting
+      ? overdue ? "Đã quá hạn xác nhận nhận kho" : "Chờ Customer xác nhận nhận kho"
+      : item.checkInStatus === "scheduled" ? "" : "Cần tiếp nhận",
+    priority: receiptWaiting || item.checkInStatus !== "scheduled" ? "high" : "medium",
     page: "checkin",
   }
 }
@@ -141,8 +145,8 @@ const supportTask = (item: SupportTicket): StaffDailyOperation => {
 
 const maintenanceTask = (item: MaintenanceTaskApi): StaffDailyOperation => ({
   id: `maintenance-${item.id}`,
-  title: `${item.title} · ${item.unitCode}`,
-  customer: item.facilityName,
+  title: formatMaintenanceTaskTitle(item),
+  customer: item.customerName?.trim() || "-",
   time: item.dueAt || item.createdAt,
   dueAt: item.dueAt || item.createdAt,
   sla: "Nhiệm vụ bảo trì được phân công",

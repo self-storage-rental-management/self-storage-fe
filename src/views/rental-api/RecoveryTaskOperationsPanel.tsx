@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type MutableRefObject, type ReactNode } from 'react'
 import { Button } from '../../components/ui'
+import LockInspectionSelect from '../../components/LockInspectionSelect'
 import { useRentalApiResource } from '../../hooks/useRentalApiResource'
 import { useRenewalCommand } from '../../hooks/useRenewalCommand'
 import { getAuthenticatedActor } from '../../services/authApi'
-import { getReturn, type InspectionInput } from '../../services/returnApi'
+import { getReturn, type InspectionInput, type LockInspectionResult } from '../../services/returnApi'
 import { recoveryOperationError, sendRecoveryCommand, validateRecoveryCommand, type RecoveryCommand, type RecoveryOperations } from '../../services/recoveryTaskOperationsApi'
 import type { RecoveryAudience, RecoveryTask } from '../../services/recoveryTasksApi'
 import { EvidenceDownload, EvidenceUpload } from '../rental-support-integration/EvidenceControls'
@@ -84,12 +85,17 @@ export default function RecoveryTaskOperationsPanel({ role, task, view, identity
       if (operation === 'recalculate-settlement') request = { action: operation, body: { expectedVersion } }
       if (operation === 'start') request = { action: operation, body: { expectedVersion, note: 'Bắt đầu xử lý nhiệm vụ thu hồi.' } }
       if (operation === 'inspection') {
+        const lockInspectionResult = text('lockInspectionResult') as LockInspectionResult
         const inspection: Omit<InspectionInput, 'evidencePhotos'> = {
           inventoryMatch: text('inventoryMatch') as InspectionInput['inventoryMatch'],
           damageClassification: text('damageClassification') as InspectionInput['damageClassification'],
           damageFee: Number(text('damageFee')), cleaningFee: Number(text('cleaningFee')), lostItemFee: Number(text('lostItemFee')),
           overdueFee: 0, outstandingFee: 0,
-          staffNotes: text('staffNotes'), returnedKey: checked('returnedKey'), returnedCard: checked('returnedCard'), returnedLock: checked('returnedLock'),
+          staffNotes: text('staffNotes'),
+          returnedKey: lockInspectionResult === 'RETURNED_USABLE',
+          returnedCard: checked('returnedCard'),
+          returnedLock: lockInspectionResult === 'RETURNED_USABLE' || lockInspectionResult === 'DAMAGED',
+          lockInspectionResult,
           proposedUnitStatus: text('proposedUnitStatus') as InspectionInput['proposedUnitStatus'],
         }
         request = { action: operation, body: { expectedVersion, inspection, evidenceFileIds: [...files] } }
@@ -142,7 +148,7 @@ export default function RecoveryTaskOperationsPanel({ role, task, view, identity
     {action && !(needsReconciliation && action === 'settlement-receipts') && <form onSubmit={e => { e.preventDefault(); submit(e.currentTarget) }} className="space-y-4 rounded-lg border border-stone-200 p-4">
       <h3 className="font-semibold">{actionLabels[action]}</h3>
       {!canProcess && <p className="text-sm">Cần quyền xử lý trả kho và quyền thao tác tại cơ sở để xử lý nhiệm vụ.</p>}
-      {action === 'settlement-receipts' && canProcess && !canCollect && <p className="text-sm">{refundSettlement ? 'Cần quyền duyệt hoàn tiền, Staff không được thực hiện hoàn tiền.' : 'Cần quyền quản lý thanh toán để ghi nhận quyết toán.'}</p>}
+      {action === 'settlement-receipts' && canProcess && !canCollect && <p className="text-sm">{refundSettlement ? 'Cần quyền duyệt hoàn tiền, nhân viên không được thực hiện hoàn tiền.' : 'Cần quyền quản lý thanh toán để ghi nhận quyết toán.'}</p>}
       <fieldset disabled={frozen || !allowed || command.conflict} className="space-y-4 disabled:opacity-70">
         {action === 'inspection' && <>
           <p className="text-sm text-stone-600">Phí quá hạn và công nợ được hệ thống tính khi lưu kiểm kê. Số tiền sẽ hiển thị trong quyết toán để khách hàng xác nhận.</p>
@@ -152,7 +158,9 @@ export default function RecoveryTaskOperationsPanel({ role, task, view, identity
             {Object.entries(feeLabels).map(([name, label]) => <Field key={name} label={`${label} (VND)`}><input name={name} type="number" min={0} max={999999999999} step={1} defaultValue={0} required className={inputClass} /></Field>)}
             <Field label="Trạng thái kho sau thu hồi"><select name="proposedUnitStatus" className={inputClass}><option value="available">Sẵn sàng cho thuê</option><option value="maintenance">Cần bảo trì</option></select></Field>
           </div>
-          <div className="flex flex-wrap gap-4"><Check name="returnedKey">Đã trả chìa khóa</Check><Check name="returnedCard">Đã trả thẻ</Check><Check name="returnedLock">Đã trả khóa</Check></div>
+          <Field label="Kết quả kiểm tra ổ khóa và chìa khóa"><LockInspectionSelect className={inputClass} /></Field>
+          <p className="text-sm text-stone-600">Hệ thống chỉ cho cấp lại mã khi đã nhận đủ ổ và chìa còn dùng được.</p>
+          <Check name="returnedCard">Đã trả thẻ</Check>
           <Field label="Ghi chú kiểm kê"><textarea name="staffNotes" rows={3} maxLength={4000} className={inputClass} /></Field>
         </>}
         {action === 'settlement-receipts' && <>

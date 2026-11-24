@@ -1,3 +1,4 @@
+import { ApiClientError } from "../../services/apiClient"
 import { isUuid } from "../../services/renewalOperationsApi"
 
 export const STAFF_GOODS_CATEGORY_LABELS: Record<string, string> = {
@@ -127,6 +128,18 @@ export function staffGoodsCategoryLabel(value: string) {
   return STAFF_GOODS_CATEGORY_LABELS[value] ?? value
 }
 
+export function inventoryReportNote(notes?: string | null, identityNote?: string | null) {
+  let text = notes?.trim() || ""
+  const current = "Ghi chú kiểm kê: "
+  if (text.startsWith(current)) return text.slice(current.length)
+  if (identityNote?.trim()) {
+    const legacyIdentity = "Ghi chú xác minh: " + identityNote.trim()
+    if (text === legacyIdentity) return ""
+    if (text.startsWith(legacyIdentity + "\n")) text = text.slice(legacyIdentity.length + 1)
+  }
+  return text.replace(/^Ghi chú bàn giao: /, "")
+}
+
 export function parseEmptyStorageHandover(note: string | null | undefined) {
   const prefix = "Tình trạng kho trống:"
   const evidenceMarker = " | Bằng chứng:"
@@ -200,7 +213,7 @@ export function staffErrorMessage(error: unknown, fallback: string) {
   if (status === 403)
     return "Bạn không có quyền thực hiện thao tác này tại cơ sở hiện tại."
   if (status === 404) return "Không tìm thấy hồ sơ cần xử lý."
-  const message = typeof (candidate as { message?: unknown }).message === "string" ? String((candidate as { message?: unknown }).message) : ""
+  const message = error instanceof ApiClientError ? error.diagnosticMessage : typeof (candidate as { message?: unknown }).message === "string" ? String((candidate as { message?: unknown }).message) : ""
   if (message.includes("not pending refund"))
     return "Hồ sơ chưa ở trạng thái chờ hoàn cọc (có thể đang chờ khách duyệt hoặc đang khiếu nại)."
   if (message.includes("not in a state awaiting inspection"))
@@ -210,6 +223,8 @@ export function staffErrorMessage(error: unknown, fallback: string) {
   if (message.includes("not in disputed status"))
     return "Hồ sơ không ở trạng thái khiếu nại."
   if (status === 409) {
+    if (message.startsWith("Đã hết hạn nhận kho"))
+      return error instanceof ApiClientError ? error.message : message
     if (code === "OPTIMISTIC_LOCK")
       return "Dữ liệu vừa được cập nhật ở nơi khác. Vui lòng tải lại và thử lại."
     if (message.includes("Reservation is not READY_FOR_CHECKIN"))
@@ -218,6 +233,8 @@ export function staffErrorMessage(error: unknown, fallback: string) {
       return "Các bước nhận kho đã thay đổi. Vui lòng tải lại hồ sơ để tiếp tục từ bước hiện tại."
     if (message.includes("Customer identity"))
       return "CCCD/CMND không khớp với thông tin đã khai báo trong đơn."
+    if (message.includes("Khoản trả trước khi đặt kho") || message.includes("chưa được xác minh đã thanh toán"))
+      return "Khoản trả trước khi đặt kho chưa được xác minh đã thanh toán hoặc cần đối soát; chưa thể check-in."
     if (message.includes("not ready to record the remaining payment"))
       return "Hồ sơ chưa sẵn sàng ghi nhận khoản thu còn lại. Vui lòng tải lại và kiểm tra bước ký hợp đồng."
     if (message.includes("Credentials can only be activated"))
@@ -234,6 +251,8 @@ export function staffErrorMessage(error: unknown, fallback: string) {
       return "Chỉ được tải bằng chứng khi đang thực hiện quy trình nhận kho. Vui lòng mở lại hồ sơ và tiếp tục từ bước hiện tại."
     if (message.includes("lock reference"))
       return "Mã ổ khóa không khớp với thông tin ra vào đã kích hoạt. Vui lòng kiểm tra lại mã ổ khóa."
+    if (/[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(message))
+      return error instanceof ApiClientError ? error.message : message
     return "Hồ sơ vừa thay đổi trạng thái. Vui lòng tải lại danh sách rồi tiếp tục nhận kho."
   }
   if (status === 413)
@@ -262,7 +281,7 @@ export function staffErrorMessage(error: unknown, fallback: string) {
       return errorList.join(". ")
     }
     if (message && !message.includes("API request failed") && !message.includes("Thông tin gửi lên chưa hợp lệ") && !message.includes("Request parameters are invalid")) {
-      return message
+      return error instanceof ApiClientError ? error.message : message
     }
     return "Thông tin chưa hợp lệ. Vui lòng kiểm tra lại các trường đã nhập."
   }
@@ -289,7 +308,7 @@ export function extractStaffFieldErrors(error: unknown): Record<string, string> 
       if (key === "lockReference") key = "keyLockReference"
       if (key === "initialUnitCondition") key = "initialCondition"
 
-      let friendlyMsg = rawVal
+      let friendlyMsg = "Vui lòng kiểm tra lại thông tin đã nhập."
       if (rawVal.includes("CCCD/CMND") || key === "identityDocumentNumber") {
         friendlyMsg = "CCCD/CMND phải gồm đúng 9 hoặc 12 chữ số"
       } else if (rawVal.includes("must not be empty") || rawVal.includes("must not be blank") || rawVal.includes("required")) {
@@ -305,14 +324,14 @@ export function extractStaffFieldErrors(error: unknown): Record<string, string> 
           case "keyLockReference": friendlyMsg = "Vui lòng nhập mã ổ khóa"; break
           case "varianceReason": friendlyMsg = "Vui lòng nhập lý do chênh lệch"; break
           case "evidenceReferences": friendlyMsg = "Cần tải lên ít nhất 1 ảnh hoặc tệp PDF bằng chứng"; break
-          default: friendlyMsg = rawVal; break
+          default: break
         }
       }
       fieldErrors[key] = friendlyMsg
     }
   }
 
-  const msg = typeof candidate.message === "string" ? candidate.message : ""
+  const msg = error instanceof ApiClientError ? error.diagnosticMessage : typeof candidate.message === "string" ? candidate.message : ""
   if (msg.includes("varianceReason is required")) {
     fieldErrors.varianceReason = "Vui lòng nhập lý do chênh lệch khi kích thước hoặc khối lượng khác đơn đặt"
   }
@@ -326,7 +345,7 @@ export function extractStaffFieldErrors(error: unknown): Record<string, string> 
     fieldErrors.lengthCm = "Kích thước hàng hóa đo đạc thực tế không vừa gian kho"
   }
   if (msg.includes("variance is not accepted")) {
-    fieldErrors.varianceAccepted = "Cần đánh dấu xác nhận chấp thuận chênh lệch với khách"
+    fieldErrors.varianceAccepted = "Cần ghi nhận cách xử lý chênh lệch trước khi hoàn tất"
   }
   if (msg.includes("identityDocumentNumber is required")) {
     fieldErrors.identityDocumentNumber = "Số CCCD/CMND không được để trống"

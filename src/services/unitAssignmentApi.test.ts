@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { clearAuthTokens } from './apiClient'
 import {
+  changeUnitAssignment,
   createUnitAssignment,
   listAssignableUnits,
   listUnitAssignmentCandidates,
@@ -70,6 +71,37 @@ describe('unitAssignmentApi', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:8080/api/manager/unit-assignments/reservation-1',
       expect.objectContaining({ method: 'POST', body: JSON.stringify({ storageUnitId: 'unit-1' }) }),
+    )
+  })
+
+  it('sends a reason when changing an assigned unit', async () => {
+    const result = {
+      assignmentId: 'assignment-2',
+      assignmentStatus: 'ACTIVE',
+      assignedAt: '2026-10-06T03:30:00Z',
+      assignedBy: 'manager-1',
+      reservationId: 'reservation-1',
+      reservationCode: 'RSV-001',
+      reservationStatus: 'UNIT_RESERVED',
+      storageUnitId: 'unit-2',
+      storageUnitCode: 'S002',
+      storageUnitStatus: 'reserved',
+    }
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      data: result,
+      correlationId: 'correlation-4',
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const response = await changeUnitAssignment('reservation-1', 'unit-2', 'Kho cũ cần bảo trì')
+
+    expect(response).toEqual(result)
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/api/manager/unit-assignments/reservation-1/change',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({ storageUnitId: 'unit-2', reason: 'Kho cũ cần bảo trì' }),
+      }),
     )
   })
 })

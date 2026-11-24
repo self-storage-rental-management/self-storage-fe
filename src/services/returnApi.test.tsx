@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { setAccessToken, clearAuthTokens } from './apiClient'
 import { completeRefund, recordReturnSettlement, isApiReturn, requestReturn, listReturns, getReturn, inspectReturn, reviewDispute, confirmReturn, paySettlement, returnError, uploadReturnEvidence, type ApiReturn } from './returnApi'
-import { ReturnSummary } from '../views/return-api/ReturnApiPanel'
+import ReturnApiPanel, { ReturnSummary } from '../views/return-api/ReturnApiPanel'
 import { ids, operationsActor } from '../../tests/rentalOperationsApiFixtures'
 import type { ApiActor } from './authApi'
 const state = vi.hoisted(() => ({ actor: null as ApiActor | null }))
@@ -84,10 +84,12 @@ describe('real Return transport and unknown settlement presentation', () => {
     const fetch = respond({ data: record })
     await inspectReturn(ids.event, { damageFee: 5000, cleaningFee: 0, lostItemFee: 0, overdueFee: 0, outstandingFee: 0,
       inventoryMatch: 'match', damageClassification: 'minor_damage', staffNotes: 'TEST inspection', evidencePhotos: [],
-      unitVacated: true, returnedKey: true, returnedCard: false, returnedLock: true, proposedUnitStatus: 'maintenance' })
+      unitVacated: true, returnedKey: true, returnedCard: false, returnedLock: true,
+      lockInspectionResult: 'RETURNED_USABLE', proposedUnitStatus: 'maintenance' })
     expect(fetch.mock.calls[0][0]).toContain(`/api/staff/returns/${ids.event}/inspection`)
     expect(JSON.parse(fetch.mock.calls[0][1].body).returnedCard).toBe(false)
     expect(JSON.parse(fetch.mock.calls[0][1].body).unitVacated).toBe(true)
+    expect(JSON.parse(fetch.mock.calls[0][1].body).lockInspectionResult).toBe('RETURNED_USABLE')
   })
   it('uploads return evidence and sends the stored asset ID to the inspection endpoint', async () => {
     state.actor = operationsActor('staff'); state.actor.permissions.push('returns:process', 'returns:read')
@@ -190,5 +192,12 @@ describe('real Return transport and unknown settlement presentation', () => {
     respond({ data: record })
     const detail = await getReturn('business', ids.event)
     expect(detail.id).toBe(record.id)
+  })
+  it('omits Thu gọn and Trải ra toggle buttons when role is customer', () => {
+    state.actor = operationsActor('customer')
+    respond({ data: [record], pagination: { page: 0, pageSize: 10, totalItems: 1, totalPages: 1 } })
+    const html = renderToStaticMarkup(<ReturnApiPanel role="customer" rentalActive={true} rentalId={ids.rental} />)
+    expect(html).not.toContain('Thu gọn')
+    expect(html).not.toContain('Trải ra')
   })
 })

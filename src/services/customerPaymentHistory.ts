@@ -6,6 +6,7 @@ import { listRenewalOperationEvents } from "./renewalOperationsApi"
 import { isOverdueSettlement, type OverdueSettlement } from "./returnApi"
 import { isUuid } from "./renewalOperationsApi"
 import { isRenewalTransactionStatus, renewalTransactionLabels } from '../types/renewalStatus'
+import { renewalDisplayLabel } from '../presentation/renewalIdentity'
 import {
   listCustomerPaymentHistory,
   type ReservationPaymentResult,
@@ -53,6 +54,7 @@ export interface HistoryEntry {
     overdueFee: number | null
     outstandingFee: number | null
     overdueSettlement: OverdueSettlement | null
+    receiptCode?: string | null
     receiptFileId: string | null
   }
 }
@@ -157,6 +159,7 @@ interface ReturnPayment {
   outstandingFee?: number | null
   overdueSettlement?: OverdueSettlement | null
   settlementReceipt?: {
+    receiptCode?: string | null
     direction: "COLLECTION" | "REFUND" | "OFFSET"
     amount: number
     paymentMethod: "CASH" | "BANK_TRANSFER" | "DEPOSIT_OFFSET"
@@ -242,6 +245,7 @@ export async function loadCustomerPaymentHistory(): Promise<{
       return (
         await Promise.all(
           renewals.map(async (renewal) => {
+            const dossierReference = renewalDisplayLabel(renewal)
             const events = await allPages((page) =>
               listRenewalOperationEvents(
                 "customer",
@@ -260,7 +264,7 @@ export async function loadCustomerPaymentHistory(): Promise<{
               const recordedAt = cash ? data.receivedAt : data.paidAt
               return [{
                 id: paymentId,
-                reference: `Gia hạn ${renewal.id}`,
+                reference: dossierReference,
                 renewalId: renewal.id,
                 rentalId: renewal.rentalId,
                 unitCode: renewal.storageUnit.code,
@@ -284,7 +288,7 @@ export async function loadCustomerPaymentHistory(): Promise<{
               const original = originalPayments.get(transaction.paymentId)
               return {
                 id: transaction.paymentId,
-                reference: `Gia hạn ${renewal.id}`,
+                reference: dossierReference,
                 renewalId: renewal.id,
                 rentalId: renewal.rentalId,
                 unitCode: renewal.storageUnit.code,
@@ -350,6 +354,7 @@ export async function loadCustomerPaymentHistory(): Promise<{
               outstandingFee: r.outstandingFee ?? null,
               overdueSettlement: r.overdueSettlement ?? null,
               receiptFileId: receipt?.receiptFileId ?? null,
+              receiptCode: receipt?.receiptCode ?? null,
             },
           }]
         })

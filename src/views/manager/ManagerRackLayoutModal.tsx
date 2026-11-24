@@ -36,7 +36,7 @@ const initialConfiguration: RackConfiguration = {
 const display = (value: number | undefined) => value !== undefined && Number.isFinite(value) ? String(value) : ''
 const formatted = (value: number | undefined, fractionDigits = 2) => value !== undefined && Number.isFinite(value)
   ? value.toLocaleString('vi-VN', { maximumFractionDigits: fractionDigits })
-  : '—'
+  : '-'
 
 /** Keep one input template; codes, coordinates and orientation are Backend-owned. */
 const automaticConfiguration = (configuration: RackConfiguration, requestedRackCount?: number): RackConfiguration => {

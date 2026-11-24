@@ -14,6 +14,7 @@ export interface RentalApiPage<T> {
 }
 export interface RentalApiRecord {
   id: string
+  displayCode?: string | null
   customer: {
     id: string
     fullName: string
@@ -51,12 +52,14 @@ export interface RentalApiRecord {
   inventoryVerifiedAt?: string | null
   canConfirmRentalStart?: boolean
   inventoryDueAt?: string | null
+  inventoryFinalDeadlineAt?: string | null
   setupStartedAt?: string | null
   setupEndsAt?: string | null
   moveInCompletedAt?: string | null
   setupExitReviewRequired?: boolean
 }
 export interface RentalApiDetail extends RentalApiRecord {
+  inventory?: { actualJson: string; mismatch: boolean; fullFit: boolean; declaredPackaging?: string | null; decision: string; acceptedQuantitiesJson?: string | null; removalDeadline?: string | null; removedAt?: string | null } | null
   bookingEvidence?: RentalBookingEvidence | null
   reservationId: string | null
   actualReturnedAt: string | null
@@ -74,6 +77,7 @@ export interface RentalApiDetail extends RentalApiRecord {
   access: {
     completeness: string
     status: string | null
+    reference?: string | null
     reason: string | null
   }
 }
@@ -121,6 +125,10 @@ export interface RentalBookingEvidence {
     widthCm: number
     heightCm: number
     weightPerItemKg: number
+    customMaterial?: string | null
+    stackable?: boolean
+    maxStackLayers?: number
+    allowHorizontalPlacement?: boolean
     fragile: boolean
     customerNote: string | null
     images: { id: string; originalName: string; contentType: string; sizeBytes: number }[]

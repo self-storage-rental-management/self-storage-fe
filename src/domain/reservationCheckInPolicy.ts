@@ -1,3 +1,4 @@
+import type { CheckInCase } from '../services/checkInApi'
 import { formatCustomerDateTime } from '../i18n/customerDate'
 export const PAYMENT_WINDOW_MINUTES = 15
 export const STAFF_REVIEW_HOURS = 6
@@ -10,6 +11,34 @@ const DAY_MS = 24 * 60 * 60 * 1000
 // Facility hours are Vietnam wall-clock hours, independent of the browser/CI timezone.
 function policyClock(value: Date) {
   return new Date(value.getTime() + VIETNAM_OFFSET_MS)
+}
+
+export function isCheckInHandoverExpired(appointmentAt: string | null | undefined, now = Date.now()) {
+  if (!appointmentAt) return false
+  const appointmentDay = Math.floor(policyClock(new Date(appointmentAt)).getTime() / DAY_MS)
+  const currentDay = Math.floor((now + VIETNAM_OFFSET_MS) / DAY_MS)
+  return currentDay - appointmentDay >= CHECK_IN_WINDOW_DAYS
+}
+
+type IntakeCase = Pick<CheckInCase, 'intakeAction' | 'checkInStatus' | 'checkInId' | 'appointmentAt' | 'scheduledAt'>
+
+export function staffCheckInActions(item: IntakeCase, now = Date.now()) {
+  const status = item.checkInStatus
+  const at = item.appointmentAt ?? item.scheduledAt
+  const starts = status === null || status === 'scheduled'
+  const afterHandover = status === 'handover_pending_receipt' || status === 'setup_in_progress' || status === 'setup_completed'
+  const withinWindow = !!at && Number.isFinite(Date.parse(at)) && !isCheckInHandoverExpired(at, now)
+  const existingCase = !!item.checkInId
+  const canOpen = starts
+    ? item.intakeAction === 'START' && withinWindow && (status === null || existingCase)
+    : item.intakeAction === 'CONTINUE' && existingCase && (afterHandover || withinWindow)
+  const canReject = canOpen && status === 'scheduled'
+  return {
+    label: starts ? 'Bắt đầu nhận kho' : 'Tiếp tục nhận kho',
+    canOpen,
+    canReject,
+    canMarkAbsent: canReject && !!at && Date.parse(at) <= now,
+  }
 }
 
 export function plannedCheckInWindow(registeredAt: Date | string | number, reviewRequired: boolean) {
