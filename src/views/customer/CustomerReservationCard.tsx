@@ -537,17 +537,16 @@ export default function CustomerReservationCard({ user, reservation: r, facility
           <div className="relative inline-block">
             <button
               type="button"
-              aria-label="Tùy chọn khác"
+              aria-label="Thao tác khác"
+              title="Thao tác khác (Xem biên lai, hợp đồng, hủy đơn...)"
               aria-haspopup="menu"
               aria-expanded={moreMenuOpen}
               onClick={() => setMoreMenuOpen(!moreMenuOpen)}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-stone-300 bg-white text-stone-600 hover:bg-stone-100 hover:text-stone-900 transition-colors"
+              className="flex h-8 items-center gap-1 px-2.5 rounded-lg border border-stone-300 bg-white text-stone-700 hover:bg-stone-100 hover:text-stone-900 transition-colors text-xs font-semibold"
             >
-              <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                <circle cx="10" cy="4" r="1.75" />
-                <circle cx="10" cy="10" r="1.75" />
-                <circle cx="10" cy="16" r="1.75" />
-              </svg>
+              <span className="text-sm font-bold leading-none select-none text-stone-500">⋮</span>
+              <span>Thao tác</span>
+              <span className={`text-[9px] text-stone-400 transition-transform ${moreMenuOpen ? 'rotate-180' : ''}`}>▼</span>
             </button>
 
             <div
