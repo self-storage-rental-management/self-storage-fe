@@ -14,6 +14,14 @@ export type ReservationRecommendationStatus =
 export type PaymentStatus = ApiPaymentStatus
 export type InvoiceStatus = ApiInvoiceStatus
 export type ReservationStatus = ApiReservationStatus
+export type InventoryResolutionStatus =
+  | 'NOT_STARTED'
+  | 'PENDING_CUSTOMER'
+  | 'PENDING_STAFF_RESOLUTION'
+  | 'ACCEPTED'
+  | 'PARTIAL_ACCEPTED'
+  | 'RETURN_REQUESTED'
+  | 'RECOVERY_REQUIRED'
 
 export interface Pagination {
   page: number
@@ -514,7 +522,40 @@ export interface CustomerReservationDetail {
   goodsItems: ReservationGoodsItem[]
   payments: ReservationPaymentResult[]
   checkInStatus?: string | null
+  handoverCompletedAt?: string | null
+  lockReference?: string | null
+  receiptConfirmationDueAt?: string | null
+  receiptConfirmationOverdue?: boolean
+  receiptConfirmationReleaseAt?: string | null
+  receiptReleaseEligible?: boolean
+  setupStartedAt?: string | null
+  setupDueAt?: string | null
+  freeSetupDays?: number | null
+  paidRentalStartsOn?: string | null
   rentalStatus?: string | null
+  inventoryDueAt?: string | null
+  inventoryFinalDeadlineAt?: string | null
+  inventoryResultPublishedAt?: string | null
+  inventoryRemainderDeadlineAt?: string | null
+  inventoryRemovalPublishedAt?: string | null
+  inventoryRemovalDeadlineAt?: string | null
+  inventoryEscalatedAt?: string | null
+  setupCompletedAt?: string | null
+  inventoryAppointmentAt?: string | null
+  inventoryArrivedAt?: string | null
+  inventoryIdentityVerifiedAt?: string | null
+  inventoryResolutionStatus?: InventoryResolutionStatus | null
+  inventoryFullFit?: boolean
+  inventoryPartialFitAvailable?: boolean
+  inventorySuggestedPackageCount?: number | null
+  inventoryMismatchSummary?: string | null
+  inventoryAcceptedQuantitiesJson?: string | null
+  inventoryActualJson?: string | null
+  inventoryMismatchJson?: string | null
+  inventorySuggestedQuantitiesJson?: string | null
+  inventoryResultVersion?: number
+  inventoryAtSiteConfirmedByName?: string | null
+  inventoryDecisionAt?: string | null
 }
 
 export interface ReservationEmailVerificationResult {
@@ -823,6 +864,30 @@ export async function updateSetupGoods(
   const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
     `/api/customer/reservations/${encodeURIComponent(reservationId)}/setup-goods`,
     { method: 'POST', body: JSON.stringify(input) },
+  )
+  return checkedReservationDetail(response.data)
+}
+
+export async function setCustomerInventoryAppointment(reservationId: string, appointmentAt: string, reason?: string) {
+  const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
+    `/api/customer/reservations/${encodeURIComponent(reservationId)}/inventory-appointment`,
+    { method: 'POST', body: JSON.stringify({ appointmentAt, reason }) },
+  )
+  return response.data
+}
+
+export async function resolveCustomerInventory(
+  reservationId: string,
+  decision: 'ACCEPT_FULL' | 'ACCEPT_PARTIAL' | 'CANCEL_AND_RETURN',
+  note?: string,
+  scheduledDate?: string,
+) {
+  const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
+    `/api/customer/reservations/${encodeURIComponent(reservationId)}/inventory-resolution`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ decision, note: note?.trim() || null, scheduledDate: scheduledDate || null }),
+    },
   )
   return checkedReservationDetail(response.data)
 }
