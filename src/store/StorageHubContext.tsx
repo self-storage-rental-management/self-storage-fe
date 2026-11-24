@@ -2267,7 +2267,12 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
     let holdId = ''
     do {
-      holdId = `RSV-${String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, '0')}`
+      const genChunk = () => {
+        const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+        const randomValues = crypto.getRandomValues(new Uint8Array(4))
+        return Array.from(randomValues).map(byte => chars[byte % chars.length]).join('')
+      }
+      holdId = `RSV-${genChunk()}-${genChunk()}-${genChunk()}`
     } while (state.holds.some(hold => hold.id === holdId))
     const quoteId = `QUO-${Date.now().toString().slice(-4)}`
     const requiresGoodsReview = Boolean(params.goods.items?.some(item => item.category === 'OTHER' || item.requiresStaffReview))

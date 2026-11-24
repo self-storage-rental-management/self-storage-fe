@@ -35,7 +35,7 @@ export function validateEmergencyProfile(user: Profile): string | null {
   const first = primaryPresent ? Object.values(contactErrors(user)) : []
   return first[0] || Object.values(contactErrors(user, true))[0] || null
 }
-function checklist(user: Profile) {
+export function profileChecklist(user: Profile) {
   const d = user.profileDetails || {}
   const first = contactErrors(user)
   const second = contactErrors(user, true)
@@ -44,14 +44,14 @@ function checklist(user: Profile) {
     { label: 'Địa chỉ', id: 'profile-address', ok: (user.permanentAddress || '').trim().length >= 5 },
     { label: 'Giấy tờ tùy thân', id: 'profile-identity', ok: !!d.identityDocumentNumber && validateRentalIdentity(d.identityDocumentNumber).ok },
     { label: 'Người liên hệ khẩn cấp', id: 'profile-contact-1', ok: !Object.keys(first).some(k => k !== 'consent') && !Object.keys(second).some(k => k !== 'consent') },
-    { label: 'Đồng ý cung cấp thông tin NLHKC', id: !d.emergencyContactConsent ? 'profile-contact-1-consent' : 'profile-contact-2-consent', ok: !first.consent && !second.consent },
+    { label: 'Đồng ý cung cấp thông tin người liên hệ khẩn cấp', id: !d.emergencyContactConsent ? 'profile-contact-1-consent' : 'profile-contact-2-consent', ok: !first.consent && !second.consent },
   ]
 }
-export const profileProgress = (user: Profile) => checklist(user).filter(item => item.ok).length
+export const profileProgress = (user: Profile) => profileChecklist(user).filter(item => item.ok).length
 export function CustomerProfileReminder({ user, onOpen, title = 'Hoàn thiện hồ sơ' }: { user: User; onOpen?: () => void; title?: string }) {
-  const items = checklist(user)
+  const items = profileChecklist(user)
   const count = items.filter(item => item.ok).length
-  if (count === 5) return <p className="text-sm text-emerald-700" role="status">✓ Hồ sơ đã hoàn thiện</p>
+  if (count === 5) return null
   const jump = (id: string) => {
     onOpen?.()
     window.setTimeout(() => {
@@ -62,10 +62,12 @@ export function CustomerProfileReminder({ user, onOpen, title = 'Hoàn thiện h
     }, 100)
   }
   return <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-stone-800">
-    <p className="font-semibold">{title}: {count}/5</p>
-    <progress className="mt-2 w-full accent-amber-600" value={count} max={5} aria-label="Tiến độ hoàn thiện hồ sơ" />
-    <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-2">{items.map(item => <li key={item.label}>{item.ok ? <span className="text-emerald-800">✓ {item.label}</span> : <button type="button" className="text-amber-900 underline" onClick={() => jump(item.id)}>○ Bổ sung {item.label.toLowerCase()}</button>}</li>)}</ul>
-    {count < 5 && <p className="mt-2">Bạn vẫn có thể xem kho và đặt giữ kho. Hoàn thiện hồ sơ trước khi thanh toán cọc, ký hợp đồng và nhận kho.</p>}
+    <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-semibold">{title}</p><span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-stone-700">{count}/5 mục</span></div>
+    <progress className="mt-3 h-2 w-full accent-amber-600" value={count} max={5} aria-label="Tiến độ hoàn thiện hồ sơ" />
+    <ul className="mt-3 grid gap-2 sm:grid-cols-2">{items.map(item => <li key={item.label} className="rounded-lg border border-amber-100 bg-white/70 px-3 py-2">
+      {item.ok ? <span className="flex items-start gap-2 text-emerald-800"><span aria-hidden="true">✓</span><span>{item.label}</span></span> : <button type="button" className="flex w-full items-start gap-2 text-left text-amber-900 underline decoration-dotted underline-offset-4" onClick={() => jump(item.id)}><span aria-hidden="true">○</span><span>Bổ sung {item.label.toLowerCase()}</span></button>}
+    </li>)}</ul>
+    {count < 5 && <p className="mt-3 text-xs leading-5 text-stone-600">Bạn vẫn có thể xem kho và đặt giữ kho. Hoàn thiện đủ hồ sơ trước khi thanh toán trước 20%, ký hợp đồng và nhận kho.</p>}
   </div>
 }
 export function CustomerProfileFields({ value, onChange, user, onNameChange, onPhoneChange }: {

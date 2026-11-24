@@ -211,6 +211,7 @@ export default function RentalDetail({
             <dt>Kiểm kê đầu vào</dt>
             <dd><Badge variant="success">Đã hoàn tất</Badge>
               <p className="mt-1 text-xs text-stone-500">Nhân viên đã xác nhận lúc {rentalDate(rental.inventoryVerifiedAt)}.</p>
+              {role === 'customer' && rental.setupEndsAt && rental.status === 'setup' && <p className="mt-3 text-sm text-stone-700">Hàng đã được kiểm kê. Kỳ thuê sẽ bắt đầu theo ngày đã chốt sau khi hết thời gian chuẩn bị miễn phí.</p>}
               {role === 'customer' && rental.canConfirmRentalStart && rental.reservationId && (
                 <div className="mt-3 space-y-2">
                   <p className="text-sm text-stone-700">Hàng đã được kiểm kê. Bạn có thể xác nhận bắt đầu kỳ thuê hôm nay.</p>
