@@ -656,9 +656,9 @@ export default function CustomerReservationCard({ user, reservation: r, facility
     <div className="space-y-5">
       <div className="flex flex-col items-start justify-between gap-5 border-b border-stone-200 pb-4 md:flex-row">
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-bold text-amber-700">{r.reservationCode}</span>
-          <span className={`rounded px-2.5 py-1 text-xs font-bold ${inventoryMismatchPending ? 'bg-red-700 text-white' : awaitingInventory ? (partialInventoryPending ? 'bg-amber-100 text-amber-900' : checkInStatus === 'completed' ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900') : visualTone === 'completed' ? 'bg-emerald-700 text-white' : visualTone === 'expired' ? 'bg-red-100 text-red-900' : progress !== null && progress >= 3 ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{detail?.inventoryResolutionStatus === 'TRANSFER_REQUESTED' ? 'Chờ thu xếp chuyển hàng' : inventoryReturnRequested ? 'Buộc trả kho do kiểm kê sai lệch' : inventoryMismatchPending ? 'Cần xử lý sai lệch kiểm kê' : awaitingInventory ? (partialInventoryPending ? 'Chờ xử lý phần hàng dư' : checkInStatus === 'completed' ? 'Đã kiểm kê' : 'Chờ kiểm kê') : reservationStatusLabels[r.status]}</span>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="min-w-0 text-xs font-bold text-amber-700">{r.reservationCode}</span>
+          <span className={`shrink-0 rounded px-2.5 py-1 text-xs font-bold ${inventoryMismatchPending ? 'bg-red-700 text-white' : awaitingInventory ? (partialInventoryPending ? 'bg-amber-100 text-amber-900' : checkInStatus === 'completed' ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900') : visualTone === 'completed' ? 'bg-emerald-700 text-white' : visualTone === 'expired' ? 'bg-red-100 text-red-900' : progress !== null && progress >= 3 ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{detail?.inventoryResolutionStatus === 'TRANSFER_REQUESTED' ? 'Chờ thu xếp chuyển hàng' : inventoryReturnRequested ? 'Buộc trả kho do kiểm kê sai lệch' : inventoryMismatchPending ? 'Cần xử lý sai lệch kiểm kê' : awaitingInventory ? (partialInventoryPending ? 'Chờ xử lý phần hàng dư' : checkInStatus === 'completed' ? 'Đã kiểm kê' : 'Chờ kiểm kê') : reservationStatusLabels[r.status]}</span>
         </div>
         <h2 className="mt-1 text-lg font-bold text-stone-900">{displayedUnitTypeName} · {displayedFacilityName}</h2>
         <div className="mt-3 space-y-2">
@@ -723,9 +723,16 @@ export default function CustomerReservationCard({ user, reservation: r, facility
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
         {/* ── CỘT TRÁI (ĐỊNH DANH & KHO - ~45%) ─────────────────── */}
         <div className="md:col-span-6 min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-xs font-bold text-stone-900 tracking-wide">#{r.reservationCode}</span>
-            <span className={`inline-flex items-center rounded-md px-2.5 py-0.5 text-xs font-bold ${
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <span className="font-mono text-xs font-bold text-stone-900 tracking-wide">#{r.reservationCode}</span>
+              {prepaymentPaid && r.status !== 'COMPLETED' && r.status !== 'AWAITING_CUSTOMER_RECEIPT' && (
+                <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 border border-emerald-200">
+                  Đã cọc 20%
+                </span>
+              )}
+            </div>
+            <span className={`inline-flex shrink-0 items-center rounded-md px-2.5 py-0.5 text-xs font-bold ${
               visualTone === 'completed' || r.status === 'COMPLETED'
                 ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                 : visualTone === 'expired' || r.status === 'EXPIRED'
@@ -740,11 +747,6 @@ export default function CustomerReservationCard({ user, reservation: r, facility
             }`}>
               {r.status === 'AWAITING_CUSTOMER_RECEIPT' ? 'Chờ xác nhận nhận kho' : r.status === 'COMPLETED' ? 'Đã hoàn tất nhận kho' : reservationStatusLabels[r.status] || r.status}
             </span>
-            {prepaymentPaid && r.status !== 'COMPLETED' && r.status !== 'AWAITING_CUSTOMER_RECEIPT' && (
-              <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 border border-emerald-200">
-                Đã cọc 20%
-              </span>
-            )}
           </div>
 
           <h2 className="mt-1.5 text-base font-bold text-stone-900 md:text-lg truncate" title={`${displayedUnitTypeName} · ${displayedFacilityName}`}>
