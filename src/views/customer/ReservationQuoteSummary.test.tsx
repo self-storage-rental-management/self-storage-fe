@@ -69,5 +69,8 @@ expect(html).toContain('63.650.000 ₫')
 expect(html).toContain('12.730.000 ₫')
 expect(html).toContain('50.920.000 ₫')
 expect(html).toContain('Thanh toán trước 20% (giữ chỗ)')
-expect(html).not.toContain('54.150.000 ₫')
+// 54.150.000 is legitimately shown inside the rent-after-discount formula, but it must
+// never be presented as the amount the customer has to pay (that is 63.650.000).
+expect(html).toContain('Tổng chi phí phải thanh toán')
+expect(html).toContain('63.650.000 ₫')
 })

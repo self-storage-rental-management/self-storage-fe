@@ -21,6 +21,45 @@ interface ProfileViewProps {
 
 const MAX_AVATAR_FILE_SIZE = 5 * 1024 * 1024
 const MAX_AVATAR_DATA_LENGTH = 450_000
+const PROFILE_DRAFT_KEY_PREFIX = 'storagehub:profile-draft:'
+type ProfileDraft = {
+  name: string
+  phone: string
+  permanentAddress: string
+  emergencyContactName: string
+  emergencyContactPhone: string
+  profileDetails: User['profileDetails']
+}
+
+function profileDraftKey(userId: string) {
+  return `${PROFILE_DRAFT_KEY_PREFIX}${userId}`
+}
+
+function readProfileDraft(userId: string): ProfileDraft | null {
+  try {
+    const raw = sessionStorage.getItem(profileDraftKey(userId))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<ProfileDraft>
+    if (typeof parsed.name !== 'string' || typeof parsed.phone !== 'string' || typeof parsed.permanentAddress !== 'string'
+      || typeof parsed.emergencyContactName !== 'string' || typeof parsed.emergencyContactPhone !== 'string') return null
+    // Build the draft explicitly so the string fields stay typed after the guard above.
+    return {
+      name: parsed.name,
+      phone: parsed.phone,
+      permanentAddress: parsed.permanentAddress,
+      emergencyContactName: parsed.emergencyContactName,
+      emergencyContactPhone: parsed.emergencyContactPhone,
+      profileDetails: parsed.profileDetails || {},
+    }
+  } catch {
+    return null
+  }
+}
+
+function clearProfileDraft(userId: string) {
+  try { sessionStorage.removeItem(profileDraftKey(userId)) } catch {}
+}
+
 type ProfileTab = 'profile' | 'security' | 'role' | 'notifications'
 
 export const roleLabelMap: Record<Role, string> = {
@@ -422,13 +461,14 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
   const [activeTab, setActiveTab] = useState<ProfileTab>(profileTabFromLocation)
 
   // Form states
-  const [name, setName] = useState(user.name)
+  const initialDraft = readProfileDraft(user.id)
+  const [name, setName] = useState(initialDraft?.name ?? user.name)
   const [email, setEmail] = useState(user.email)
-  const [phone, setPhone] = useState(user.phone || '')
-  const [permanentAddress, setPermanentAddress] = useState(user.permanentAddress || '')
-  const [profileDetails, setProfileDetails] = useState(user.profileDetails || {})
-  const [emergencyContactName, setEmergencyContactName] = useState(user.emergencyContactName || '')
-  const [emergencyContactPhone, setEmergencyContactPhone] = useState(user.emergencyContactPhone || '')
+  const [phone, setPhone] = useState(initialDraft?.phone ?? (user.phone || ''))
+  const [permanentAddress, setPermanentAddress] = useState(initialDraft?.permanentAddress ?? (user.permanentAddress || ''))
+  const [profileDetails, setProfileDetails] = useState(initialDraft?.profileDetails ?? (user.profileDetails || {}))
+  const [emergencyContactName, setEmergencyContactName] = useState(initialDraft?.emergencyContactName ?? (user.emergencyContactName || ''))
+  const [emergencyContactPhone, setEmergencyContactPhone] = useState(initialDraft?.emergencyContactPhone ?? (user.emergencyContactPhone || ''))
   const [avatarUrl, setAvatarUrl] = useState(user.avatar || '')
 
   // Security states
@@ -478,7 +518,17 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
     emergencyContactName !== (user.emergencyContactName || '') ||
     emergencyContactPhone !== (user.emergencyContactPhone || '')
 
+  useEffect(() => {
+    if (!isCustomer || !profileHasChanges) return
+    try {
+      sessionStorage.setItem(profileDraftKey(user.id), JSON.stringify({
+        name, phone, permanentAddress, emergencyContactName, emergencyContactPhone, profileDetails,
+      } satisfies ProfileDraft))
+    } catch {}
+  }, [isCustomer, name, phone, permanentAddress, emergencyContactName, emergencyContactPhone, profileDetails, profileHasChanges, user.id])
+
   const handleCancelProfileChanges = () => {
+    clearProfileDraft(user.id)
     setName(user.name)
     setEmail(user.email)
     setPhone(user.phone || '')
@@ -586,6 +636,7 @@ setSavingProfile(true)
       } else {
         updateCustomerProfile({ name, email, phone, permanentAddress, emergencyContactName, emergencyContactPhone, profileDetails, avatar: avatarUrl }, user)
       }
+      clearProfileDraft(user.id)
       showToast('Đã cập nhật thông tin cá nhân.')
     } catch (error) {
       showToast(userFacingError(error, 'Không thể cập nhật thông tin cá nhân.'))
@@ -595,13 +646,14 @@ setSavingProfile(true)
   }
 
   useEffect(() => {
-    setName(user.name)
+    const draft = readProfileDraft(user.id)
+    setName(draft?.name ?? user.name)
     setEmail(user.email)
-    setPhone(user.phone || '')
-    setPermanentAddress(user.permanentAddress || '')
-    setProfileDetails(user.profileDetails || {})
-    setEmergencyContactName(user.emergencyContactName || '')
-    setEmergencyContactPhone(user.emergencyContactPhone || '')
+    setPhone(draft?.phone ?? (user.phone || ''))
+    setPermanentAddress(draft?.permanentAddress ?? (user.permanentAddress || ''))
+    setProfileDetails(draft?.profileDetails ?? (user.profileDetails || {}))
+    setEmergencyContactName(draft?.emergencyContactName ?? (user.emergencyContactName || ''))
+    setEmergencyContactPhone(draft?.emergencyContactPhone ?? (user.emergencyContactPhone || ''))
     setAvatarUrl(user.avatar || '')
   }, [user.id, user.name, user.email, user.phone, user.permanentAddress, user.emergencyContactName, user.emergencyContactPhone, user.profileDetails, user.avatar])
 

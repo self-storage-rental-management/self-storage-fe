@@ -70,6 +70,78 @@ export default function CustomerSupportChatbot({
 
   // Auto-scroll
   const chatEndRef = useRef<HTMLDivElement>(null)
+  const launcherRef = useRef<HTMLButtonElement>(null)
+  const [btnPos, setBtnPos] = useState<{ x: number; y: number } | null>(() => {
+    if (typeof window === 'undefined') return null
+    try {
+      const saved = localStorage.getItem('storagehub_chat_btn_pos') || sessionStorage.getItem('storagehub_chat_btn_pos')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (typeof parsed?.x === 'number' && typeof parsed?.y === 'number') {
+          return {
+            x: Math.max(12, Math.min((window.innerWidth || 1024) - 60, parsed.x)),
+            y: Math.max(12, Math.min((window.innerHeight || 768) - 60, parsed.y)),
+          }
+        }
+      }
+    } catch {}
+    return null
+  })
+  const dragRef = useRef<{ startX: number; startY: number; initialX: number; initialY: number } | null>(null)
+  const isDraggingRef = useRef(false)
+  const [isDragging, setIsDragging] = useState(false)
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.button !== 0 && e.pointerType === 'mouse') return
+    const rect = launcherRef.current?.getBoundingClientRect()
+    if (!rect) return
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      initialX: rect.left,
+      initialY: rect.top,
+    }
+    isDraggingRef.current = false
+
+    const onPointerMove = (ev: PointerEvent) => {
+      if (!dragRef.current) return
+      const dx = ev.clientX - dragRef.current.startX
+      const dy = ev.clientY - dragRef.current.startY
+      if (!isDraggingRef.current && Math.hypot(dx, dy) > 4) {
+        isDraggingRef.current = true
+        setIsDragging(true)
+      }
+      if (isDraggingRef.current) {
+        const nextX = Math.max(12, Math.min((window.innerWidth || 1024) - 60, dragRef.current.initialX + dx))
+        const nextY = Math.max(12, Math.min((window.innerHeight || 768) - 60, dragRef.current.initialY + dy))
+        setBtnPos({ x: nextX, y: nextY })
+      }
+    }
+
+    const onPointerUp = () => {
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('pointercancel', onPointerUp)
+      dragRef.current = null
+      if (isDraggingRef.current) {
+        setIsDragging(false)
+        setBtnPos((current) => {
+          if (current) {
+            try {
+              localStorage.setItem('storagehub_chat_btn_pos', JSON.stringify(current))
+              sessionStorage.setItem('storagehub_chat_btn_pos', JSON.stringify(current))
+            } catch {}
+          }
+          return current
+        })
+        setTimeout(() => { isDraggingRef.current = false }, 80)
+      }
+    }
+
+    window.addEventListener('pointermove', onPointerMove, { passive: true })
+    window.addEventListener('pointerup', onPointerUp)
+    window.addEventListener('pointercancel', onPointerUp)
+  }
   useEffect(() => {
     if (isOpen) {
       chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -292,11 +364,18 @@ export default function CustomerSupportChatbot({
       {/* ── Floating Launcher ───────────────────────────────── */}
       {!isOpen && (
         <button
-          {...launcherProps}
+          ref={launcherRef}
           type="button"
           aria-label="Mở Trợ lý StorageHub"
+          title="Nhấn để mở Trợ lý StorageHub · Kéo để di chuyển vị trí tự do"
           aria-haspopup="dialog"
-          className="fixed right-4 bottom-4 sm:right-6 sm:bottom-6 z-50 flex h-12 w-12 touch-none cursor-grab select-none items-center justify-center rounded-full border border-amber-600/30 bg-[#181b22] text-white shadow-lg transition-colors hover:bg-[#20242d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 active:cursor-grabbing"
+          onPointerDown={handlePointerDown}
+          onClick={() => {
+            if (isDraggingRef.current) return
+            setIsOpen(true)
+          }}
+          style={btnPos ? { left: `${btnPos.x}px`, top: `${btnPos.y}px`, bottom: 'auto', right: 'auto' } : undefined}
+          className={`fixed ${btnPos ? '' : 'right-4 bottom-4 sm:right-6 sm:bottom-6'} z-50 flex h-12 w-12 touch-none select-none items-center justify-center rounded-full border border-amber-600/30 bg-[#181b22] text-white shadow-lg transition-transform duration-75 hover:bg-[#20242d] ${isDragging ? 'cursor-grabbing scale-105 shadow-2xl ring-2 ring-amber-500/50' : 'cursor-grab hover:scale-105'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2`}
         >
           <svg aria-hidden="true" className="show-icon h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
             <path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H5l-3 3V11.5A7.5 7.5 0 0 1 9.5 4h3a7.5 7.5 0 0 1 7.5 7.5Z" />

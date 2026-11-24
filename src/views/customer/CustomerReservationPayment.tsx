@@ -1,4 +1,4 @@
-import { profileProgress } from '../../components/CustomerProfileFields'
+import { profileChecklist, profileProgress } from '../../components/CustomerProfileFields'
 import { actorToUser, getAuthenticatedActor } from '../../services/authApi'
 import { formatCustomerDateTime } from '../../i18n/customerDate'
 import { userFacingError } from '../../presentation/userFacingError'
@@ -18,6 +18,7 @@ import ReservationReceipt from './ReservationReceipt'
 import ReservationQuoteSummary from './ReservationQuoteSummary'
 import { bookingDepositAccepted } from './paymentPresentation'
 import { rentalEndDateForDisplay } from '../../domain/rentalTimeline'
+import type { User } from '../../types'
 
 function displayValue(value?: string | null) {
   return value?.trim() || 'Chưa cập nhật'
@@ -36,6 +37,7 @@ function formatDisplayDateTime(value?: string | null) {
 }
 
 interface Props {
+  user?: User
   reservation: CustomerReservation
   facilityName: string
   unitTypeName: string
@@ -46,7 +48,7 @@ interface Props {
   onRefresh: () => Promise<void>
 }
 
-export default function CustomerReservationPayment({ reservation, facilityName, unitTypeName, paymentStartedAt, paymentExpiresAt, now, onMessage, onRefresh }: Props) {
+export default function CustomerReservationPayment({ user, reservation, facilityName, unitTypeName, paymentStartedAt, paymentExpiresAt, now, onMessage, onRefresh }: Props) {
   const [payment, setPayment] = useState<ReservationPaymentResult | null>(null)
   const [payOpen, setPayOpen] = useState(false)
   const [confirmModalOpen, setConfirmModalOpen] = useState(false)
@@ -116,6 +118,11 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
 
   const countdown = paymentCountdown(paymentExpiresAt || reservation.holdExpiresAt, now)
   const snapshot = savedReservationQuote(reservation)
+  const actor = getAuthenticatedActor()
+  const profileUser = actor ? actorToUser(actor) : user
+  const profileChecks = profileUser ? profileChecklist(profileUser) : []
+  const missingProfileFields = profileChecks.filter(item => !item.ok).map(item => item.label)
+  const profileIncomplete = !profileUser || missingProfileFields.length > 0
   useEffect(() => {
     if (reservation.status !== 'AWAITING_PAYMENT' || !countdown.expired) return
     let disposed = false
@@ -129,7 +136,7 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
     if (paymentLock.current) return
     if (busy || countdown.expired || !acceptedNoRefund || reservation.status !== 'AWAITING_PAYMENT' || !snapshot) return
     const actor = getAuthenticatedActor()
-    if (!actor || profileProgress(actorToUser(actor)) < 5) {
+    if (!actor || !profileUser || profileProgress(profileUser) < 5) {
       onMessage('Vui lòng cập nhật đủ số điện thoại, giấy tờ tùy thân và người liên hệ khẩn cấp trong Hồ sơ trước khi thanh toán giữ chỗ.')
       return
     }
@@ -161,9 +168,10 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
       <div className="mt-2 rounded border border-amber-300/40 bg-amber-500/20 px-2 py-1.5 text-center text-[11px] font-semibold text-inherit">
         {payment?.paymentStatus === 'PAID' ? 'Khoản trả trước đã thanh toán không được hoàn lại khi tự ý hủy trước nhận kho.' : 'Bạn chưa thanh toán. Hủy ngay không mất phí.'}
       </div>
-      <Button className="mt-2" size="sm" disabled={busy || countdown.expired} onClick={() => {
+      {profileIncomplete && <div role="alert" className="mt-2 rounded-lg border border-rose-200 bg-rose-50 p-2 text-left text-[11px] leading-5 text-rose-900"><b>Chưa thể thanh toán</b><p>Hoàn thiện hồ sơ trước khi thanh toán, gồm: {missingProfileFields.length ? missingProfileFields.join(', ') : 'thông tin tài khoản'}.</p><p className="mt-1">Mở mục Hồ sơ để bổ sung rồi quay lại đơn này.</p></div>}
+      <Button className="mt-2" size="sm" disabled={busy || countdown.expired || profileIncomplete} onClick={() => {
         const actor = getAuthenticatedActor()
-        if (!actor || profileProgress(actorToUser(actor)) < 5) {
+        if (!actor || !profileUser || profileProgress(profileUser) < 5) {
           onMessage('Vui lòng cập nhật đủ số điện thoại, giấy tờ tùy thân và người liên hệ khẩn cấp trong Hồ sơ trước khi thanh toán giữ chỗ.')
           return
         }
@@ -204,7 +212,7 @@ export default function CustomerReservationPayment({ reservation, facilityName, 
         <div className={`rounded-lg p-3 text-center ${timerTone}`}><p className="text-xs font-bold uppercase tracking-wide">Hạn thanh toán · giờ:phút:giây</p><p className="mt-1 text-2xl font-extrabold tabular-nums">{countdown.text}</p></div>
 
         <p className="text-sm text-stone-600">Bạn sẽ được chuyển sang VNPay thử nghiệm. Sau khi thanh toán thành công, bạn có thể xem biên lai trong đơn hoặc qua email.</p>
-        <Button className="w-full" disabled={busy || countdown.expired} onClick={() => { setAcceptedNoRefund(false); setConfirmModalOpen(true) }}>
+        <Button className="w-full" disabled={busy || countdown.expired || profileIncomplete} onClick={() => { setAcceptedNoRefund(false); setConfirmModalOpen(true) }}>
           {busy ? 'Đang chuyển sang VNPay…' : `Thanh toán qua VNPay ${formatVnd(snapshot.reservationDepositAmount)}`}
         </Button>
       </div>

@@ -1,9 +1,28 @@
 import { formatVndAmount } from '../i18n/currency'
 
-type Terms = { setupEarlyExitFee?: number | null; earlyTerminationFee?: number | null; earlyTerminationNoticeDays?: number | null }
+type Terms = {
+  setupEarlyExitFee?: number | null
+  earlyTerminationFee?: number | null
+  earlyTerminationNoticeDays?: number | null
+  totalAfterDiscount?: number | null
+  monthlyPrice?: number | null
+  rentalMonths?: number | null
+  reservationDepositAmount?: number | null
+  earlyTerminationFeeCoefficient?: number | null
+}
 export default function ReturnPolicyNotice({ terms, business = false }: { terms?: Terms; business?: boolean }) {
-  return <details className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 text-sm leading-6 text-stone-800">
-    <summary className="cursor-pointer font-semibold text-amber-950">Quy định phí trả kho, nghiệm thu và hoàn cọc{terms?.earlyTerminationFee != null ? ` · Phí chấm dứt sớm theo báo giá: ${formatVndAmount(terms.earlyTerminationFee)}` : ''}</summary>
+  const setupFee = terms?.setupEarlyExitFee ?? null
+  return <div className="space-y-2">
+    {setupFee != null && <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-950">
+      <b>Các khoản phí trong báo giá</b>
+      <div className="mt-1 grid gap-1 sm:grid-cols-2">
+        {setupFee != null && <span>Trả trong thời gian chuẩn bị: <b>{formatVndAmount(setupFee)}</b></span>}
+      </div>
+      <p className="mt-1 text-amber-900"><b>Khoản giữ lại khi trả trong thời gian chuẩn bị</b> = 20% tiền thuê sau ưu đãi{terms?.totalAfterDiscount != null ? ` (${formatVndAmount(terms.totalAfterDiscount)})` : ''} = <b>{formatVndAmount(setupFee)}</b>; khách được hoàn 80% tiền thuê còn lại. Tiền cọc đảm bảo được quyết toán riêng.</p>
+      <p className="mt-1 text-amber-900">Phí hư hỏng chỉ được tính theo hạng mục và bảng giá chuẩn trong biên bản nghiệm thu.</p>
+    </div>}
+    <details className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 text-sm leading-6 text-stone-800">
+    <summary className="cursor-pointer font-semibold text-amber-950">Quy định trả kho, nghiệm thu và hoàn tiền</summary>
     <div className="mt-3 space-y-3">
       <p><b>Trả kho đúng hạn:</b> không tự động chịu phí chấm dứt sớm. Tiền cọc đảm bảo được quyết toán sau khi đối chiếu công nợ và hiện trạng kho.</p>
       <p><b>Trả trong thời gian chuẩn bị:</b> tiền sử dụng tính theo ngày lịch từ ngày xác nhận nhận kho đến ngày bàn giao kho trống, tính cả hai ngày. Cùng ngày tính 1 ngày. Tiền sử dụng bằng đơn giá tháng nhân số ngày rồi chia 30, làm tròn một lần đến đồng. Khoản phí chấm dứt đã chấp thuận trong báo giá{terms?.setupEarlyExitFee != null ? ` (${formatVndAmount(terms.setupEarlyExitFee)})` : ''} vẫn áp dụng cho trả setup thông thường. Hồ sơ cũ giữ điều khoản đã lưu.</p>
@@ -16,5 +35,6 @@ export default function ReturnPolicyNotice({ terms, business = false }: { terms?
       {business && <p className="border-t border-amber-200 pt-3">BO cần công bố điều kiện, công thức và mức phí trong gói thuê trước khi khách nhận báo giá. Quyết toán dùng phiên bản đã lưu theo đơn, không áp chính sách mới ngược cho hợp đồng cũ. Nếu hồ sơ thiếu bảng giá đã lưu hoặc có tranh chấp, cần xem xét thủ công trước khi chốt.</p>}
       {!terms && <p className="text-stone-600">Mức phí và số ngày báo trước cụ thể nằm trong báo giá/hợp đồng đã chấp nhận. Bảng quyết toán sau nghiệm thu là nơi đối chiếu số tiền thực tế; không có một mức phạt cố định cho mọi đơn.</p>}
     </div>
-  </details>
+    </details>
+  </div>
 }
