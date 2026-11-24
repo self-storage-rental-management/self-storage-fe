@@ -224,7 +224,7 @@ function SettlementCalculationBreakdown({ record }: { record: ApiReturn }) {
 
         <div className="flex justify-between gap-4 text-xs sm:text-sm">
           <div>
-            <span className="text-stone-600">Tiền cọc đảm bảo</span>
+            <span className="font-semibold text-stone-800">Tiền cọc đảm bảo</span>
             <p className={formulaClass}>1 × đơn giá tháng = {rentalMoney(deposit, 'VND')}.</p>
           </div>
           <span className="shrink-0 font-mono text-sm text-stone-900">+ {rentalMoney(deposit, 'VND')}</span>
@@ -232,7 +232,7 @@ function SettlementCalculationBreakdown({ record }: { record: ApiReturn }) {
 
         <div className="flex justify-between gap-4 text-xs sm:text-sm">
           <div>
-            <span className="text-stone-600">Chi phí phát sinh</span>
+            <span className="font-semibold text-stone-800">Chi phí phát sinh</span>
             <p className={formulaClass}>Hư hỏng + vệ sinh + mất đồ + quá hạn + còn thiếu = {rentalMoney(totalFees, 'VND')}.</p>
           </div>
           <span className="shrink-0 font-mono text-sm text-rose-700">− {rentalMoney(totalFees, 'VND')}</span>
@@ -248,7 +248,7 @@ function SettlementCalculationBreakdown({ record }: { record: ApiReturn }) {
 
         <div className="flex justify-between gap-4 text-xs sm:text-sm">
           <div>
-            <span className="text-stone-600">Đơn giá mỗi tháng sau giảm giá</span>
+            <span className="font-semibold text-stone-800">Đơn giá mỗi tháng sau giảm giá</span>
             <p className={formulaClass}>
               {monthlyPrice != null && usedMonths != null
                 ? `${rentalMoney(usedRental, 'VND')} ÷ ${usedMonths} tháng đã sử dụng = ${rentalMoney(monthlyPrice, 'VND')}.`
@@ -262,7 +262,7 @@ function SettlementCalculationBreakdown({ record }: { record: ApiReturn }) {
 
         <div className="flex justify-between gap-4 text-xs sm:text-sm">
           <div>
-            <span className="text-stone-600">Tiền thuê theo kỳ đã chốt</span>
+            <span className="font-semibold text-stone-800">Tiền thuê theo kỳ đã chốt</span>
             <p className={formulaClass}>
               {monthlyPrice != null && displayRentalMonths
                 ? `${rentalMoney(monthlyPrice, 'VND')} × ${displayRentalMonths} tháng = ${rentalMoney(totalRental, 'VND')}.`
@@ -274,7 +274,7 @@ function SettlementCalculationBreakdown({ record }: { record: ApiReturn }) {
 
         <div className="flex justify-between gap-4 text-xs sm:text-sm">
           <div>
-            <span className="text-stone-600">Tiền thuê số tháng đã sử dụng</span>
+            <span className="font-semibold text-stone-800">Tiền thuê số tháng đã sử dụng</span>
             <p className={formulaClass}>{monthlyPrice != null && usedMonths != null ? `${rentalMoney(monthlyPrice, 'VND')} × ${usedMonths} tháng = ${rentalMoney(usedRental, 'VND')}.` : 'Theo số tiền thuê đã ghi nhận.'}</p>
           </div>
           <span className="shrink-0 font-mono text-sm text-stone-900">{rentalMoney(usedRental, 'VND')}</span>

@@ -664,7 +664,7 @@ function WorkspaceData({
           onChanged={refresh}
         />
       )}
-      {returnRental && <Modal open onClose={() => setReturnRental(undefined)} title="Trả kho & quyết toán" size="xl">
+      {returnRental && <Modal open onClose={() => setReturnRental(undefined)} title="Trả kho & quyết toán" size="3xl">
         <ReturnApiPanel role="customer" rentalId={returnRental.id} rentalActive={returnRental.active} onChanged={refresh} />
       </Modal>}
       {action?.kind === "request" && (
