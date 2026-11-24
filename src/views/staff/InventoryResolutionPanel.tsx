@@ -78,8 +78,8 @@ export default function InventoryResolutionPanel({ item, busy, onRefresh, onPart
       weight={item.handover?.actualMeasurements.weightKg ?? 0} volume={item.handover?.actualMeasurements.actualVolumeM3 ?? 0}>
       <p role="status" className="rounded-lg border bg-white p-4 text-sm font-semibold text-stone-900">
         {transferring ? 'Đã tạo yêu cầu thu xếp chuyển hàng. Cơ sở theo dõi yêu cầu tại mục Hỗ trợ khách hàng.' : done ? 'Đã ghi nhận kết quả kiểm kê vào hồ sơ thuê.' : returning ? 'Khách đã chọn trả lại kho. Tiếp tục nghiệm thu và quyết toán ở hồ sơ trả kho.'
-          : partial ? item.inventoryRemainderRemovedAt ? 'Đã xác nhận đưa phần dư ra. Hồ sơ đã tiếp nhận phần hàng còn lại.' : 'Khách đã chọn nhận một phần. Chờ đưa phần dư ra và Staff xác nhận bằng chứng.'
-          : item.inventoryFullFit ? 'Hàng thực tế vẫn vừa kho. Staff ghi nhận phương án tiếp nhận trực tiếp với khách.'
+          : partial ? item.inventoryRemainderRemovedAt ? 'Đã xác nhận đưa phần dư ra. Hồ sơ đã tiếp nhận phần hàng còn lại.' : 'Khách đã chọn nhận một phần. Chờ đưa phần dư ra và Nhân viên xác nhận bằng chứng.'
+          : item.inventoryFullFit ? 'Hàng thực tế vẫn vừa kho. Nhân viên ghi nhận phương án tiếp nhận trực tiếp với khách.'
           : 'Chọn đưa phần dư ra khỏi gian kho hoặc tạo yêu cầu thu xếp chuyển hàng ngay tại cơ sở.'}
       </p>
       {item.inventoryFullFit && item.inventoryActualJson && <div className="space-y-2 rounded-lg bg-white p-3 text-stone-900">
@@ -99,7 +99,7 @@ export default function InventoryResolutionPanel({ item, busy, onRefresh, onPart
       </div>}
       {!done && !partial && !returning && !transferring && <fieldset className="space-y-4 rounded-xl border border-amber-200 bg-white p-4 text-sm text-stone-900" disabled={disabled}>
         <legend className="px-1 font-bold">Phương án xử lý tại cơ sở</legend>
-        {otherGoods && <p className="rounded-lg bg-amber-50 p-3">Khách khai báo hàng hóa loại Khác. Staff có thể chấp nhận nếu đủ điều kiện hoặc từ chối kèm lý do. Từ chối sẽ mở hồ sơ trả kho, nghiệm thu và quyết toán để xác định tiền hoàn hoặc thu thêm.</p>}
+        {otherGoods && <p className="rounded-lg bg-amber-50 p-3">Khách khai báo hàng hóa loại Khác. Nhân viên có thể chấp nhận nếu đủ điều kiện hoặc từ chối kèm lý do. Từ chối sẽ mở hồ sơ trả kho, nghiệm thu và quyết toán để xác định tiền hoàn hoặc thu thêm.</p>}
         {([
           ['ACCEPT_FULL', otherGoods ? 'Chấp nhận hàng hóa loại Khác và tiếp nhận toàn bộ' : 'Tiếp nhận toàn bộ hàng thực tế', Boolean(item.inventoryFullFit)],
           ['ACCEPT_PARTIAL', 'Nhận phần vừa kho, đưa phần dư ra', !item.inventoryFullFit],

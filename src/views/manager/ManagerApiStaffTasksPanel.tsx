@@ -1,3 +1,4 @@
+import { displayStatusLabel } from '../../presentation/statusLabels'
 import EmergencyContactsPanel from '../../components/EmergencyContactsPanel'
 import './managerStaffTasks.css'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -398,7 +399,7 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
           <Select label="Gian kho" value={unitStatusTargetId} onChange={event => setUnitStatusTargetId(event.target.value)}>
             <option value="">Chọn gian kho</option>
             {units.map(unit => (
-              <option key={unit.id} value={unit.id}>{unit.code} · {unit.status}</option>
+              <option key={unit.id} value={unit.id}>{unit.code} · {displayStatusLabel(unit.status)}</option>
             ))}
           </Select>
           <Select label="Trạng thái mới" value={unitStatusTargetValue} onChange={event => setUnitStatusTargetValue(event.target.value as 'available' | 'maintenance')}>

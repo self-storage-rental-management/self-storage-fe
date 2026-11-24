@@ -130,7 +130,7 @@ export function ReturnSummary({ record, hideTerminationFee = false, hideHeader =
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {([
           ['Cọc theo hợp đồng', record.depositAmount], ['Phí đã ghi nhận', record.totalDeductions],
-          ...(record.setupEarlyExit ? [['Tiền thuê được hoàn (80%)', record.rentalRefundCredit], ...(showFixedTerminationFee ? [['Khoản giữ lại theo chính sách setup (Phí chấm dứt sớm một lần)', record.earlyTerminationFee]] as const : [])] as const : []),
+          ...(record.setupEarlyExit ? [['Tiền thuê được hoàn (80%)', record.rentalRefundCredit], ...(showFixedTerminationFee ? [['Khoản giữ lại theo chính sách chuẩn bị (Phí chấm dứt sớm một lần)', record.earlyTerminationFee]] as const : [])] as const : []),
           ...(!record.setupEarlyExit && record.activeReturnPolicy ? [['Tiền thuê các tháng còn lại chưa sử dụng', record.activeReturnPolicy.rentalRefundAmount]] as const : []),
           ['Khoản hoàn tiền', record.netRefundAmount], ['Khách cần đóng thêm', record.amountDueFromCustomer],
         ] as const).map(([label, amount]) => <div key={label} className="rounded-lg bg-stone-50 p-3"><p className="text-xs text-stone-500">{label}</p><p className="mt-1 text-sm font-bold text-stone-900">{amount == null ? 'Chưa xác định' : rentalMoney(amount, 'VND')}</p></div>)}
@@ -361,7 +361,7 @@ function RecoveryReturnSummary({ record, hideTerminationFee, hideHeader = false 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {([
           ['Tiền cọc đảm bảo thuê thực thu', record.depositAmount], ['Phí đã ghi nhận', record.totalDeductions],
-          ...(record.setupEarlyExit ? [['Tiền thuê được hoàn (80%)', record.rentalRefundCredit], ...(!hideTerminationFee ? [['Khoản giữ lại theo chính sách setup (Phí chấm dứt sớm một lần)', record.earlyTerminationFee]] as const : [])] as const : []),
+          ...(record.setupEarlyExit ? [['Tiền thuê được hoàn (80%)', record.rentalRefundCredit], ...(!hideTerminationFee ? [['Khoản giữ lại theo chính sách chuẩn bị (Phí chấm dứt sớm một lần)', record.earlyTerminationFee]] as const : [])] as const : []),
           ...(!record.setupEarlyExit && record.activeReturnPolicy ? [['Tiền thuê các tháng còn lại chưa sử dụng', record.activeReturnPolicy.rentalRefundAmount]] as const : []),
           ['Khoản hoàn tiền', record.netRefundAmount], ['Khách cần đóng thêm', record.amountDueFromCustomer],
         ] as const).map(([label, amount]) => <div key={label} className="rounded-lg bg-stone-50 p-3"><p className="text-xs text-stone-500">{label}</p><p className="mt-1 text-sm font-bold text-stone-900">{amount == null ? 'Chưa xác định' : rentalMoney(amount, 'VND')}</p></div>)}
@@ -1118,7 +1118,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
               <dl className="divide-y divide-stone-100 text-sm">
                 {!recovery && record.setupEarlyExit && <>
                   <div className="flex justify-between gap-3 py-2"><dt className="text-stone-500">Tiền thuê thực thu được quyết toán</dt><dd className="shrink-0 font-medium">{record.rentalRefundCredit == null ? 'Chưa xác định' : rentalMoney(record.rentalRefundCredit, 'VND')}</dd></div>
-                  {<div className="flex justify-between gap-3 py-2"><dt className="text-stone-500">Khoản giữ lại theo chính sách setup</dt><dd className="shrink-0 font-medium">{record.earlyTerminationFee == null ? 'Chưa xác định' : rentalMoney(record.earlyTerminationFee, 'VND')}</dd></div>}
+                  {<div className="flex justify-between gap-3 py-2"><dt className="text-stone-500">Khoản giữ lại theo chính sách chuẩn bị</dt><dd className="shrink-0 font-medium">{record.earlyTerminationFee == null ? 'Chưa xác định' : rentalMoney(record.earlyTerminationFee, 'VND')}</dd></div>}
                 </>}
                 {feeKeys.map((key, index) => <div key={key} className="flex justify-between gap-3 py-2"><dt className="text-stone-500">{['Phí hư hỏng', 'Phí vệ sinh', 'Phí thiếu khóa', 'Phí quá hạn', 'Phí còn thiếu'][index]}</dt><dd className="shrink-0 font-medium">{rentalMoney(key === 'lostItemFee' ? Math.max(0, record.lostItemFee - (record.palletLossFee || 0)) : record[key], 'VND')}</dd></div>)}
                 <div className="flex justify-between gap-3 py-2"><dt className="text-stone-500">Phí thiếu tấm kê</dt><dd className="shrink-0 font-medium">{rentalMoney(record.palletLossFee || 0, 'VND')}</dd></div>
@@ -1300,7 +1300,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                               />
                               <div>
                                 <p className="text-xs font-bold">Xác nhận khách đã dọn sạch hàng và bàn giao kho trống</p>
-                                <p className="text-[11px] text-stone-500">Điều kiện bắt buộc cho hồ sơ trả kho trong thời gian setup.</p>
+                                <p className="text-[11px] text-stone-500">Điều kiện bắt buộc cho hồ sơ trả kho trong thời gian chuẩn bị.</p>
                               </div>
                             </label>
                           </div>
@@ -1538,7 +1538,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                     {rentalCredit > 0 && (
                       <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 flex items-center justify-between gap-3">
                         <div>
-                          <p className="text-xs font-bold text-stone-800">{record.setupEarlyExit ? 'Tiền thuê được hoàn theo chính sách setup' : 'Tiền thuê các tháng chưa bắt đầu'}</p>
+                          <p className="text-xs font-bold text-stone-800">{record.setupEarlyExit ? 'Tiền thuê được hoàn theo chính sách chuẩn bị' : 'Tiền thuê các tháng chưa bắt đầu'}</p>
                           <p className="text-[11px] text-stone-500">{record.setupEarlyExit ? 'Hoàn 80%; giữ lại 20% theo báo giá.' : 'Hoàn sau khi trừ phí vượt cọc (nếu có).'}</p>
                         </div>
                         <span className="shrink-0 text-sm font-extrabold text-stone-900 font-mono">{rentalMoney(rentalCredit, 'VND')}</span>

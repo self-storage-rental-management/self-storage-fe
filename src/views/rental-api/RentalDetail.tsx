@@ -1,3 +1,4 @@
+import { displayStatusLabel } from '../../presentation/statusLabels'
 import { invoiceNumberLabel } from '../customer/paymentLabels'
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { useEffect, useState } from "react"
@@ -235,7 +236,7 @@ export default function RentalDetail({
               {rental.moveInCompletedAt && <p className="border-t border-stone-100 pt-3 text-xs text-stone-500">Đã báo hoàn tất chuẩn bị lúc {new Date(rental.moveInCompletedAt).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })} ngày {rentalDate(vietnamDateInput(rental.moveInCompletedAt))}</p>}
               {role === 'customer' && (rental.status === 'setup' || rental.status === 'active') && rental.inventoryPending
                 && !rental.moveInCompletedAt && !inventoryDetail?.setupCompletedAt && !rental.inventoryVerifiedAt && rental.reservationId
-                && <div className="mt-3 rounded-lg border border-violet-300 bg-violet-50 p-3 text-violet-950"><p className="text-sm font-bold">Bạn đã sắp xếp hàng xong?</p><p className="mt-1 text-xs leading-5">Báo đã setup xong để mở bước chọn lịch kiểm kê.</p><Button className="mt-2" size="sm" disabled={preparationSubmitting} onClick={() => void reportPreparationComplete()}>{preparationSubmitting ? 'Đang gửi…' : 'Đã setup xong'}</Button>{preparationError && <p role="alert" className="mt-2 text-xs text-red-700">{preparationError}</p>}</div>}
+                && <div className="mt-3 rounded-lg border border-violet-300 bg-violet-50 p-3 text-violet-950"><p className="text-sm font-bold">Bạn đã sắp xếp hàng xong?</p><p className="mt-1 text-xs leading-5">Báo đã chuẩn bị xong để mở bước chọn lịch kiểm kê.</p><Button className="mt-2" size="sm" disabled={preparationSubmitting} onClick={() => void reportPreparationComplete()}>{preparationSubmitting ? 'Đang gửi…' : 'Đã chuẩn bị xong'}</Button>{preparationError && <p role="alert" className="mt-2 text-xs text-red-700">{preparationError}</p>}</div>}
             </dd>
           </div>}
           {rental.inventoryVerifiedAt ? <div>
@@ -425,7 +426,7 @@ export default function RentalDetail({
                   <p className="text-sm font-medium text-stone-600">{bookingPaymentPurposes[payment.purpose]}</p>
                   <p className="mt-1 text-xl font-bold text-stone-900">{rentalMoney(payment.amount, evidence.currency)}</p>
                   <p className="mt-2 text-sm"><strong>Trạng thái:</strong> {bookingPaymentStatuses[payment.status]}</p>
-                  <p className="mt-1 text-sm"><strong>Số hóa đơn:</strong> {invoiceNumberLabel(payment.invoiceNumber)}{payment.invoiceNumber?.trim() && ` · ${payment.invoiceStatus}`}</p>
+                  <p className="mt-1 text-sm"><strong>Số hóa đơn:</strong> {invoiceNumberLabel(payment.invoiceNumber)}{payment.invoiceNumber?.trim() && ` · ${displayStatusLabel(payment.invoiceStatus)}`}</p>
                   {role === 'customer' && payment.status === 'PAID' && rental.reservationId && <Button variant="outline" size="sm" className="mt-3" onClick={() => setReceiptPayment(payment.id)}>Xem biên lai</Button>}
                 </li>
               ))}
