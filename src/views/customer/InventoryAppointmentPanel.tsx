@@ -107,3 +107,4 @@ export default function InventoryAppointmentPanel({ detail, now, onSaved }: {
     </section>
   )
 }
+
