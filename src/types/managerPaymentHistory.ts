@@ -24,6 +24,7 @@ export type ManagerPaymentHistoryType =
 export interface ManagerPaymentHistoryItem {
   id: string
   transactionReference: string
+  receiptCode?: string | null
   customerName: string
   type: ManagerPaymentHistoryType
   status: ManagerPaymentHistoryStatus

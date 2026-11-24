@@ -532,9 +532,9 @@ type CheckInFilters = Pick<NonNullable<Parameters<typeof listCheckIns>[0]>, "q" 
 
 const checkInTableColumnWidths = ["18%", "13%", "15%", "19%", "35%"] as const
 const checkInActionButtonBaseClass = "h-9 shrink-0 whitespace-nowrap !px-2 !py-0 !text-xs font-medium"
-const inventoryActionClass = "border-sky-300 bg-sky-50 text-sky-800 hover:border-sky-400 hover:bg-sky-100"
-const handoverActionClass = "border-amber-300 bg-amber-50 text-amber-900 hover:border-amber-400 hover:bg-amber-100"
-const documentActionClass = "border-violet-300 bg-violet-50 text-violet-800 hover:border-violet-400 hover:bg-violet-100"
+const inventoryActionClass = "!border-0 !bg-sky-100 !text-sky-900 hover:!bg-sky-200"
+const handoverActionClass = "!border-0 !bg-amber-100 !text-amber-950 hover:!bg-amber-200"
+const documentActionClass = "!border-0 !bg-violet-100 !text-violet-900 hover:!bg-violet-200"
 
 function CheckInTableColumns() {
   return (
@@ -1260,8 +1260,8 @@ export default function StaffCheckInOperationsPanel({
       if (!lineInventory && !varianceAccepted) {
         errors.varianceAccepted = "Cần ghi nhận chấp thuận chênh lệch ở biểu mẫu cũ"
       }
-      if (!effectiveVarianceReason.trim()) {
-        errors.varianceReason = "Vui lòng nhập lý do chênh lệch khi hàng hóa khác đơn đặt"
+      if (effectiveVarianceReason.length < 10) {
+        errors.varianceReason = "Vui lòng mô tả rõ chênh lệch, tối thiểu 10 ký tự"
       }
     }
     const emptyStorageReferences = checkInEvidenceAssetIds(
@@ -2747,6 +2747,7 @@ export default function StaffCheckInOperationsPanel({
                     <Input
                       label="Lý do chênh lệch *"
                       maxLength={500}
+                      placeholder="Ví dụ: Thùng carton thay cho thùng nhựa đã khai báo"
                       error={fieldErrors.varianceReason}
                       disabled={isReviewingCompletedStep}
                       value={varianceReason}

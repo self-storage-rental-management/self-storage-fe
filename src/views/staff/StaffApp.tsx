@@ -1,6 +1,7 @@
 import { checkInTask } from "../../services/staffDailyOperationsApi"
 import { LEGACY_RENEWAL_NOTICE, LEGACY_RENEWAL_HISTORY_NOTICE, legacyRenewalMoney } from '../../domain/legacyRenewal'
 import { VIETNAM_TIME_ZONE } from '../../utils/vietnamTime'
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import { useEffect, useRef, useState } from "react"
 
 import Layout, {
@@ -2356,7 +2357,7 @@ export default function StaffApp({
                             {renewal.discountAmount ? ` (Ưu đãi giảm: ${formatMoney(renewal.discountAmount)})` : ""}
                           </p>
                           <p className="text-[11px] text-slate-400">
-                            Mã yêu cầu: <span className="font-mono">{renewal.id}</span> · Gửi lúc: {formatDate(renewal.requestedAt)}
+                            Mã hồ sơ: <span className="font-mono">{recordDisplayCode(renewal.id)}</span> · Gửi lúc: {formatDate(renewal.requestedAt)}
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
