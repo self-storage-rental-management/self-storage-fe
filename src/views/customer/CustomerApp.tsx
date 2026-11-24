@@ -3389,9 +3389,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                               size="sm"
                               onClick={() => {
                                 setActiveRentalForReturn(rental)
-                                const todayValue = dateInputValue(new Date())
-                                const endValue = parseCustomerDate(rental.endDate) ? dateInputValue(parseCustomerDate(rental.endDate)!) : todayValue
-                                setReturnTargetDate(todayValue <= endValue ? todayValue : '')
+                                setReturnTargetDate('')
                                 setReturnModalOpen(true)
                               }}
                             >
