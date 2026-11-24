@@ -1,4 +1,5 @@
 import { parseVietnamDate } from '../../utils/vietnamTime'
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { singleManagerFacility, managerFacilityNotice } from "../manager/managerFacilityUi"
 import { useEffect, useRef, useState } from "react"
@@ -262,10 +263,10 @@ function SupportSession({
             <SupportReadState {...read} loading={read.loading && !read.data} retry={reload} />
             {invalidScope ? <p role="alert" className="p-4 text-sm text-red-700">Không thể hiển thị hội thoại ngoài phạm vi truy cập của bạn.</p> : <>
               <div className="max-h-[550px] divide-y divide-stone-100 overflow-y-auto">
-                {visibleTickets.map(t => <button key={t.id} type="button" disabled={locked} aria-pressed={selected === t.id} aria-label={`Mở hội thoại: ${t.subject}`} className={`block w-full border-l-4 p-4 text-left transition-colors disabled:opacity-60 ${selected === t.id ? 'border-amber-500 bg-amber-50' : 'border-transparent hover:bg-white'}`} onClick={() => { if (command.locked || uploadLock.current) return; setCreation(undefined); setSelected(t.id); command.clearError() }}>
+                {visibleTickets.map(t => <button key={t.id} type="button" disabled={locked} aria-pressed={selected === t.id} aria-label={`Mở hội thoại: ${t.subject}`} className={`block w-full p-4 text-left transition-colors disabled:opacity-60 ${selected === t.id ? 'bg-amber-50 shadow-[inset_2px_0_0_#f59e0b]' : 'hover:bg-white'}`} onClick={() => { if (command.locked || uploadLock.current) return; setCreation(undefined); setSelected(t.id); command.clearError() }}>
                   <div className="flex items-center gap-3"><span aria-hidden="true" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#f5e3e1] text-sm font-semibold text-[#95575f]">{(role === 'customer' ? 'HT' : t.customerName?.trim().split(/\s+/).slice(-2).map(word => word[0]).join('') || 'KH')}</span><div className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-stone-900">{role === 'customer' ? actor.facilityNames?.[t.facilityId ?? ''] ?? 'Nhân viên hỗ trợ' : t.customerName ?? 'Khách hàng'}</span><span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${supportStatusClass(t.status)}`}>{supportStatusLabels[t.status]}</span></div></div>
                   <p className="mt-1.5 line-clamp-2 break-words text-xs leading-5 text-stone-600">{t.subject}</p>
-                  <p className="mt-2 flex justify-between gap-2 text-[10px] text-stone-400"><span>{t.displayCode || `#${t.id.slice(0, 8)}`}</span><span>{new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit' }).format(parseVietnamDate(t.createdAt))}</span></p>
+                  <p className="mt-2 flex justify-between gap-2 text-[10px] text-stone-400"><span>{t.displayCode || recordDisplayCode(t.id)}</span><span>{new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit' }).format(parseVietnamDate(t.createdAt))}</span></p>
                 </button>)}
                 {read.data && !visibleTickets.length && <p className="p-6 text-center text-sm text-stone-500">{'Chưa có cuộc trò chuyện phù hợp.'}</p>}
               </div>

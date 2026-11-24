@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
-import CustomerReservationCard, { ReservationPreparationNotice } from './CustomerReservationCard'
+import CustomerReservationCard, { InventoryResolutionNotice, ReservationPreparationNotice } from './CustomerReservationCard'
 import InventoryAppointmentPanel from './InventoryAppointmentPanel'
 import { paymentCountdown, paymentCountdownUrgency, reservationProgress, reservationStatusLabels } from './reservationPresentation'
 import ReservationReceipt from './ReservationReceipt'
@@ -102,15 +102,15 @@ describe('customer reservation layout regression', () => {
   })
   it('shows the two customer gates before inventory', () => {
     expect(render('AWAITING_CUSTOMER_RECEIPT')).toContain('Xác nhận đã nhận kho')
-    expect(render('PREPARING')).not.toContain('Đã setup xong')
+    expect(render('PREPARING')).not.toContain('Đã chuẩn bị xong')
 
     const notice = (checkInStatus: string) => renderToStaticMarkup(
       <ReservationPreparationNotice checkInStatus={checkInStatus} submitting={false} onReady={() => {}} />,
     )
-    expect(notice('setup_in_progress')).toContain('Đã setup xong')
-    expect(notice('handover_pending_receipt')).toContain('Đã setup xong')
+    expect(notice('setup_in_progress')).toContain('Đã chuẩn bị xong')
+    expect(notice('handover_pending_receipt')).toContain('Đã chuẩn bị xong')
     expect(notice('setup_completed')).toContain('Đang chờ nhân viên kiểm kê')
-    expect(notice('setup_completed')).not.toContain('Đã setup xong')
+    expect(notice('setup_completed')).not.toContain('Đã chuẩn bị xong')
     expect(notice('completed')).toContain('Đã hoàn tất kiểm kê')
   })
 
@@ -122,8 +122,9 @@ describe('customer reservation layout regression', () => {
     } as CustomerReservationDetail
     const html = renderToStaticMarkup(<InventoryAppointmentPanel detail={detail} now={Date.now()} onSaved={vi.fn()} />)
     expect(html).toContain('02/11/2026 16:30')
-    expect(html).toContain('05/11/2026 15:00')
-    expect(html).toContain('08/11/2026 15:00')
+    expect(html).not.toContain('Báo setup xong lúc')
+    expect(html).not.toContain('Mốc nhắc')
+    expect(html).not.toContain('Hạn kiểm kê')
     expect(html).toContain('Đổi lịch kiểm kê')
   })
 
@@ -184,4 +185,49 @@ it('pre-handover reservation shows setup-adjusted estimated dates without repric
    expect(html).toContain('Thanh toán trước 20% (giữ chỗ)')
    expect(invoice).not.toContain('Thông tin hàng hóa đã khai báo')
    expect(html.split('>Thông tin khách hàng</h3>')).toHaveLength(2)
+ })
+
+ it('shows stepwise return extension button only when extendable and hides future cap upfront', () => {
+   const detailBase = {
+     reservation: { ...base, status: 'COMPLETED' as const },
+     inventoryResolutionStatus: 'PENDING_CUSTOMER' as const,
+     inventoryFullFit: false,
+     inventoryRemovalPublishedAt: '2026-11-20T08:00:00Z',
+     inventoryRemovalDeadlineAt: '2026-11-30T17:00:00Z',
+     inventoryReturnWindowDays: 10,
+     inventoryReturnExtensionDays: 5,
+     inventoryReturnExtensionCount: 0,
+     inventoryReturnCanExtend: true,
+   } as unknown as import('../../services/customerReservationApi').CustomerReservationDetail
+   const now = Date.parse('2026-11-21T08:00:00Z')
+   const html = renderToStaticMarkup(
+     <InventoryResolutionNotice detail={detailBase} now={now} submitting={false} onResolve={() => {}} onExtendReturnWindow={() => {}} />,
+   )
+   expect(html).toContain('Yêu cầu kéo dài thời gian')
+   expect(html).not.toContain('20 ngày')
+   expect(html).not.toContain('tối đa 2 lần')
+
+   const extendedOnce = renderToStaticMarkup(
+     <InventoryResolutionNotice
+       detail={{ ...detailBase, inventoryReturnExtensionCount: 1, inventoryReturnWindowDays: 15, inventoryReturnCanExtend: true }}
+       now={now}
+       submitting={false}
+       onResolve={() => {}}
+       onExtendReturnWindow={() => {}}
+     />,
+   )
+   expect(extendedOnce).toContain('Đã kéo dài thời gian trả kho: 1 lần.')
+   expect(extendedOnce).toContain('Yêu cầu kéo dài thời gian')
+
+   const exhausted = renderToStaticMarkup(
+     <InventoryResolutionNotice
+       detail={{ ...detailBase, inventoryReturnExtensionCount: 2, inventoryReturnWindowDays: 20, inventoryReturnCanExtend: false }}
+       now={now}
+       submitting={false}
+       onResolve={() => {}}
+       onExtendReturnWindow={() => {}}
+     />,
+   )
+   expect(exhausted).toContain('Đã kéo dài thời gian trả kho: 2 lần.')
+   expect(exhausted).not.toContain('Yêu cầu kéo dài thời gian')
  })

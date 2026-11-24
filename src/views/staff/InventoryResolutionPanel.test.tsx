@@ -4,8 +4,8 @@ import InventoryResolutionPanel from './InventoryResolutionPanel'
 import type { CheckInCase } from '../../services/checkInApi'
 
 function render(overrides: Partial<CheckInCase>) {
-  return renderToStaticMarkup(<InventoryResolutionPanel item={{ checkInId: 'checkin', inventoryResolutionStatus: 'PENDING_CUSTOMER', ...overrides } as CheckInCase}
-    busy={false} onRefresh={vi.fn()} onPartialRemoval={vi.fn()} onOpenReturns={vi.fn()} />)
+  return renderToStaticMarkup(<InventoryResolutionPanel item={{ checkInId: 'checkin', inventoryResolutionStatus: 'PENDING_CUSTOMER', inventoryReturnWindowDays: 7, ...overrides } as CheckInCase}
+    busy={false} onRefresh={vi.fn()} onOpenReturns={vi.fn()} />)
 }
 
 it('records full intake onsite without suggesting another warehouse when changed goods fit', () => {
@@ -14,8 +14,9 @@ it('records full intake onsite without suggesting another warehouse when changed
   expect(html).not.toContain('Gợi ý chuyển sang kho phù hợp')
   expect(html).not.toContain('Xác nhận phần dư đã đưa ra')
 })
-it('offers the physical removal confirmation only after the customer accepts partial intake', () => {
-  expect(render({ inventoryResolutionStatus: 'PARTIAL_ACCEPTED', inventoryFullFit: false })).toContain('Xác nhận phần dư đã đưa ra')
+it('replaces retired partial intake with forced return within 7 days', () => {
+  expect(render({ inventoryResolutionStatus: 'PARTIAL_ACCEPTED', inventoryFullFit: false })).toContain('Buộc trả kho và quyết toán (hạn 7 ngày)')
+  expect(render({ inventoryFullFit: false })).not.toContain('Tạo yêu cầu thu xếp chuyển hàng')
   expect(render({ inventoryFullFit: false })).not.toContain('Xác nhận phần dư đã đưa ra')
   expect(render({ inventoryResolutionStatus: 'PARTIAL_ACCEPTED', inventoryRemainderRemovedAt: '2026-11-24T00:00:00Z' })).not.toContain('Xác nhận phần dư đã đưa ra')
 })
@@ -38,18 +39,19 @@ it('captures the signed paper record as uploaded photos instead of asking for a 
   const html = render({ inventoryFullFit: true })
   expect(html).toContain('Biên bản xác nhận phương án hàng hóa có chữ ký khách')
   expect(html).toContain('type="file"')
-  expect(html).toContain('multiple=""')
+  expect(html).not.toContain('multiple=""')
   expect(html).not.toContain('Mã ảnh biên bản')
   expect(html).not.toContain('Mã tệp ảnh biên bản')
 })
 
 
-it('offers removal and a transfer request when the inspected goods exceed capacity', () => {
+it('offers only forced 7-day return when the inspected goods exceed capacity', () => {
   const html = render({ inventoryFullFit: false, inventoryPartialFitAvailable: false })
-  expect(html).toContain('đưa phần dư ra')
-  expect(html).toContain('Tạo yêu cầu thu xếp chuyển hàng')
-  expect(html).not.toContain('Trả lại kho')
-  const submitted = render({ inventoryResolutionStatus: 'TRANSFER_REQUESTED', inventoryFullFit: false })
-  expect(submitted).toContain('Đã tạo yêu cầu thu xếp chuyển hàng')
-  expect(submitted).not.toContain('type="radio"')
+  expect(html).not.toContain('đưa phần dư ra')
+  expect(html).not.toContain('Nhận phần vừa kho')
+  expect(html).not.toContain('Số kiện cần đưa ra')
+  expect(html).not.toContain('Tạo yêu cầu thu xếp chuyển hàng')
+  expect(html).toContain('Buộc trả kho và quyết toán (hạn 7 ngày)')
+  expect(render({ inventoryFullFit: false, inventoryReturnWindowDays: 3 })).toContain('Buộc trả kho và quyết toán (hạn 3 ngày)')
+  expect(render({ inventoryFullFit: false, inventoryReturnWindowDays: 10 })).toContain('Buộc trả kho và quyết toán (hạn 10 ngày)')
 })

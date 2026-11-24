@@ -1,3 +1,4 @@
+import type { InventoryDecision } from './inventoryDecision'
 import { ApiClientError, apiDownload, apiRequest } from './apiClient'
 import type { GoodsItemInput, GoodsCategory } from './customerReservationApi'
 import { isCheckInStatus, isReservationStatus, isPaymentStatus, type CheckInStatus as WorkflowCheckInStatus, type ReservationStatus, type PaymentStatus } from '../types/statusContracts'
@@ -78,8 +79,25 @@ export interface CompleteCheckInRequest {
   lockReference: string
 }
 
+export interface HandoverRecord {
+  facilityName: string
+  facilityAddress: string
+  handedOverBy: string
+  handedOverByName: string
+  handedOverAt: string
+  items: { name: string; quantity: number }[]
+  signedRecordReference: string | null
+  note: string | null
+  rackCount?: number | null
+  palletCount?: number | null
+}
+
 export interface CheckInCase {
   equipment?: { rackCount: number; frameCount: number; palletCount: number | null }
+  handoverRecord?: HandoverRecord | null
+  customerReceiptConfirmedAt?: string | null
+  facilityAddress?: string | null
+  inventoryReturnWindowDays?: number | null
   intakeAction: 'START' | 'CONTINUE' | 'NONE'
   declaredGoodsLines?: {
     id: string
@@ -124,6 +142,7 @@ export interface CheckInCase {
   inventoryDueAt: string | null
   inventoryFinalDeadlineAt?: string | null
   inventoryPending: boolean
+  inventoryDecision?: InventoryDecision | null
   inventoryResolutionStatus?: InventoryResolutionStatus | null
   inventoryFullFit?: boolean
   inventoryPartialFitAvailable?: boolean
@@ -432,6 +451,10 @@ export async function startCheckInSetup(checkInId: string, request: {
   note?: string
   initialUnitCondition?: string
   evidenceReferences?: string[]
+  handedOverItems?: { name: string; quantity: number }[]
+  signedRecordReference?: string
+  rackCount?: number
+  palletCount?: number
 }) {
   return assertEnvelope(await apiRequest<unknown>(
     `/api/staff/check-ins/${encodeURIComponent(checkInId)}/setup/start`,
@@ -717,7 +740,7 @@ export async function prepareInventoryResolution(checkInId: string, expectedRevi
 }
 
 export const publishInventoryDraft = prepareInventoryResolution
-export type AtSiteInventoryDecision = 'REQUEST_TRANSFER' | 'ACCEPT_FULL' | 'ACCEPT_PARTIAL' | 'CANCEL_AND_RETURN'
+export type AtSiteInventoryDecision = 'REQUEST_TRANSFER' | 'ACCEPT_FULL' | 'CANCEL_AND_RETURN'
 export async function resolveInventoryAtSite(checkInId: string, request: { decision: AtSiteInventoryDecision; customerPresent: boolean; note?: string; scheduledDate?: string; evidenceReferences?: string[]; resultVersion?: number }) {
   return assertEnvelope(await apiRequest<unknown>(`/api/staff/check-ins/${encodeURIComponent(checkInId)}/inventory-resolution-at-site`,
     { method: 'POST', body: JSON.stringify(request) }))

@@ -95,6 +95,12 @@ describe('Manager payment history screen', () => {
     expect(html).toContain('VNPay')
   })
 
+  it('shows the persisted receipt code and keeps the gateway identifiers in the receipt', () => {
+    state.list = { data: paymentPage([{ ...item, receiptCode: 'PT-ABCD-EFGH-1234', transactionReference: 'MANUAL-RENTAL-123', gatewayTransactionNo: 'BANK-123' }]) }
+    const html = render()
+    expect(html).toContain('>PT-ABCD-EFGH-1234</code>')
+  })
+
   it('distinguishes refunds from collections and does not offer receipts for pending payments', () => {
     state.list = { data: paymentPage([{ ...item, type: 'RETURN_REFUND', status: 'REFUNDED' }]) }
     let html = render()

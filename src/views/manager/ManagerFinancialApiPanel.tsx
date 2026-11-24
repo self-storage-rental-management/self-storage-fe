@@ -1,5 +1,6 @@
 import { displayStatusLabel } from '../../presentation/statusLabels'
 import { invoiceNumberLabel } from '../customer/paymentLabels'
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import { useRef, useState, type FormEvent } from 'react'
 import { downloadPaymentReceipt } from '../../utils/downloadPaymentReceipt'
 import { getRenewalReceipt } from '../../services/renewalReceiptApi'
@@ -160,9 +161,10 @@ function receiptFields(item: ManagerPaymentHistoryItem): [string, string][] {
       }).format(date)
 
   const fields: [string, string][] = [
-    ['Mã giao dịch StorageHub', item.id],
+    ['Mã biên nhận', item.receiptCode || 'Chưa cấp'],
+    ['Mã giao dịch StorageHub', recordDisplayCode(item.id)],
     [isRemainingRental ? 'Mã tham chiếu thanh toán' : isVnpay ? 'Mã tham chiếu VNPay' : 'Mã tham chiếu giao dịch', item.transactionReference || '-'],
-    [isRemainingRental ? 'Mã phiếu thu hoặc giao dịch' : isVnpay ? 'Mã giao dịch VNPay' : 'Mã giao dịch', item.gatewayTransactionNo || item.transactionReference || '-'],
+    [isVnpay ? 'Mã giao dịch VNPay' : 'Mã giao dịch thanh toán', item.gatewayTransactionNo || '-'],
   ]
 
   if (item.reservationCode) {
@@ -301,12 +303,12 @@ function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; 
           <col className="w-[13%]" /><col className="w-[12%]" /><col className="w-[12%]" /><col className="w-[10%]" />
         </colgroup>
         <Thead><tr>
-          <Th>Mã giao dịch</Th><Th>Khách hàng</Th><Th>Loại</Th><Th>Phương thức</Th>
+          <Th>Mã giao dịch / biên nhận</Th><Th>Khách hàng</Th><Th>Loại</Th><Th>Phương thức</Th>
           <Th className="text-right">Số tiền</Th><Th>Trạng thái</Th><Th>Thời gian</Th><Th className="text-center">Biên lai</Th>
         </tr></Thead>
         <Tbody>
           {result.data.map((item: ManagerPaymentHistoryItem) => <Tr key={item.id} className="transition-colors hover:bg-stone-50 focus-within:bg-stone-50">
-            <Td><code className="block truncate text-xs text-stone-900" title={item.transactionReference}>{item.transactionReference}</code></Td>
+            <Td><code className="block break-all text-xs text-stone-900" title={item.receiptCode || item.transactionReference}>{item.receiptCode || item.transactionReference}</code></Td>
             <Td><p className="break-words font-medium text-stone-900 [overflow-wrap:anywhere]">{item.customerName}</p></Td>
             <Td><span className="block break-words text-stone-700">{typeLabels[item.type]}</span></Td>
             <Td><span className="block break-words text-stone-700">{paymentMethodLabel(item.paymentMethod)}</span></Td>

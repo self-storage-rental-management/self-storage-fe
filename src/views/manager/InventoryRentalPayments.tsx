@@ -15,8 +15,8 @@ function Receipt({ payment: p }: { payment: RentalPaymentReceipt }) {
   return <PaymentReceiptCard title="Biên lai thanh toán" reference={p.renewalId || p.rentalId}
     confirmed={verified} status={p.verification==='SIMULATED' ? 'Giao dịch mô phỏng' : verified ? 'Đã xác nhận' : 'Cần đối soát'}
     fields={[
-      ['Mã giao dịch StorageHub',p.paymentId],['Mã tham chiếu thanh toán',p.transactionReference || '-'],
-      ['Mã phiếu thu hoặc giao dịch VNPay',p.gatewayTransactionNo || '-'],['Hồ sơ thuê',p.rentalId],
+      ['Mã phiếu thu',p.receiptCode || 'Chưa cấp'],['Mã giao dịch StorageHub',p.paymentId],
+      ['Mã tham chiếu thanh toán',p.transactionReference || '-'],['Mã giao dịch thanh toán',p.gatewayTransactionNo || '-'],['Hồ sơ thuê',p.rentalId],
       ['Thời điểm ghi nhận thanh toán',rentalDate(p.paidAt)],['Thời điểm StorageHub xử lý',rentalDate(p.processedAt)],
       ['Phương thức thanh toán',paymentMethodLabel(p.paymentMethod)],['Người ghi nhận',p.initiatedByName],
       ['Nội dung',purpose(p)],['Số tiền',formatVndAmount(p.amount)],['Tiền tệ',paymentCurrencyLabel(p.currency)],

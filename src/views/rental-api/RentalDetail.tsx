@@ -1,4 +1,6 @@
 import { displayStatusLabel } from '../../presentation/statusLabels'
+import InventoryMismatchEvidence, { type InventoryInspectionReport } from '../staff/InventoryMismatchEvidence'
+import InventoryDecisionSummary from '../../components/InventoryDecisionSummary'
 import { invoiceNumberLabel } from '../customer/paymentLabels'
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { useEffect, useState } from "react"
@@ -9,11 +11,13 @@ import BookingTransactionReceipt from "./BookingTransactionReceipt"
 import type { RentalApiDetail, RentalApiRole } from "../../types/rentalApi"
 import { bookingPaymentPurposes, bookingPaymentStatuses } from "../../services/rentalBookingEvidence"
 import { rentalRecordLabel, rentalStatusLabel, rentalMoney, unknown, rentalDataWarning, rentalPeriodText, rentalDate, accessStatusLabels } from "./presentation"
-import { downloadCheckInEvidence } from "../../services/checkInApi"
-import { confirmCustomerRentalStart, getCustomerReservation, markCustomerPreparationComplete, previewCustomerRentalStart, resolveCustomerInventory, type CustomerReservationDetail, type RentalStartConfirmation } from "../../services/customerReservationApi"
+import { downloadCheckInEvidence, type CheckInInventoryLine } from "../../services/checkInApi"
+import { confirmCustomerRentalStart, extendCustomerInventoryReturnWindow, getCustomerReservation, markCustomerPreparationComplete, previewCustomerRentalStart, resolveCustomerInventory, type CustomerReservationDetail, type RentalStartConfirmation } from "../../services/customerReservationApi"
 import { InventoryLineInspectionResult, InventoryResolutionNotice, PackagingInspectionResult } from "../customer/CustomerReservationCard"
 import InventoryAppointmentPanel from "../customer/InventoryAppointmentPanel"
 import { formatCustomerDateTime } from "../../i18n/customerDate"
+import { listReturns, type ApiReturn } from "../../services/returnApi"
+import { ReturnSummary } from "../return-api/ReturnApiPanel"
 import { userFacingError } from "../../presentation/userFacingError"
 import FilePreviewDialog from "../../components/FilePreviewDialog"
 import { vietnamDateInput } from "../../utils/vietnamTime"
@@ -51,6 +55,26 @@ function GoodsImage({ image }: { image: { id: string; originalName: string; cont
     {preview && url && <FilePreviewDialog file={{ url, type: image.contentType, name: image.originalName }} onClose={() => setPreview(false)} />}
   </div>
 }
+function savedInventoryReport(rental: RentalApiDetail): InventoryInspectionReport | null {
+  if (rental.inventory?.report) return rental.inventory.report
+  if (!rental.inventory?.actualJson) return null
+  try {
+    const actual = JSON.parse(rental.inventory.actualJson)
+    if (!actual || typeof actual !== 'object' || Array.isArray(actual)) return null
+    const finite = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? value : undefined
+    return {
+      packageCount: finite(actual.packageCount),
+      actualMeasurements: { weightKg: finite(actual.weightKg), actualVolumeM3: finite(actual.volumeM3) },
+      inventoryLines: Array.isArray(actual.lines) ? actual.lines.filter((line: unknown): line is CheckInInventoryLine => Boolean(line && typeof line === 'object' && 'goodsItemId' in line && 'actualQuantity' in line && typeof line.goodsItemId === 'string' && typeof line.actualQuantity === 'number')) : [],
+      actualPackagingMethod: typeof actual.packagingMethod === 'string' ? actual.packagingMethod : null,
+      packagingCondition: ['INTACT', 'MINOR_DAMAGE', 'MAJOR_DAMAGE', 'UNPACKAGED'].includes(actual.packagingCondition) ? actual.packagingCondition : null,
+      varianceReason: typeof actual.varianceReason === 'string' ? actual.varianceReason : null,
+      notes: typeof actual.notes === 'string' ? actual.notes : '',
+      evidenceReferences: Array.isArray(actual.evidenceReferences) ? actual.evidenceReferences.filter((id: unknown): id is string => typeof id === 'string') : [],
+    }
+  } catch { return null }
+}
+
 export default function RentalDetail({
   rental,
   onRequest,
@@ -65,7 +89,7 @@ export default function RentalDetail({
   onRentalStartConfirmed?: () => void
 }) {
   const { copy } = useManagerPresentation()
-  const [section, setSection] = useState<'documents' | 'payments'>('documents')
+  const [section, setSection] = useState<'documents' | 'payments' | 'inventory'>('documents')
   const [receiptPayment, setReceiptPayment] = useState<string>()
   const [startPreview, setStartPreview] = useState<RentalStartConfirmation>()
   const [startAcknowledged, setStartAcknowledged] = useState(false)
@@ -75,11 +99,14 @@ export default function RentalDetail({
   const [preparationError, setPreparationError] = useState<string>()
   const [inventoryDetail, setInventoryDetail] = useState<CustomerReservationDetail>()
   const [inventoryReadError, setInventoryReadError] = useState('')
+  const [inventoryPreviewError, setInventoryPreviewError] = useState('')
   const [inventoryReload, setInventoryReload] = useState(0)
   const [resolvingInventory, setResolvingInventory] = useState(false)
   const [inventoryActionMessage, setInventoryActionMessage] = useState('')
   const [inventoryActionError, setInventoryActionError] = useState('')
-  const inventoryReservationId = role === 'customer' && (rental.moveInCompletedAt || rental.inventoryVerifiedAt || rental.inventoryPending)
+  const [activeReturnCase, setActiveReturnCase] = useState<ApiReturn>()
+  const isReturningRental = ['return_requested', 'return_inspection', 'closing'].includes(rental.status)
+  const inventoryReservationId = role === 'customer'
     ? rental.reservationId : null
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
@@ -93,12 +120,41 @@ export default function RentalDetail({
     void getCustomerReservation(inventoryReservationId)
       .then(value => { if (active) setInventoryDetail(value) })
       .catch(error => { if (active) setInventoryReadError(userFacingError(error, 'Không tải được lịch kiểm kê.')) })
-    return () => { active = false }
+    const refresh = () => { if (document.visibilityState !== 'hidden') setInventoryReload(value => value + 1) }
+    const timer = window.setInterval(refresh, 15_000)
+    window.addEventListener('focus', refresh)
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', refresh) }
   }, [inventoryReservationId, inventoryReload])
+  const previewInventoryEvidence = async (id: string) => {
+    const tab = window.open('', '_blank')
+    if (tab) tab.opener = null
+    setInventoryPreviewError('')
+    try {
+      const file = await downloadCheckInEvidence(id)
+      const url = URL.createObjectURL(file.blob)
+      if (tab) tab.location.href = url
+      else window.open(url, '_blank', 'noopener,noreferrer')
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (error) { tab?.close(); setInventoryPreviewError(userFacingError(error, 'Không thể mở bằng chứng kiểm kê.')) }
+  }
+  useEffect(() => {
+    if (!isReturningRental) { setActiveReturnCase(undefined); return }
+    let active = true
+    const returnRole = role === 'manager' ? 'manager' : role === 'staff' ? 'staff' : 'customer'
+    void listReturns(returnRole, 0, 50)
+      .then(page => {
+        if (!active) return
+        const found = page.data.find(item => item.rentalId === rental.id && item.status !== 'completed')
+        setActiveReturnCase(found)
+      })
+      .catch(() => {})
+    return () => { active = false }
+  }, [isReturningRental, rental.id, role])
   const labelClass = "text-xs font-medium text-stone-500"
   const valueClass = "mt-1 text-sm font-semibold text-stone-900"
 
   const displayCode = rental.displayCode
+  const inspectionReport = savedInventoryReport(rental)
   const evidence = rental.bookingEvidence
   const agreed = evidence?.agreedAmounts
   const warnings = rental.dataWarnings.filter(warning => warning.field !== "contractEndDate")
@@ -147,7 +203,7 @@ export default function RentalDetail({
     }
   }
 
-  const resolveInventoryDecision = async (decision: 'ACCEPT_FULL' | 'ACCEPT_PARTIAL' | 'CANCEL_AND_RETURN', scheduledDate?: string) => {
+  const resolveInventoryDecision = async (decision: 'ACCEPT_FULL' | 'CANCEL_AND_RETURN', scheduledDate?: string) => {
     if (role !== 'customer' || !rental.reservationId || resolvingInventory) return
     setResolvingInventory(true)
     setInventoryActionMessage('')
@@ -162,12 +218,27 @@ export default function RentalDetail({
       setInventoryDetail(updated)
       setInventoryActionMessage(decision === 'CANCEL_AND_RETURN'
         ? 'Đã gửi yêu cầu trả kho. Cơ sở sẽ tiếp nhận và kiểm tra hiện trạng theo quy trình trả kho.'
-        : decision === 'ACCEPT_PARTIAL'
-          ? 'Đã xác nhận nhận phần hàng có thể xếp trong gian kho.'
-          : 'Đã xác nhận nhận toàn bộ hàng hóa.')
+        : 'Đã xác nhận nhận toàn bộ hàng hóa.')
       onRentalStartConfirmed?.()
     } catch (error) {
       setInventoryActionError(userFacingError(error, 'Không thể ghi nhận phương án xử lý kiểm kê.'))
+    } finally {
+      setResolvingInventory(false)
+    }
+  }
+
+  const extendInventoryReturn = async () => {
+    if (role !== 'customer' || !rental.reservationId || resolvingInventory) return
+    setResolvingInventory(true)
+    setInventoryActionMessage('')
+    setInventoryActionError('')
+    try {
+      const updated = await extendCustomerInventoryReturnWindow(rental.reservationId)
+      setInventoryDetail(updated)
+      setInventoryActionMessage('Đã kéo dài thời gian trả kho theo quy định.')
+      onRentalStartConfirmed?.()
+    } catch (error) {
+      setInventoryActionError(userFacingError(error, 'Không thể kéo dài thời gian trả kho.'))
     } finally {
       setResolvingInventory(false)
     }
@@ -178,8 +249,22 @@ export default function RentalDetail({
       <div className="flex flex-wrap gap-2">
         <Button variant={section === 'documents' ? 'primary' : 'outline'} onClick={() => setSection('documents')}>Hồ sơ & tài liệu</Button>
         <Button variant={section === 'payments' ? 'primary' : 'outline'} onClick={() => setSection('payments')}>Thỏa thuận & giao dịch</Button>
+        <Button variant={section === 'inventory' ? 'primary' : 'outline'} onClick={() => setSection('inventory')}>Kết quả kiểm kê</Button>
       </div>
       <div className={section === 'documents' ? 'space-y-5' : 'hidden'}>
+      {isReturningRental && (
+        <Card className="space-y-3 rounded-xl border border-amber-300 bg-amber-50/40 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-base font-bold text-amber-950">Hồ sơ đang trong quy trình trả kho</h3>
+            <Badge variant="warning">{copy(rentalStatusLabel(rental))}</Badge>
+          </div>
+          {activeReturnCase ? (
+            <ReturnSummary record={activeReturnCase} hideHeader />
+          ) : (
+            <p className="text-sm text-amber-900">Hồ sơ đã chuyển sang trả kho. Vui lòng mở mục <b>Trả kho</b> để theo dõi lịch trả, nghiệm thu và bảng kê quyết toán.</p>
+          )}
+        </Card>
+      )}
       {rental.status === "active" && <RenewalRiskNotice rentalId={rental.id} role={role} />}
       <Card className="overflow-hidden rounded-xl border-t-4 border-t-amber-500 bg-white px-5 py-6 sm:px-8 sm:py-8">
         <div className="mb-6 flex flex-wrap items-start justify-between gap-4 border-b border-stone-200 pb-6">
@@ -235,11 +320,24 @@ export default function RentalDetail({
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3"><span className="text-sm text-emerald-800">Bắt đầu kỳ thuê có tính tiền</span><span className="font-bold text-emerald-900">{rentalDate(rental.startDate)}</span></div>
               <p className="border-t border-stone-100 pt-3 text-xs text-stone-500">Ngày tính tiền = ngày khách xác nhận nhận kho thực tế + số ngày chuẩn bị miễn phí theo báo giá.</p>
               {rental.moveInCompletedAt && <p className="border-t border-stone-100 pt-3 text-xs text-stone-500">Đã báo hoàn tất chuẩn bị lúc {new Date(rental.moveInCompletedAt).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })} ngày {rentalDate(vietnamDateInput(rental.moveInCompletedAt))}</p>}
-              {role === 'customer' && (rental.status === 'setup' || rental.status === 'active') && rental.inventoryPending
-                && !rental.moveInCompletedAt && !inventoryDetail?.setupCompletedAt && !rental.inventoryVerifiedAt && rental.reservationId
-                && <div className="mt-3 rounded-lg border border-violet-300 bg-violet-50 p-3 text-violet-950"><p className="text-sm font-bold">Bạn đã sắp xếp hàng xong?</p><p className="mt-1 text-xs leading-5">Báo đã chuẩn bị xong để mở bước chọn lịch kiểm kê.</p><Button className="mt-2" size="sm" disabled={preparationSubmitting} onClick={() => void reportPreparationComplete()}>{preparationSubmitting ? 'Đang gửi…' : 'Đã chuẩn bị xong'}</Button>{preparationError && <p role="alert" className="mt-2 text-xs text-red-700">{preparationError}</p>}</div>}
             </dd>
           </div>}
+          {role === 'customer' && !isReturningRental && (rental.status === 'setup' || rental.status === 'active') && rental.inventoryPending
+            && !rental.moveInCompletedAt && !inventoryDetail?.setupCompletedAt && !rental.inventoryVerifiedAt && rental.reservationId && (
+            <div>
+              <dt>Đưa hàng vào kho</dt>
+              <dd>
+                <div className="rounded-lg border border-violet-300 bg-violet-50 p-3 text-violet-950">
+                  <p className="text-sm font-bold">Bạn đã đưa hàng vào kho xong?</p>
+                  <p className="mt-1 text-xs leading-5">Xác nhận đã đưa hàng vào thành công để mở lịch chọn ngày hẹn kiểm kê gửi cho nhân viên.</p>
+                  <Button className="mt-2" size="sm" disabled={preparationSubmitting} onClick={() => void reportPreparationComplete()}>
+                    {preparationSubmitting ? 'Đang gửi…' : 'Xác nhận đã đưa hàng vào thành công'}
+                  </Button>
+                  {preparationError && <p role="alert" className="mt-2 text-xs text-red-700">{preparationError}</p>}
+                </div>
+              </dd>
+            </div>
+          )}
           {rental.inventoryVerifiedAt ? <div>
             <dt>Kiểm kê đầu vào</dt>
             <dd><Badge variant="success">Đã hoàn tất</Badge>
@@ -254,7 +352,7 @@ export default function RentalDetail({
               )}
               {role === 'customer' && inventoryDetail?.reservation.id === rental.reservationId && (
                 <div className="mt-3 space-y-2">
-                  <InventoryResolutionNotice detail={inventoryDetail} now={now} submitting={resolvingInventory} onResolve={(decision, scheduledDate) => void resolveInventoryDecision(decision, scheduledDate)} />
+                  <InventoryResolutionNotice detail={inventoryDetail} now={now} submitting={resolvingInventory} onExtendReturnWindow={() => void extendInventoryReturn()} onResolve={(decision, scheduledDate) => void resolveInventoryDecision(decision, scheduledDate)} />
                   {inventoryDetail.inventoryAtSiteConfirmedByName && <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
                     <p className="font-semibold">Kết quả kiểm kê đã được ghi nhận tại cơ sở</p>
                     <p className="mt-1">Nhân viên <b>{inventoryDetail.inventoryAtSiteConfirmedByName}</b> đã trình bày kết quả kiểm kê và ghi nhận phương án bạn đồng ý{inventoryDetail.inventoryDecisionAt ? ` lúc ${formatCustomerDateTime(new Date(inventoryDetail.inventoryDecisionAt))}` : ''}. Bạn không cần xác nhận lại trên tài khoản.</p>
@@ -264,13 +362,13 @@ export default function RentalDetail({
                 </div>
               )}
             </dd>
-          </div> : rental.inventoryPending && <div>
+          </div> : rental.inventoryPending && !isReturningRental && <div>
             <dt>Kiểm kê đầu vào</dt>
             <dd className="space-y-3">{role === 'customer' && inventoryDetail?.reservation.id === rental.reservationId
               && (inventoryDetail.inventoryFinalDeadlineAt || inventoryDetail.setupCompletedAt || (inventoryDetail.inventoryResolutionStatus && inventoryDetail.inventoryResolutionStatus !== 'NOT_STARTED')) ? (
                 <>
                   {inventoryDetail.inventoryFinalDeadlineAt && <InventoryAppointmentPanel detail={inventoryDetail} now={now} onSaved={setInventoryDetail} />}
-                  <InventoryResolutionNotice detail={inventoryDetail} now={now} submitting={resolvingInventory} onResolve={(decision, scheduledDate) => void resolveInventoryDecision(decision, scheduledDate)} />
+                  <InventoryResolutionNotice detail={inventoryDetail} now={now} submitting={resolvingInventory} onExtendReturnWindow={() => void extendInventoryReturn()} onResolve={(decision, scheduledDate) => void resolveInventoryDecision(decision, scheduledDate)} />
                   {inventoryDetail.inventoryAtSiteConfirmedByName && <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
                     <p className="font-semibold">Kết quả kiểm kê đã được ghi nhận tại cơ sở</p>
                     <p className="mt-1">Nhân viên <b>{inventoryDetail.inventoryAtSiteConfirmedByName}</b> đã trình bày kết quả kiểm kê và ghi nhận phương án bạn đồng ý{inventoryDetail.inventoryDecisionAt ? ` lúc ${formatCustomerDateTime(new Date(inventoryDetail.inventoryDecisionAt))}` : ''}. Bạn không cần xác nhận lại trên tài khoản.</p>
@@ -375,22 +473,6 @@ export default function RentalDetail({
           </div>
         )}
       </Card>}
-      {rental.inventory ? (
-        <Card className="space-y-3 rounded-xl p-5">
-          <h3 className="font-bold">Kết quả kiểm kê hàng hóa</h3>
-          <p>{rental.inventory.fullFit ? rental.inventory.mismatch ? 'Có sai lệch so với khai báo, hàng vẫn vừa kho.' : 'Hàng thực tế khớp khai báo.' : 'Hàng thực tế vượt sức chứa của gian kho.'}</p>
-          {rental.inventory.decision === 'TRANSFER_REQUESTED' && <p>Đã tạo yêu cầu thu xếp chuyển hàng.</p>}
-          {rental.inventory.decision === 'PARTIAL_ACCEPTED' && rental.inventory.removalDeadline && <p>Ngày hẹn đưa hàng dư ra: {new Date(Date.parse(rental.inventory.removalDeadline) - 1).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</p>}
-          {rental.inventory.removedAt && <p>Đã xác nhận đưa hàng dư ra ngày {rentalDate(rental.inventory.removedAt)}.</p>}
-          <InventoryLineInspectionResult detail={{ inventoryActualJson: rental.inventory.actualJson, acceptedQuantitiesJson: rental.inventory.decision === 'PARTIAL_ACCEPTED' ? rental.inventory.acceptedQuantitiesJson : null, goodsItems: evidence?.goodsItems }} />
-          <PackagingInspectionResult detail={{ inventoryActualJson: rental.inventory.actualJson, goodsCondition: rental.inventory.declaredPackaging }} />
-        </Card>
-      ) : inventoryDetail?.reservation.id === rental.reservationId && inventoryDetail.inventoryResultPublishedAt && (
-        <Card className="space-y-3 rounded-xl p-5">
-          <InventoryLineInspectionResult detail={inventoryDetail} />
-          <PackagingInspectionResult detail={inventoryDetail} />
-        </Card>
-      )}
       {evidence?.goodsItems?.some(item => item.images.length > 0) && <Card className="rounded-xl p-5">
         <h3 className="mb-4 border-b border-stone-200 pb-3 text-base font-bold">Hình ảnh hàng hóa</h3>
         <div className="space-y-5">{evidence.goodsItems.filter(item => item.images.length > 0).map(item => <div key={item.id}>
@@ -398,6 +480,25 @@ export default function RentalDetail({
           <div className="flex flex-wrap gap-3">{item.images.map(image => <GoodsImage key={image.id} image={image} />)}</div>
         </div>)}</div>
       </Card>}
+      </div>
+      <div className={section === 'inventory' ? 'space-y-4' : 'hidden'}>
+      {(rental.inventory?.intakeDecision || inventoryDetail?.inventoryDecision) && <InventoryDecisionSummary decision={rental.inventory?.intakeDecision || inventoryDetail?.inventoryDecision} />}
+      {inspectionReport ? <Card className="p-4">
+        <h3 className="mb-3 border-b border-stone-200 pb-2 text-base font-semibold">Kết quả kiểm kê hàng hóa</h3>
+        <InventoryMismatchEvidence item={{
+          handover: inspectionReport,
+          inventoryFullFit: rental.inventory?.fullFit,
+          inventoryMismatchJson: rental.inventory?.mismatchJson || (rental.inventory?.mismatch ? '{}' : null),
+          inventoryMismatchSummary: rental.inventory?.mismatchSummary,
+          declaredPackagingMethod: rental.inventory?.declaredPackaging,
+          declaredPackageCount: evidence?.goodsItems?.length ? evidence.goodsItems.reduce((sum, item) => sum + item.quantity, 0) : undefined,
+          declaredGoodsWeightKg: evidence?.goodsItems?.length ? evidence.goodsItems.reduce((sum, item) => sum + item.quantity * item.weightPerItemKg, 0) : undefined,
+          declaredGoodsVolumeM3: evidence?.goodsItems?.length ? evidence.goodsItems.reduce((sum, item) => sum + item.quantity * item.lengthCm * item.widthCm * item.heightCm / 1_000_000, 0) : undefined,
+          declaredGoodsLines: evidence?.goodsItems?.map(item => ({ ...item, code: item.goodsCode,
+            name: item.customGoodsName || item.categoryName, weightPerPackageKg: item.weightPerItemKg })),
+        }} onPreview={id => void previewInventoryEvidence(id)} />
+      </Card> : <p className="rounded-lg border border-stone-200 bg-white p-4 text-sm text-stone-600">Chưa có kết quả kiểm kê đã lưu cho hồ sơ này.</p>}
+      {inventoryPreviewError && <p role="alert" className="text-sm text-red-700">{inventoryPreviewError}</p>}
       </div>
       <div className={section === 'payments' ? 'space-y-5' : 'hidden'}>
       {evidence && (

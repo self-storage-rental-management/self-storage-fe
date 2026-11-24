@@ -65,7 +65,6 @@ function returnRecoveryCutoff(value: string | null | undefined) {
     ? at.toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
     : null
 }
-
 export function returnRecoveryCountdown(value: string | null | undefined, now = Date.now()) {
   if (!value) return null
   const deadline = Date.parse(value)
@@ -117,7 +116,7 @@ export function ReturnSummary({ record, hideTerminationFee = false, hideHeader =
         </>
       )}
       {['requested', 'scheduled'].includes(record.status) && record.recoveryEligibleAt && <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">Nếu khách chưa đến và chưa hoàn tất trả kho, hồ sơ sẽ chuyển sang nhiệm vụ xử lý sau <strong>{returnRecoveryCountdown(record.recoveryEligibleAt, now) || returnRecoveryCutoff(record.recoveryEligibleAt)}</strong>. Hàng chưa được tự động di chuyển.</p>}
-      {record.returnType === 'INVENTORY_MISMATCH' && <p className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-950">Yêu cầu trả kho này liên quan đến hàng hóa không khớp khai báo. Phí và thời gian được tính theo kết quả kiểm kê.</p>}
+      {record.returnType === 'INVENTORY_MISMATCH' && <p className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-950">Yêu cầu trả kho này liên quan đến hàng hóa không khớp khai báo. Phí và thời gian được tính theo kết quả kiểm kê.{record.returnWindowDays != null ? ` Hạn trả hàng áp dụng: ${record.returnWindowDays} ngày lịch.` : ''}</p>}
       {record.status === 'recovery_required' && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-950">Khách chưa đến theo lịch và đã hết thời gian ân hạn. Hàng chưa được tự động di chuyển. Cơ sở cần lập biên bản, kiểm kê và bàn giao hai người trước khi thu hồi.</p>}
       {record.status === 'recovery_required' && record.recoveryTaskDeadlineAt && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-950">Hạn xử lý nhiệm vụ thu hồi: {returnRecoveryCutoff(record.recoveryTaskDeadlineAt)}</p>}
       {inventoryMismatch && record.earlyTerminationPolicy && <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-950">
@@ -139,7 +138,7 @@ export function ReturnSummary({ record, hideTerminationFee = false, hideHeader =
         ? 'Chỉ tính thời gian sử dụng thực tế và các khoản có bằng chứng, không áp dụng phí chấm dứt sớm cố định.'
         : record.setupEarlyExit
           ? hideTerminationFee ? 'Trả trong thời gian chuẩn bị: hoàn 80% tiền thuê sau ưu đãi, giữ lại 20%; tiền cọc đảm bảo quyết toán riêng sau khi trừ hư hỏng theo bảng giá.' : 'Trả trong thời gian chuẩn bị: hệ thống giữ lại 20% tiền thuê sau ưu đãi và hoàn 80%. Hư hỏng trừ vào cọc một tháng; phần vượt cọc được bù vào tiền thuê chưa sử dụng trước khi yêu cầu khách trả thêm.'
-        : record.setupReturnedAt ? 'Kho được nghiệm thu sau hạn chuẩn bị, áp dụng quyết toán của kỳ thuê đã bắt đầu.' : 'Nhân viên cần xác nhận đã dọn hết hàng và bàn giao kho trống. Điều khoản thời gian chuẩn bị áp dụng theo thời điểm nghiệm thu thực tế.'}</p>}
+          : record.setupReturnedAt ? 'Kho được nghiệm thu sau hạn chuẩn bị, áp dụng quyết toán của kỳ thuê đã bắt đầu.' : 'Nhân viên cần xác nhận đã dọn hết hàng và bàn giao kho trống. Điều khoản thời gian chuẩn bị áp dụng theo thời điểm nghiệm thu thực tế.'}</p>}
       {record.settlementBlocker && (
         <p role="status" className="rounded bg-amber-50 p-3">
           {record.settlementBlocker}
@@ -361,7 +360,7 @@ function RecoveryReturnSummary({ record, hideTerminationFee, hideHeader = false 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {([
           ['Tiền cọc đảm bảo thuê thực thu', record.depositAmount], ['Phí đã ghi nhận', record.totalDeductions],
-          ...(record.setupEarlyExit ? [['Tiền thuê được hoàn (80%)', record.rentalRefundCredit], ...(!hideTerminationFee ? [['Khoản giữ lại theo chính sách chuẩn bị (Phí chấm dứt sớm một lần)', record.earlyTerminationFee]] as const : [])] as const : []),
+          ...(record.setupEarlyExit ? [['Tiền thuê được hoàn (80%)', record.rentalRefundCredit], ...(!hideTerminationFee ? [[(record.returnType === 'INVENTORY_MISMATCH' ? 'Khoản giữ lại theo chính sách chuẩn bị' : 'Khoản giữ lại theo chính sách chuẩn bị (Phí chấm dứt sớm một lần)'), record.earlyTerminationFee]] as const : [])] as const : []),
           ...(!record.setupEarlyExit && record.activeReturnPolicy ? [['Tiền thuê các tháng còn lại chưa sử dụng', record.activeReturnPolicy.rentalRefundAmount]] as const : []),
           ['Khoản hoàn tiền', record.netRefundAmount], ['Khách cần đóng thêm', record.amountDueFromCustomer],
         ] as const).map(([label, amount]) => <div key={label} className="rounded-lg bg-stone-50 p-3"><p className="text-xs text-stone-500">{label}</p><p className="mt-1 text-sm font-bold text-stone-900">{amount == null ? 'Chưa xác định' : rentalMoney(amount, 'VND')}</p></div>)}
