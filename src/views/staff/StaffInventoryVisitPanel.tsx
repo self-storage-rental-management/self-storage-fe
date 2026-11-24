@@ -48,8 +48,12 @@ export default function StaffInventoryVisitPanel({ item, now, busy, onBusyChange
       return
     }
     const checkInId = item.checkInId
-    if (!checkInId || !present || (!file && !photoId)) return
+    if (!checkInId || !open || expired || !visit?.appointmentAt || !present || (!file && !photoId)) return
     await run(async () => {
+      if (!visit?.arrivedAt) {
+        const arrived = await recordInventoryArrival(checkInId)
+        onSaved(arrived)
+      }
       let uploadedPhotoId = photoId
       if (!uploadedPhotoId && file) {
         const photo = await uploadCheckInEvidence(checkInId, file, 'CHECK_IN_IDENTITY')
@@ -61,36 +65,32 @@ export default function StaffInventoryVisitPanel({ item, now, busy, onBusyChange
     })
   }
 
-  return <section className="space-y-3 rounded-lg border border-violet-200 bg-violet-50 p-4 text-sm text-violet-950">
-    <p className="font-semibold">Lịch hẹn và xác minh khách kiểm kê</p>
-    {item.setupCompletedAt && <p>Khách báo chuẩn bị xong lúc {format(item.setupCompletedAt)}</p>}
-    <p>Giờ hẹn <b>{visit?.appointmentAt ? format(visit.appointmentAt) : 'Chưa đặt lịch'}</b></p>
-    {item.inventoryDueAt && <p>Mốc nhắc {format(item.inventoryDueAt)}</p>}
-    {item.inventoryFinalDeadlineAt && <p>Hạn kiểm kê <b>{format(item.inventoryFinalDeadlineAt)}</b></p>}
-    {visit?.arrivedAt && <p>Giờ khách đến thực tế <b>{format(visit.arrivedAt)}</b></p>}
+  return <section className="space-y-4 rounded-xl border border-stone-200 bg-stone-50 p-5 text-sm text-stone-700">
+    <h3 className="font-semibold text-stone-900">Kiểm tra khách đến kiểm kê</h3>
     {visit?.identityVerifiedAt ? <div className="flex flex-wrap items-center gap-2">
       <span>Đã xác minh lúc {format(visit.identityVerifiedAt)}{visit.verifiedByName ? ` bởi ${visit.verifiedByName}` : ''}.</span>
       {visit.photoId && <Button type="button" size="sm" variant="outline" onClick={() => onPreview(visit.photoId!)}>Xem ảnh xác minh</Button>}
-    </div> : open && (expired ? <p className="font-semibold text-red-800">Đã quá hạn kiểm kê. Hồ sơ cần Manager xử lý.</p>
-      : !visit?.appointmentAt ? <p>Đang chờ khách chọn lịch kiểm kê.</p>
-      : !visit.arrivedAt ? <Button type="button" size="sm" disabled={busy || !item.checkInId}
-        onClick={() => { if (item.checkInId) void run(() => recordInventoryArrival(item.checkInId!)) }}>Ghi nhận khách đã đến</Button>
-      : <div className="space-y-2">
+    </div> : open && <div className="space-y-4">
+      {expired && <p role="status" className="font-semibold text-red-800">Đã quá hạn kiểm kê. Hồ sơ cần Manager xử lý.</p>}
+      {!visit?.appointmentAt && <p role="status">Đang chờ khách chọn lịch kiểm kê.</p>}
+      <fieldset className="space-y-4" disabled={busy || expired || !visit?.appointmentAt}>
+
         <label className="grid gap-1">Số CCCD hoặc hộ chiếu trên giấy tờ gốc
-          <input className="rounded-md border border-violet-300 bg-white p-2" autoComplete="off" maxLength={30}
+          <input className="rounded-md border border-stone-300 bg-white p-2" autoComplete="off" maxLength={30}
             value={document} disabled={busy} onChange={event => setDocument(event.target.value)} />
         </label>
         <label className="grid gap-1">Ảnh khách tại buổi kiểm kê
-          <input type="file" accept="image/jpeg,image/png,image/webp" capture="user" disabled={busy}
+          <input className="block w-full rounded-lg border border-stone-300 bg-white p-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-stone-100 file:px-3 file:py-2 file:font-medium" type="file" accept="image/jpeg,image/png,image/webp" capture="user" disabled={busy}
             onChange={event => { setFile(event.target.files?.[0]); setPhotoId(undefined) }} />
         </label>
         <label className="flex items-center gap-2">
           <input type="checkbox" checked={present} disabled={busy} onChange={event => setPresent(event.target.checked)} />
           Đã đối chiếu giấy tờ gốc và xác nhận người đặt kho trực tiếp có mặt.
         </label>
-        <Button type="button" size="sm" disabled={busy || !document.trim() || !present || (!file && !photoId)}
+        <Button type="button" size="sm" disabled={busy || expired || !visit?.appointmentAt || !item.checkInId || !document.trim() || !present || (!file && !photoId)}
           onClick={() => void verify()}>{busy ? 'Đang lưu…' : 'Xác minh người đặt kho'}</Button>
-      </div>)}
+      </fieldset>
+      </div>}
     {error && <p className="text-red-800" role="alert">{error}</p>}
   </section>
 }

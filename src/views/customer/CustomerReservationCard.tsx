@@ -613,6 +613,15 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         {detail && <PackagingInspectionResult detail={detail} />}
         {detail && <InventoryLineInspectionResult detail={detail} />}
         {detail && <InventoryResolutionNotice detail={detail} now={now} submitting={resolvingInventory} onResolve={(decision, scheduledDate) => void resolveInventoryDecision(decision, scheduledDate)} />}
+      {detail?.inventoryAtSiteConfirmedByName && <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
+        <p className="font-semibold">Kết quả kiểm kê đã được ghi nhận tại cơ sở</p>
+        <p className="mt-1">
+          Nhân viên <b>{detail.inventoryAtSiteConfirmedByName}</b> đã trình bày kết quả kiểm kê và ghi nhận phương án bạn đồng ý
+          {detail.inventoryDecisionAt ? ` lúc ${formatCustomerDateTime(new Date(detail.inventoryDecisionAt))}` : ''}.
+          Bạn không cần xác nhận lại trên tài khoản.
+        </p>
+        <p className="mt-1 text-xs text-emerald-900">Bảng kê quyết toán (nếu có) vẫn cần bạn xác nhận riêng khi được gửi.</p>
+      </div>}
         {documentAvailable && <Button variant="outline" size="sm" className="reservation-action reservation-action-document min-h-10 w-full justify-center" disabled={busy} onClick={() => void prepareBookingDocument()}>{busy ? 'Đang chuẩn bị…' : 'Xem phiếu giữ kho'}</Button>}
         {handoverDocumentsAvailable && <Button variant="outline" size="sm" className="min-h-10 w-full justify-center" disabled={busy} onClick={() => void loadHandoverDocuments()}>{busy ? 'Đang tải…' : 'Xem hợp đồng đã ký'}</Button>}
         {onRequestSupport && <Button type="button" variant="outline" size="sm" className="min-h-10 w-full justify-center" onClick={onRequestSupport}>Hỗ trợ đơn này</Button>}

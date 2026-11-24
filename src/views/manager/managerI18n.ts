@@ -1,3 +1,5 @@
+import { VIETNAM_TIME_ZONE } from '../../utils/vietnamTime'
+
 export type Language = 'en' | 'vi'
 
 type BilingualLabel = { en: string; vi: string }
@@ -229,9 +231,11 @@ export const managerDateLabel = (value: string | undefined, lang: Language, incl
     ? parsed.toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-GB', {
       day: '2-digit', month: '2-digit', year: 'numeric',
       hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+      timeZone: VIETNAM_TIME_ZONE,
     })
     : parsed.toLocaleDateString(lang === 'vi' ? 'vi-VN' : 'en-GB', {
       day: '2-digit', month: '2-digit', year: 'numeric',
+      timeZone: VIETNAM_TIME_ZONE,
     })
 }
 

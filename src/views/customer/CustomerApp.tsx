@@ -1,3 +1,4 @@
+import { PACKAGING_METHOD_OPTIONS } from '../../domain/packagingMethods'
 import BookingArrivalDetails from './BookingArrivalDetails'
 import CustomerTransactionTerms from './CustomerTransactionTerms'
 import BookingPersonalDetails from './BookingPersonalDetails'
@@ -3601,7 +3602,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
               <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => setGoodsItems(items => [...items, createGoodsDeclarationItem()])}>+ Thêm hàng hóa</Button>
 
               <div className="mt-4 grid grid-cols-1 gap-3">
-                <Select label="Phương thức đóng gói chung *" value={goodsCondition} onChange={e => setGoodsCondition(e.target.value)}><option value="">Chọn phương thức đóng gói</option>{['Thùng carton', 'Thùng nhựa', 'Thùng gỗ', 'Bọc màng / túi bảo vệ', 'Kiện hàng / pallet', 'Chưa đóng gói', 'Đóng gói hỗn hợp'].map(value => <option key={value}>{value}</option>)}</Select>
+                <Select label="Phương thức đóng gói chung *" value={goodsCondition} onChange={e => setGoodsCondition(e.target.value)}><option value="">Chọn phương thức đóng gói</option>{PACKAGING_METHOD_OPTIONS.map(value => <option key={value}>{value}</option>)}</Select>
                 <label className="flex items-start gap-2 text-sm text-stone-700"><input className="mt-1" type="checkbox" checked={goodsNotProhibited} onChange={e => setGoodsNotProhibited(e.target.checked)} /><span>Hàng của tôi không thuộc danh mục cấm (cháy nổ, hóa chất, hàng tươi sống…). Xem <a className="font-semibold underline" href="#booking-prohibited-rules" onClick={event => { event.preventDefault(); const rules = document.getElementById('booking-prohibited-rules'); if (rules instanceof HTMLDetailsElement) { rules.open = true; rules.scrollIntoView({ behavior: 'smooth', block: 'center' }) } }}>Quy định thuê kho</a>.</span></label>
                 <details id="booking-prohibited-rules" className="rounded-lg border border-stone-200 p-3"><summary className="cursor-pointer text-sm font-medium">Quy định thuê kho và danh mục hàng cấm</summary><div className="mt-3"><p className="mb-3 text-sm">Không nhận hàng cháy nổ, hóa chất nguy hiểm, hàng tươi sống hoặc hàng vi phạm pháp luật.</p><CustomerTransactionTerms /></div></details>
               </div>
