@@ -49,6 +49,43 @@ export function compareStaffTaskSchedule<
     : dueDifference || priorityDifference
 }
 
+export function compareCheckInSchedule<
+  T extends {
+    checkInStatus?: string | null
+    appointmentAt?: string | null
+    scheduledAt?: string | null
+    setupCompletedAt?: string | null
+    checkedInAt?: string | null
+    startDate?: string | null
+    reservationCode?: string | null
+  },
+>(left: T, right: T): number {
+  // 1. Hồ sơ đang cần xử lý (chưa hoàn tất) luôn ưu tiên hiển thị trước các hồ sơ đã kết thúc
+  const finishedStatuses = ["completed", "rejected", "no_show"]
+  const leftFinished = finishedStatuses.includes(left.checkInStatus || "")
+  const rightFinished = finishedStatuses.includes(right.checkInStatus || "")
+  if (leftFinished !== rightFinished) {
+    return leftFinished ? 1 : -1
+  }
+
+  // 2. Gần nhất / mới nhất lên đầu (sắp xếp giảm dần theo mốc thời gian nhận kho / hẹn)
+  const timestamp = (item: T) => {
+    const val = item.appointmentAt || item.scheduledAt || item.setupCompletedAt || item.checkedInAt || item.startDate
+    if (!val) return 0
+    const result = new Date(val).getTime()
+    return Number.isNaN(result) ? 0 : result
+  }
+
+  const leftTime = timestamp(left)
+  const rightTime = timestamp(right)
+  if (rightTime !== leftTime) {
+    return rightTime - leftTime
+  }
+
+  // 3. Dự phòng theo mã đơn giảm dần
+  return (right.reservationCode || "").localeCompare(left.reservationCode || "")
+}
+
 const CHECK_IN_STATUS_LABELS: Record<string, string> = {
   scheduled: "Đã lên lịch",
   identity_verified: "Đã xác minh khách",
