@@ -1,3 +1,4 @@
+import { displayStatusLabel } from '../../presentation/statusLabels'
 import { formatCustomerDateTime } from '../../i18n/customerDate'
 import { userFacingError } from '../../presentation/userFacingError'
 import { useEffect, useState } from "react"
@@ -232,19 +233,19 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
                         {label}
                       </span>
                       {entry.reservationPayment?.invoiceNumber && (
-                        <p className="max-w-[150px] truncate font-mono text-[10px] text-stone-500" title={`Hóa đơn: ${entry.reservationPayment.invoiceNumber} · ${entry.reservationPayment.invoiceStatus || "DRAFT"}`}>
-                          Hóa đơn: {entry.reservationPayment.invoiceNumber}
+                        <p className="max-w-[150px] truncate font-mono text-[10px] text-stone-500" title={`Hóa đơn: ${entry.reservationPayment.invoiceNumber} · ${displayStatusLabel(entry.reservationPayment.invoiceStatus || "DRAFT")}`}>
+                          Hóa đơn: {entry.reservationPayment.invoiceNumber} · {displayStatusLabel(entry.reservationPayment.invoiceStatus || "DRAFT")}
                         </p>
                       )}
                     </div>
                   </Td>
                   <Td className="text-center">
                     {!loading && !error && canViewCustomerHistoryReceipt(entry) ? (
-                      <Button variant="outline" size="sm" onClick={() => setReceiptId(entry.id)}>
-                        Xem biên lai
+                      <Button variant="ghost" size="sm" className="!h-9 !w-9 !p-2 !text-stone-500 hover:!bg-stone-100" aria-label="Xem biên lai" title="Xem biên lai" onClick={() => setReceiptId(entry.id)}>
+                        <svg aria-hidden="true" className="show-icon h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" /><circle cx="12" cy="12" r="2.5" /></svg>
                       </Button>
                     ) : (
-                      <span className="text-xs text-stone-400">—</span>
+                      <span className="text-xs text-stone-400">Chưa có</span>
                     )}
                   </Td>
                 </Tr>

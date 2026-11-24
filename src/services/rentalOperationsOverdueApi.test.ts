@@ -463,7 +463,7 @@ describe("D3 real API transport", () => {
       ),
     ).rejects.toMatchObject({
       status: 409,
-      message: expect.stringContaining("DEFERRED_SOURCE"),
+      diagnosticMessage: expect.stringContaining("DEFERRED_SOURCE"),
     })
   })
   it.each([

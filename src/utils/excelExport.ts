@@ -1,3 +1,4 @@
+import { displayStatusLabel } from '../presentation/statusLabels'
 import * as XLSX from 'xlsx'
 import type { MonthlyRevenueRecord } from '../data/demoDatabase'
 
@@ -207,7 +208,7 @@ export function exportManagerFacilityExcel(options: ManagerFacilityExportOptions
     ['Doanh thu định kỳ/tháng', m.monthlyRevenue ?? '-', 'Tổng giá trị hợp đồng active'],
     ['Tiền đã thu', m.collectedRevenue ?? '-', 'Đã đối soát ghi nhận'],
     ['Hồ sơ thuê quá hạn', m.overdueRentalsCount ?? 0, 'Cần nhắc nợ hoặc xử lý'],
-    ['Lượt nhận kho trong tháng', m.monthCheckinsCount ?? 0, 'Check-in thành công'],
+    ['Lượt nhận kho trong tháng', m.monthCheckinsCount ?? 0, 'Nhận kho thành công'],
     ['Yêu cầu trả kho chờ xử lý', m.openReturnsCount ?? 0, 'Đang chờ nghiệm thu / hoàn tất']
   ]
 
@@ -226,7 +227,7 @@ export function exportManagerFacilityExcel(options: ManagerFacilityExportOptions
     XLSX.utils.book_append_sheet(wb, flow, 'Thu và hoàn tiền')
     const refunds = XLSX.utils.aoa_to_sheet([
       ['Đơn', 'Khách', 'Trạng thái', 'Cọc', 'Ghi có tiền thuê', 'Khấu trừ', 'Tiền hoàn', 'Ngày chi', 'Tham chiếu', 'Đã xác minh chi'],
-      ...f.settlements.map(s => [s.reservationCode, s.customerName, s.status, s.deposit ?? 'Chưa phân bổ', s.rentalCredit ?? 'Chưa phân bổ', s.deductions ?? 'Chưa phân bổ', s.refund, s.paidAt || '', s.reference || '', s.payoutRecorded ? 'Đã ghi nhận' : 'Chưa hoàn']),
+      ...f.settlements.map(s => [s.reservationCode, s.customerName, displayStatusLabel(s.status), s.deposit ?? 'Chưa phân bổ', s.rentalCredit ?? 'Chưa phân bổ', s.deductions ?? 'Chưa phân bổ', s.refund, s.paidAt || '', s.reference || '', s.payoutRecorded ? 'Đã ghi nhận' : 'Chưa hoàn']),
     ])
     XLSX.utils.book_append_sheet(wb, refunds, 'Quyết toán tiền hoàn')
   }
@@ -245,7 +246,7 @@ export function exportManagerFacilityExcel(options: ManagerFacilityExportOptions
         u.code,
         u.type,
         u.zone,
-        u.status,
+        displayStatusLabel(u.status),
         u.price,
         u.availability || '-'
       ])
@@ -267,8 +268,8 @@ export function exportManagerFacilityExcel(options: ManagerFacilityExportOptions
         r.unitId,
         r.customerName,
         r.scheduledDate,
-        r.status,
-        r.damageClassification || 'Chưa kiểm tra',
+        displayStatusLabel(r.status),
+        r.damageClassification ? ({ no_damage: 'Không hư hại', minor_damage: 'Hư hại nhẹ', major_damage: 'Hư hại nặng', abandoned_goods: 'Còn hàng trong kho' } as Record<string, string>)[r.damageClassification] || 'Chưa phân loại' : 'Chưa kiểm tra',
         r.notes || '-'
       ])
     })

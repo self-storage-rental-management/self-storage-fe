@@ -12,7 +12,7 @@ import { isCheckInHandoverExpired, staffCheckInActions } from "../../domain/rese
 import { packageVolumeM3 } from '../../domain/reservationCapacity'
 import { inventoryResult } from '../../domain/inventoryResult'
 import { canOpenInventory } from '../../domain/inventoryAccess'
-import { canReturnToInventoryStage, isInventoryStageReadOnly, INVENTORY_STAGE_LABELS, type InventoryStage } from '../../domain/inventoryStages'
+import { canReturnToInventoryStage, isInventoryResultReopenable, isInventoryStageReadOnly, INVENTORY_STAGE_LABELS, type InventoryStage } from '../../domain/inventoryStages'
 
 import {
   archiveCompletedCheckIn,
@@ -83,7 +83,7 @@ const checklistLabels: Array<[keyof CheckInChecklist, string]> = [
 
   ["measurementVerified", "Đã đo và đối chiếu hàng hóa thực tế"],
 
-  ["unitWalkthrough", "Đã bàn giao kho trống cho khách hàng"],
+  ["unitWalkthrough", "Đã bàn giao kho trống, đối chiếu đủ khung và tấm kê với khách hàng"],
 
   ["conditionRecorded", "Đã ghi nhận tình trạng hàng hóa"],
 
@@ -529,6 +529,7 @@ const workflowStepLabels = [
 type CheckInFilters = Pick<NonNullable<Parameters<typeof listCheckIns>[0]>, "q" | "status" | "scheduledFrom" | "scheduledTo">
 
 const checkInTableColumnWidths = ["18%", "13%", "15%", "19%", "35%"] as const
+const checkInActionButtonBaseClass = "h-9 shrink-0 whitespace-nowrap !px-2 !py-0 !text-xs font-medium"
 
 function CheckInTableColumns() {
   return (
@@ -566,6 +567,28 @@ function CheckInWorkList({ group, filters, refreshKey, now, renderRow }: {
     })
     return () => { active = false }
   }, [filters, group, page, refreshKey])
+
+  // The customer confirms receipt and reports setup completion on their own portal, so the
+  // operator's list must pick those transitions up on its own instead of waiting for a manual
+  // reload. Only the list data is replaced; an open form keeps its own state untouched.
+  useEffect(() => {
+    let active = true
+    const poll = async () => {
+      try {
+        const response = await listCheckIns({ ...filters, group, page, pageSize: 20 })
+        if (active && page < response.pagination.totalPages) setResult(response)
+      } catch {
+        // Keep the last good list; the next poll can recover from a temporary read error.
+      }
+    }
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void poll()
+    }, 15_000)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
+  }, [filters, group, page])
 
   const { totalItems = 0, totalPages = 0 } = result?.pagination ?? {}
   const title = group === "ONGOING" ? "Đang diễn ra" : "Đã xử lý"
@@ -670,9 +693,13 @@ export default function StaffCheckInOperationsPanel({
   const [inventoryDraftRevision, setInventoryDraftRevision] = useState(0)
   const [inventorySavedAt, setInventorySavedAt] = useState<string | null>(null)
   const [inventoryEditing, setInventoryEditing] = useState(true)
+  // True after the operator walks back from a recorded at-site result: the corrected draft must
+  // be published again before the case may move on to the discrepancy stage.
+  const [inventoryReopened, setInventoryReopened] = useState(false)
   const [confirmedInventoryReview, setConfirmedInventoryReview] = useState<string | null>(null)
   const inventoryMode = handoverStep === 6
-  const inventoryPublished = Boolean(handoverTarget?.inventoryResolutionStatus && handoverTarget.inventoryResolutionStatus !== "NOT_STARTED" && handoverTarget.inventoryResolutionStatus !== "ACCEPTED") || handoverTarget?.checkInStatus === "completed"
+  const inventoryRecordedAtSite = Boolean(handoverTarget?.inventoryResolutionStatus && handoverTarget.inventoryResolutionStatus !== "NOT_STARTED" && handoverTarget.inventoryResolutionStatus !== "ACCEPTED") || handoverTarget?.checkInStatus === "completed"
+  const inventoryPublished = inventoryRecordedAtSite && !inventoryReopened
 
   /** Steps already passed stay reachable so a mistaken entry does not trap the operator. */
   const canGoBackToInventoryStage = (stage: InventoryStage) => canReturnToInventoryStage({
@@ -690,6 +717,9 @@ export default function StaffCheckInOperationsPanel({
       // Re-open the editable inspection form even when a draft was already saved.
       setInventoryEditing(true)
       setConfirmedInventoryReview(null)
+      // A result recorded at the facility was never sent to the customer, so walking back
+      // unlocks the record and requires publishing the corrected numbers again.
+      if (inventoryRecordedAtSite) setInventoryReopened(true)
     }
     setInventoryStage(stage)
   }
@@ -1034,9 +1064,17 @@ export default function StaffCheckInOperationsPanel({
 
   const workflowCurrentStep = handoverTarget ? stepForCheckIn(handoverTarget) : 1
   const handoverDeadlinePassed = handoverTarget ? handoverExpired(handoverTarget, now) : false
-  // Walking back into an already published inspection must not reopen an editable form the
-  // backend would reject; those earlier stages are shown read-only instead.
-  const inventoryStageReadOnly = inventoryMode && isInventoryStageReadOnly({ stage: inventoryStage, published: inventoryPublished })
+  // An at-site result was never sent to the customer, so the operator may still correct the
+  // inspection. Anything already sent to the customer keeps the form read-only.
+  const inventoryResultReopenable = isInventoryResultReopenable({
+    resolutionStatus: handoverTarget?.inventoryResolutionStatus,
+    checkInStatus: handoverTarget?.checkInStatus,
+  })
+  const inventoryStageReadOnly = inventoryMode && isInventoryStageReadOnly({
+    stage: inventoryStage,
+    published: inventoryPublished,
+    reopenable: inventoryResultReopenable,
+  })
   const isReviewingCompletedStep = Boolean(
     handoverTarget &&
       (handoverTarget.checkInStatus === "completed" || handoverStep < workflowCurrentStep ||
@@ -1076,11 +1114,19 @@ export default function StaffCheckInOperationsPanel({
     }
   }
 
+  // The customer confirms receipt and reports setup completion on their own portal. While the
+  // operator has this case open on a customer-waiting step, the form must follow those
+  // transitions by itself — closing the waiting popup must not stop the sync.
+  const awaitngCustomerTransition = Boolean(
+    handoverTarget?.checkInId
+    && ["handover_pending_receipt", "setup_in_progress"].includes(handoverTarget.checkInStatus || ""),
+  )
+
   useEffect(() => {
-    if (!customerWaitTarget || !handoverTarget?.checkInId) return
+    if (!awaitngCustomerTransition || !handoverTarget?.checkInId) return
 
     let active = true
-    const pollCustomerReceipt = async () => {
+    const pollCustomerTransition = async () => {
       try {
         const response = await listCheckIns({
           page: 0,
@@ -1090,32 +1136,33 @@ export default function StaffCheckInOperationsPanel({
         const latest = response.data.find((item) => item.checkInId === handoverTarget.checkInId)
         if (!active || !latest) return
 
+        const previousStatus = handoverTarget.checkInStatus
         setHandoverTarget(latest)
         setHandoverStep(current => current === 6 && canOpenInventory(latest.checkInStatus, latest.inventoryVisit?.appointmentAt) ? 6 : Math.min(5, stepForCheckIn(latest)))
         if (latest.checkInStatus === "handover_pending_receipt") {
           setCustomerWaitTarget("receipt")
         } else if (latest.checkInStatus === "setup_in_progress") {
-          if (customerWaitTarget === "receipt") {
-            showToast("Khách hàng đã xác nhận sẵn sàng bàn giao. Đang chờ khách chuẩn bị hàng để kiểm kê.")
+          if (previousStatus === "handover_pending_receipt") {
+            showToast("Khách hàng đã xác nhận nhận kho. Đang chờ khách chuẩn bị hàng để kiểm kê.")
           }
           setCustomerWaitTarget("preparation")
         } else {
-          if (customerWaitTarget === "preparation" && latest.checkInStatus === "setup_completed") {
+          if (previousStatus === "setup_in_progress" && latest.checkInStatus === "setup_completed") {
             showToast("Khách hàng đã báo sẵn sàng kiểm kê. Bước kiểm kê hàng hóa đã được mở.")
           }
           setCustomerWaitTarget(null)
         }
       } catch {
-        // Keep the waiting popup open. The next poll can recover from a temporary read error.
+        // Keep the last known state. The next poll can recover from a temporary read error.
       }
     }
 
-    const timer = window.setInterval(() => void pollCustomerReceipt(), 3000)
+    const timer = window.setInterval(() => void pollCustomerTransition(), 3000)
     return () => {
       active = false
       window.clearInterval(timer)
     }
-  }, [customerWaitTarget, handoverTarget?.checkInId, handoverTarget?.reservationCode, showToast])
+  }, [awaitngCustomerTransition, handoverTarget?.checkInId, handoverTarget?.checkInStatus, handoverTarget?.reservationCode, showToast])
 
   const closeHandover = () => {
     if (submitting) return
@@ -1302,6 +1349,9 @@ export default function StaffCheckInOperationsPanel({
         const asset = await uploadCheckInEvidence(
           handoverTarget.checkInId,
           file,
+          'CHECK_IN',
+          'bang-chung-kiem-ke-hang-hoa',
+          handoverTarget.reservationCode,
         )
 
         uploadedEvidence.push(asset.id)
@@ -1403,7 +1453,7 @@ export default function StaffCheckInOperationsPanel({
 
       setPaymentEvidenceFile(null)
 
-      showToast("Đã lưu hàng hóa kiểm kê. Bạn có thể đóng và mở lại hồ sơ hoặc chỉnh sửa trước khi xử lý sai lệch.")
+      showToast("Đã lưu hàng hóa kiểm kê. Bạn có thể đóng và mở lại hồ sơ hoặc chỉnh sửa trước khi chốt kết quả tiếp nhận.")
       setInventoryDraftRevision(savedDraft.revision)
       setInventorySavedAt(savedDraft.savedAt)
       setInventoryEditing(false)
@@ -1425,10 +1475,11 @@ export default function StaffCheckInOperationsPanel({
     try {
       const updated = await prepareInventoryResolution(handoverTarget.checkInId, inventoryDraftRevision)
       setHandoverTarget(updated)
+      setInventoryReopened(false)
       setInventoryStage(4)
       showToast('Đã kiểm tra sức chứa. Ghi nhận phương án xử lý trực tiếp tại cơ sở.')
       refresh()
-    } catch (reason) { fail(reason, 'Không thể mở bước xử lý sai lệch.') }
+    } catch (reason) { fail(reason, 'Không thể mở bước kết quả tiếp nhận.') }
     finally { inventoryCommandLock.current = false; setSubmitting(false) }
   }
 
@@ -1463,14 +1514,14 @@ export default function StaffCheckInOperationsPanel({
         if (setupTermsKey && (confirmedSetupTerms !== setupTermsKey || handoverTarget.setupEarlyExitFee == null)) {
           throw new Error('Cần đối chiếu điều khoản phí trả kho trong thời gian chuẩn bị trong hợp đồng đã ký trước khi tiếp tục.')
         }
-        const asset = await uploadCheckInEvidence(handoverTarget.checkInId, contractFile)
+        const asset = await uploadCheckInEvidence(handoverTarget.checkInId, contractFile, 'CHECK_IN', 'hop-dong-da-ky-luc-ban-giao', handoverTarget.reservationCode)
         updated = await signCheckInContract(handoverTarget.checkInId, asset.id, handoverTarget.setupEarlyExitPolicyVersion)
         setChecklist((current) => ({ ...current, contractVerified: true }))
       } else if (handoverStep === 3) {
         const due = handoverTarget.dueAtCheckIn ?? 0
         if (due > 0) {
           if (!paymentEvidenceFile) return
-          const asset = await uploadCheckInEvidence(handoverTarget.checkInId, paymentEvidenceFile)
+          const asset = await uploadCheckInEvidence(handoverTarget.checkInId, paymentEvidenceFile, 'CHECK_IN', 'bang-chung-thu-tien-luc-ky-hop-dong', handoverTarget.reservationCode)
           await recordCheckInRemainingPayment(handoverTarget.checkInId, {
             amount: due,
             paymentMethod,
@@ -1512,7 +1563,7 @@ export default function StaffCheckInOperationsPanel({
         }
         const emptyStorageEvidence = checkInEvidenceAssetIds(evidenceReferences)
         for (const file of evidenceFiles) {
-          const asset = await uploadCheckInEvidence(handoverTarget.checkInId, file)
+          const asset = await uploadCheckInEvidence(handoverTarget.checkInId, file, 'CHECK_IN', 'bang-chung-ban-giao-kho-luc-ban-giao', handoverTarget.reservationCode)
           emptyStorageEvidence.push(asset.id)
         }
         setEvidenceReferences(emptyStorageEvidence)
@@ -1558,7 +1609,7 @@ export default function StaffCheckInOperationsPanel({
       const uploadedEvidence = [...rejectEvidenceReferences]
 
       for (const file of rejectEvidenceFiles) {
-        const asset = await uploadCheckInEvidence(rejectTarget.checkInId, file)
+        const asset = await uploadCheckInEvidence(rejectTarget.checkInId, file, 'CHECK_IN', 'bien-ban-tu-choi-nhan-kho', rejectTarget.reservationCode)
 
         uploadedEvidence.push(asset.id)
       }
@@ -1652,7 +1703,7 @@ export default function StaffCheckInOperationsPanel({
       const evidenceReferences: string[] = []
       for (const file of partialRemovalFiles) {
         if (!validateUploadFile(file, "bằng chứng đưa phần hàng dư ra", setError)) return
-        const asset = await uploadCheckInEvidence(partialRemovalTarget.checkInId, file)
+        const asset = await uploadCheckInEvidence(partialRemovalTarget.checkInId, file, 'CHECK_IN', 'bang-chung-dua-hang-du-ra', partialRemovalTarget.reservationCode)
         evidenceReferences.push(asset.id)
       }
       const updatedInventory = await confirmPartialInventoryRemoval(partialRemovalTarget.checkInId, {
@@ -1685,6 +1736,7 @@ export default function StaffCheckInOperationsPanel({
     setInventoryDraftRevision(draft?.revision ?? 0)
     setInventorySavedAt(draft?.savedAt ?? null)
     setInventoryEditing(!draft?.request)
+    setInventoryReopened(false)
     setError(null)
     setFieldErrors({})
     setHandoverTarget(item)
@@ -1835,6 +1887,20 @@ export default function StaffCheckInOperationsPanel({
     const actions = staffCheckInActions(item, now)
     const receiptState = receiptConfirmationState(item, now)
     const receiptRelease = receiptReleaseState(item, now)
+    const showsOngoingActions = group === "ONGOING" && item.checkInStatus !== "completed"
+    const showsDetailAction = ["handover_pending_receipt", "setup_in_progress", "setup_completed"].includes(item.checkInStatus || "")
+    const actionButtonCount = 1
+      + (showsOngoingActions ? 2 : 0)
+      + (showsOngoingActions && item.inventoryResolutionStatus === "PARTIAL_ACCEPTED" ? 1 : 0)
+      + (showsOngoingActions && actions.canReject ? 1 : 0)
+      + (showsDetailAction ? 1 : 0)
+      + (item.checkInStatus === "completed" ? 3 : 0)
+    const actionLayoutClass = actionButtonCount === 1
+      ? "flex max-w-md flex-wrap items-center justify-center"
+      : actionButtonCount === 3
+        ? "grid max-w-[31rem] grid-cols-3"
+        : "grid max-w-[25rem] grid-cols-2"
+    const actionButtonClass = `${checkInActionButtonBaseClass} ${actionButtonCount === 1 ? "w-48" : "w-full"}`
     return (
     <Tr key={item.reservationId} title={item.customerName ? `Khách hàng: ${item.customerName}` : undefined}>
       <Td>
@@ -1893,12 +1959,12 @@ export default function StaffCheckInOperationsPanel({
         </Badge>
       </Td>
       <Td className="whitespace-normal text-center">
-        <div className="mx-auto flex w-full max-w-md flex-wrap items-center justify-center gap-1.5">
-          <Button size="sm" variant="outline" className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]" disabled={submitting || !canOpenInventory(item.checkInStatus, item.inventoryVisit?.appointmentAt)} title={!canOpenInventory(item.checkInStatus, item.inventoryVisit?.appointmentAt) ? "Chờ khách xác nhận lịch kiểm kê" : "Mở form kiểm kê riêng"} onClick={() => openHandover(item, true)}>Xem tiến trình kiểm kê</Button>
-          {group === "ONGOING" && item.checkInStatus !== "completed" && (
+        <div className={`mx-auto w-full gap-1.5 ${actionLayoutClass}`}>
+          <Button size="sm" variant="outline" className={actionButtonClass} disabled={submitting || !canOpenInventory(item.checkInStatus, item.inventoryVisit?.appointmentAt)} title={!canOpenInventory(item.checkInStatus, item.inventoryVisit?.appointmentAt) ? "Chờ khách xác nhận lịch kiểm kê" : "Mở form kiểm kê riêng"} onClick={() => openHandover(item, true)}>Xem tiến trình kiểm kê</Button>
+          {showsOngoingActions && (
             <>
               {item.inventoryResolutionStatus === "PARTIAL_ACCEPTED" && <Button
-                className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
+                className={actionButtonClass}
                 size="sm"
                 variant="danger"
                 disabled={submitting}
@@ -1907,7 +1973,7 @@ export default function StaffCheckInOperationsPanel({
                 Xác nhận đã đưa phần dư ra
               </Button>}
               <Button
-                className="shrink-0 whitespace-nowrap !px-2.5 !py-1 !text-xs font-medium"
+                className={actionButtonClass}
                 size="sm"
                 disabled={submitting || !actions.canOpen}
                 onClick={() => beginHandover(item)}
@@ -1915,7 +1981,7 @@ export default function StaffCheckInOperationsPanel({
                 {stepForCheckIn(item) === 6 ? "Xem tiến trình bàn giao" : actions.label}
               </Button>
               {actions.canReject && <Button
-                className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
+                className={actionButtonClass}
                 size="sm"
                 variant="danger"
                 disabled={submitting}
@@ -1924,7 +1990,7 @@ export default function StaffCheckInOperationsPanel({
                 Từ chối nhận kho
               </Button>}
               <Button
-                className="shrink-0 whitespace-nowrap !px-2.5 !py-1 !text-xs font-medium"
+                className={actionButtonClass}
                 size="sm"
                 variant="danger"
                 disabled={submitting || !actions.canMarkAbsent}
@@ -1937,20 +2003,20 @@ export default function StaffCheckInOperationsPanel({
               </Button>
             </>
           )}
-          {["handover_pending_receipt", "setup_in_progress", "setup_completed"].includes(item.checkInStatus || "") && (
+          {showsDetailAction && (
             <Button
-              className="shrink-0 whitespace-nowrap !px-3 !py-1.5 !text-sm font-medium"
+              className={actionButtonClass}
               size="sm"
               variant="outline"
               onClick={() => setDetailTarget(item)}
             >
-              Xem biên bản
+              Xem biên bản kiểm kê
             </Button>
           )}
           {item.checkInStatus === "completed" && (
             <>
               <Button
-                className="shrink-0 whitespace-nowrap !px-3 !py-1.5 !text-sm font-medium"
+                className={actionButtonClass}
                 size="sm"
                 variant="outline"
                 onClick={() => openHandover(item)}
@@ -1958,15 +2024,15 @@ export default function StaffCheckInOperationsPanel({
                 Xem tiến trình bàn giao
               </Button>
               <Button
-                className="shrink-0 whitespace-nowrap !px-3 !py-1.5 !text-sm font-medium"
+                className={actionButtonClass}
                 size="sm"
                 variant="outline"
                 onClick={() => setDetailTarget(item)}
               >
-                Xem biên bản
+                Xem biên bản kiểm kê
               </Button>
               <Button
-                className="shrink-0 whitespace-nowrap !px-3 !py-1.5 !text-sm font-medium"
+                className={actionButtonClass}
                 size="sm"
                 variant="danger"
                 onClick={() => setDeleteTarget(item)}
@@ -2119,7 +2185,7 @@ export default function StaffCheckInOperationsPanel({
                   </div>
                 ) : (
                   <>
-                    <label className="block text-sm font-medium text-stone-700">Hợp đồng đã ký (PDF hoặc ảnh, tối đa 25MB) *<input disabled={submitting || isReviewingCompletedStep} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => {
+                    <label className="block text-sm font-medium text-stone-700">Hợp đồng đã ký lúc nhận kho (PDF hoặc ảnh, tối đa 25MB) *<input disabled={submitting || isReviewingCompletedStep} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => {
                       const selected = event.target.files?.[0] || null
                       if (!validateUploadFile(selected, 'hợp đồng', setError)) {
                         event.target.value = ""
@@ -2153,7 +2219,7 @@ export default function StaffCheckInOperationsPanel({
                 {(handoverTarget.dueAtCheckIn ?? 0) > 0 && !isReviewingCompletedStep ? (
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Select label="Phương thức thanh toán" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as CheckInPaymentMethod)}><option value="CASH">Tiền mặt</option><option value="BANK_TRANSFER">Chuyển khoản</option></Select>
-                    <label className="block text-sm font-medium">Biên lai / bằng chứng giao dịch (tối đa 25MB) *<input className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => {
+                    <label className="block text-sm font-medium">Bằng chứng thu tiền lúc ký hợp đồng (biên lai, ảnh hoặc PDF, tối đa 25MB) *<input className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => {
                       const selected = event.target.files?.[0] || null
                       if (!validateUploadFile(selected, 'biên lai', setError)) {
                         event.target.value = ""
@@ -2174,6 +2240,9 @@ export default function StaffCheckInOperationsPanel({
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 pb-3">
                     <div>
                       <p className="text-base font-bold text-amber-950">Bàn giao gian kho trống & Kích hoạt quyền ra vào</p>
+                      <p className="mt-2 text-sm font-semibold">Thiết bị bàn giao: {handoverTarget.equipment?.palletCount != null
+                        ? <>{handoverTarget.equipment.rackCount} bộ kệ / {handoverTarget.equipment.frameCount} khung và {handoverTarget.equipment.palletCount} tấm kê. Đếm và xác nhận cùng khách; khi trả kho phải thu hồi đủ tấm kê.</>
+                        : 'Chưa có cấu hình thiết bị trong hồ sơ; cần đối soát trước khi bàn giao.'}</p>
                       <p className="text-xs text-amber-800 mt-0.5">Tiến hành dẫn khách kiểm tra kho thực tế, bàn giao mã mở khóa và xác nhận hiện trạng ban đầu.</p>
                     </div>
                   </div>
@@ -2287,7 +2356,7 @@ export default function StaffCheckInOperationsPanel({
                   {!isReviewingCompletedStep && (
                     <>
                       <label className="block text-sm font-semibold text-stone-800">
-                        Ảnh hoặc PDF bằng chứng kho trống *
+                        Bằng chứng bàn giao kho lúc bàn giao (ảnh hoặc PDF) *
                         <input
                           type="file"
                           multiple
@@ -2304,7 +2373,7 @@ export default function StaffCheckInOperationsPanel({
                           }}
                         />
                       </label>
-                      <p className="text-xs text-stone-600">Chọn ít nhất một tệp ghi nhận hiện trạng kho trước khi khách chuyển hàng vào. Tối đa 25 MB mỗi tệp.</p>
+                      <p className="text-xs text-stone-600">Chọn ít nhất một tệp ghi nhận hiện trạng kho, mã ổ khóa và việc bàn giao trước khi khách chuyển hàng vào. Tối đa 25 MB mỗi tệp.</p>
                       <FilePreviewList
                         files={evidenceFiles}
                         onRemove={index => setEvidenceFiles(files => files.filter((_, current) => current !== index))}
@@ -2732,7 +2801,7 @@ export default function StaffCheckInOperationsPanel({
                 {!isReviewingCompletedStep && (
                   <div className="space-y-1">
                     <label className="block text-sm font-medium">
-                      Ảnh/PDF bằng chứng kiểm kê hàng hóa (tối đa 25MB/tệp) *
+                      Bằng chứng kiểm kê hàng hóa (ảnh/PDF, tối đa 25MB/tệp) *
                       <input
                         className={`mt-1 block w-full rounded-lg border ${fieldErrors.evidenceFiles || fieldErrors.evidenceReferences ? 'border-red-500 bg-red-50/20' : 'border-stone-300'} bg-white px-3 py-2 text-sm`}
                         type="file"
@@ -2801,7 +2870,7 @@ export default function StaffCheckInOperationsPanel({
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
                             <p className="font-bold text-stone-900">Kết quả kiểm tra sức chứa</p>
-                            <p className="mt-1 text-xs text-stone-600">Đối chiếu sơ bộ số kiện, thể tích, tải trọng và kích thước. Hệ thống xác nhận phương án xếp hàng chính thức khi chuyển sang xử lý sai lệch.</p>
+                            <p className="mt-1 text-xs text-stone-600">Đối chiếu sơ bộ số kiện, thể tích, tải trọng và kích thước. Hệ thống xác nhận phương án xếp hàng chính thức khi chuyển sang kết quả tiếp nhận.</p>
                           </div>
                         </div>
                         <div className="mt-4 grid gap-2 sm:grid-cols-3" aria-label="Các kết quả kiểm tra sức chứa">
@@ -2812,14 +2881,14 @@ export default function StaffCheckInOperationsPanel({
                           ] as const).map(([label, active]) => <div key={label} className={`rounded-lg border p-3 text-sm ${active ? "border-amber-500 bg-white font-semibold text-stone-950 ring-1 ring-amber-400" : "border-stone-200 bg-white/60 text-stone-500"}`}><span aria-hidden="true">{active ? "● " : "○ "}</span>{label}</div>)}
                         </div>
                         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-xs">
-                          <div className="rounded-lg border border-white/80 bg-white/80 p-3"><span className="text-stone-500">Số kiện thực tế / khai báo</span><p className="mt-1 font-bold text-stone-900">{inventoryCapacity.totalPackages} / {handoverTarget?.declaredPackageCount ?? "—"}</p></div>
-                          <div className="rounded-lg border border-white/80 bg-white/80 p-3"><span className="text-stone-500">Thể tích thực tế / sức chứa</span><p className="mt-1 font-bold text-stone-900">{inventoryCapacity.totalVolume.toFixed(4)} / {handoverTarget?.storageCapacity?.volumeM3 == null ? "—" : handoverTarget.storageCapacity.volumeM3.toFixed(4)} m³</p></div>
-                          <div className="rounded-lg border border-white/80 bg-white/80 p-3"><span className="text-stone-500">Khối lượng thực tế / giới hạn</span><p className="mt-1 font-bold text-stone-900">{inventoryCapacity.totalWeight.toFixed(2)} / {handoverTarget?.storageCapacity?.maxLoadKg == null ? "—" : handoverTarget.storageCapacity.maxLoadKg.toFixed(2)} kg</p></div>
-                          <div className="rounded-lg border border-white/80 bg-white/80 p-3"><span className="text-stone-500">Kích thước lớn nhất</span><p className="mt-1 font-bold text-stone-900">{inventoryCapacity.dimensions.every(value => value > 0) ? `${inventoryCapacity.dimensions.join(" × ")} cm` : "—"}</p></div>
+                          <div className="rounded-lg border border-white/80 bg-white/80 p-3"><span className="text-stone-500">Số kiện thực tế / khai báo</span><p className="mt-1 font-bold text-stone-900">{inventoryCapacity.totalPackages} / {handoverTarget?.declaredPackageCount ?? "-"}</p></div>
+                          <div className="rounded-lg border border-white/80 bg-white/80 p-3"><span className="text-stone-500">Thể tích thực tế / sức chứa</span><p className="mt-1 font-bold text-stone-900">{inventoryCapacity.totalVolume.toFixed(4)} / {handoverTarget?.storageCapacity?.volumeM3 == null ? "-" : handoverTarget.storageCapacity.volumeM3.toFixed(4)} m³</p></div>
+                          <div className="rounded-lg border border-white/80 bg-white/80 p-3"><span className="text-stone-500">Khối lượng thực tế / giới hạn</span><p className="mt-1 font-bold text-stone-900">{inventoryCapacity.totalWeight.toFixed(2)} / {handoverTarget?.storageCapacity?.maxLoadKg == null ? "-" : handoverTarget.storageCapacity.maxLoadKg.toFixed(2)} kg</p></div>
+                          <div className="rounded-lg border border-white/80 bg-white/80 p-3"><span className="text-stone-500">Kích thước lớn nhất</span><p className="mt-1 font-bold text-stone-900">{inventoryCapacity.dimensions.every(value => value > 0) ? `${inventoryCapacity.dimensions.join(" × ")} cm` : "-"}</p></div>
                         </div>
                         {inventoryCapacity.state === "PENDING" && <p className="mt-3 text-sm text-stone-600">Nhập đầy đủ số liệu và xác nhận từng dòng hàng để xem kết quả sức chứa.</p>}
                         {inventoryCapacity.reasons.length > 0 && <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-red-800">{inventoryCapacity.reasons.map(reason => <li key={reason}>{reason}</li>)}</ul>}
-                        {inventoryCapacity.state === "UNKNOWN" && <p className="mt-3 text-xs text-amber-800">Chưa nhận được cấu hình sức chứa của gian kho. Kết quả chính thức sẽ được backend đối chiếu bằng phương án xếp pallet khi gửi kiểm kê.</p>}
+                        {inventoryCapacity.state === "UNKNOWN" && <p className="mt-3 text-xs text-amber-800">Chưa nhận được cấu hình sức chứa của gian kho. Kết quả xếp hàng sẽ có sau khi gửi kiểm kê.</p>}
                         {handoverTarget?.inventoryMismatchSummary && handoverTarget.inventoryResolutionStatus && handoverTarget.inventoryResolutionStatus !== "NOT_STARTED" && <p className="mt-3 border-t border-black/10 pt-3 text-xs text-stone-700"><b>Kết quả lần kiểm kê gần nhất:</b> {handoverTarget.inventoryMismatchSummary}</p>}
                       </section>
                     )}
@@ -2860,7 +2929,7 @@ export default function StaffCheckInOperationsPanel({
             )}
 
             {inventoryMode && inventoryStage === 3 && <div>
-              {inventorySavedAt && !inventoryPublished && <p role="status" className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">Đã lưu bản kiểm kê lúc {formatStaffDateTime(inventorySavedAt)}. Có thể chỉnh sửa trước khi chuyển sang xử lý sai lệch.</p>}
+              {inventorySavedAt && !inventoryPublished && <p role="status" className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">Đã lưu bản kiểm kê lúc {formatStaffDateTime(inventorySavedAt)}. Có thể chỉnh sửa trước khi chuyển sang kết quả tiếp nhận.</p>}
               {(() => {
                 const fit = inventoryPublished ? handoverTarget.inventoryFullFit : !inventoryCapacity || ["UNKNOWN", "PENDING"].includes(inventoryCapacity.state) ? null : inventoryCapacity.state !== "NOT_FIT"
                 const result = inventoryResult(fit, inventoryPublished ? Boolean(handoverTarget.inventoryMismatchJson) : measurementVariance)
@@ -2914,8 +2983,8 @@ export default function StaffCheckInOperationsPanel({
                   {inventoryStage === 1 && <Button disabled={submitting || handoverTarget.checkInStatus === 'setup_in_progress' || !handoverTarget.inventoryVisit?.identityVerifiedAt} onClick={() => setInventoryStage(2)}>Tiếp tục kiểm kê hàng hóa</Button>}
                   {inventoryStage === 2 && inventoryStageReadOnly && <Button onClick={() => setInventoryStage(4)}>Xem lại kết quả kiểm kê</Button>}
                   {inventoryStage === 2 && !inventoryStageReadOnly && <Button disabled={submitting || !inventoryLinesComplete || (lineInventory && !inventoryReviewConfirmed) || !actualPackagingMethod.trim() || !packagingCondition || (packagingNoteRequired && !handoverNotes.trim()) || (!evidenceFiles.length && !evidenceReferences.length) || (measurementVariance && !effectiveVarianceReason.trim())} onClick={() => void submitHandover()}>{submitting ? "Đang lưu kiểm kê…" : "Xác nhận hàng hóa kiểm kê"}</Button>}
-                  {inventoryStage === 3 && !inventoryPublished && <Button disabled={submitting || (lineInventory && !inventoryReviewConfirmed) || Boolean(handoverTarget.inventoryFinalDeadlineAt && Date.parse(handoverTarget.inventoryFinalDeadlineAt) <= now)} onClick={() => void continueInventoryResolution()}>{submitting ? "Đang kiểm tra sức chứa…" : "Tiếp tục xử lý sai lệch"}</Button>}
-                  {inventoryStage === 3 && inventoryPublished && <Button onClick={() => setInventoryStage(4)}>Theo dõi xử lý sai lệch</Button>}
+                  {inventoryStage === 3 && !inventoryPublished && <Button disabled={submitting || (lineInventory && !inventoryReviewConfirmed) || Boolean(handoverTarget.inventoryFinalDeadlineAt && Date.parse(handoverTarget.inventoryFinalDeadlineAt) <= now)} onClick={() => void continueInventoryResolution()}>{submitting ? "Đang kiểm tra sức chứa…" : "Tiếp tục đến kết quả tiếp nhận"}</Button>}
+                  {inventoryStage === 3 && inventoryPublished && <Button onClick={() => setInventoryStage(4)}>Xem kết quả tiếp nhận</Button>}
                 </div>
               ) : isReviewingCompletedStep ? (
                 <div className="flex flex-wrap items-center justify-end gap-3">
@@ -3256,7 +3325,7 @@ export default function StaffCheckInOperationsPanel({
               <option value="MAINTENANCE">Chuyển sang bảo trì</option>
             </Select>
             <label className="block text-sm font-medium text-stone-700">
-              Bằng chứng từ chối (ảnh hoặc PDF)
+              Biên bản từ chối nhận kho (ảnh hoặc PDF)
               <input
                 className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
                 type="file"
@@ -3325,7 +3394,7 @@ export default function StaffCheckInOperationsPanel({
               onChange={event => setPartialRemovalNotes(event.target.value)}
             />
             <label className="block text-sm font-medium text-stone-700">
-              Bằng chứng đưa phần hàng dư ra (ảnh hoặc PDF)
+              Bằng chứng bàn giao phần hàng dư ra (ảnh hoặc PDF)
               <input
                 className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
                 type="file"

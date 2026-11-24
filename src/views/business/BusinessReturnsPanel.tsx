@@ -821,7 +821,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
       if (useApi) {
         let receiptFileId = refundUpload.current?.file === refundFile ? refundUpload.current.id : undefined
         if (!receiptFileId) {
-          const asset = await uploadReturnEvidence(selectedItem.id, refundFile!)
+          const asset = await uploadReturnEvidence(selectedItem.id, refundFile!, 'business', 'bien-lai-thuc-hoan-tra-kho')
           receiptFileId = asset.id
           refundUpload.current = { file: refundFile!, id: asset.id }
         }
@@ -838,7 +838,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
           notes: refundNotes.trim() || 'Hoàn tiền cọc quyết toán',
         })
         await loadApiData()
-        setFeedback('Đã ghi nhận chứng từ hoàn tiền và hoàn tất hồ sơ theo kết quả backend.')
+        setFeedback('Đã ghi nhận chứng từ hoàn tiền và hoàn tất hồ sơ.')
         setActiveTab('overview')
         return
       }
@@ -970,7 +970,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
       }
 
       if (useApi) {
-        if (!newRentalId) throw new Error('Vui lòng nhập mã hồ sơ thuê từ Backend.')
+        if (!newRentalId) throw new Error('Vui lòng nhập mã hồ sơ thuê.')
         await requestReturn(newRentalId, newScheduledDate, newNotes)
         await loadApiData()
         setCreateModalOpen(false)
@@ -1003,7 +1003,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
 
     // Bước 1
     await new Promise((r) => setTimeout(r, 1200))
-    addLog('1. Customer tạo yêu cầu trả kho cho gian HCM-Q1-M-001 (Cọc: 9,500,000 ₫, Hẹn trả: 2026-10-18)')
+    addLog('1. Khách hàng tạo yêu cầu trả kho cho gian HCM-Q1-M-001 (Cọc: 9,500,000 ₫, Hẹn trả: 2026-10-18)')
     setDemoStep(2)
 
     // Bước 2
@@ -1013,7 +1013,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
 
     // Bước 3
     await new Promise((r) => setTimeout(r, 1600))
-    addLog('3. Customer xem biên bản: Không đồng ý phí vệ sinh 100k, gửi khiếu nại lên Ban Điều Hành -> Trạng thái: DISPUTED')
+    addLog('3. Khách hàng xem biên bản: Không đồng ý phí vệ sinh 100k, gửi khiếu nại lên Ban Điều Hành -> Trạng thái: DISPUTED')
     setDemoStep(4)
 
     // Bước 4
@@ -1189,7 +1189,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                     <div className="space-y-3">
                       <p className="text-base font-semibold text-stone-700">Chưa có hồ sơ trả kho nào trong danh sách</p>
                       <p className="text-xs text-stone-500 max-w-md mx-auto">
-                        {useApi ? 'Chưa có hồ sơ trả kho từ Backend.' : 'Bấm nút bên dưới để nạp bộ dữ liệu mẫu chuẩn nghiệp vụ hoặc tự tạo hồ sơ mới.'}
+                        {useApi ? 'Chưa có hồ sơ trả kho.' : 'Bấm nút bên dưới để nạp bộ dữ liệu mẫu chuẩn nghiệp vụ hoặc tự tạo hồ sơ mới.'}
                       </p>
                       <div className="flex justify-center gap-2 pt-2">
                         {!useApi && <Button variant="primary" size="sm" onClick={handleSeedDemoData}>Nạp 5 hồ sơ mẫu chuẩn</Button>}
@@ -1250,7 +1250,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                           className="bg-amber-600 hover:bg-amber-700 text-white font-bold cursor-pointer shadow-2xs"
                           onClick={() => handleOpenDetail(item, 'overview')}
                         >
-                          Duyệt hủy setup
+                          Duyệt hủy chuẩn bị
                         </Button>
                       ) : isBusiness && isAwaitingLegacyPricing(item) ? (
                         <Button
@@ -2047,7 +2047,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                 </p>
 
                 <div className="p-3 bg-white rounded-lg border border-purple-200 flex items-center justify-between">
-                  <span className="text-xs text-stone-600 font-medium">Số tiền cọc thực hoàn:</span>
+                  <span className="text-xs text-stone-600 font-medium">Số tiền cọc thực hoàn (Tiền hoàn thực tế):</span>
                   <span className="text-base font-extrabold text-purple-900 font-mono">
                     {formatAmount(selectedItem.netRefundAmount)}
                   </span>
@@ -2083,7 +2083,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
 
                 {useApi && <>
                   <label className="block text-xs font-bold text-stone-700">Phương thức hoàn tiền<select className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-normal" value={refundMethod} disabled={submitting} onChange={event => { setRefundMethod(event.target.value as 'CASH' | 'BANK_TRANSFER'); setRefundConfirmed(false) }}><option value="BANK_TRANSFER">Chuyển khoản</option><option value="CASH">Tiền mặt</option></select></label>
-                  <label className="block text-xs font-bold text-stone-700">Biên lai thực hoàn (*)<input key={selectedItem.id} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" disabled={submitting} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-normal" onChange={event => { setRefundFile(event.target.files?.[0] ?? null); setRefundConfirmed(false); refundUpload.current = null }} /></label>
+                  <label className="block text-xs font-bold text-stone-700">Biên lai thực hoàn trả kho (*)<input key={selectedItem.id} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" disabled={submitting} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-normal" onChange={event => { setRefundFile(event.target.files?.[0] ?? null); setRefundConfirmed(false); refundUpload.current = null }} /></label>
                   <label className="flex items-start gap-2 text-xs text-stone-700"><input type="checkbox" className="mt-0.5" checked={refundConfirmed} disabled={submitting || !refundFile} onChange={event => setRefundConfirmed(event.target.checked)} /><span>Tôi xác nhận đã thực hoàn đúng số tiền hiển thị và đã đối chiếu biên lai. Hệ thống chỉ ghi nhận chứng từ, không tự chuyển tiền.</span></label>
                 </>}
                 <div className="flex justify-end gap-2 pt-1">

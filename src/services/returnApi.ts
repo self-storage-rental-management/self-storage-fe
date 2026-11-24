@@ -2,6 +2,7 @@ import { apiRequest, ApiClientError } from './apiClient'
 import { getAuthenticatedActor } from './authApi'
 import { readRentalEnvelope, readRentalPage } from './rentalApi'
 import { isUuid } from './renewalOperationsApi'
+import { renameEvidenceFile } from '../utils/evidenceFileName'
 
 export type ReturnRole = 'customer' | 'staff' | 'manager' | 'business'
 export const returnStatuses = ['requested', 'scheduled', 'inspected', 'awaiting_business_review', 'awaiting_customer_confirmation', 'disputed', 'payment_due', 'refund_pending', 'recovery_required', 'completed'] as const
@@ -389,7 +390,7 @@ function readReturnEvidenceAsset(payload: unknown): ReturnEvidenceAsset {
   if (!object(payload) || !object(payload.data) || !isUuid(payload.data.id) ||
     typeof payload.data.originalName !== 'string' || typeof payload.data.contentType !== 'string' ||
     typeof payload.data.sizeBytes !== 'number') {
-    throw new ApiClientError('Backend trả về bằng chứng trả kho không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+    throw new ApiClientError('Chưa tải được thông tin. Vui lòng thử lại.', { code: 'INVALID_API_RESPONSE' })
   }
   return {
     id: payload.data.id,
@@ -399,12 +400,21 @@ function readReturnEvidenceAsset(payload: unknown): ReturnEvidenceAsset {
   }
 }
 
-export async function uploadReturnEvidence(returnId: string, file: File, role: ReturnRole = 'staff') {
+export async function uploadReturnEvidence(
+  returnId: string,
+  file: File,
+  role: ReturnRole = 'staff',
+  fileNamePurpose?: string,
+  fileNameContext?: string,
+) {
   actor(role, true)
   if (!isUuid(returnId)) throw new Error('Mã hồ sơ trả kho không hợp lệ.')
   if (!file || file.size <= 0) throw new Error('Tệp bằng chứng không được để trống.')
   const form = new FormData()
-  form.set('file', file)
+  const namedFile = fileNamePurpose
+    ? renameEvidenceFile(file, fileNamePurpose, fileNameContext)
+    : file
+  form.set('file', namedFile)
   form.set('entityType', 'RETURN_CASE')
   form.set('entityId', returnId)
   return readReturnEvidenceAsset(await apiRequest<unknown>('/api/files', { method: 'POST', body: form }))
@@ -454,13 +464,13 @@ export async function decideLegacyPricing(id: string, body: {
     !body.resolutionNote.trim() || body.resolutionNote.length > 2000 ||
     !body.pricingSnapshotJson.trim() || body.pricingSnapshotJson.length > 12000 ||
     !isUuid(body.sourceDocumentFileId)) {
-    throw new Error('Thiếu snapshot giá cũ hoặc bằng chứng hợp đồng/báo giá.')
+    throw new Error('Thiếu bản ghi đã lưu giá cũ hoặc bằng chứng hợp đồng/báo giá.')
   }
   try {
     const parsed = JSON.parse(body.pricingSnapshotJson)
     if (parsed === null || (typeof parsed !== 'object')) throw new Error('invalid')
   } catch {
-    throw new Error('Snapshot giá cũ phải là JSON hợp lệ.')
+    throw new Error('Bản ghi đã lưu giá cũ phải là JSON hợp lệ.')
   }
   return bound(await apiRequest(`/api/business/returns/${id}/legacy-pricing-decision`, {
     method: 'POST',
@@ -479,10 +489,16 @@ export function paySettlement(id: string, paymentMethod: string, notes = '') {
 }
 export function returnError(error: unknown) {
   if (error instanceof ApiClientError) {
-    const msg = error.message || ''
+    const displayMessage = error.message || ''
+    const diagnosticMessage = error.diagnosticMessage || ''
+    const msg = diagnosticMessage || displayMessage
+    const hasSeparateDiagnostic = Boolean(diagnosticMessage && diagnosticMessage !== displayMessage)
     if (error.status === 409 || msg.includes('409')) {
       if (msg === 'Cần đối soát lại phí quá hạn trước khi xác nhận hoặc thu hoàn tiền.') {
         return 'Cần cơ sở đối soát lại phí quá hạn trước khi xác nhận hoặc thu hoàn tiền.'
+      }
+      if (msg.includes('Vui lòng thanh toán tại cơ sở')) {
+        return 'Vui lòng thanh toán tại cơ sở.'
       }
       if (msg.includes('verified paid security deposit')) {
         return 'Tiền cọc đảm bảo thuê chưa xác nhận thành công.'
@@ -505,15 +521,15 @@ export function returnError(error: unknown) {
       if (msg.includes('Already in progress') || msg.includes('already in progress')) {
         return 'Đã có yêu cầu trả kho đang được xử lý cho hợp đồng này.'
       }
-      if (msg && msg !== 'Conflict' && !msg.startsWith('Request failed with status 409')) {
-        return msg
+      if (!hasSeparateDiagnostic && displayMessage && displayMessage !== 'Conflict' && !displayMessage.startsWith('Request failed with status 409')) {
+        return displayMessage
       }
       return 'Xung đột trạng thái (409): Vui lòng tải lại hồ sơ để kiểm tra.'
     }
     if (error.status === 403) return 'Bạn chưa có quyền xử lý hồ sơ trả kho tại cơ sở này.'
     if (error.status === 401) return 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'
     if (error.status === 404) return 'Không tìm thấy hồ sơ trong phạm vi được truy cập.'
-    return 'Chưa xác nhận được kết quả từ máy chủ. Tải lại hồ sơ trước khi gửi lại thao tác.'
+    return displayMessage || 'Chưa xác nhận được kết quả từ máy chủ. Tải lại hồ sơ trước khi gửi lại thao tác.'
   }
   return error instanceof Error ? error.message : 'Không thể xử lý hồ sơ trả kho.'
 }

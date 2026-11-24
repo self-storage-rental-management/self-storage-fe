@@ -16,7 +16,7 @@ function hasFutureSigningAppointment(appointment: SigningAppointment) {
 export function renewalPaymentError(error: unknown): string {
   if(error instanceof ApiClientError) {
     if(error.status===401)return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại rồi tiếp tục thanh toán."
-    if(error.message.includes("DEFERRED_SOURCE")||error.code==="DEFERRED_SOURCE")
+    if(error.diagnosticMessage.includes("DEFERRED_SOURCE")||error.code==="DEFERRED_SOURCE")
       return "Hệ thống chưa đủ dữ liệu để mở thanh toán gia hạn. Vui lòng liên hệ hỗ trợ để kiểm tra hồ sơ."
     if(error.status===409)return `Chưa thể mở thanh toán: ${error.message}. Vui lòng cập nhật hồ sơ hoặc liên hệ hỗ trợ.`
     if(error.status!==null&&error.status>=500)

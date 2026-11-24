@@ -1,5 +1,4 @@
 import ReturnPolicyNotice from '../../components/ReturnPolicyNotice'
-import InventoryMismatchReturnNotice from '../../components/InventoryMismatchReturnNotice'
 import { useState } from 'react'
 import { getAuthenticatedActor, resendEmailVerificationWithApi } from '../../services/authApi'
 import { formatCustomerDateTime } from '../../i18n/customerDate'
@@ -175,7 +174,6 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
           </div>
         </div>
       </div>
-
 
 
 

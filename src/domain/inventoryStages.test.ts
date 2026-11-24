@@ -1,5 +1,11 @@
 import { expect, it } from 'vitest'
-import { canReturnToInventoryStage, isInventoryStageReadOnly, INVENTORY_STAGE_LABELS, type InventoryStage } from './inventoryStages'
+import {
+  canReturnToInventoryStage,
+  isInventoryResultReopenable,
+  isInventoryStageReadOnly,
+  INVENTORY_STAGE_LABELS,
+  type InventoryStage,
+} from './inventoryStages'
 
 const base = { current: 4 as InventoryStage, submitting: false, checkInStatus: 'setup_completed' }
 
@@ -19,14 +25,23 @@ it('blocks navigation while saving and while the customer has not scheduled the 
   expect(canReturnToInventoryStage({ ...base, checkInStatus: 'setup_in_progress', target: 1 })).toBe(false)
 })
 
-it('shows a published inspection form read-only instead of editable', () => {
-  expect(isInventoryStageReadOnly({ stage: 2, published: true })).toBe(true)
-  expect(isInventoryStageReadOnly({ stage: 2, published: false })).toBe(false)
-  expect(isInventoryStageReadOnly({ stage: 3, published: true })).toBe(false)
-  expect(isInventoryStageReadOnly({ stage: 4, published: true })).toBe(false)
+it('treats an at-site result as reopenable because it never reached the customer', () => {
+  expect(isInventoryResultReopenable({ resolutionStatus: 'PENDING_STAFF_RESOLUTION', checkInStatus: 'setup_completed' })).toBe(true)
+  for (const resolutionStatus of ['PENDING_CUSTOMER', 'PARTIAL_ACCEPTED', 'RETURN_REQUESTED', 'ACCEPTED', 'NOT_STARTED']) {
+    expect(isInventoryResultReopenable({ resolutionStatus, checkInStatus: 'setup_completed' })).toBe(false)
+  }
+  expect(isInventoryResultReopenable({ resolutionStatus: 'PENDING_STAFF_RESOLUTION', checkInStatus: 'completed' })).toBe(false)
+})
+
+it('shows a frozen inspection form read-only but keeps a reopenable at-site result editable', () => {
+  expect(isInventoryStageReadOnly({ stage: 2, published: true, reopenable: false })).toBe(true)
+  expect(isInventoryStageReadOnly({ stage: 2, published: true, reopenable: true })).toBe(false)
+  expect(isInventoryStageReadOnly({ stage: 2, published: false, reopenable: false })).toBe(false)
+  expect(isInventoryStageReadOnly({ stage: 3, published: true, reopenable: false })).toBe(false)
+  expect(isInventoryStageReadOnly({ stage: 4, published: true, reopenable: false })).toBe(false)
 })
 
 it('names all four inventory stages in order', () => {
   expect([1, 2, 3, 4].map(stage => INVENTORY_STAGE_LABELS[stage as InventoryStage]))
-    .toEqual(['Kiểm tra khách', 'Kiểm kê hàng hóa', 'Xác nhận hàng hóa kiểm kê', 'Xử lý sai lệch'])
+    .toEqual(['Kiểm tra khách', 'Kiểm kê hàng hóa', 'Xác nhận hàng hóa kiểm kê', 'Kết quả tiếp nhận'])
 })

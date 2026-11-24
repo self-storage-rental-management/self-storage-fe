@@ -59,6 +59,7 @@ export interface RentalApiRecord {
   setupExitReviewRequired?: boolean
 }
 export interface RentalApiDetail extends RentalApiRecord {
+  inventory?: { actualJson: string; mismatch: boolean; fullFit: boolean; declaredPackaging?: string | null; decision: string; acceptedQuantitiesJson?: string | null; removalDeadline?: string | null; removedAt?: string | null } | null
   bookingEvidence?: RentalBookingEvidence | null
   reservationId: string | null
   actualReturnedAt: string | null
