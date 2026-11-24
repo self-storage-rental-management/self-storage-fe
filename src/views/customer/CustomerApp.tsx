@@ -7,6 +7,7 @@ import { normalizeRentalIdentity, validateRentalIdentity } from '../../domain/re
 import { CustomerProfileReminder } from '../../components/CustomerProfileFields'
 import CustomerCatalogStatus, { catalogLoadError, type CatalogLoadError } from './CustomerCatalogStatus'
 import { matchesReservationSearch, reservationPage } from './reservationList'
+import CustomerPagination from './CustomerPagination'
 import { estimatedRentalPeriod } from '../../domain/rentalTimeline'
 import { formatCustomerDate, formatCustomerDateTime } from '../../i18n/customerDate'
 import { useBackendNotifications } from '../../hooks/useBackendNotifications'
@@ -796,9 +797,22 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const [reservationTab, setReservationTab] = useState<'all' | 'active' | 'completed' | 'expired'>('all')
   const [reservationSearch, setReservationSearch] = useState('')
   const [reservationPageNumber, setReservationPageNumber] = useState(1)
-  const reservationPageSize = 3
+  const [reservationPageSize, setReservationPageSize] = useState(5)
   const [expiredReservationPageNumber, setExpiredReservationPageNumber] = useState(1)
   const [completedReservationPageNumber, setCompletedReservationPageNumber] = useState(1)
+
+  const handleReservationPageChange = (newPage: number) => {
+    setReservationPageNumber(newPage)
+    const el = document.getElementById('customer-reservations-section')
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+
+  const handleReservationPageSizeChange = (newSize: number) => {
+    setReservationPageSize(newSize)
+    setReservationPageNumber(1)
+  }
   const [rentalFacilityFilter, setRentalFacilityFilter] = useState('all')
   const [rentalTypeFilter, setRentalTypeFilter] = useState('all')
   const [rentalDeadlineFilter, setRentalDeadlineFilter] = useState<'all' | 'upcoming' | 'overdue'>('all')
@@ -2667,7 +2681,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
       {/* ── STORAGE RESERVATIONS (HOLDS) ─────────────────────── */}
       {page === 'reservations' && (
-        <div className="fade-in space-y-4">
+        <div id="customer-reservations-section" className="fade-in space-y-4">
           <SectionHeader
             title={'Đơn Đặt Giữ Kho Của Tôi'}
             action={<Button size="sm" onClick={() => navigateTo('browse-units')}>{Icon.plus} {'Đặt giữ kho mới'}</Button>}
@@ -2824,33 +2838,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   ))}
                 </div>
 
-                {/* Phân trang: Luôn hiển thị để người dùng theo dõi số trang và tổng số đơn */}
-                <nav aria-label="Phân trang đơn giữ kho" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-5 py-3 shadow-xs">
-                  <p className="text-xs text-stone-500 font-medium">
-                    Hiển thị <b>{currentTabTotalCount === 0 ? 0 : currentTabPagination.start + 1}–{Math.min(currentTabPagination.end, currentTabTotalCount)}</b> trong tổng số <b>{currentTabTotalCount}</b> đơn ({reservationPageSize} đơn/trang)
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={reservationPageNumber <= 1}
-                      onClick={() => setReservationPageNumber(p => Math.max(1, p - 1))}
-                    >
-                      Trang trước
-                    </Button>
-                    <span className="px-2 text-xs font-semibold text-stone-600">
-                      Trang {currentTabPagination.page} / {Math.max(1, currentTabPagination.pages)}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={reservationPageNumber >= currentTabPagination.pages}
-                      onClick={() => setReservationPageNumber(p => p + 1)}
-                    >
-                      Trang sau
-                    </Button>
-                  </div>
-                </nav>
+                <CustomerPagination
+                  page={currentTabPagination.page}
+                  pageCount={currentTabPagination.pages}
+                  total={currentTabTotalCount}
+                  pageSize={reservationPageSize}
+                  onPageChange={handleReservationPageChange}
+                  onPageSizeChange={handleReservationPageSizeChange}
+                />
               </div>
             )
           ) : displayedReservationHolds.length ? (
@@ -3116,32 +3111,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   </div>
                 </Card></div>
               )})}
-                <nav aria-label="Phân trang đơn giữ kho" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-5 py-3 shadow-xs">
-                  <p className="text-xs text-stone-500 font-medium">
-                    Hiển thị <b>{displayedReservationHolds.length === 0 ? 0 : currentTabPagination.start + 1}–{Math.min(currentTabPagination.end, displayedReservationHolds.length)}</b> trong tổng số <b>{displayedReservationHolds.length}</b> đơn ({reservationPageSize} đơn/trang)
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={reservationPageNumber <= 1}
-                      onClick={() => setReservationPageNumber(p => Math.max(1, p - 1))}
-                    >
-                      Trang trước
-                    </Button>
-                    <span className="px-2 text-xs font-semibold text-stone-600">
-                      Trang {currentTabPagination.page} / {Math.max(1, currentTabPagination.pages)}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={reservationPageNumber >= currentTabPagination.pages}
-                      onClick={() => setReservationPageNumber(p => p + 1)}
-                    >
-                      Trang sau
-                    </Button>
-                  </div>
-                </nav>
+                <CustomerPagination
+                  page={currentTabPagination.page}
+                  pageCount={currentTabPagination.pages}
+                  total={currentTabTotalCount}
+                  pageSize={reservationPageSize}
+                  onPageChange={handleReservationPageChange}
+                  onPageSizeChange={handleReservationPageSizeChange}
+                />
             </div>
           ) : (
             <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-12 text-center shadow-xs">

@@ -7,10 +7,54 @@ import { returnScreenRecord } from '../../services/returnScreenAdapter'
 import { getReturn, reviewDispute, returnError } from '../../services/returnApi'
 import { isManagerFacilityVisible } from '../../domain/managerRules'
 import { useStorageHub } from '../../store/StorageHubContext'
-import type { ReturnCase } from '../../types/storageHub'
+import type { ReturnCase, RentalRecord } from '../../types/storageHub'
 import type { User } from '../../types'
 import ManagerPaymentComplaintsPanel from './ManagerPaymentComplaintsPanel'
 import { listManagerPaymentComplaints } from '../../services/managerPaymentComplaintApi'
+import { getRental } from '../../services/rentalApi'
+
+const rentalCodeCache = new Map<string, string>()
+
+function RentalDisplayCode({
+  rentalId,
+  useApi,
+  hubRentals
+}: {
+  rentalId: string
+  useApi: boolean
+  hubRentals?: RentalRecord[]
+}) {
+  const [code, setCode] = useState<string | null>(() => rentalCodeCache.get(rentalId) ?? null)
+
+  useEffect(() => {
+    let active = true
+    if (rentalCodeCache.has(rentalId)) {
+      setCode(rentalCodeCache.get(rentalId)!)
+      return
+    }
+    if (useApi) {
+      void getRental('manager', rentalId)
+        .then(record => {
+          const display = record.displayCode || record.contractId || rentalId
+          rentalCodeCache.set(rentalId, display)
+          if (active) setCode(display)
+        })
+        .catch(() => {
+          if (active) setCode(rentalId)
+        })
+    } else {
+      const match = hubRentals?.find(r => r.id === rentalId)
+      const display = match?.contractId || rentalId
+      rentalCodeCache.set(rentalId, display)
+      setCode(display)
+    }
+    return () => {
+      active = false
+    }
+  }, [rentalId, useApi, hubRentals])
+
+  return <span>{code ?? 'Đang tải…'}</span>
+}
 
 export interface ManagerComplaintsWorkspaceProps {
   user: User
@@ -196,9 +240,20 @@ export default function ManagerComplaintsWorkspace({
           proposedUnitStatus: latest.proposedUnitStatus ?? 'available'
         })
         await returnApiRecords.refresh()
+        try {
+          hub.reviewReturnDispute(
+            selectedReturn.id,
+            user,
+            disputeResolutionNote.trim(),
+            disputeSettlement,
+            disputePreset
+          )
+        } catch {
+          // ignore if record exists only in backend database
+        }
         setDisputeModalOpen(false)
         setSelectedReturn(null)
-        showToast(`Đã lưu kết quả xem xét khiếu nại cho hồ sơ ${selectedReturn.id}.`)
+        showToast('Đã lưu kết quả xem xét khiếu nại thành công.')
         window.dispatchEvent(new Event('storagehub:complaints-updated'))
       } catch (error) {
         showToast(returnError(error))
@@ -218,7 +273,7 @@ export default function ManagerComplaintsWorkspace({
         disputeSettlement,
         disputePreset
       )
-      showToast(`Đã giải quyết khiếu nại cho hồ sơ ${selectedReturn.id} thành công!`)
+      showToast('Đã giải quyết khiếu nại thành công!')
       setDisputeModalOpen(false)
       setSelectedReturn(null)
       window.dispatchEvent(new Event('storagehub:complaints-updated'))
@@ -342,7 +397,9 @@ export default function ManagerComplaintsWorkspace({
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-stone-900 text-base">{item.id}</span>
+                          <span className="font-bold text-stone-900 text-base font-mono">
+                            <RentalDisplayCode rentalId={item.rentalId} useApi={useApi} hubRentals={hub.rentals} />
+                          </span>
                           <Badge variant="error">Đang khiếu nại quyết toán</Badge>
                         </div>
                         <p className="mt-1 text-xs text-stone-500">
@@ -418,202 +475,221 @@ export default function ManagerComplaintsWorkspace({
               if (!apiBusy) setDisputeModalOpen(false)
             }}
             title="Phân Xử & Giải Quyết Khiếu Nại Quyết Toán"
+            size="2xl"
           >
             {selectedReturn && (
-              <div className="space-y-4 text-xs sm:text-sm">
-                <div className="rounded-lg bg-stone-50 p-3 space-y-1 text-xs border border-stone-200">
-                  <p>
-                    Hồ sơ trả kho: <strong>{selectedReturn.id}</strong> · Gian kho: <strong>{selectedReturn.unitId}</strong>
-                  </p>
-                  <p>
-                    Khách hàng: <strong>{selectedReturn.customerName}</strong> ({selectedReturn.customerPhone || 'Chưa có SĐT'})
-                  </p>
-                  <p>
-                    Tiền cọc an ninh ban đầu: <strong className="text-emerald-700">{formatVnd(deposit)}</strong>
-                  </p>
-                </div>
-
-                {/* Customer note banner */}
-                <div className="rounded-lg bg-rose-50 border border-rose-200 p-3 text-xs">
-                  <p className="font-bold text-rose-800 mb-1">Nội dung khiếu nại của khách:</p>
-                  <p className="text-stone-800 italic">
-                    "{selectedReturn.customerDecisionNote || 'Khách hàng không đồng ý với biên bản quyết toán.'}"
-                  </p>
-                </div>
-
-                {/* Quick Presets */}
-                <div>
-                  <p className="font-bold text-stone-800 mb-1.5 text-xs uppercase tracking-wide">
-                    Phương án phân xử nhanh (Khuyến nghị chuẩn):
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => applyDisputePreset('facility_fault_full_refund')}
-                      className={`text-left p-2.5 rounded-lg border text-xs transition ${
-                        disputePreset === 'facility_fault_full_refund'
-                          ? 'border-emerald-500 bg-emerald-50 text-emerald-900 ring-1 ring-emerald-500'
-                          : 'border-stone-200 hover:border-emerald-300 hover:bg-emerald-50/50 text-stone-700'
-                      }`}
-                    >
-                      <div className="font-bold text-emerald-800">🏢 Lỗi kết cấu cơ sở</div>
-                      <div className="text-[11px] text-stone-500 mt-0.5">
-                        Miễn 100% phí vệ sinh & hư hại, hoàn đủ cọc cho khách.
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 text-xs sm:text-sm">
+                {/* Cột trái: Thông tin hợp đồng + Ý kiến khách + Phương án nhanh + Ghi chú kết luận */}
+                <div className="space-y-3 flex flex-col justify-between">
+                  <div className="space-y-2.5">
+                    {/* Thông tin hồ sơ & cọc */}
+                    <div className="rounded-lg bg-stone-50 p-2.5 space-y-1 text-xs border border-stone-200">
+                      <div className="flex flex-wrap items-center justify-between gap-1">
+                        <span>
+                          Mã hồ sơ thuê: <strong className="font-mono text-stone-900"><RentalDisplayCode rentalId={selectedReturn.rentalId} useApi={useApi} hubRentals={hub.rentals} /></strong>
+                        </span>
+                        <span>Gian kho: <strong>{selectedReturn.unitId}</strong></span>
                       </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => applyDisputePreset('customer_fault_deduct')}
-                      className={`text-left p-2.5 rounded-lg border text-xs transition ${
-                        disputePreset === 'customer_fault_deduct'
-                          ? 'border-amber-500 bg-amber-50 text-amber-900 ring-1 ring-amber-500'
-                          : 'border-stone-200 hover:border-amber-300 hover:bg-amber-50/50 text-stone-700'
-                      }`}
-                    >
-                      <div className="font-bold text-amber-800">👤 Lỗi do khách hàng</div>
-                      <div className="text-[11px] text-stone-500 mt-0.5">
-                        Giữ nguyên khấu trừ các khoản phí theo biên bản.
+                      <div className="flex flex-wrap items-center justify-between gap-1">
+                        <span>
+                          Khách hàng: <strong>{selectedReturn.customerName}</strong> ({selectedReturn.customerPhone || 'Chưa có SĐT'})
+                        </span>
+                        <span>
+                          Cọc ban đầu: <strong className="text-emerald-700">{formatVnd(deposit)}</strong>
+                        </span>
                       </div>
-                    </button>
+                    </div>
 
-                    <button
-                      type="button"
-                      onClick={() => applyDisputePreset('mutual_settlement')}
-                      className={`text-left p-2.5 rounded-lg border text-xs transition ${
-                        disputePreset === 'mutual_settlement'
-                          ? 'border-blue-500 bg-blue-50 text-blue-900 ring-1 ring-blue-500'
-                          : 'border-stone-200 hover:border-blue-300 hover:bg-blue-50/50 text-stone-700'
-                      }`}
-                    >
-                      <div className="font-bold text-blue-800">🤝 Thỏa thuận thiện chí</div>
-                      <div className="text-[11px] text-stone-500 mt-0.5">
-                        Giảm 50% phí vệ sinh kho để giải quyết êm đẹp.
+                    {/* Customer note banner */}
+                    <div className="rounded-lg bg-rose-50 border border-rose-200 p-2.5 text-xs">
+                      <p className="font-bold text-rose-800 mb-0.5">Nội dung khiếu nại của khách:</p>
+                      <p className="text-stone-800 italic line-clamp-3">
+                        "{selectedReturn.customerDecisionNote || 'Khách hàng không đồng ý với biên bản quyết toán.'}"
+                      </p>
+                    </div>
+
+                    {/* Quick Presets */}
+                    <div>
+                      <p className="font-bold text-stone-800 mb-1 text-xs uppercase tracking-wide">
+                        Phương án phân xử nhanh:
+                      </p>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => applyDisputePreset('facility_fault_full_refund')}
+                          className={`text-left p-2 rounded-lg border text-xs transition ${
+                            disputePreset === 'facility_fault_full_refund'
+                              ? 'border-emerald-500 bg-emerald-50 text-emerald-900 ring-1 ring-emerald-500'
+                              : 'border-stone-200 hover:border-emerald-300 hover:bg-emerald-50/50 text-stone-700'
+                          }`}
+                        >
+                          <div className="font-bold text-emerald-800 text-[11px] leading-tight">🏢 Lỗi cơ sở</div>
+                          <div className="text-[10px] text-stone-500 mt-0.5 line-clamp-2">
+                            Miễn 100% phí vệ sinh & hư hại.
+                          </div>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => applyDisputePreset('customer_fault_deduct')}
+                          className={`text-left p-2 rounded-lg border text-xs transition ${
+                            disputePreset === 'customer_fault_deduct'
+                              ? 'border-amber-500 bg-amber-50 text-amber-900 ring-1 ring-amber-500'
+                              : 'border-stone-200 hover:border-amber-300 hover:bg-amber-50/50 text-stone-700'
+                          }`}
+                        >
+                          <div className="font-bold text-amber-800 text-[11px] leading-tight">👤 Lỗi khách</div>
+                          <div className="text-[10px] text-stone-500 mt-0.5 line-clamp-2">
+                            Giữ nguyên khấu trừ biên bản.
+                          </div>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => applyDisputePreset('mutual_settlement')}
+                          className={`text-left p-2 rounded-lg border text-xs transition ${
+                            disputePreset === 'mutual_settlement'
+                              ? 'border-blue-500 bg-blue-50 text-blue-900 ring-1 ring-blue-500'
+                              : 'border-stone-200 hover:border-blue-300 hover:bg-blue-50/50 text-stone-700'
+                          }`}
+                        >
+                          <div className="font-bold text-blue-800 text-[11px] leading-tight">🤝 Thiện chí</div>
+                          <div className="text-[10px] text-stone-500 mt-0.5 line-clamp-2">
+                            Giảm 50% phí vệ sinh kho.
+                          </div>
+                        </button>
                       </div>
-                    </button>
+                    </div>
+                  </div>
+
+                  {/* Resolution Note */}
+                  <div>
+                    <label className="block font-bold text-stone-800 mb-1 text-xs">
+                      Ghi chú kết luận & giải thích cho khách hàng <span className="text-rose-500">*</span>:
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={disputeResolutionNote}
+                      onChange={e => setDisputeResolutionNote(e.target.value)}
+                      placeholder="Nhập nội dung giải thích căn cứ xử lý khiếu nại để gửi cho khách..."
+                      className="w-full border border-stone-300 rounded-lg p-2 text-xs bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    />
                   </div>
                 </div>
 
-                {/* Adjustable Fees Table */}
-                <div>
-                  <p className="font-bold text-stone-800 mb-1.5 text-xs uppercase tracking-wide">
-                    Điều chỉnh bảng kê chi phí khấu trừ (VNĐ):
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                {/* Cột phải: Bảng kê khấu trừ + Dự toán hoàn/thu + Nút hành động */}
+                <div className="space-y-3 flex flex-col justify-between">
+                  <div className="space-y-2.5">
+                    {/* Adjustable Fees Table */}
                     <div>
-                      <label className="block text-stone-600 mb-0.5 font-medium">Phí hư hại kho:</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="10000"
-                        value={disputeSettlement.damageFee}
-                        onChange={e => setSettlementFee('damageFee', e.target.value)}
-                        className="w-full border border-stone-300 rounded px-2 py-1 text-sm bg-white"
-                      />
+                      <p className="font-bold text-stone-800 mb-1 text-xs uppercase tracking-wide">
+                        Điều chỉnh chi phí khấu trừ (VNĐ):
+                      </p>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                          <label className="block text-stone-600 mb-0.5 font-medium text-[11px]">Phí hư hại kho:</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="10000"
+                            value={disputeSettlement.damageFee}
+                            onChange={e => setSettlementFee('damageFee', e.target.value)}
+                            className="w-full border border-stone-300 rounded px-2 py-1 text-xs bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-stone-600 mb-0.5 font-medium text-[11px]">Phí dọn vệ sinh:</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="10000"
+                            value={disputeSettlement.cleaningFee}
+                            onChange={e => setSettlementFee('cleaningFee', e.target.value)}
+                            className="w-full border border-stone-300 rounded px-2 py-1 text-xs bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-stone-600 mb-0.5 font-medium text-[11px]">Phí mất chìa/thẻ/khóa:</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="10000"
+                            value={disputeSettlement.lostItemFee}
+                            onChange={e => setSettlementFee('lostItemFee', e.target.value)}
+                            className="w-full border border-stone-300 rounded px-2 py-1 text-xs bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-stone-600 mb-0.5 font-medium text-[11px]">Phí phạt trễ hạn:</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="10000"
+                            value={disputeSettlement.overdueFee}
+                            onChange={e => setSettlementFee('overdueFee', e.target.value)}
+                            className="w-full border border-stone-300 rounded px-2 py-1 text-xs bg-white"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="block text-stone-600 mb-0.5 font-medium text-[11px]">Nợ cước tồn đọng:</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="10000"
+                            value={disputeSettlement.outstandingFee}
+                            onChange={e => setSettlementFee('outstandingFee', e.target.value)}
+                            className="w-full border border-stone-300 rounded px-2 py-1 text-xs bg-white"
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-stone-600 mb-0.5 font-medium">Phí dọn dẹp vệ sinh:</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="10000"
-                        value={disputeSettlement.cleaningFee}
-                        onChange={e => setSettlementFee('cleaningFee', e.target.value)}
-                        className="w-full border border-stone-300 rounded px-2 py-1 text-sm bg-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-stone-600 mb-0.5 font-medium">Phí mất chìa/thẻ/ổ khóa:</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="10000"
-                        value={disputeSettlement.lostItemFee}
-                        onChange={e => setSettlementFee('lostItemFee', e.target.value)}
-                        className="w-full border border-stone-300 rounded px-2 py-1 text-sm bg-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-stone-600 mb-0.5 font-medium">Phí phạt trễ hạn:</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="10000"
-                        value={disputeSettlement.overdueFee}
-                        onChange={e => setSettlementFee('overdueFee', e.target.value)}
-                        className="w-full border border-stone-300 rounded px-2 py-1 text-sm bg-white"
-                      />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="block text-stone-600 mb-0.5 font-medium">Nợ cước tồn đọng:</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="10000"
-                        value={disputeSettlement.outstandingFee}
-                        onChange={e => setSettlementFee('outstandingFee', e.target.value)}
-                        className="w-full border border-stone-300 rounded px-2 py-1 text-sm bg-white"
-                      />
-                    </div>
-                  </div>
-                </div>
 
-                {/* Real-time Calculation Summary */}
-                <div className="rounded-lg bg-stone-100 p-3 text-xs space-y-1.5 border border-stone-200">
-                  <div className="flex justify-between">
-                    <span className="text-stone-600">Tổng phí khấu trừ sau điều chỉnh:</span>
-                    <strong className="text-rose-700">{formatVnd(totalDeductions)}</strong>
+                    {/* Real-time Calculation Summary */}
+                    <div className="rounded-lg bg-stone-100 p-2.5 text-xs space-y-1 border border-stone-200">
+                      <div className="flex justify-between">
+                        <span className="text-stone-600">Tổng phí khấu trừ sau điều chỉnh:</span>
+                        <strong className="text-rose-700">{formatVnd(totalDeductions)}</strong>
+                      </div>
+                      <div className="flex justify-between border-t border-stone-200 pt-1">
+                        <span className="text-stone-700 font-medium">Tiền cọc an ninh ban đầu:</span>
+                        <strong className="text-emerald-700">{formatVnd(deposit)}</strong>
+                      </div>
+                      <div className="flex justify-between border-t border-stone-300 pt-1 font-bold text-sm">
+                        {calculatedRefund > 0 ? (
+                          <>
+                            <span className="text-emerald-800">Hoàn trả lại khách hàng:</span>
+                            <span className="text-emerald-700">{formatVnd(calculatedRefund)}</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-rose-800">Khách hàng cần đóng thêm:</span>
+                            <span className="text-rose-700">{formatVnd(calculatedDue)}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex justify-between border-t border-stone-200 pt-1">
-                    <span className="text-stone-700 font-medium">Tiền cọc an ninh ban đầu:</span>
-                    <strong className="text-emerald-700">{formatVnd(deposit)}</strong>
-                  </div>
-                  <div className="flex justify-between border-t border-stone-300 pt-1.5 font-bold text-sm">
-                    {calculatedRefund > 0 ? (
-                      <>
-                        <span className="text-emerald-800">Hoàn trả lại khách hàng:</span>
-                        <span className="text-emerald-700">{formatVnd(calculatedRefund)}</span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="text-rose-800">Khách hàng cần đóng thêm:</span>
-                        <span className="text-rose-700">{formatVnd(calculatedDue)}</span>
-                      </>
-                    )}
-                  </div>
-                </div>
 
-                {/* Resolution Note */}
-                <div>
-                  <label className="block font-bold text-stone-800 mb-1 text-xs">
-                    Ghi chú kết luận & giải thích cho khách hàng <span className="text-rose-500">*</span>:
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={disputeResolutionNote}
-                    onChange={e => setDisputeResolutionNote(e.target.value)}
-                    placeholder="Nhập nội dung giải thích căn cứ xử lý khiếu nại để gửi cho khách..."
-                    className="w-full border border-stone-300 rounded-lg p-2.5 text-xs sm:text-sm bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                  />
-                </div>
-
-                {/* Modal Actions */}
-                <div className="flex gap-2 justify-end pt-3 border-t">
-                  <Button
-                    variant="outline"
-                    onClick={() => setDisputeModalOpen(false)}
-                    disabled={apiBusy}
-                  >
-                    Hủy
-                  </Button>
-                  <Button
-                    variant="primary"
-                    className="bg-rose-600 hover:bg-rose-700 text-white"
-                    disabled={apiBusy || !disputeResolutionNote.trim()}
-                    onClick={handleReviewDispute}
-                  >
-                    {apiBusy ? 'Đang gửi kết luận…' : 'Gửi kết luận cho khách'}
-                  </Button>
+                  {/* Modal Actions */}
+                  <div className="flex gap-2 justify-end pt-2 border-t">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDisputeModalOpen(false)}
+                      disabled={apiBusy}
+                    >
+                      Hủy
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      className="bg-rose-600 hover:bg-rose-700 text-white"
+                      disabled={apiBusy || !disputeResolutionNote.trim()}
+                      onClick={handleReviewDispute}
+                    >
+                      {apiBusy ? 'Đang gửi kết luận…' : 'Gửi kết luận cho khách'}
+                    </Button>
+                  </div>
                 </div>
               </div>
             )}
