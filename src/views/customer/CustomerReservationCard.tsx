@@ -152,20 +152,22 @@ function InventoryResolutionNotice({ detail, now, submitting, onResolve }: {
     ? policyDateInput(new Date(new Date(detail.inventoryRemovalPublishedAt).getTime() + 86_400_000)) : today
   const removalLast = detail.inventoryRemovalDeadlineAt
     ? policyDateInput(new Date(new Date(detail.inventoryRemovalDeadlineAt).getTime() - 1)) : undefined
-  const removalDeadlineMs = detail.inventoryRemovalDeadlineAt ? Date.parse(detail.inventoryRemovalDeadlineAt) : null
+  const minReturnDate = removalFirst > today ? removalFirst : today
+  const removalDeadline = detail.inventoryRemovalDeadlineAt
+  const removalDeadlineMs = removalDeadline ? Date.parse(removalDeadline) : null
+  const maxReturnDate = removalDeadlineMs == null ? undefined : policyDateInput(new Date(removalDeadlineMs - 1))
   const inventoryExpired = Boolean(detail.inventoryEscalatedAt)
     || Boolean(detail.inventoryFinalDeadlineAt && Date.parse(detail.inventoryFinalDeadlineAt) <= now)
     || (removalDeadlineMs != null && removalDeadlineMs <= now)
   const canPlanReturn = !detail.inventoryEscalatedAt
     && (removalDeadlineMs == null ? !inventoryExpired : now < removalDeadlineMs)
-  const minReturnDate = removalFirst > today ? removalFirst : today
   const [returnDate, setReturnDate] = useState(today)
   const [returnPlannerOpen, setReturnPlannerOpen] = useState(false)
   const [partialConfirmOpen, setPartialConfirmOpen] = useState(false)
   const [returnDateError, setReturnDateError] = useState('')
   if (!['PENDING_CUSTOMER', 'PARTIAL_ACCEPTED', 'RETURN_REQUESTED'].includes(detail.inventoryResolutionStatus || '')) return null
   const confirmInventoryReturn = () => {
-    if (!returnDate || returnDate < minReturnDate || (removalLast && returnDate > removalLast)) {
+    if (!canPlanReturn || !returnDate || returnDate < minReturnDate || (removalLast && returnDate > removalLast)) {
       setReturnDateError('Vui lòng chọn ngày trả kho hợp lệ.')
       return
     }
@@ -286,7 +288,7 @@ export function PackagingInspectionResult({ detail }: { detail: CustomerReservat
   </div>
 }
 
-export default function CustomerReservationCard({ reservation: r, facilityName, unitTypeName, facilityDetails, unitTypeDetails, facility, unitType, onVerify, onCancel, onDelete, onRefresh, onReceiptConfirmed, onRequestSupport, visualTone = 'active' }: Props) {
+export default function CustomerReservationCard({ user, reservation: r, facilityName, unitTypeName, facilityDetails, unitTypeDetails, facility, unitType, onVerify, onCancel, onDelete, onRefresh, onReceiptConfirmed, onRequestSupport, visualTone = 'active' }: Props) {
   const [activeSection, setActiveSection] = useState<'information' | 'quote'>('information')
   const [detail, setDetail] = useState<CustomerReservationDetail | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -294,6 +296,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
   const [confirmingReceipt, setConfirmingReceipt] = useState(false)
   const receiptLock = useRef(false)
   const [confirmingPreparation, setConfirmingPreparation] = useState(false)
+  const [preparationConfirmed, setPreparationConfirmed] = useState(false)
   const [resolvingInventory, setResolvingInventory] = useState(false)
   const preparationLock = useRef(false)
   const [bookingDocument, setBookingDocument] = useState<BookingDocument | null>(null)
@@ -497,6 +500,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
     try {
       const updated = await markCustomerPreparationComplete(r.id, 'Khách hàng đã sắp xếp hàng và sẵn sàng để nhân viên kiểm kê.')
       setDetail(updated)
+      setPreparationConfirmed(true)
       setMessage('Đã báo sẵn sàng để kiểm kê. Nhân viên sẽ thực hiện kiểm kê hàng hóa.')
       try { await onRefresh() } catch { /* The preparation command has already succeeded. */ }
     } catch (error) {
@@ -506,10 +510,8 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         setDetail(current)
         if (current.checkInStatus === 'setup_completed' || current.checkInStatus === 'completed') setMessage(null)
       } catch { /* Preserve the command error if readback is also unavailable. */ }
-      try { await onRefresh() } catch { /* Preserve the command error if readback is also unavailable. */ }
-      preparationLock.current = false
     }
-    finally { setConfirmingPreparation(false) }
+    finally { preparationLock.current = false; setConfirmingPreparation(false) }
   }
   const resolveInventoryDecision = async (decision: 'ACCEPT_FULL' | 'ACCEPT_PARTIAL' | 'CANCEL_AND_RETURN', scheduledDate?: string) => {
     if (resolvingInventory) return
@@ -979,6 +981,7 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         <div className="flex justify-end gap-2 border-t border-stone-100 pt-4"><Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>Quay lại</Button><Button variant="danger" onClick={() => { setDeleteConfirmOpen(false); onDelete?.() }}>Xóa đơn đặt giữ kho</Button></div>
       </div>
     </Modal>
+    </div>
  </Card>
   )
 }

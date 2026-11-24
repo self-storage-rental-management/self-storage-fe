@@ -18,14 +18,17 @@ function render(inventoryVisit: InventoryVisit | null, now = Date.parse('2026-11
 describe('staff inventory visit', () => {
   it('offers the arrival action only with an appointment inside the deadline', () => {
     expect(render(null)).not.toContain('Ghi nhận khách đã đến')
-    expect(render(visit)).toContain('Ghi nhận khách đã đến')
+    expect(render(visit)).toContain('Số CCCD hoặc hộ chiếu trên giấy tờ gốc')
+    expect(render(visit)).toContain('Ảnh khách tại buổi kiểm kê')
+    expect(render(visit)).not.toContain('Ghi nhận khách đã đến')
     expect(render(visit, Date.parse(deadline))).toContain('Đã quá hạn kiểm kê')
     expect(render(visit, Date.parse(deadline))).not.toContain('Ghi nhận khách đã đến')
   })
 
   it('requires the booking customer and a photo before enabling identity verification', () => {
     const html = render({ ...visit, arrivedAt })
-    expect(html).toContain('03/11/2026 09:45')
+    expect(html).not.toContain('Giờ khách đến thực tế')
+    for (const label of ['Khách báo chuẩn bị xong', 'Giờ hẹn', 'Mốc nhắc', 'Hạn kiểm kê']) expect(html).not.toContain(label)
     expect(html).toContain('người đặt kho trực tiếp có mặt')
     expect(html).toContain('accept="image/jpeg,image/png,image/webp"')
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Xác minh người đặt kho<\/button>/)

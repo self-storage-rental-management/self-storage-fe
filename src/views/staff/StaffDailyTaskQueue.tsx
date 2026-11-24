@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
+import { vietnamDateInput } from "../../utils/vietnamTime"
 import "./staffDailyTaskQueue.css"
 
 import { Badge, Button, Card, Input, Modal, Select, Table, Tbody, Td, Th, Thead, Tr } from "../../components/ui"
@@ -65,7 +66,7 @@ const emptyMaintenancePage = (): MaintenancePage => ({
 const toDateInputValue = (value: string) => {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ""
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
+  return vietnamDateInput(date)
 }
 
 const priorityRank: Record<QueueRow["priority"], number> = { high: 0, medium: 1, low: 2 }

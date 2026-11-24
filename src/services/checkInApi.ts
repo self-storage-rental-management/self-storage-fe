@@ -16,6 +16,7 @@ export type InventoryVisit = {
 export type InventoryResolutionStatus =
   | 'NOT_STARTED'
   | 'PENDING_CUSTOMER'
+  | 'PENDING_STAFF_RESOLUTION'
   | 'ACCEPTED'
   | 'PARTIAL_ACCEPTED'
   | 'RETURN_REQUESTED'
@@ -34,6 +35,8 @@ export interface CheckInChecklist {
 
 export interface CheckInInventoryLine {
   actualGoods?: GoodsItemInput | null
+  actualCategoryId?: string | null
+  actualMaterialId?: string | null
   goodsItemId: string
   actualQuantity: number
   condition: 'INTACT' | 'DAMAGED' | 'NOT_PRESENT'
@@ -129,6 +132,14 @@ export interface CheckInCase {
   inventoryActualJson?: string | null
   inventoryMismatchJson?: string | null
   inventorySuggestedQuantitiesJson?: string | null
+  /** Version of the published inspection record; an at-site confirmation is bound to it. */
+  inventoryResultVersion?: number
+  /** Who recorded the at-site arrangement with the verified customer. */
+  inventoryAtSiteConfirmedBy?: string | null
+  inventoryAtSiteConfirmedByName?: string | null
+  inventoryDecisionAt?: string | null
+  /** True only when this case still waits for an online customer confirmation. */
+  inventoryAwaitingOnlineConfirmation?: boolean
   receiptConfirmationDueAt: string | null
   receiptConfirmationOverdue: boolean
   receiptConfirmationReleaseAt?: string | null
@@ -673,4 +684,28 @@ export function listStaffAccessCredentials(params: {
   pageSize?: number
 } = {}) {
   return listAccessCredentialsAt('/api/staff/access-credentials', params)
+}
+
+export interface SavedInventoryDraft {
+  request: CompleteCheckInRequest | null
+  revision: number
+  savedAt: string | null
+}
+export async function getInventoryDraft(checkInId: string) {
+  return (await apiRequest<{ data: SavedInventoryDraft }>(`/api/staff/check-ins/${encodeURIComponent(checkInId)}/inventory-draft`)).data
+}
+export async function saveInventoryDraft(checkInId: string, request: CompleteCheckInRequest, expectedRevision: number) {
+  return (await apiRequest<{ data: SavedInventoryDraft }>(`/api/staff/check-ins/${encodeURIComponent(checkInId)}/inventory-draft`,
+    { method: 'POST', body: JSON.stringify({ request, expectedRevision }) })).data
+}
+export async function prepareInventoryResolution(checkInId: string, expectedRevision: number) {
+  return assertEnvelope(await apiRequest<unknown>(`/api/staff/check-ins/${encodeURIComponent(checkInId)}/inventory-draft/resolve`,
+    { method: 'POST', body: JSON.stringify({ expectedRevision }) }))
+}
+
+export const publishInventoryDraft = prepareInventoryResolution
+export type AtSiteInventoryDecision = 'ACCEPT_FULL' | 'ACCEPT_PARTIAL' | 'CANCEL_AND_RETURN'
+export async function resolveInventoryAtSite(checkInId: string, request: { decision: AtSiteInventoryDecision; customerPresent: boolean; note?: string; scheduledDate?: string; evidenceReferences?: string[]; resultVersion?: number }) {
+  return assertEnvelope(await apiRequest<unknown>(`/api/staff/check-ins/${encodeURIComponent(checkInId)}/inventory-resolution-at-site`,
+    { method: 'POST', body: JSON.stringify(request) }))
 }

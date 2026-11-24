@@ -41,7 +41,7 @@ const labels: Record<ApiReturn['status'], string> = {
   disputed: 'Đang khiếu nại - Cần BO giải quyết',
   payment_due: 'Chờ thanh toán quyết toán',
   refund_pending: 'Chờ hoàn cọc',
-  recovery_required: 'Cần xử lý khách không đến',
+  recovery_required: 'Chờ thu hồi hàng',
   completed: 'Đã hoàn tất',
 }
 const returnStatusOptions: Array<[ApiReturn['status'] | 'all', string]> = [
@@ -54,7 +54,6 @@ const returnStatusOptions: Array<[ApiReturn['status'] | 'all', string]> = [
   ['disputed', 'Đang khiếu nại - Cần BO giải quyết'],
   ['payment_due', 'Chờ thanh toán quyết toán'],
   ['refund_pending', 'Chờ hoàn cọc'],
-  ['recovery_required', 'Cần xử lý khách không đến'],
   ['completed', 'Đã hoàn tất'],
 ]
 
