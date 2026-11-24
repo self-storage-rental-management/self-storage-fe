@@ -12,6 +12,7 @@ interface Props {
   isAllowed: (date: string, time: string) => boolean
 }
 export default function BookingArrivalDetails(p: Props) {
+  const hasSetupEarlyExitTerms = Boolean(p.quote?.setupEarlyExitPolicyVersion && p.quote.setupEarlyExitFee != null)
   const dates: string[] = []
   const cursor = new Date(`${p.minDate}T12:00:00Z`)
   for (let i = 0; i < 32 && Number.isFinite(cursor.getTime()); i++) {
@@ -52,6 +53,15 @@ export default function BookingArrivalDetails(p: Props) {
       <p className="mt-2 text-xs text-stone-500">Số tiền theo báo giá ở bước 3. Khoản trả trước được trừ vào tổng chi phí khi bàn giao.</p>
     </section>}
     <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{p.needsReview ? 'Đơn cần nhân viên duyệt. Khi đơn được duyệt, bạn sẽ nhận email và có 15 phút để thanh toán khoản trả trước.' : 'Sau khi xác nhận đặt kho và hoàn tất xác minh cần thiết, bạn có 15 phút để thanh toán khoản trả trước.'} Quá hạn, chỗ giữ được nhả và đơn hết hiệu lực.</p>
-    <label className="flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" checked={p.accepted} onChange={event => p.onAccepted(event.target.checked)} /><span>Tôi đã đọc quy định nhận kho: nếu quá hạn đến nhận kho, chỗ giữ được nhả và khoản trả trước không được hoàn lại theo điều khoản đã chấp nhận.</span></label>
+    <label className="flex items-start gap-2 text-sm">
+      <input className="mt-1" type="checkbox" checked={p.accepted} onChange={event => p.onAccepted(event.target.checked)} />
+      <span className="space-y-1 leading-5">
+        <span className="block">Tôi đã đọc, hiểu và đồng ý:</span>
+        <ul className="list-disc space-y-0.5 pl-5">
+          <li>Quy định nhận kho: nếu quá hạn đến nhận kho, chỗ giữ được nhả và khoản trả trước không được hoàn lại theo điều khoản đã chấp nhận.</li>
+          {hasSetupEarlyExitTerms && <li>Điều khoản trả kho trong thời gian chuẩn bị của báo giá này.</li>}
+        </ul>
+      </span>
+    </label>
   </div>
 }

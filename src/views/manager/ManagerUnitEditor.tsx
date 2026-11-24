@@ -32,7 +32,6 @@ interface Props {
 interface FormState {
   code: string
   type: StorageUnit['type']
-  floor: string
   zone: string
   doorWidthM: string
   doorHeightM: string
@@ -47,12 +46,9 @@ const storageTypeFromDefinition = (definition: UnitType): StorageUnit['type'] =>
   return 'Small'
 }
 
-const toNumber = (value: string) => Number(value.replace(/\s/g, '').replace(/,/g, ''))
-
 const emptyForm: FormState = {
   code: '',
   type: 'Small',
-  floor: '1',
   zone: '',
   doorWidthM: '',
   doorHeightM: '',
@@ -109,7 +105,6 @@ export default function ManagerUnitEditor({
       setForm({
         code: unit.code,
         type: unit.type,
-        floor: String(unit.floor),
         zone: unit.zone,
         doorWidthM: String(unit.doorDimensions.widthM),
         doorHeightM: String(unit.doorDimensions.heightM),
@@ -126,12 +121,10 @@ export default function ManagerUnitEditor({
 
   const save = () => {
     const code = form.code.trim().toUpperCase()
-    const numeric = { floor: toNumber(form.floor) }
     const doorDimensions = mode === 'edit' ? unit?.doorDimensions : selectedTemplate?.doorDimensions
     if (!facilityId || !facilityName) return showToast("Không xác định được cơ sở của quản lý cơ sở.")
     if (!code || !form.zone.trim()) return showToast('Vui lòng nhập mã gian kho và khu vực.')
     if (mode === 'create' && allUnitCodes.some(item => item.toUpperCase() === code)) return showToast('Mã gian kho đã tồn tại trong hệ thống.')
-    if (!Number.isInteger(numeric.floor) || numeric.floor < 0) return showToast('Tầng phải là số nguyên không âm.')
     if (!doorDimensions || [doorDimensions.widthM, doorDimensions.heightM].some(value => !Number.isFinite(value) || value <= 0)) {
       return showToast('Thông số gian kho hiện có chưa hợp lệ. Vui lòng kiểm tra dữ liệu trước khi lưu.')
     }
@@ -142,7 +135,6 @@ export default function ManagerUnitEditor({
       code,
       facilityId,
       facilityName,
-      floor: numeric.floor,
       zone: form.zone.trim(),
       type: form.type,
       doorDimensions: { ...doorDimensions },
@@ -194,7 +186,6 @@ export default function ManagerUnitEditor({
             {definitions.map(item => <option key={item.definition.id} value={item.type}>{managerUnitTypeLabel(item.type, 'vi')}</option>)}
           </Select>
           <Input label="Khu vực *" value={form.zone} onChange={event => setField('zone', event.target.value)} />
-          <Input label="Tầng *" type="number" min="0" step="1" value={form.floor} onChange={event => setField('floor', event.target.value)} />
         </div>
       </section>
 

@@ -76,6 +76,7 @@ export interface RentalApiDetail extends RentalApiRecord {
   access: {
     completeness: string
     status: string | null
+    reference?: string | null
     reason: string | null
   }
 }
