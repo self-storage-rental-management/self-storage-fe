@@ -119,7 +119,7 @@ interface ApiEnvelope<T> {
 
 function readData<T>(payload: unknown): T {
   if (!payload || typeof payload !== 'object' || !('data' in payload)) {
-    throw new ApiClientError('Backend trả về dữ liệu không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+    throw new ApiClientError('Chưa tải được thông tin. Vui lòng thử lại.', { code: 'INVALID_API_RESPONSE' })
   }
   return (payload as { data: T }).data
 }
@@ -133,7 +133,7 @@ function readDashboard(payload: unknown): AdminApiDashboard {
     || !value.usersByRole || typeof value.usersByRole !== 'object'
     || !Array.isArray(value.recentLoginFailures)
     || !Array.isArray(value.recentSecurityEvents)) {
-    throw new ApiClientError('Backend trả về tổng quan quản trị không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+    throw new ApiClientError('Chưa tải được thông tin. Vui lòng thử lại.', { code: 'INVALID_API_RESPONSE' })
   }
   return {
     totalUsers: value.totalUsers,
@@ -154,7 +154,7 @@ function readPage<T>(payload: unknown): { data: T[]; pagination: AdminUserPage['
     || typeof pagination.pageSize !== 'number'
     || typeof pagination.totalItems !== 'number'
     || typeof pagination.totalPages !== 'number') {
-    throw new ApiClientError('Backend trả về danh sách không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+    throw new ApiClientError('Chưa tải được thông tin. Vui lòng thử lại.', { code: 'INVALID_API_RESPONSE' })
   }
   return {
     data: value.data as T[],

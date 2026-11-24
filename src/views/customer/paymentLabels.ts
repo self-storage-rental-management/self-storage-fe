@@ -35,7 +35,7 @@ export function paymentMethodLabel(value?: string | null, gateway = false): stri
 }
 
 export function formatHistoryPaymentMethod(value?: string | null): string {
-  if (!value) return '—'
+  if (!value) return '-'
   const trimmed = value.trim()
   const upper = trimmed.toUpperCase()
 
@@ -122,7 +122,7 @@ export function formatHistoryPaymentMethod(value?: string | null): string {
     trimmed === 'null' ||
     trimmed === 'undefined'
   ) {
-    return '—'
+    return '-'
   }
 
   return trimmed

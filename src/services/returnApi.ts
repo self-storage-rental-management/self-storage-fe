@@ -385,7 +385,7 @@ function readReturnEvidenceAsset(payload: unknown): ReturnEvidenceAsset {
   if (!object(payload) || !object(payload.data) || !isUuid(payload.data.id) ||
     typeof payload.data.originalName !== 'string' || typeof payload.data.contentType !== 'string' ||
     typeof payload.data.sizeBytes !== 'number') {
-    throw new ApiClientError('Backend trả về bằng chứng trả kho không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+    throw new ApiClientError('Chưa tải được thông tin. Vui lòng thử lại.', { code: 'INVALID_API_RESPONSE' })
   }
   return {
     id: payload.data.id,

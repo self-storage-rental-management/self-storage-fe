@@ -142,7 +142,7 @@ function distributionRows(plan: PalletPlan, goodsItems: GoodsItemInput[]): Compa
 }
 
 function conditionNumber(value: number | undefined | null) {
-  return value == null || !Number.isFinite(value) ? '—' : String(Math.round(value * 1000) / 1000)
+  return value == null || !Number.isFinite(value) ? '-' : String(Math.round(value * 1000) / 1000)
 }
 
 function storageConditionKey(capacity: PalletAllocation['capacity'], cargoHeightCm?: number) {
@@ -266,7 +266,7 @@ function DistributionTable({ plan, goodsItems }: { plan: PalletPlan; goodsItems:
         <tbody>
           {rows.map(row => <tr key={row.key} className="border-t border-stone-200">
             <td className="px-3 py-2">{row.label}<span className="block text-[11px] text-stone-500">{row.palletCount} tấm kê</span>{plan.items.length > 1 && <span className="block text-[11px] text-stone-500">Hàng {row.itemNumbers.join(', ')}</span>}</td>
-            {layerColumns.map(index => <td key={index} className="px-3 py-2 text-center">{row.layerPieces[index] == null ? '—' : `${n(row.layerPieces[index]!)} kiện`}</td>)}
+            {layerColumns.map(index => <td key={index} className="px-3 py-2 text-center">{row.layerPieces[index] == null ? '-' : `${n(row.layerPieces[index]!)} kiện`}</td>)}
             <td className="px-3 py-2"><div className="flex items-center justify-between gap-3"><span>{n(row.cargoWeight)}/{n(row.cargoLimit)} kg</span><span className="min-w-24 flex-1"><ProgressBar value={row.cargoWeight} maximum={row.cargoLimit} /></span></div><span className="block text-[11px] text-stone-500">khối lượng hàng / giới hạn hàng của khoang; khối lượng tấm kê hiển thị riêng</span></td>
           </tr>)}
           <tr className="border-t border-stone-200 font-semibold">

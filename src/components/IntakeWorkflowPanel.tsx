@@ -74,20 +74,20 @@ export default function IntakeWorkflowPanel({ reservationId, role, checkInId, st
   const selectedDateTimeIsPast = Boolean(at && at < minimumDateTime)
   const button = (action: string, label: string, disabled = false) => <button type="button" disabled={busy || disabled} onClick={() => void change(action)} className="rounded border border-stone-400 bg-white px-3 py-2 text-sm disabled:opacity-50">{label}</button>
   return <section className={`space-y-3 rounded-xl border p-4 text-left text-sm ${remaining != null && remaining < 86_400_000 ? 'border-red-400 bg-red-50 text-red-950' : 'border-stone-300 bg-stone-50'}`}>
-    <h4 className="font-bold">Setup và lịch kiểm kê</h4>
+    <h4 className="font-bold">Chuẩn bị hàng và lịch kiểm kê</h4>
     {deadline && <p className="font-semibold">Hạn: {show(deadline)} · {remaining! <= 0 ? 'Đã quá hạn' : `Còn ${Math.ceil(remaining! / 3_600_000)} giờ`}</p>}
     {!state.readyAt && <p>Đã dời {state.setupExtensionCount ?? 0}/2 lần. Mỗi lần tối đa {state.setupExtensionDays ?? 'chưa cấu hình'} ngày. Không cộng thời gian miễn phí.</p>}
     <p>Lịch kiểm kê: {show(state.appointmentAt)}</p>
     {state.resultConfirmationDueAt && <p>Vui lòng xác nhận hoặc góp ý về kết quả trong 48 giờ. Sau thời hạn này, hệ thống không tự xác nhận thay bạn.</p>}
     {role === 'MANAGER' && state.setupExtensionDays == null && !state.readyAt && <label className="block">Số ngày tối đa mỗi lần dời hạn<input className="ml-2 rounded border p-2" type="number" min="1" step="1" value={extensionDays} onChange={e => setExtensionDays(e.target.value)} /></label>}
     {(role === 'MANAGER' || role === 'CUSTOMER') && <label className="block">Ngày giờ mới theo giờ Việt Nam<input className="mt-1 block rounded border p-2" type="datetime-local" min={minimumDateTime} value={at} onChange={e => setAt(e.target.value)} /></label>}
-    {role === 'CUSTOMER' && <div className="flex flex-wrap gap-2">{!state.readyAt && button('EXTEND_SETUP', 'Dời hạn setup', (state.setupExtensionCount ?? 0) >= 2 || !state.setupDeadlineAt || selectedDateTimeIsPast)}{state.readyAt && !state.arrivedAt && button('APPOINTMENT', 'Xác nhận lịch kiểm kê', selectedDateTimeIsPast)}</div>}
+    {role === 'CUSTOMER' && <div className="flex flex-wrap gap-2">{!state.readyAt && button('EXTEND_SETUP', 'Dời hạn chuẩn bị hàng', (state.setupExtensionCount ?? 0) >= 2 || !state.setupDeadlineAt || selectedDateTimeIsPast)}{state.readyAt && !state.arrivedAt && button('APPOINTMENT', 'Xác nhận lịch kiểm kê', selectedDateTimeIsPast)}</div>}
     {role === 'STAFF' && state.readyAt && <div className="space-y-2">
       {!state.arrivedAt && button('ARRIVAL', 'Ghi nhận khách đã đến')}
       {state.arrivedAt && !state.identityVerifiedAt && <><label className="block">CCCD hoặc hộ chiếu<input className="ml-2 rounded border p-2" value={document} onChange={e => setDocument(e.target.value)} /></label><label className="block">Ảnh tại buổi kiểm kê<input type="file" accept="image/*" capture="user" onChange={e => setPhoto(e.target.files?.[0] || null)} /></label>{button('VERIFY', 'Xác minh chính chủ')}</>}
     </div>}
     {role !== 'CUSTOMER' && <div className="flex flex-wrap gap-2">{button('REMIND', 'Nhắc khách')}{role === 'MANAGER' && <><input aria-label="Lý do điều chỉnh do cơ sở" className="rounded border p-2" placeholder="Lý do điều chỉnh do cơ sở" value={reason} onChange={e => setReason(e.target.value)} />{button('FACILITY_EXTENSION', 'Điều chỉnh hạn do cơ sở', selectedDateTimeIsPast)}</>}</div>}
     {error && <p role="alert" className="text-red-800">{error}</p>}
-    <details><summary>Lịch sử xử lý</summary>{state.history.map((h, i) => <p key={i}>{show(h.time)} · {h.action === 'APPOINTMENT' ? 'Cập nhật lịch kiểm kê' : h.action === 'EXTEND_SETUP' ? 'Dời hạn setup' : h.action === 'VERIFY' ? 'Xác minh chính chủ' : h.action === 'ARRIVAL' ? 'Khách đã đến' : h.action === 'FACILITY_EXTENSION' ? 'Điều chỉnh do cơ sở' : 'Gửi nhắc'}{h.after ? ` · ${show(h.after)}` : ''}{h.reason ? ` · ${h.reason}` : ''}</p>)}</details>
+    <details><summary>Lịch sử xử lý</summary>{state.history.map((h, i) => <p key={i}>{show(h.time)} · {h.action === 'APPOINTMENT' ? 'Cập nhật lịch kiểm kê' : h.action === 'EXTEND_SETUP' ? 'Dời hạn chuẩn bị hàng' : h.action === 'VERIFY' ? 'Xác minh chính chủ' : h.action === 'ARRIVAL' ? 'Khách đã đến' : h.action === 'FACILITY_EXTENSION' ? 'Điều chỉnh do cơ sở' : 'Gửi nhắc'}{h.after ? ` · ${show(h.after)}` : ''}{h.reason ? ` · ${h.reason}` : ''}</p>)}</details>
   </section>
 }

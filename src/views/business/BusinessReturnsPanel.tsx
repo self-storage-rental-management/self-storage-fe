@@ -782,7 +782,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
           notes: refundNotes.trim() || 'Hoàn tiền cọc quyết toán',
         })
         await loadApiData()
-        setFeedback('Đã ghi nhận chứng từ hoàn tiền và hoàn tất hồ sơ theo kết quả backend.')
+        setFeedback('Đã ghi nhận chứng từ hoàn tiền và hoàn tất hồ sơ.')
         setActiveTab('overview')
         return
       }
@@ -914,7 +914,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
       }
 
       if (useApi) {
-        if (!newRentalId) throw new Error('Vui lòng nhập mã hồ sơ thuê từ Backend.')
+        if (!newRentalId) throw new Error('Vui lòng nhập mã hồ sơ thuê.')
         await requestReturn(newRentalId, newScheduledDate, newNotes)
         await loadApiData()
         setCreateModalOpen(false)
@@ -1133,7 +1133,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                     <div className="space-y-3">
                       <p className="text-base font-semibold text-stone-700">Chưa có hồ sơ trả kho nào trong danh sách</p>
                       <p className="text-xs text-stone-500 max-w-md mx-auto">
-                        {useApi ? 'Chưa có hồ sơ trả kho từ Backend.' : 'Bấm nút bên dưới để nạp bộ dữ liệu mẫu chuẩn nghiệp vụ hoặc tự tạo hồ sơ mới.'}
+                        {useApi ? 'Chưa có hồ sơ trả kho.' : 'Bấm nút bên dưới để nạp bộ dữ liệu mẫu chuẩn nghiệp vụ hoặc tự tạo hồ sơ mới.'}
                       </p>
                       <div className="flex justify-center gap-2 pt-2">
                         {!useApi && <Button variant="primary" size="sm" onClick={handleSeedDemoData}>Nạp 5 hồ sơ mẫu chuẩn</Button>}

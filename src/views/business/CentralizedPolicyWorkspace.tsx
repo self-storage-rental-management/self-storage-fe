@@ -313,7 +313,7 @@ export default function CentralizedPolicyWorkspace({ user, lang = 'vi', initialP
               QUY ĐỊNH & CHÍNH SÁCH VẬN HÀNH TOÀN HỆ THỐNG
             </h1>
             <p className="text-stone-300 text-sm leading-relaxed">
-              Mô-đun quản trị tập trung toàn bộ 9 chính sách cốt lõi của StorageHub. BO ban hành quy chuẩn chung — Toàn bộ cơ sở và khách hàng tự động áp dụng đồng bộ, bảo vệ quyền lợi hợp đồng đang chạy.
+              Mô-đun quản trị tập trung toàn bộ 9 chính sách cốt lõi của StorageHub. BO ban hành quy chuẩn chung - Toàn bộ cơ sở và khách hàng tự động áp dụng đồng bộ, bảo vệ quyền lợi hợp đồng đang chạy.
             </p>
           </div>
 
@@ -1068,10 +1068,10 @@ export default function CentralizedPolicyWorkspace({ user, lang = 'vi', initialP
                         </td>
                         <td className="py-3 px-4 font-semibold text-stone-800">{item.publishedByName || 'Ban Quản Trị'}</td>
                         <td className="py-3 px-4 font-mono text-stone-500">
-                          {item.publishedAt ? new Date(item.publishedAt).toLocaleDateString('vi-VN') : '—'}
+                          {item.publishedAt ? new Date(item.publishedAt).toLocaleDateString('vi-VN') : '-'}
                         </td>
                         <td className="py-3 px-4 max-w-xs truncate text-stone-600" title={item.changeSummary || ''}>
-                          {item.changeSummary || '—'}
+                          {item.changeSummary || '-'}
                         </td>
                         <td className="py-3 px-4 text-right">
                           {!isCurrent && (

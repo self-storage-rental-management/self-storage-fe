@@ -1,3 +1,4 @@
+import { ApiClientError } from "../../services/apiClient"
 import { isUuid } from "../../services/renewalOperationsApi"
 
 export const STAFF_GOODS_CATEGORY_LABELS: Record<string, string> = {
@@ -175,7 +176,7 @@ export function staffErrorMessage(error: unknown, fallback: string) {
   if (status === 403)
     return "Bạn không có quyền thực hiện thao tác này tại cơ sở hiện tại."
   if (status === 404) return "Không tìm thấy hồ sơ cần xử lý."
-  const message = typeof (candidate as { message?: unknown }).message === "string" ? String((candidate as { message?: unknown }).message) : ""
+  const message = error instanceof ApiClientError ? error.diagnosticMessage : typeof (candidate as { message?: unknown }).message === "string" ? String((candidate as { message?: unknown }).message) : ""
   if (message.includes("not pending refund"))
     return "Hồ sơ chưa ở trạng thái chờ hoàn cọc (có thể đang chờ khách duyệt hoặc đang khiếu nại)."
   if (message.includes("not in a state awaiting inspection"))
@@ -186,7 +187,7 @@ export function staffErrorMessage(error: unknown, fallback: string) {
     return "Hồ sơ không ở trạng thái khiếu nại."
   if (status === 409) {
     if (message.startsWith("Đã hết hạn nhận kho"))
-      return message
+      return error instanceof ApiClientError ? error.message : message
     if (code === "OPTIMISTIC_LOCK")
       return "Dữ liệu vừa được cập nhật ở nơi khác. Vui lòng tải lại và thử lại."
     if (message.includes("Reservation is not READY_FOR_CHECKIN"))
@@ -214,7 +215,7 @@ export function staffErrorMessage(error: unknown, fallback: string) {
     if (message.includes("lock reference"))
       return "Mã ổ khóa không khớp với thông tin ra vào đã kích hoạt. Vui lòng kiểm tra lại mã ổ khóa."
     if (/[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(message))
-      return message
+      return error instanceof ApiClientError ? error.message : message
     return "Hồ sơ vừa thay đổi trạng thái. Vui lòng tải lại danh sách rồi tiếp tục nhận kho."
   }
   if (status === 413)
@@ -243,7 +244,7 @@ export function staffErrorMessage(error: unknown, fallback: string) {
       return errorList.join(". ")
     }
     if (message && !message.includes("API request failed") && !message.includes("Thông tin gửi lên chưa hợp lệ") && !message.includes("Request parameters are invalid")) {
-      return message
+      return error instanceof ApiClientError ? error.message : message
     }
     return "Thông tin chưa hợp lệ. Vui lòng kiểm tra lại các trường đã nhập."
   }
@@ -270,7 +271,7 @@ export function extractStaffFieldErrors(error: unknown): Record<string, string> 
       if (key === "lockReference") key = "keyLockReference"
       if (key === "initialUnitCondition") key = "initialCondition"
 
-      let friendlyMsg = rawVal
+      let friendlyMsg = "Vui lòng kiểm tra lại thông tin đã nhập."
       if (rawVal.includes("CCCD/CMND") || key === "identityDocumentNumber") {
         friendlyMsg = "CCCD/CMND phải gồm đúng 9 hoặc 12 chữ số"
       } else if (rawVal.includes("must not be empty") || rawVal.includes("must not be blank") || rawVal.includes("required")) {
@@ -286,14 +287,14 @@ export function extractStaffFieldErrors(error: unknown): Record<string, string> 
           case "keyLockReference": friendlyMsg = "Vui lòng nhập mã ổ khóa"; break
           case "varianceReason": friendlyMsg = "Vui lòng nhập lý do chênh lệch"; break
           case "evidenceReferences": friendlyMsg = "Cần tải lên ít nhất 1 ảnh hoặc tệp PDF bằng chứng"; break
-          default: friendlyMsg = rawVal; break
+          default: break
         }
       }
       fieldErrors[key] = friendlyMsg
     }
   }
 
-  const msg = typeof candidate.message === "string" ? candidate.message : ""
+  const msg = error instanceof ApiClientError ? error.diagnosticMessage : typeof candidate.message === "string" ? candidate.message : ""
   if (msg.includes("varianceReason is required")) {
     fieldErrors.varianceReason = "Vui lòng nhập lý do chênh lệch khi kích thước hoặc khối lượng khác đơn đặt"
   }

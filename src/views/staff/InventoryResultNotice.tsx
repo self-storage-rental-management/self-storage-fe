@@ -34,7 +34,7 @@ export default function InventoryResultNotice({ result, published, checkInId, pa
     } catch { setError('Chưa thể tải kho gợi ý. Vui lòng thử lại.') }
     finally { setLoading(false) }
   }
-  const number = (value: number, digits: number) => Number.isFinite(value) ? value.toLocaleString('vi-VN', { maximumFractionDigits: digits }) : '—'
+  const number = (value: number, digits: number) => Number.isFinite(value) ? value.toLocaleString('vi-VN', { maximumFractionDigits: digits }) : '-'
   return <section className={`overflow-hidden rounded-2xl border ${screen.color}`} aria-label="Xác nhận hàng hóa kiểm kê" aria-live="polite">
     <header className="flex items-start gap-3 border-b border-black/10 p-5">
       <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-2xl font-bold">{screen.icon}</span>

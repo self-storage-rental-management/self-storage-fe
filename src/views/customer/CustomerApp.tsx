@@ -389,7 +389,7 @@ function notificationTimestamp(value?: string): number {
 
 function addMonthsForPreview(value: string, months: number): string {
   const date = parseCustomerDate(value)
-  if (!date || months <= 0) return '—'
+  if (!date || months <= 0) return '-'
   const year = date.getFullYear()
   const month = date.getMonth()
   const day = date.getDate()
@@ -2222,16 +2222,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         appointmentAt: 'Thời gian nhận kho chưa hợp lệ.',
       }
       const validationMessage = validationDetails
-        ? Object.entries(validationDetails).map(([field, detail]) => {
+        ? Object.keys(validationDetails).map((field) => {
             const itemMatch = field.match(/goodsItems\[(\d+)]\.(.+)/)
             if (itemMatch) {
               const itemNumber = Number(itemMatch[1]) + 1
               const itemField = ({ category: 'loại hàng', description: 'mô tả', quantity: 'số lượng', lengthCm: 'chiều dài', widthCm: 'chiều rộng', heightCm: 'chiều cao', weightPerItemKg: 'cân nặng', materialName: 'vật liệu' } as Record<string, string>)[itemMatch[2]] || itemMatch[2]
               return `Hàng hóa ${itemNumber}: ${itemField} chưa hợp lệ.`
             }
-            return typeof detail === 'string' && /[À-ỹ]/u.test(detail)
-              ? userFacingError(detail, validationLabels[field])
-              : validationLabels[field] || `Thông tin ${field} chưa hợp lệ.`
+            return validationLabels[field] || 'Vui lòng kiểm tra lại thông tin đã nhập.'
           }).join(' ')
         : ''
       const message = bookingAvailabilityIssue(error) ?? (
@@ -2419,7 +2417,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                         <div className="mt-4 flex flex-wrap items-center gap-2">
                           <div className="flex items-center gap-2 rounded-lg bg-[#292a27] px-3 py-1.5 text-sm font-bold text-white">
                             <span>{'Mã mở cổng:'}</span>
-                            <span className="text-[#e9a12c]">{rental.gateCode || '—'}</span>
+                            <span className="text-[#e9a12c]">{rental.gateCode || '-'}</span>
                           </div>
                           <Badge variant="muted">{'Quyền vào 24/7'}</Badge>
                         </div>
@@ -3470,7 +3468,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                           )}
                         </div>
                       </div>
-                      {['awaiting_customer_confirmation', 'disputed', 'payment_due', 'refund_pending', 'completed'].includes(returnCase.status) && <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5"><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{'Hiện trạng ban đầu'}</p><p className="mt-1 font-semibold">{returnCase.initialConditionSnapshot}</p></div><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{'Kết quả nghiệm thu'}</p><p className="mt-1 font-semibold">{returnCase.damageClassification || '—'} · {returnCase.staffNotes || '—'}</p></div><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{`Phí quá hạn (${returnCase.overdueDays || 0} ngày)`}</p><p className="mt-1 font-bold text-red-700">{formatVnd(returnCase.overdueFee || 0)}</p></div><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{'Cọc được hoàn'}</p><p className="mt-1 font-bold text-emerald-700">{formatVnd(returnCase.netRefundAmount)}</p></div><div className={`rounded-lg p-3 ${(returnCase.amountDueFromCustomer || 0) > 0 ? 'bg-red-100' : 'bg-white'}`}><p className="text-stone-500">{'Khách phải đóng thêm'}</p><p className="mt-1 font-bold text-red-700">{formatVnd(returnCase.amountDueFromCustomer || 0)}</p></div></div>}
+                      {['awaiting_customer_confirmation', 'disputed', 'payment_due', 'refund_pending', 'completed'].includes(returnCase.status) && <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5"><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{'Hiện trạng ban đầu'}</p><p className="mt-1 font-semibold">{returnCase.initialConditionSnapshot}</p></div><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{'Kết quả nghiệm thu'}</p><p className="mt-1 font-semibold">{returnCase.damageClassification || '-'} · {returnCase.staffNotes || '-'}</p></div><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{`Phí quá hạn (${returnCase.overdueDays || 0} ngày)`}</p><p className="mt-1 font-bold text-red-700">{formatVnd(returnCase.overdueFee || 0)}</p></div><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{'Cọc được hoàn'}</p><p className="mt-1 font-bold text-emerald-700">{formatVnd(returnCase.netRefundAmount)}</p></div><div className={`rounded-lg p-3 ${(returnCase.amountDueFromCustomer || 0) > 0 ? 'bg-red-100' : 'bg-white'}`}><p className="text-stone-500">{'Khách phải đóng thêm'}</p><p className="mt-1 font-bold text-red-700">{formatVnd(returnCase.amountDueFromCustomer || 0)}</p></div></div>}
                       {returnCase.structuralInspection && (
                         <div className="mt-2.5 rounded-lg border border-stone-200 bg-white p-2.5 text-xs flex flex-wrap items-center justify-between gap-2">
                           <div className="flex items-center gap-2">
@@ -3535,8 +3533,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       {page === 'contracts' && isApiAuthenticated() && <div className="fade-in space-y-4">
         <SectionHeader title="Hợp đồng của tôi" subtitle="Hồ sơ hợp đồng và văn bản bàn giao được lưu theo reservation trên hệ thống." />
         <Card className="space-y-4 p-5 text-sm text-stone-700">
-          <p>Hợp đồng ký và văn bản bàn giao không lấy từ dữ liệu demo. Hãy mở từng hồ sơ đặt kho để xem hoặc tải phiếu xác nhận, văn bản bàn giao và bằng chứng đã lưu trên backend.</p>
-          {backendReservations.length > 0 ? <div className="space-y-2">{backendReservations.map(reservation => <div key={reservation.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3"><div><p className="font-bold text-stone-900">{reservation.reservationCode}</p><p className="text-xs text-stone-600">{displayDateValue(reservation.startDate)} → {displayDateValue(reservation.endDate)} · {reservation.status}</p></div><Button size="sm" variant="outline" onClick={() => { setPage('reservations'); window.setTimeout(() => revealNotificationTarget(reservation.id), 0) }}>Mở hồ sơ</Button></div>)}</div> : <p className="rounded-lg border border-dashed border-stone-300 p-4 text-stone-500">Chưa có reservation từ backend.</p>}
+          <p>Mở hồ sơ đặt kho để xem hoặc tải phiếu xác nhận, văn bản bàn giao và bằng chứng.</p>
+          {backendReservations.length > 0 ? <div className="space-y-2">{backendReservations.map(reservation => <div key={reservation.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3"><div><p className="font-bold text-stone-900">{reservation.reservationCode}</p><p className="text-xs text-stone-600">{displayDateValue(reservation.startDate)} → {displayDateValue(reservation.endDate)} · {reservation.status}</p></div><Button size="sm" variant="outline" onClick={() => { setPage('reservations'); window.setTimeout(() => revealNotificationTarget(reservation.id), 0) }}>Mở hồ sơ</Button></div>)}</div> : <p className="rounded-lg border border-dashed border-stone-300 p-4 text-stone-500">Chưa có hồ sơ đặt kho.</p>}
         </Card>
       </div>}
       {page === 'contracts' && !isApiAuthenticated() && <div className="fade-in space-y-4">
@@ -3603,7 +3601,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   const rental = myRentals.find(r => r.id === payment.rentalId)
                   const hold = myHolds.find(h => h.id === payment.reservationId)
                   const labels: Record<string, string> = { RESERVATION_DEPOSIT: 'Thanh toán trước 20% (giữ chỗ) 20%', INITIAL_RENT: 'Phần còn lại tại cơ sở', RENEWAL: 'Thanh toán gia hạn', DAMAGE_FEE: 'Thanh toán quyết toán trả kho', REFUND: 'Hoàn cọc sau quyết toán' }
-                  return <Tr key={payment.id}><Td><span className="text-xs text-stone-600">{payment.transactionReference || payment.id}</span><p className="mt-0.5 text-[10px] text-stone-400">{payment.paidAt ? formatCustomerDateTime(new Date(payment.paidAt)) : '—'}</p></Td><Td><b>{rental?.unitId || hold?.assignedUnitId || hold?.unitTypeName || '—'}</b><p className="text-[10px] text-stone-400">{rental?.facilityName || hold?.facilityName}</p></Td><Td>{labels[payment.type] || 'Giao dịch thanh toán'}</Td><Td><span className="text-xs text-stone-500">{formatHistoryPaymentMethod(payment.paymentMethod)}</span></Td><Td><b className={payment.type === 'REFUND' ? 'text-emerald-700' : 'text-stone-950'}>{payment.type === 'REFUND' ? '+' : ''}{formatVnd(payment.amount)}</b></Td><Td><span className={`inline-flex rounded px-2.5 py-1 text-xs font-bold ${payment.status === 'PAID' ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{payment.status === 'PAID' ? ('Hoàn tất') : ('Đang xử lý')}</span></Td></Tr>
+                  return <Tr key={payment.id}><Td><span className="text-xs text-stone-600">{payment.transactionReference || payment.id}</span><p className="mt-0.5 text-[10px] text-stone-400">{payment.paidAt ? formatCustomerDateTime(new Date(payment.paidAt)) : '-'}</p></Td><Td><b>{rental?.unitId || hold?.assignedUnitId || hold?.unitTypeName || '-'}</b><p className="text-[10px] text-stone-400">{rental?.facilityName || hold?.facilityName}</p></Td><Td>{labels[payment.type] || 'Giao dịch thanh toán'}</Td><Td><span className="text-xs text-stone-500">{formatHistoryPaymentMethod(payment.paymentMethod)}</span></Td><Td><b className={payment.type === 'REFUND' ? 'text-emerald-700' : 'text-stone-950'}>{payment.type === 'REFUND' ? '+' : ''}{formatVnd(payment.amount)}</b></Td><Td><span className={`inline-flex rounded px-2.5 py-1 text-xs font-bold ${payment.status === 'PAID' ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{payment.status === 'PAID' ? ('Hoàn tất') : ('Đang xử lý')}</span></Td></Tr>
                 })}
                 {!myPayments.length && <tr><td colSpan={6}><p className="py-6 text-center text-sm text-stone-500">{'Chưa có giao dịch nào.'}</p></td></tr>}
               </Tbody>
@@ -4205,7 +4203,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     </span>
                   </div>
                   <div className="space-y-5 p-5">
-                    <section><p className="mb-2 text-[10px] font-bold uppercase tracking-[.14em] text-amber-700">{'1. Chủ thể hợp đồng'}</p><div className="grid gap-3 sm:grid-cols-2"><div className="rounded-lg border border-stone-200 p-3"><p className="font-bold text-stone-950">{'Bên cho thuê: StorageHub'}</p><p className="mt-1 leading-5 text-stone-600">{activeHoldForContract.facilityName}<br />{facilities.find(item => item.id === activeHoldForContract.facilityId)?.address || '—'}<br />{'Đại diện ký: quản lý cơ sở / nhân viên được ủy quyền'}</p></div><div className="rounded-lg border border-stone-200 p-3"><p className="font-bold text-stone-950">{`Bên thuê: ${activeHoldForContract.customerName}`}</p><p className="mt-1 leading-5 text-stone-600">CCCD người thuê: {maskCccd(activeHoldForContract.identityId || '')}<br />{activeHoldForContract.customerPhone} · {activeHoldForContract.customerEmail}<br />{activeHoldForContract.customerAddress || ('Địa chỉ: cập nhật khi ký')}<br />{`Mã khách hàng: ${activeHoldForContract.customerId}`}</p></div></div></section>
+                    <section><p className="mb-2 text-[10px] font-bold uppercase tracking-[.14em] text-amber-700">{'1. Chủ thể hợp đồng'}</p><div className="grid gap-3 sm:grid-cols-2"><div className="rounded-lg border border-stone-200 p-3"><p className="font-bold text-stone-950">{'Bên cho thuê: StorageHub'}</p><p className="mt-1 leading-5 text-stone-600">{activeHoldForContract.facilityName}<br />{facilities.find(item => item.id === activeHoldForContract.facilityId)?.address || '-'}<br />{'Đại diện ký: quản lý cơ sở / nhân viên được ủy quyền'}</p></div><div className="rounded-lg border border-stone-200 p-3"><p className="font-bold text-stone-950">{`Bên thuê: ${activeHoldForContract.customerName}`}</p><p className="mt-1 leading-5 text-stone-600">CCCD người thuê: {maskCccd(activeHoldForContract.identityId || '')}<br />{activeHoldForContract.customerPhone} · {activeHoldForContract.customerEmail}<br />{activeHoldForContract.customerAddress || ('Địa chỉ: cập nhật khi ký')}<br />{`Mã khách hàng: ${activeHoldForContract.customerId}`}</p></div></div></section>
                     <section><p className="mb-2 text-[10px] font-bold uppercase tracking-[.14em] text-amber-700">{'2. Đối tượng thuê & lịch bàn giao'}</p><div className="grid gap-px overflow-hidden rounded-lg border border-stone-200 bg-stone-200 sm:grid-cols-2">{[
                       ['Số hợp đồng / mã đơn', `${signed?.contractNumber ?? ('Cấp sau khi ký')} · ${activeHoldForContract.id}`],
                       ['Gian kho / cỡ kho', activeHoldForContract.assignedUnitId ?? unitTypeLabel(activeHoldForContract.unitTypeName)],
@@ -4232,8 +4230,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                         <p className="text-sm text-stone-600">{LEGACY_RENEWAL_HISTORY_NOTICE}</p>
                         <p>Kỳ đã lưu: {displayDateValue(renewal.oldEndDate)} → {displayDateValue(renewal.newEndDate)} · {renewal.renewalMonths} tháng</p>
                         <p>Tiền thuê đã lưu: {legacyRenewalMoney(renewal.totalAmount ?? renewal.renewalFee)}</p>
-                        <p>Mã chứng từ cũ: {renewal.invoiceNumber || '—'}</p>
-                        <p>Ngày ký đã lưu: {renewal.signedAt ? formatCustomerDate(new Date(renewal.signedAt)) : '—'}</p>
+                        <p>Mã chứng từ cũ: {renewal.invoiceNumber || '-'}</p>
+                        <p>Ngày ký đã lưu: {renewal.signedAt ? formatCustomerDate(new Date(renewal.signedAt)) : '-'}</p>
                         {renewalContract && <div className="flex gap-2 border-t border-stone-200 pt-3"><a href={renewalContract.scannedFileUrl} target="_blank" rel="noopener noreferrer" className="underline">Xem tệp hợp đồng đã lưu</a><a href={renewalContract.scannedFileUrl} download={renewalContract.scannedFileName} className="underline">Tải xuống</a></div>}
                       </article>
                     })}</div></section>}
@@ -4288,12 +4286,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 <div className="rounded-xl border border-stone-200 bg-stone-50 p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-[.16em] text-stone-500">{'Hồ sơ biên nhận thanh toán'}</p><p className="mt-1 text-lg font-bold text-stone-950">{activeHoldForContract.id}</p><p className="mt-1 text-stone-600">{activeHoldForContract.customerName} · {activeHoldForContract.customerEmail}</p></div><div className="text-right"><p className="text-stone-500">{'Đơn vị nhận tiền'}</p><p className="font-bold">StorageHub · {activeHoldForContract.facilityName}</p></div></div><div className="mt-4 grid gap-3 sm:grid-cols-4"><div className="rounded-lg bg-white p-3"><p className="text-stone-500">{'Tiền thuê theo kỳ'}</p><p className="mt-1 text-lg font-bold">{legacyRenewalMoney(rentalValue)}</p></div><div className="rounded-lg bg-emerald-50 p-3"><p className="text-emerald-700">{'Tiền cọc đảm bảo kho'}</p><p className="mt-1 text-lg font-bold text-emerald-800">{formatVnd(securityDeposit)}</p></div><div className="rounded-lg bg-blue-50 p-3"><p className="text-blue-700">{'Đã thu'}</p><p className="mt-1 text-lg font-bold text-blue-800">{legacyRenewalMoney(totalPaid)}</p></div><div className="rounded-lg bg-amber-50 p-3"><p className="text-amber-800">{'Còn phải thu'}</p><p className="mt-1 text-lg font-bold text-amber-900">{legacyRenewalMoney(balance)}</p></div></div></div>
                 {receiptPayments.map(payment => isLegacyRenewalPayment(payment) ? <LegacyRenewalPaymentRecord key={payment.id} payment={payment} /> : <article key={payment.id} className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 bg-stone-50 px-5 py-3"><div><p className="text-[10px] font-bold uppercase tracking-wide text-stone-500">{payment.type === 'RESERVATION_DEPOSIT' ? 'Biên lai cọc' : payment.type === 'INITIAL_RENT' ? 'Biên lai nhận kho' : payment.type === 'RENEWAL' && payment.id.startsWith('PAY-RNW-BAL-') ? 'Biên lai thanh toán số dư gia hạn' : payment.type === 'RENEWAL' ? 'Biên lai thanh toán gia hạn' : 'Biên nhận điện tử'}</p><p className="mt-1 text-sm font-bold">{payment.transactionReference || payment.id}</p></div><span className="rounded-full bg-emerald-100 px-3 py-1 font-bold text-emerald-800">{payment.status === 'PAID' ? ('Đã thanh toán') : ('Đang xử lý')}</span></div><div className="grid gap-px bg-stone-200 sm:grid-cols-2">{[
                   ['Số biên nhận', payment.id],
-                  ['Ngày giờ thanh toán', payment.paidAt ? formatCustomerDateTime(new Date(payment.paidAt)) : '—'],
+                  ['Ngày giờ thanh toán', payment.paidAt ? formatCustomerDateTime(new Date(payment.paidAt)) : '-'],
                   ['Người nộp tiền', `${activeHoldForContract.customerName} · ${activeHoldForContract.customerEmail}`],
                   ['Đơn vị nhận tiền', `StorageHub · ${activeHoldForContract.facilityName}`],
                   ['Nội dung thanh toán', payment.type === 'RENEWAL' && payment.id.startsWith('PAY-RNW-BAL-') ? (`Thanh toán phần còn lại của kỳ gia hạn: ${formatVnd(payment.amount)}`) : payment.description || (payment.type === 'RESERVATION_DEPOSIT' ? ('Thanh toán trước 20% (giữ chỗ)') : payment.type === 'INITIAL_RENT' ? ('Thanh toán phần còn lại tại nhận kho') : payment.type === 'RENEWAL' ? ('Thanh toán gia hạn hợp đồng') : 'Giao dịch thanh toán')],
                   ['Số hóa đơn', invoiceNumberLabel(payment.invoiceNumber)],
-                  ['Mã đơn / hợp đồng', `${activeHoldForContract.id} · ${contracts.find(item => item.reservationId === activeHoldForContract.id)?.contractNumber || '—'}`],
+                  ['Mã đơn / hợp đồng', `${activeHoldForContract.id} · ${contracts.find(item => item.reservationId === activeHoldForContract.id)?.contractNumber || '-'}`],
                   ['Phương thức', formatHistoryPaymentMethod(payment.paymentMethod || activeHoldForContract.payment.method)],
                   ['Mã giao dịch đối soát', payment.transactionReference || activeHoldForContract.payment.transactionId || payment.id],
                   ['Số tiền / tiền tệ', `${formatVnd(payment.amount)} · ${paymentCurrencyLabel('VND')}`],
