@@ -203,6 +203,7 @@ export default function RentalDetail({
               : rental.access.status === 'REVOKED' ? 'Thẻ hoặc mã ra vào đã được thu hồi.'
               : rental.access.status === 'INACTIVE' ? 'Chưa ghi nhận thẻ hoặc mã ra vào được cấp cho hồ sơ này.'
               : 'Trạng thái được cập nhật theo thông tin quyền ra vào của cơ sở.'}</p></dd>
+            {rental.access.status?.toUpperCase() === 'ACTIVE' && rental.access.reference && <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2"><dt className="text-xs font-medium text-amber-900">Mã ổ khóa đã bàn giao</dt><dd className="mt-1 font-mono text-base font-bold tracking-wider text-amber-950">{rental.access.reference}</dd></div>}
           </div>
         </dl>
       </Card>

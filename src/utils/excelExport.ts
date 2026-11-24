@@ -158,7 +158,6 @@ export interface ManagerFacilityExportOptions {
   units?: Array<{
     code: string
     type: string
-    floor: number | string
     zone: string
     status: string
     price: number | string
@@ -241,14 +240,13 @@ export function exportManagerFacilityExcel(options: ManagerFacilityExportOptions
   // 2. Sheet Danh sách gian kho
   if (options.units && options.units.length > 0) {
     const sheetUnits: (string | number)[][] = [
-      ['DANH SÁCH GIAN KHO TẠI CƠ SỞ', '', '', '', '', '', `Xuất ngày: ${todayStr}`],
-      ['Mã gian', 'Loại kho', 'Tầng', 'Khu vực', 'Trạng thái', 'Giá thuê/tháng', 'Khả dụng thực tế']
+      ['DANH SÁCH GIAN KHO TẠI CƠ SỞ', '', '', '', '', `Xuất ngày: ${todayStr}`],
+      ['Mã gian', 'Loại kho', 'Khu vực', 'Trạng thái', 'Giá thuê/tháng', 'Khả dụng thực tế']
     ]
     options.units.forEach(u => {
       sheetUnits.push([
         u.code,
         u.type,
-        typeof u.floor === 'number' ? `Tầng ${u.floor}` : u.floor,
         u.zone,
         u.status,
         u.price,
@@ -256,7 +254,7 @@ export function exportManagerFacilityExcel(options: ManagerFacilityExportOptions
       ])
     })
     const wsUnits = XLSX.utils.aoa_to_sheet(sheetUnits)
-    wsUnits['!cols'] = [{ wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 15 }, { wch: 18 }, { wch: 20 }, { wch: 28 }]
+    wsUnits['!cols'] = [{ wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 28 }]
     XLSX.utils.book_append_sheet(wb, wsUnits, 'Danh sách gian kho')
   }
 
