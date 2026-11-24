@@ -1,3 +1,4 @@
+import { CustomerProfileFields, CustomerProfileReminder, validateEmergencyProfile } from '../components/CustomerProfileFields'
 import { userFacingError } from '../presentation/userFacingError'
 import { useEffect, useState } from 'react'
 import type { PermissionKey, Role, User } from '../types'
@@ -20,6 +21,37 @@ interface ProfileViewProps {
 
 const MAX_AVATAR_FILE_SIZE = 5 * 1024 * 1024
 const MAX_AVATAR_DATA_LENGTH = 450_000
+const PROFILE_DRAFT_KEY_PREFIX = 'storagehub:profile-draft:'
+type ProfileDraft = {
+  name: string
+  phone: string
+  permanentAddress: string
+  emergencyContactName: string
+  emergencyContactPhone: string
+  profileDetails: User['profileDetails']
+}
+
+function profileDraftKey(userId: string) {
+  return `${PROFILE_DRAFT_KEY_PREFIX}${userId}`
+}
+
+function readProfileDraft(userId: string): ProfileDraft | null {
+  try {
+    const raw = sessionStorage.getItem(profileDraftKey(userId))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<ProfileDraft>
+    if (typeof parsed.name !== 'string' || typeof parsed.phone !== 'string' || typeof parsed.permanentAddress !== 'string'
+      || typeof parsed.emergencyContactName !== 'string' || typeof parsed.emergencyContactPhone !== 'string') return null
+    return { ...parsed, profileDetails: parsed.profileDetails || {} }
+  } catch {
+    return null
+  }
+}
+
+function clearProfileDraft(userId: string) {
+  try { sessionStorage.removeItem(profileDraftKey(userId)) } catch {}
+}
+
 type ProfileTab = 'profile' | 'security' | 'role' | 'notifications'
 
 export const roleLabelMap: Record<Role, string> = {
@@ -421,12 +453,14 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
   const [activeTab, setActiveTab] = useState<ProfileTab>(profileTabFromLocation)
 
   // Form states
-  const [name, setName] = useState(user.name)
+  const initialDraft = readProfileDraft(user.id)
+  const [name, setName] = useState(initialDraft?.name ?? user.name)
   const [email, setEmail] = useState(user.email)
-  const [phone, setPhone] = useState(user.phone || '')
-  const [permanentAddress, setPermanentAddress] = useState(user.permanentAddress || '')
-  const [emergencyContactName, setEmergencyContactName] = useState(user.emergencyContactName || '')
-  const [emergencyContactPhone, setEmergencyContactPhone] = useState(user.emergencyContactPhone || '')
+  const [phone, setPhone] = useState(initialDraft?.phone ?? (user.phone || ''))
+  const [permanentAddress, setPermanentAddress] = useState(initialDraft?.permanentAddress ?? (user.permanentAddress || ''))
+  const [profileDetails, setProfileDetails] = useState(initialDraft?.profileDetails ?? (user.profileDetails || {}))
+  const [emergencyContactName, setEmergencyContactName] = useState(initialDraft?.emergencyContactName ?? (user.emergencyContactName || ''))
+  const [emergencyContactPhone, setEmergencyContactPhone] = useState(initialDraft?.emergencyContactPhone ?? (user.emergencyContactPhone || ''))
   const [avatarUrl, setAvatarUrl] = useState(user.avatar || '')
 
   // Security states
@@ -469,17 +503,29 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
   const [apiManagerSummaryError, setApiManagerSummaryError] = useState(false)
 
   const profileHasChanges =
+    JSON.stringify(profileDetails) !== JSON.stringify(user.profileDetails || {}) ||
     name !== user.name ||
     phone !== (user.phone || '') ||
     permanentAddress !== (user.permanentAddress || '') ||
     emergencyContactName !== (user.emergencyContactName || '') ||
     emergencyContactPhone !== (user.emergencyContactPhone || '')
 
+  useEffect(() => {
+    if (!isCustomer || !profileHasChanges) return
+    try {
+      sessionStorage.setItem(profileDraftKey(user.id), JSON.stringify({
+        name, phone, permanentAddress, emergencyContactName, emergencyContactPhone, profileDetails,
+      } satisfies ProfileDraft))
+    } catch {}
+  }, [isCustomer, name, phone, permanentAddress, emergencyContactName, emergencyContactPhone, profileDetails, profileHasChanges, user.id])
+
   const handleCancelProfileChanges = () => {
+    clearProfileDraft(user.id)
     setName(user.name)
     setEmail(user.email)
     setPhone(user.phone || '')
     setPermanentAddress(user.permanentAddress || '')
+    setProfileDetails(user.profileDetails || {})
     setEmergencyContactName(user.emergencyContactName || '')
     setEmergencyContactPhone(user.emergencyContactPhone || '')
   }
@@ -551,7 +597,7 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
     e.preventDefault()
     if (!isCustomer || savingProfile || !profileHasChanges) return
 
-const validationError = validateProfileForm({
+const validationError = validateEmergencyProfile({ name, phone, permanentAddress, emergencyContactName, emergencyContactPhone, profileDetails }) || validateProfileForm({
   name,
   phone,
   permanentAddress,
@@ -573,14 +619,16 @@ setSavingProfile(true)
         emergencyContactName: emergencyContactName.trim(),
         emergencyContactPhone,
         avatarUrl,
+        profileDetails,
       }
       if (isApiAuthenticated()) {
         const actor = await updateCurrentProfileWithApi(profile)
         setAvatarUrl(actor.avatarUrl || '')
         onUpdateUser?.(actorToUser(actor))
       } else {
-        updateCustomerProfile({ name, email, phone, permanentAddress, emergencyContactName, emergencyContactPhone, avatar: avatarUrl }, user)
+        updateCustomerProfile({ name, email, phone, permanentAddress, emergencyContactName, emergencyContactPhone, profileDetails, avatar: avatarUrl }, user)
       }
+      clearProfileDraft(user.id)
       showToast('Đã cập nhật thông tin cá nhân.')
     } catch (error) {
       showToast(userFacingError(error, 'Không thể cập nhật thông tin cá nhân.'))
@@ -590,14 +638,16 @@ setSavingProfile(true)
   }
 
   useEffect(() => {
-    setName(user.name)
+    const draft = readProfileDraft(user.id)
+    setName(draft?.name ?? user.name)
     setEmail(user.email)
-    setPhone(user.phone || '')
-    setPermanentAddress(user.permanentAddress || '')
-    setEmergencyContactName(user.emergencyContactName || '')
-    setEmergencyContactPhone(user.emergencyContactPhone || '')
+    setPhone(draft?.phone ?? (user.phone || ''))
+    setPermanentAddress(draft?.permanentAddress ?? (user.permanentAddress || ''))
+    setProfileDetails(draft?.profileDetails ?? (user.profileDetails || {}))
+    setEmergencyContactName(draft?.emergencyContactName ?? (user.emergencyContactName || ''))
+    setEmergencyContactPhone(draft?.emergencyContactPhone ?? (user.emergencyContactPhone || ''))
     setAvatarUrl(user.avatar || '')
-  }, [user.id, user.name, user.email, user.phone, user.permanentAddress, user.emergencyContactName, user.emergencyContactPhone, user.avatar])
+  }, [user.id, user.name, user.email, user.phone, user.permanentAddress, user.emergencyContactName, user.emergencyContactPhone, user.profileDetails, user.avatar])
 
   useEffect(() => {
     const syncProfileTab = () => setActiveTab(profileTabFromLocation())
@@ -633,7 +683,7 @@ setSavingProfile(true)
         setAvatarUrl(actor.avatarUrl || nextAvatarUrl)
         onUpdateUser?.(actorToUser(actor))
       } else if (isCustomer) {
-        updateCustomerProfile({ name, email, phone, permanentAddress, emergencyContactName, emergencyContactPhone, avatar: nextAvatarUrl }, user)
+        updateCustomerProfile({ name, email, phone, permanentAddress, emergencyContactName, emergencyContactPhone, profileDetails, avatar: nextAvatarUrl }, user)
       }
     } catch (error) {
       setAvatarUrl(previousAvatarUrl)
@@ -1090,6 +1140,7 @@ setSavingProfile(true)
         avatarUploading={avatarUploading}
         onAvatarChange={handleAvatarChange}
       />
+      {isCustomer && <CustomerProfileReminder user={{ ...user, name, phone, permanentAddress, emergencyContactName, emergencyContactPhone, profileDetails }} onOpen={() => setActiveTab('profile')} />}
       {/* Tabs */}
       <div className="flex flex-wrap gap-2 border-b border-[#deddd2] pb-1">
         {([
@@ -1163,7 +1214,7 @@ setSavingProfile(true)
               <Card className="p-6">
                 <div className="flex items-center justify-between pb-4 mb-5 border-b border-stone-100">
                   <div>
-                    <p className="text-xs text-stone-600">Cập nhật thông tin liên hệ và người liên hệ khẩn cấp</p>
+                    <h2 className="font-semibold text-stone-900">Hồ sơ khách hàng</h2>
                   </div>
                 </div>
 
@@ -1198,6 +1249,7 @@ setSavingProfile(true)
                   </div>
 
                   <Input
+                    id="profile-phone"
                     label="Số điện thoại Việt Nam"
                     value={phone}
                     onChange={e => setPhone(e.target.value)}
@@ -1211,6 +1263,7 @@ setSavingProfile(true)
                       <span className="text-xs text-stone-600 font-normal">Tối thiểu 5 ký tự</span>
                     </div>
                     <textarea
+                      id="profile-address"
                       value={permanentAddress}
                       onChange={e => setPermanentAddress(e.target.value)}
                       placeholder="Nhập số nhà, đường, phường/xã, quận/huyện, tỉnh/thành phố"
@@ -1219,27 +1272,9 @@ setSavingProfile(true)
                     />
                   </label>
 
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div>
-                      <Input
-                        label="Người liên hệ khẩn cấp"
-                        value={emergencyContactName}
-                        onChange={e => setEmergencyContactName(e.target.value)}
-                        placeholder="Họ và tên người liên hệ"
-                      />
-                      <p className="mt-1 text-[11px] text-stone-600">Tối thiểu 2 ký tự</p>
-                    </div>
-                    <div>
-                      <Input
-                        label="SĐT liên hệ khẩn cấp"
-                        value={emergencyContactPhone}
-                        onChange={e => setEmergencyContactPhone(e.target.value)}
-                        placeholder="0901234567"
-                        inputMode="tel"
-                      />
-                      <p className="mt-1 text-[11px] text-stone-600">Nhập 10-11 số bắt đầu bằng 0 hoặc số quốc tế, ví dụ: 0901234562 / +84901234562.</p>
-                    </div>
-                  </div>
+                  <CustomerProfileFields value={profileDetails} onChange={setProfileDetails}
+                    user={{ ...user, name, phone, permanentAddress, emergencyContactName, emergencyContactPhone, profileDetails }}
+                    onNameChange={setEmergencyContactName} onPhoneChange={setEmergencyContactPhone} />
 
                   {profileHasChanges && (
                     <div className="sticky bottom-0 z-10 flex flex-col justify-end gap-3 border-t border-stone-200 bg-white/95 pt-4 sm:flex-row">

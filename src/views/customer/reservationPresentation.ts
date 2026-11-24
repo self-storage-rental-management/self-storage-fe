@@ -2,19 +2,20 @@ import type { ReservationStatus } from '../../services/customerReservationApi'
 
 export function paymentCountdown(deadline: string | null | undefined, now: number) {
   const timestamp = deadline ? Date.parse(deadline) : NaN
-  if (!Number.isFinite(timestamp)) return { text: 'Đang tải thời hạn…', expired: true }
+  if (!Number.isFinite(timestamp)) return { text: 'Đang tải thời hạn…', expired: true, urgency: 'normal' as const }
   const seconds = Math.max(0, Math.ceil((timestamp - now) / 1000))
   const hours = Math.floor(seconds / 3600)
   const minutes = Math.floor((seconds % 3600) / 60)
   const text = hours > 0
     ? `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
     : `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
-  return { text, expired: seconds === 0 }
+
+  return { text, expired: seconds === 0, urgency: seconds < 60 ? 'danger' as const : seconds < 300 ? 'warning' as const : 'normal' as const }
 }
 
 export const reservationStatusLabels: Record<ReservationStatus, string> = {
   AWAITING_EMAIL: 'Đang xử lý hồ sơ', AWAITING_REVIEW: 'Chờ duyệt hàng hóa',
-  AWAITING_PAYMENT: 'Chờ thanh toán đặt cọc giữ chỗ', PAYMENT_GRACE: 'Chờ khiếu nại thanh toán',
+  AWAITING_PAYMENT: 'Chờ thanh toán trước 20% (giữ chỗ)', PAYMENT_GRACE: 'Chờ khiếu nại thanh toán',
   PAYMENT_REVIEW: 'Đang đối soát thanh toán', CONFIRMED: 'Đã xác nhận giữ kho',
   UNIT_RESERVED: 'Đã phân kho', READY_FOR_CHECKIN: 'Sẵn sàng nhận kho',
   AWAITING_CUSTOMER_RECEIPT: 'Chờ xác nhận nhận kho', PREPARING: 'Đang chuẩn bị hàng', COMPLETED: 'Đã hoàn tất nhận kho',

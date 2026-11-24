@@ -24,9 +24,9 @@ describe('customer reservation layout regression', () => {
   it('counts down against the backend deadline and blocks expired or invalid deadlines', () => {
     const deadline = '2026-11-01T10:00:00Z'
     const timestamp = Date.parse(deadline)
-    expect(paymentCountdown(deadline, timestamp - 600_000)).toEqual({ text: '10:00', expired: false })
+    expect(paymentCountdown(deadline, timestamp - 600_000)).toEqual({ text: '10:00', expired: false, urgency: 'normal' })
     expect(paymentCountdown(deadline, timestamp - 599_000).text).toBe('09:59')
-    expect(paymentCountdown(deadline, timestamp + 1)).toEqual({ text: '00:00', expired: true })
+    expect(paymentCountdown(deadline, timestamp + 1)).toEqual({ text: '00:00', expired: true, urgency: 'danger' })
     expect(paymentCountdown('invalid', timestamp).expired).toBe(true)
   })
 

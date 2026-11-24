@@ -60,13 +60,16 @@ function RentalPriceComparison({ currentName, suggestedName, comparison }: {
   comparison: PriceComparison
 }) {
   const { current, suggested, rentalMonths } = comparison
+  const rentalSavings = current.rentAfterPackageDiscount - suggested.rentAfterPackageDiscount
   const rows = [
     ['Tiền thuê cả kỳ', current.rentAfterPackageDiscount, suggested.rentAfterPackageDiscount],
-    ['Tiền cọc đảm bảo kho', current.securityDepositAmount, suggested.securityDepositAmount],
-    ['Phí giữ chỗ', current.reservationDepositAmount, suggested.reservationDepositAmount],
+    ['Tiền cọc đảm bảo (hoàn lại khi trả kho)', current.securityDepositAmount, suggested.securityDepositAmount],
+    ['Tổng phải thanh toán', current.rentAfterPackageDiscount + current.securityDepositAmount, suggested.rentAfterPackageDiscount + suggested.securityDepositAmount],
+    ['Thanh toán trước 20% (đã nằm trong tổng)', current.reservationDepositAmount, suggested.reservationDepositAmount],
   ] as const
 
   return <div className="space-y-2 rounded-lg border border-amber-200 bg-white p-3 text-stone-900">
+    {rentalSavings > 0 && <p className="text-lg font-bold text-amber-800">Tiết kiệm {formatVndAmount(rentalSavings)} tiền thuê trong {n(rentalMonths)} tháng</p>}
     <h5 className="font-semibold">So sánh chi phí kỳ thuê {n(rentalMonths)} tháng</h5>
     <p className="text-xs text-stone-600">Tiền thuê đã tính mức giảm {n(suggested.discountRate * 100)}% của gói đang chọn.</p>
     <div className="overflow-x-auto">
@@ -94,7 +97,7 @@ function RentalPriceComparison({ currentName, suggestedName, comparison }: {
         </tbody>
       </table>
     </div>
-    <p className="text-xs text-stone-600">Phí giữ chỗ được trừ vào tiền thuê. Số tiền sẽ được xác nhận trên báo giá.</p>
+    <p className="text-xs text-stone-600">Cọc đảm bảo được hoàn lại sau quyết toán. Cọc thấp hơn giúp giảm số tiền cần trả ban đầu; khoản trả trước đã nằm trong tổng chi phí. Số tiền cuối cùng theo báo giá.</p>
   </div>
 }
 
@@ -183,7 +186,8 @@ export default function CustomerWarehouseSuggestion({
   const { palletLengthCm, palletWidthCm } = plan
   return <section className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
     <h4 className="font-semibold">Gợi ý đổi sang {suggestedName}</h4>
-    <ul className="list-disc space-y-1 pl-5">
+    {priceComparison && <RentalPriceComparison currentName={currentName} suggestedName={suggestedName} comparison={priceComparison} />}
+    <details><summary className="cursor-pointer text-sm font-medium">Xem lý do kho được gợi ý phù hợp</summary><ul className="mt-2 list-disc space-y-1 pl-5">
       <li>
         Tấm kê của {suggestedName} có chiều dài {n(palletLengthCm)} cm và chiều rộng {n(palletWidthCm)} cm.
         {plan.items.map(item => {
@@ -214,8 +218,8 @@ export default function CustomerWarehouseSuggestion({
         {' '}Khối lượng trên từng khung nằm trong mức cho phép.
       </li>
       <li>Có {n(suggestedCheck.availableUnitCount)} gian phù hợp trong kỳ thuê đã chọn.</li>
-    </ul>
-    {priceComparison && <RentalPriceComparison currentName={currentName} suggestedName={suggestedName} comparison={priceComparison} />}
+    </ul></details>
+
     {suggestedCheck.staffReviewRequired && <p>Nhân viên cơ sở cần duyệt hàng trước khi thanh toán cọc.</p>}
     <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={onChoose}>{actionLabel}</Button>
   </section>

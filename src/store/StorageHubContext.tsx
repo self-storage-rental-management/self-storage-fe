@@ -74,7 +74,7 @@ const clientSecurityContext = () => ({
 
 type CompanyRole = Exclude<User['role'], 'customer'>
 type AccountStatus = 'active' | 'inactive' | 'suspended'
-type StoredUser = (typeof USERS)[number] & Partial<Pick<User, 'permanentAddress' | 'emergencyContactName' | 'emergencyContactPhone' | 'avatar'>> & {
+type StoredUser = (typeof USERS)[number] & Partial<Pick<User, 'permanentAddress' | 'emergencyContactName' | 'emergencyContactPhone' | 'profileDetails' | 'avatar'>> & {
   passwordResetAt?: string
   mustChangePassword?: boolean
 }
@@ -1224,6 +1224,7 @@ interface StorageHubContextValue extends StorageHubState {
     permanentAddress?: string
     emergencyContactName?: string
     emergencyContactPhone?: string
+    profileDetails?: User['profileDetails']
     avatar?: string
   }, customer: User) => void
   submitProfileChangeRequest: (params: { requestedFields: string[]; reason: string }, requester: User) => ProfileChangeRequest
@@ -1863,6 +1864,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     permanentAddress: account.permanentAddress,
     emergencyContactName: account.emergencyContactName,
     emergencyContactPhone: account.emergencyContactPhone,
+    profileDetails: account.profileDetails,
     avatar: account.avatar,
     role: account.role as User['role'],
     facility: account.facility
@@ -1879,6 +1881,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     permanentAddress: account.permanentAddress,
     emergencyContactName: account.emergencyContactName,
     emergencyContactPhone: account.emergencyContactPhone,
+    profileDetails: account.profileDetails,
     avatar: account.avatar,
     mustChangePassword: account.mustChangePassword ?? false,
     passwordResetAt: account.passwordResetAt
@@ -2259,7 +2262,12 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
     let holdId = ''
     do {
-      holdId = `RSV-${String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, '0')}`
+      const genChunk = () => {
+        const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+        const randomValues = crypto.getRandomValues(new Uint8Array(4))
+        return Array.from(randomValues).map(byte => chars[byte % chars.length]).join('')
+      }
+      holdId = `RSV-${genChunk()}-${genChunk()}-${genChunk()}`
     } while (state.holds.some(hold => hold.id === holdId))
     const quoteId = `QUO-${Date.now().toString().slice(-4)}`
     const requiresGoodsReview = Boolean(params.goods.items?.some(item => item.category === 'OTHER' || item.requiresStaffReview))
@@ -4004,6 +4012,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     permanentAddress?: string
     emergencyContactName?: string
     emergencyContactPhone?: string
+    profileDetails?: User['profileDetails']
     avatar?: string
   }, customer: User) => {
     const canonicalCustomer = resolveCanonicalActor(customer)
@@ -4021,6 +4030,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       permanentAddress: updates.permanentAddress?.trim() || '',
       emergencyContactName: updates.emergencyContactName?.trim() || '',
       emergencyContactPhone: updates.emergencyContactPhone?.trim() || '',
+      profileDetails: updates.profileDetails ?? canonicalCustomer.profileDetails,
       avatar: updates.avatar || canonicalCustomer.avatar,
     } as StoredUser
     const before = accountSnapshot(canonicalCustomer)
