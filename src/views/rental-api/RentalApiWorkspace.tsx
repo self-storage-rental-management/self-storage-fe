@@ -466,10 +466,15 @@ function WorkspaceData({
           {role === 'manager' ? (read.data.kind === 'rental'
             ? <ManagerRentalGroups kind="rental" rows={read.data.page.data} onDetail={id => setDetail({ kind: 'rental', id })} />
             : <ManagerRentalGroups kind="renewal" rows={read.data.page.data} onDetail={id => setDetail({ kind: 'renewal', id })} />
-          ) : role === 'customer' && read.data.kind === 'renewal' ? <CustomerRenewalGroups rows={read.data.page.data} onDetail={id => setDetail({ kind: 'renewal', id })} /> : role === 'customer' && read.data.kind === 'rental' ? <div className="space-y-5">{[
-            { id: 'ongoing', title: 'Đang diễn ra', subtitle: 'Hồ sơ đang thuê, quá hạn hoặc đang xử lý trả kho.', rows: read.data.page.data.filter(row => row.status !== 'completed'), active: true },
-            { id: 'finished', title: 'Hồ sơ đã kết thúc', subtitle: 'Hồ sơ thuê đã hoàn tất xử lý.', rows: read.data.page.data.filter(row => row.status === 'completed'), active: false },
-          ].map(group => {
+          ) : role === 'customer' && read.data.kind === 'renewal' ? <CustomerRenewalGroups rows={read.data.page.data} onDetail={id => setDetail({ kind: 'renewal', id })} /> : role === 'customer' && read.data.kind === 'rental' ? <div className="space-y-5">{(() => {
+            const returningStatuses = ['return_requested', 'return_inspection', 'closing']
+            const returningRows = read.data.page.data.filter(row => returningStatuses.includes(row.status))
+            return [
+              { id: 'ongoing', title: 'Đang diễn ra', subtitle: 'Hồ sơ đang thuê, trong thời gian chuẩn bị hoặc quá hạn.', rows: read.data.page.data.filter(row => row.status !== 'completed' && !returningStatuses.includes(row.status)), active: true },
+              ...(returningRows.length > 0 ? [{ id: 'returning', title: 'Đang trả kho', subtitle: 'Hồ sơ đã chuyển sang quy trình trả kho, nghiệm thu và quyết toán.', rows: returningRows, active: true }] : []),
+              { id: 'finished', title: 'Hồ sơ đã kết thúc', subtitle: 'Hồ sơ thuê đã hoàn tất xử lý.', rows: read.data.page.data.filter(row => row.status === 'completed'), active: false },
+            ]
+          })().map(group => {
             const pages = Math.ceil(group.rows.length / 5)
             const page = Math.min(rentalPages[group.id] ?? 0, Math.max(0, pages - 1))
             return <RentalRecordGroup key={group.id} id={`rental-group-${group.id}`} title={group.title} subtitle={group.subtitle}

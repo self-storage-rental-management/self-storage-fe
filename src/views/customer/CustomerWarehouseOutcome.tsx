@@ -90,12 +90,21 @@ export function CustomerNoCompatibleWarehouse({ check, goodsItems = [], maxSuppo
     { label: 'Chiều cao', value: displayedDimensions![2], limit: storageLimits.maxCargoHeightCm },
   ] : []
   const issue = storageIssue(item, storageLimits, check)
+  const capacityIssue = check.issues.some(value =>
+    /không đủ vị trí|tấm kê|pallet|kiện chưa được xếp|số lượng/i.test(value),
+  )
   const weightIssue = check.issues.some(value => /đơn nặng|khối lượng|tải trọng|vượt .*kg/i.test(value))
     || (storageLimits.maxCargoWeightKg != null && check.totalGoodsWeightKg > storageLimits.maxCargoWeightKg)
-  const title = weightIssue ? 'Chưa có loại kho đủ tải trọng' : 'Chưa có loại kho phù hợp'
-  const subtitle = weightIssue
-    ? 'Kích thước hàng hóa phù hợp sau khi xét hướng đặt, nhưng tổng khối lượng vượt giới hạn các loại kho hiện có.'
-    : 'Hàng hóa của bạn vượt quá kích thước lưu trữ được hỗ trợ.'
+  const title = capacityIssue
+    ? 'Chưa có loại kho đủ sức chứa'
+    : weightIssue
+      ? 'Chưa có loại kho đủ tải trọng'
+      : 'Chưa có loại kho phù hợp'
+  const subtitle = capacityIssue
+    ? 'Kích thước từng kiện hàng phù hợp, nhưng số lượng kiện hoặc vị trí tấm kê vượt quá sức chứa của các loại kho hiện có.'
+    : weightIssue
+      ? 'Kích thước hàng hóa phù hợp sau khi xét hướng đặt, nhưng tổng khối lượng vượt giới hạn các loại kho hiện có.'
+      : 'Hàng hóa của bạn vượt quá kích thước lưu trữ được hỗ trợ.'
 
   return <section className="space-y-3 rounded-xl border border-red-200 bg-white p-4 text-sm text-stone-800">
     <h4 className="flex items-center gap-2 text-base font-semibold"><span aria-hidden="true" className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold leading-none text-white">×</span>{title}</h4>
