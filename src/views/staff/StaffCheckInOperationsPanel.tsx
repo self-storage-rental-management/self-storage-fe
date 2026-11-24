@@ -1959,7 +1959,7 @@ export default function StaffCheckInOperationsPanel({
               variant="outline"
               onClick={() => setDetailTarget(item)}
             >
-              Xem biên bản
+              Xem biên bản kiểm kê
             </Button>
           )}
           {item.checkInStatus === "completed" && (
@@ -1978,7 +1978,7 @@ export default function StaffCheckInOperationsPanel({
                 variant="outline"
                 onClick={() => setDetailTarget(item)}
               >
-                Xem biên bản
+                Xem biên bản kiểm kê
               </Button>
               <Button
                 className={actionButtonClass}

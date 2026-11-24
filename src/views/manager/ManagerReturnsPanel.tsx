@@ -543,28 +543,15 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
     : null
 
   return (
-    <div className="fade-in space-y-6">
+    <div className="manager-returns-page fade-in space-y-4">
       {useApi && apiRead.loading && <p role="status">Đang tải hồ sơ trả kho…</p>}
       {useApi && apiRead.error && <p role="alert">{apiRead.error} <Button variant="outline" size="sm" onClick={() => void apiRead.refresh()}>Thử lại</Button></p>}
+      <div className="space-y-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
       <header>
         <h1 className="text-2xl font-bold text-stone-900">Trả kho và nghiệm thu</h1>
         <p className="mt-1 text-sm text-stone-500">Theo dõi nghiệm thu hiện trường, biên bản và quyết toán hồ sơ trả kho.</p>
       </header>
-
-      {/* Filter Tabs & Search Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-x-5 border-b border-stone-200" aria-label="Trạng thái trả kho">
-          {[
-            ['All', `Tất cả ${facilityReturns.length}`],
-            ['awaiting_inspection', `Chờ nghiệm thu ${awaitingInspectionCount}`],
-            ['recovery_required', `Cần xử lý thu hồi ${recoveryRequiredCount}`],
-            ['inspected', `Đã kiểm tra ${inspectedCount}`],
-            ['needs_maintenance', `Cần bảo trì ${needsMaintenanceCount}`],
-            ['completed', `Hoàn tất ${completedCount}`],
-          ].map(([value, label]) => <button key={value} type="button" aria-pressed={returnTab === value}
-            className={`border-b-2 px-1 py-3 text-sm ${returnTab === value ? 'border-amber-700 font-semibold text-stone-900' : 'border-transparent text-stone-500 hover:text-stone-900'}`}
-            onClick={() => setReturnTab(value)}>{label}</button>)}
-        </div>
         <div className="flex w-full items-center gap-2 sm:w-auto">
           <input
             type="text"
@@ -587,6 +574,19 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
             </div>
           </details>
         </div>
+        </div>
+        <div className="flex w-fit max-w-full flex-wrap items-center gap-1 rounded-full bg-[#eeebe1] p-1" aria-label="Trạng thái trả kho">
+          {[
+            ['All', `Tất cả ${facilityReturns.length}`],
+            ['awaiting_inspection', `Chờ nghiệm thu ${awaitingInspectionCount}`],
+            ['recovery_required', `Cần xử lý thu hồi ${recoveryRequiredCount}`],
+            ['inspected', `Đã kiểm tra ${inspectedCount}`],
+            ['needs_maintenance', `Cần bảo trì ${needsMaintenanceCount}`],
+            ['completed', `Hoàn tất ${completedCount}`],
+          ].map(([value, label]) => <button key={value} type="button" aria-pressed={returnTab === value}
+            className={`rounded-full px-3 py-2 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-900 ${returnTab === value ? 'bg-[#191c26] font-semibold text-white' : 'text-stone-600 hover:bg-white hover:text-stone-900'}`}
+            onClick={() => setReturnTab(value)}>{label}</button>)}
+        </div>
       </div>
 
       {hiddenFacilityCount > 0 && (
@@ -599,15 +599,15 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
       )}
 
       {/* Returns Table */}
-      <Card className="overflow-hidden !border-0 !bg-transparent !shadow-none">
+      <Card className="manager-return-card overflow-hidden !border-stone-200 !bg-white !shadow-none">
         <Table tableClassName="manager-return-table">
           <Thead>
             <tr>
-              <Th>{'Mã hồ sơ thuê'}</Th>
+              <Th>{'Mã hồ sơ'}</Th>
               <Th>{'Khách Hàng'}</Th>
               <Th>{'Gian Kho'}</Th>
-              <Th>{'Ngày Hẹn / Nghiệm Thu'}</Th>
-              <Th>{'Đánh Giá Hiện Trường & Hư Hại'}</Th>
+              <Th>{'Hẹn / Nghiệm thu'}</Th>
+              <Th>{'Đánh giá hiện trường'}</Th>
               <Th>{'Quyết Toán'}</Th>
               <Th>{'Trạng Thái'}</Th>
               <Th className="text-right">{'Thao Tác'}</Th>
@@ -636,7 +636,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                     key={ret.id}
                     className={
                       ret.status === 'disputed'
-                        ? 'bg-rose-50/40 hover:bg-rose-50/70 border-l-4 border-l-rose-500'
+                        ? 'bg-rose-50/40 hover:bg-rose-50/70'
                         : isDamaged && ret.status !== 'completed'
                         ? 'bg-amber-50/30 hover:bg-amber-50/60'
                         : undefined
@@ -654,7 +654,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                       </div>
                     </Td>
                     <Td>
-                      <span className="font-mono font-medium text-stone-900 text-xs">
+                      <span className="break-words font-medium text-stone-900 text-xs">
                         {ret.unitId}
                       </span>
                     </Td>
@@ -664,11 +664,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                         <p className="text-[11px] text-stone-400">
                           {'Yêu cầu:'} {formatManagerDate(ret.requestedAt)}
                         </p>
-                        {ret.staffId && (
-                          <p className="text-[11px] text-blue-600 font-medium mt-0.5">
-                            NV: {users.find(u => u.id === ret.staffId)?.name || ret.staffId}
-                          </p>
-                        )}
+
                       </div>
                     </Td>
                     <Td>
@@ -722,7 +718,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                     </Td>
                     <Td>{returnStatusBadge(ret)}</Td>
                     <Td className="text-right">
-                      <div className="flex flex-wrap items-center justify-end gap-1.5">
+                      <div className="manager-return-actions grid grid-cols-2 gap-1.5">
                         <Button
                           variant="outline"
                           size="sm"
@@ -737,7 +733,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                         <Button
                           variant="outline"
                           size="sm"
-                          className="font-medium text-amber-800 border-amber-300 hover:bg-amber-50"
+                          className="!border-[#191c26] !bg-[#191c26] !text-white hover:!bg-[#303542]"
                           onClick={() => {
                             setSettlementTarget(ret)
                             setSettlementModalOpen(true)
@@ -773,7 +769,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                           <Button
                             variant="primary"
                             size="sm"
-                            className="bg-rose-600 hover:bg-rose-700 text-white font-medium whitespace-nowrap"
+                            className="col-span-2 bg-rose-600 hover:bg-rose-700 text-white font-medium whitespace-nowrap"
                             onClick={() => {
                               openDisputeReview(ret)
                             }}
@@ -798,7 +794,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                         )}
 
                         {ret.status === 'completed' && (
-                          <Button variant="danger" size="sm" onClick={() => setDeleteTarget(ret)}>
+                          <Button variant="outline" size="sm" className="col-start-2 !border-red-200 !bg-red-50 !text-red-700 hover:!bg-red-100" onClick={() => setDeleteTarget(ret)}>
                             Xóa
                           </Button>
                         )}

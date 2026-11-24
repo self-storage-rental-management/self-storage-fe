@@ -12,10 +12,12 @@ it.each([
   expect(html).toContain(title)
   expect(html).toContain('144 kg')
   expect(html).toContain('Phương án xác nhận của khách')
-  if (result === 'NOT_FIT') {
-    expect(html).toContain('disabled=""')
-    expect(html).toContain('Kiểm tra sức chứa chính thức trước khi tìm kho thay thế.')
-  } else {
-    expect(html).not.toContain('Gợi ý chuyển sang kho phù hợp')
-  }
+  expect(html).not.toContain('Tìm kho phù hợp với hàng thực tế')
+  expect(html).not.toContain('Gợi ý chuyển sang kho phù hợp')
+})
+
+it('automatically checks alternatives after the result is published', () => {
+  const html = renderToStaticMarkup(<InventoryResultNotice result="NOT_FIT" published checkInId="checkin" packages={12} weight={144} volume={0.5}>{null}</InventoryResultNotice>)
+  expect(html).toContain('Kiểm tra tự động: đang tìm kho phù hợp để chuyển…')
+  expect(html).not.toContain('Tìm kho phù hợp với hàng thực tế')
 })
