@@ -633,7 +633,7 @@ describe("D5 commands: exact DTO, idempotency and role restrictions", () => {
         ),
       ).rejects.toMatchObject({
         status,
-        message: "DEFERRED_SOURCE: test-only shared policy",
+        diagnosticMessage: "DEFERRED_SOURCE: test-only shared policy",
       })
       expect(fetch).toHaveBeenCalledTimes(1)
       expect(new URL(fetch.mock.calls[0][0]).pathname).toBe(
