@@ -102,15 +102,15 @@ describe('customer reservation layout regression', () => {
   })
   it('shows the two customer gates before inventory', () => {
     expect(render('AWAITING_CUSTOMER_RECEIPT')).toContain('Xác nhận đã nhận kho')
-    expect(render('PREPARING')).not.toContain('Đã setup xong')
+    expect(render('PREPARING')).not.toContain('Đã chuẩn bị xong')
 
     const notice = (checkInStatus: string) => renderToStaticMarkup(
       <ReservationPreparationNotice checkInStatus={checkInStatus} submitting={false} onReady={() => {}} />,
     )
-    expect(notice('setup_in_progress')).toContain('Đã setup xong')
-    expect(notice('handover_pending_receipt')).toContain('Đã setup xong')
+    expect(notice('setup_in_progress')).toContain('Đã chuẩn bị xong')
+    expect(notice('handover_pending_receipt')).toContain('Đã chuẩn bị xong')
     expect(notice('setup_completed')).toContain('Đang chờ nhân viên kiểm kê')
-    expect(notice('setup_completed')).not.toContain('Đã setup xong')
+    expect(notice('setup_completed')).not.toContain('Đã chuẩn bị xong')
     expect(notice('completed')).toContain('Đã hoàn tất kiểm kê')
   })
 
