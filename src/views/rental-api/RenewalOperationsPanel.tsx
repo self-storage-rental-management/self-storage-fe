@@ -521,6 +521,8 @@ export default function RenewalOperationsPanel({
         }}
         onSuccess={(e) => {
           setLastEvent(e)
+          if (selected.action === "noShow") setSuccessMessage("Đã ghi nhận khách không đến.")
+          if (e.kind === "NO_SHOW") onDocumentEvent?.(e)
           if (selected.action === "incident") setSuccessMessage("Đã gửi báo cáo sự cố tại cơ sở.")
           if (selected.action === "cash") {
             const reference = e.data && typeof e.data === "object" && "transactionReference" in e.data ? e.data.transactionReference : undefined
@@ -1006,12 +1008,21 @@ export default function RenewalOperationsPanel({
                   proposalRead.data,
                   now,
                 )
-                const reason = blockedReason
+                const reason = action === "cash"
+                  ? cashRecorded
+                    ? "Đã ghi nhận thanh toán còn lại."
+                    : paymentEventsRead.loading
+                      ? "Đang kiểm tra trạng thái thanh toán."
+                      : paymentEventsRead.error
+                        ? "Không thể xác minh trạng thái thanh toán. Hãy tải lại hồ sơ rồi thử lại."
+                        : blockedReason
+                  : blockedReason
                 return (
                   <div key={action} className="flex min-w-0 flex-col gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3">
                     <Button
                       type="button"
-                      variant="outline"
+                      variant={action === "noShow" ? "danger" : "outline"}
+                      className="mt-auto w-full"
                       disabled={!!reason || locked}
                       onClick={() => {
                         if (lockRef.current || reason) return
