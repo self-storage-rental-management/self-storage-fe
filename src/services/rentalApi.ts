@@ -106,6 +106,7 @@ export function isRentalRecord(value: unknown): boolean {
   return (
     !!r &&
     typeof r.id === "string" &&
+    (r.displayCode == null || (typeof r.displayCode === "string" && /^SH-\d{6}$/.test(r.displayCode))) &&
     !!r.customer?.id &&
     typeof r.customer.fullName === "string" &&
     !!r.facility?.id &&
@@ -180,7 +181,8 @@ export async function getRental(role: RentalApiRole, id: string) {
       if (!isRentalRecord(value) || !r || r.id !== id ||
         !isRentalBookingEvidence(r.bookingEvidence, r.id, r.reservationId) ||
         !isFinancialSummary(r.financialSummary) || !r.access ||
-        !(r.access.reason === null || typeof r.access.reason === "string")) return false
+        !(r.access.reason === null || typeof r.access.reason === "string") ||
+        !(r.access.reference == null || typeof r.access.reference === "string")) return false
       return r.access.completeness === "UNKNOWN"
         ? r.access.status === null && !!r.access.reason?.trim()
         : r.access.completeness === "COMPLETE" &&

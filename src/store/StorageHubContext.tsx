@@ -281,6 +281,11 @@ export const KNOWN_FACILITY_CORRECTIONS: Record<string, { name?: string; address
     name: 'Kho Hồ Thanh Phương',
     address: 'Lô E2a-7, Đường D1, Khu Công nghệ cao, Phường Long Thạnh Mỹ, TP. Thủ Đức, TP. Hồ Chí Minh',
     city: 'TP. Hồ Chí Minh'
+  },
+  'FPT-TV-F01': {
+    name: 'Kho Thư viện FPT',
+    address: 'Khuôn viên Thư viện FPT, Lô E2a-7, Đường D1, Khu Công nghệ cao, Phường Long Thạnh Mỹ, TP. Thủ Đức, TP. Hồ Chí Minh',
+    city: 'TP. Hồ Chí Minh'
   }
 }
 
@@ -3999,7 +4004,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         entityId: userId,
         beforeState: accountSnapshot(target),
         afterState: accountSnapshot(updated),
-        notes: 'Đã tạo yêu cầu reset mật khẩu, mật khẩu mới phải được xử lý bởi auth backend/email service.',
+        notes: 'Đã tạo yêu cầu đặt lại mật khẩu.',
         timestamp: now
       }, ...prev.activities]
     }))
@@ -4100,7 +4105,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }
 
   const resetToDemoData = () => {
-    if (!DEMO_DATA_ENABLED) throw new Error('Dữ liệu demo đang tắt, dữ liệu phải được đọc từ backend.')
+    if (!DEMO_DATA_ENABLED) throw new Error('Dữ liệu minh họa hiện chưa khả dụng.')
     localStorage.removeItem(STORAGE_KEY)
     try {
       localStorage.removeItem('storagehub:vnd:facilities')

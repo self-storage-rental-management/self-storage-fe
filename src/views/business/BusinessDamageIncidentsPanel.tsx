@@ -434,7 +434,7 @@ export default function BusinessDamageIncidentsPanel({ user, lang = 'vi', facili
                     </Td>
                     <Td className="py-3 px-3 text-xs text-stone-500">
                       <div>{new Date(inc.occurredAt).toLocaleDateString('vi-VN')}</div>
-                      <div className="text-[10px] text-stone-400">{inc.reportedByName || 'Staff'}</div>
+                      <div className="text-[10px] text-stone-400">{inc.reportedByName || 'Nhân viên'}</div>
                     </Td>
                     <Td className="py-3 px-3 text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -702,7 +702,7 @@ export default function BusinessDamageIncidentsPanel({ user, lang = 'vi', facili
               </div>
               <div>
                 <span className="text-stone-400 block">{isVi ? 'Người ghi nhận' : 'Reported By'}:</span>
-                <span className="font-semibold text-stone-800">{activeIncident.reportedByName || 'Staff'}</span>
+                <span className="font-semibold text-stone-800">{activeIncident.reportedByName || 'Nhân viên'}</span>
               </div>
               <div>
                 <span className="text-stone-400 block">{isVi ? 'Thời gian báo cáo' : 'Reported At'}:</span>

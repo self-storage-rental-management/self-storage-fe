@@ -43,8 +43,8 @@ export interface StaffReservationProgress {
   createdAt: string
 }
 
-export async function listStaffReservationReviews(page = 0, size = 20) {
-  return checkedStatusPage(await apiRequest<PageResponse<ReservationReview>>(`/api/staff/reservation-reviews?page=${page}&size=${size}`), checkedReservationState)
+export async function listStaffReservationReviews(page = 0, size = 20, completed = false) {
+  return checkedStatusPage(await apiRequest<PageResponse<ReservationReview>>(`/api/staff/reservation-reviews?page=${page}&size=${size}${completed ? "&completed=true" : ""}`), checkedReservationState)
 }
 
 export async function decideStaffReservationReview(reservationId: string, decision: 'APPROVE' | 'REJECT', note: string) {

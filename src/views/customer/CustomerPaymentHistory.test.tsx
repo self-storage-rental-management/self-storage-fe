@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { paymentHistoryTimestamp, visibleCustomerPaymentWarnings } from './CustomerPaymentHistory'
+import { PaymentHistoryDossier, paymentHistoryTimestamp, visibleCustomerPaymentWarnings } from './CustomerPaymentHistory'
 import { formatHistoryPaymentMethod, paymentMethodLabel } from './paymentLabels'
 import { renderToStaticMarkup } from 'react-dom/server'
 import ReservationReceipt from './ReservationReceipt'
 import { bookingDepositAccepted, paymentRecordLabel } from './paymentPresentation'
 import type { ReservationPaymentResult, ReservationStatus } from '../../services/customerReservationApi'
+import type { HistoryEntry } from '../../services/customerPaymentHistory'
 
 const paid: ReservationPaymentResult = {
   paymentId: 'payment-test', reservationId: 'reservation-test', transactionReference: 'intent-test',
@@ -12,6 +13,17 @@ const paid: ReservationPaymentResult = {
   paymentStatus: 'PAID', reservationStatus: 'CONFIRMED', responseCode: '00', transactionStatus: '00',
   gatewayPayDate: '20261011080000', message: '', processedAt: '2026-10-11T01:00:00Z', lastReconciledAt: null,
 }
+
+describe('Số hóa đơn trên biên lai', () => {
+  it.each([[null, 'Chưa cấp'], ['   ', 'Chưa cấp'], ['INV-OLD-123', 'INV-OLD-123']])(
+    'shows the persisted invoice or its missing state for %s', (invoiceNumber, label) => {
+      const html = renderToStaticMarkup(<ReservationReceipt payment={{ ...paid, invoiceNumber }} reservationCode="RSV-TEST" />)
+      expect(html).toContain(`>${label}</dd>`)
+      expect(html).toContain('>transaction-test</dd>')
+      expect(html).toContain('>RSV-TEST</dd>')
+    },
+  )
+})
 
 describe('Booking acceptance uses Payment and Reservation response fields', () => {
   it.each(['CONFIRMED', 'UNIT_RESERVED', 'READY_FOR_CHECKIN', 'AWAITING_CUSTOMER_RECEIPT', 'COMPLETED'] as ReservationStatus[])(
@@ -44,6 +56,22 @@ describe('customer payment warning presentation', () => {
       'Chưa tải được đầy đủ lịch sử thanh toán đơn giữ kho.',
       'Chưa tải được đầy đủ danh sách gia hạn.',
     ])).toEqual(['Chưa tải được đầy đủ danh sách gia hạn.'])
+  })
+})
+
+describe('renewal dossier identity in payment history', () => {
+  it('shows the rental dossier and occurrence without exposing the unit code or renewal UUID', () => {
+    const entry = {
+      id: 'payment', reference: 'SH-184033 · Gia hạn lần 2', category: 'renewal', amount: 5500000,
+      currency: 'VND', timestamp: null, status: 'SUCCEEDED', method: 'VNPay', renewalId: 'renewal-uuid',
+      rentalId: 'rental-uuid', unitCode: 'HCM-Q1-F01-M-001', facilityName: 'Kho Việt – Cơ sở Quận 1',
+    } satisfies HistoryEntry
+    const html = renderToStaticMarkup(<PaymentHistoryDossier entry={entry} onOpenRentals={() => undefined} />)
+
+    expect(html).toContain('SH-184033 · Gia hạn lần 2')
+    expect(html).not.toContain('HCM-Q1-F01-M-001')
+    expect(html).not.toContain('renewal-uuid')
+    expect(html).not.toContain('Kho Việt')
   })
 })
 
@@ -90,11 +118,11 @@ describe('standardized payment method labels in payment history', () => {
     ['Chuyển khoản', 'Chuyển khoản'],
     ['DEPOSIT_OFFSET', 'Đối trừ quyết toán'],
     ['Đối trừ quyết toán', 'Đối trừ quyết toán'],
-    [null, '—'],
-    [undefined, '—'],
-    ['', '—'],
-    ['Chưa có', '—'],
-    ['Chưa có thông tin', '—'],
+    [null, '-'],
+    [undefined, '-'],
+    ['', '-'],
+    ['Chưa có', '-'],
+    ['Chưa có thông tin', '-'],
   ])('formats %s to %s', (input, expected) => {
     expect(formatHistoryPaymentMethod(input)).toBe(expected)
   })

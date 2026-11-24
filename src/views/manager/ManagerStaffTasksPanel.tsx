@@ -238,6 +238,7 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
   }
 
   const createTask = () => {
+    if (!dueAt || dueAt < new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' })) { showToast('Hạn xử lý phải từ hôm nay trở đi.'); return }
     const selectedStaff = staff.find(item => item.id === staffId)
     if (!selectedStaff) {
       showToast('Vui lòng chọn nhân viên thuộc cơ sở trước khi tạo nhiệm vụ.')
@@ -359,7 +360,7 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
       <Select label="Hồ sơ liên quan (nếu có)" value={referenceId} onChange={event => selectReference(event.target.value)}><option value="">Không liên kết hồ sơ</option>{referenceOptions.map(option => <option key={`${option.type}-${option.id}`} value={option.id}>{option.label}</option>)}</Select>
       {selectedReference && <ManagerActionNotice compact tone="info">Đã liên kết <b>{selectedReference.id}</b>: {selectedReference.summary}</ManagerActionNotice>}
       {!referenceOptions.length && type !== 'general' && <ManagerActionNotice compact tone="warning">Cơ sở hiện không có hồ sơ {managerTaskTypeLabel(type, 'vi').toLowerCase()} để liên kết.</ManagerActionNotice>}
-      <Input label="Hạn xử lý" type="date" value={dueAt} onChange={event => setDueAt(event.target.value)} />
+      <Input label="Hạn xử lý" type="date" min={new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' })} value={dueAt} onChange={event => setDueAt(event.target.value)} />
       <Select label="Người phụ trách (bắt buộc)" value={staffId} onChange={event => setStaffId(event.target.value)}><option value="">Chọn nhân viên</option>{staff.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}</Select>
       <Input label="Ghi chú" value={notes} onChange={event => setNotes(event.target.value)} />
       <ManagerActionNotice compact tone="info">Nhiệm vụ mới ở trạng thái “Chờ nhận”. Chỉ nhân viên được giao mới có thể nhận và hoàn thành.</ManagerActionNotice>

@@ -41,6 +41,7 @@ import {
 } from "../../components/ui"
 
 import {
+  compareCheckInSchedule,
   extractStaffFieldErrors,
   formatStaffDateTime,
   parseEmptyStorageHandover,
@@ -305,6 +306,8 @@ export default function StaffCheckInOperationsPanel({
   showToast: (message: string) => void
 }) {
   const [items, setItems] = useState<CheckInCase[]>([])
+
+  const sortedItems = useMemo(() => [...items].sort(compareCheckInSchedule), [items])
 
   const [page, setPage] = useState(0)
 
@@ -1376,7 +1379,7 @@ export default function StaffCheckInOperationsPanel({
             </Tr>
           </Thead>
           <Tbody>
-            {items.map((item) => (
+            {sortedItems.map((item) => (
               <Tr key={item.reservationId}>
                 <Td>
                   <b className="font-mono">{item.reservationCode}</b>
@@ -1481,7 +1484,7 @@ export default function StaffCheckInOperationsPanel({
                 </Td>
               </Tr>
             ))}
-            {!loading && !items.length && (
+            {!loading && !sortedItems.length && (
               <tr>
                 <td
                   colSpan={6}

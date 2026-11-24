@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import type { User } from '../../types'
 import { useStorageHub } from '../../store/StorageHubContext'
 import { getPublicSupportKnowledge, PUBLIC_SUPPORT_UNKNOWN } from '../../services/supportPublicKnowledgeApi'
+import { useMovableChatLauncher } from '../../hooks/useMovableChatLauncher'
 import {
   SUPPORT_FAQS,
   matchQueryAgainstFAQ,
@@ -162,9 +163,7 @@ export default function CustomerSupportChatbot({
     })
   }, [isOpen, user.name])
 
-  const handleOpen = () => {
-    setIsOpen(true)
-  }
+  const launcherProps = useMovableChatLauncher(() => setIsOpen(true))
 
   const addMessage = (sender: 'bot' | 'user' | 'system', text: string, extra?: Partial<Message>) => {
     const now = new Date().toLocaleTimeString('vi-VN', { timeZone: VIETNAM_TIME_ZONE, hour: '2-digit', minute: '2-digit' })
@@ -365,17 +364,12 @@ export default function CustomerSupportChatbot({
       {/* ── Floating Launcher ───────────────────────────────── */}
       {!isOpen && (
         <button
+          {...launcherProps}
           ref={launcherRef}
           type="button"
-          onPointerDown={handlePointerDown}
-          onClick={() => {
-            if (isDraggingRef.current) return
-            handleOpen()
-          }}
           aria-label="Mở Trợ lý StorageHub"
           title="Nhấn để mở Trợ lý StorageHub · Kéo để di chuyển vị trí tự do"
           aria-haspopup="dialog"
-          style={btnPos ? { left: `${btnPos.x}px`, top: `${btnPos.y}px`, bottom: 'auto', right: 'auto' } : undefined}
           className={`fixed ${btnPos ? '' : 'right-4 bottom-4 sm:right-6 sm:bottom-6'} z-50 flex h-12 w-12 touch-none select-none items-center justify-center rounded-full border border-amber-600/30 bg-[#181b22] text-white shadow-lg transition-transform duration-75 hover:bg-[#20242d] ${isDragging ? 'cursor-grabbing scale-105 shadow-2xl ring-2 ring-amber-500/50' : 'cursor-grab hover:scale-105'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2`}
         >
           <svg aria-hidden="true" className="show-icon h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">

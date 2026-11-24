@@ -6,6 +6,7 @@ export interface RenewalReceiptData {
   paymentId: string; renewalId: string; transactionReference: string | null; gatewayTransactionNo: string | null
   amount: number; currency: string; paymentStatus: 'PAID'; paymentMethod: string | null; gatewayPayDate: string | null
   paidAt: string; processedAt: string | null; initiatedByName: string; kind: 'DEPOSIT' | 'FULL_RENT' | 'REMAINING_RENT' | 'INSTALLMENT'
+  receiptCode?: string | null
   environment: 'SANDBOX' | 'PRODUCTION'; invoiceNumber: string | null
   invoiceStatus: 'DRAFT' | 'PAID' | 'VOID' | 'REFUNDED'; invoiceIssuedAt: string | null
 }

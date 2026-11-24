@@ -80,14 +80,14 @@ function assertPage(payload: unknown): UnitReleasePage {
     || typeof value.pagination.pageSize !== 'number'
     || typeof value.pagination.totalItems !== 'number'
     || typeof value.pagination.totalPages !== 'number') {
-    throw new ApiClientError('Backend trả về danh sách giải phóng kho không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+    throw new ApiClientError('Chưa tải được thông tin. Vui lòng thử lại.', { code: 'INVALID_API_RESPONSE' })
   }
   return value as UnitReleasePage
 }
 
 function assertEnvelope<T>(payload: unknown): ApiEnvelope<T> {
   if (!payload || typeof payload !== 'object' || !('data' in payload)) {
-    throw new ApiClientError('Backend trả về dữ liệu giải phóng kho không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+    throw new ApiClientError('Chưa tải được thông tin. Vui lòng thử lại.', { code: 'INVALID_API_RESPONSE' })
   }
   return payload as ApiEnvelope<T>
 }

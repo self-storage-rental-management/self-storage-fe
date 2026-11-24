@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import "./managerInventoryList.css"
 import ManagerUnitTypeModal from "./ManagerUnitTypeModal"
 import {
   Badge,
@@ -33,7 +34,6 @@ import { paginateManagerItems } from "./managerList"
 import type { RentalApiRecord } from "../../types/rentalApi"
 import {
   currentInventoryRentals,
-  inventoryLocation,
   loadInventoryRentals,
 } from "./managerInventoryDetailsApi"
 import {
@@ -139,7 +139,7 @@ function InventoryRead({
   view: 'info' | 'assignment'
 }) {
   const [createOpen, setCreateOpen] = useState(false)
-  const [editingType, setEditingType] = useState<(CustomerUnitType & { floor?: string; zone?: string })>()
+  const [editingType, setEditingType] = useState<(CustomerUnitType & { zone?: string })>()
   const [reviewNotice, setReviewNotice] = useState('')
   const [deletingType, setDeletingType] = useState<{ id: string; name: string }>()
   const [restoringType, setRestoringType] = useState<CustomerUnitType>()
@@ -209,14 +209,14 @@ function InventoryRead({
           const reservedUnitsForType = (type.counts.reserved ?? 0) + (type.counts.assigned ?? 0) + (type.counts.held ?? 0)
           return <article key={type.id} className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-100 p-4">
-              <div><div className="flex flex-wrap items-center gap-2"><h4 className="text-base font-bold">{type.name}</h4>{detail ? <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ${facilityCatalogTypeStatusClass(detail)}`}>{facilityCatalogTypeStatusLabel(detail)}</span> : <Badge variant="muted">Đang tải</Badge>}</div><p className="mt-1 text-xs text-stone-500">Mã {type.code} · Tổng <b>{totalUnitsForType}</b> gian ({availableUnitsForType} khả dụng{inactiveUnitsForType > 0 ? `, ${inactiveUnitsForType} tạm ngưng` : ''}{occupiedUnitsForType > 0 ? `, ${occupiedUnitsForType} đang dùng` : ''}) · Tầng {unit?.floor || '—'} · {unit?.zone || 'Chưa có khu vực'}</p></div>
+              <div><div className="flex flex-wrap items-center gap-2"><h4 className="text-base font-bold">{type.name}</h4>{detail ? <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ${facilityCatalogTypeStatusClass(detail)}`}>{facilityCatalogTypeStatusLabel(detail)}</span> : <Badge variant="muted">Đang tải</Badge>}</div><p className="mt-1 text-xs text-stone-500">Mã {type.code} · Tổng <b>{totalUnitsForType}</b> gian ({availableUnitsForType} khả dụng{inactiveUnitsForType > 0 ? `, ${inactiveUnitsForType} tạm ngưng` : ''}{occupiedUnitsForType > 0 ? `, ${occupiedUnitsForType} đang dùng` : ''}) · {unit?.zone || 'Chưa có khu vực'}</p></div>
               <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={async () => {
               setActionBusy(true); setActionError(undefined)
               try {
                 const loaded = detail || (await listAccessibleUnitTypes(facilityId, 0, 100)).data.find(item => item.id === type.id)
                 if (!loaded) throw new Error('Không tìm thấy loại kho. Vui lòng tải lại danh sách.')
-                setEditingType({ ...loaded, floor: unit?.floor || '', zone: unit?.zone || '' })
+                setEditingType({ ...loaded, zone: unit?.zone || '' })
               } catch (error) { setActionError(managerDisplayError(error)) } finally { setActionBusy(false) }
             }} disabled={actionBusy || detail?.status === 'archived'}>Chỉnh sửa</Button>
             {detail?.status === 'archived' ? (
@@ -250,7 +250,7 @@ function InventoryRead({
                   </dd>
                 </div>
                 <div><dt className="text-xs text-stone-500">Khung kệ</dt><dd className="mt-1 font-medium">{detail.rackCount} kệ, kích thước {detail.rackLengthM} × {detail.rackWidthM} × {detail.rackHeightM} m</dd></div>
-                <div><dt className="text-xs text-stone-500">Lối đi và xe đẩy</dt><dd className="mt-1 font-medium">Rộng {detail.aisleWidthM ?? '—'} m · {detail.trolleyType || 'Chưa khai báo'}</dd></div>
+                <div><dt className="text-xs text-stone-500">Lối đi và xe đẩy</dt><dd className="mt-1 font-medium">Rộng {detail.aisleWidthM ?? '-'} m · {detail.trolleyType || 'Chưa khai báo'}</dd></div>
                 <div><dt className="text-xs text-stone-500">Sức chứa dự kiến</dt><dd className="mt-1 font-medium">{detail.smallBoxCapacity ?? 0} thùng nhỏ · {detail.largeBoxCapacity ?? 0} thùng lớn</dd></div>
                 <div><dt className="text-xs text-stone-500">Tiền cọc đảm bảo kho</dt><dd className="mt-1 font-medium">{formatVndAmount(detail.securityDepositAmount)}</dd></div>
               </dl>
@@ -380,11 +380,6 @@ export function InventoryContent({
     catch { selectedRentals = [] }
   }
   const selectedRental = selectedRentals.length === 1 ? selectedRentals[0] : undefined
-  const floors = [
-    ...new Set(
-      units.map((u) => u.floor).filter((s): s is string => !!s?.trim()),
-    ),
-  ].sort((a, b) => a.localeCompare(b, "vi", { numeric: true }))
   const zones = [
     ...new Set(
       units.map((u) => u.zone).filter((s): s is string => !!s?.trim()),
@@ -423,7 +418,7 @@ export function InventoryContent({
   )
   return (
     <>
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-6">
+      <div className="manager-inventory-stats grid grid-cols-2 gap-3 xl:grid-cols-6">
         <StatCard title="Tổng số gian" value={units.length} icon={Icon.box} />
         <StatCard
           title="Còn trống"
@@ -448,13 +443,13 @@ export function InventoryContent({
         />
       </div>
       <SectionHeader title={title} action={onCreateUnitType && <Button variant="primary" onClick={onCreateUnitType}>+ Thêm loại kho</Button>} />
-      <Card className="p-4">
-        <div className="grid items-end gap-3 md:grid-cols-2 2xl:grid-cols-6">
-          <label className="block min-w-0 text-sm font-medium text-stone-700 md:col-span-2">
+      <Card className="manager-inventory-filters !rounded-2xl !shadow-none p-5">
+        <div className="manager-inventory-filter-grid grid items-end gap-3">
+          <label className="block min-w-0 text-sm font-medium text-stone-700">
             Tìm kiếm
             <input
               className={`${inputClass} mt-1`}
-              placeholder="Tìm mã gian, loại gian, tầng hoặc khu vực..."
+              placeholder="Tìm mã gian, loại gian hoặc khu vực..."
               value={filters.query}
               onChange={(e) => change({ query: e.target.value })}
             />
@@ -479,19 +474,21 @@ export function InventoryContent({
                 ] as [string, string],
             ),
           ])}
-          {filter("Tầng", "floor", [
-            ["all", "Tất cả tầng"],
-            ...floors.map((f) => [f, `Tầng ${f}`] as [string, string]),
-          ])}
           {filter("Khu vực", "zone", [
             ["all", "Tất cả khu vực"],
             ...zones.map((z) => [z, z] as [string, string]),
           ])}
-        </div>
-        <div className="mt-2 flex justify-end">
+          {filter("Sắp xếp", "sort", [
+            ["attention", "Cần chú ý trước"],
+            ["code", "Sắp xếp theo mã gian"],
+            ["area-desc", "Diện tích từ lớn đến nhỏ"],
+            ["price-asc", "Giá từ thấp đến cao"],
+            ["price-desc", "Giá từ cao đến thấp"],
+          ])}
           <Button
             size="sm"
             variant="ghost"
+            className="min-h-11 whitespace-nowrap"
             onClick={() => {
               setFilters(emptyInventoryFilters)
               setPage(1)
@@ -499,17 +496,11 @@ export function InventoryContent({
           >Xóa bộ lọc</Button>
         </div>
       </Card>
-      <div className="flex flex-wrap items-end justify-between gap-3 text-sm text-stone-600">
-        <span>Hiển thị {visible.length} trên {units.length} gian kho</span>
-        <div className="w-full sm:w-64">{filter("Sắp xếp", "sort", [
-            ["attention", "Cần chú ý trước"],
-            ["code", "Sắp xếp theo mã gian"],
-            ["area-desc", "Diện tích từ lớn đến nhỏ"],
-            ["price-asc", "Giá từ thấp đến cao"],
-            ["price-desc", "Giá từ cao đến thấp"],
-          ])}</div>
+      <Card className="manager-inventory-list min-w-0 max-w-full overflow-hidden !rounded-2xl !shadow-none">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 px-5 py-5">
+          <h2 className="text-lg font-semibold text-stone-900">Danh sách gian kho</h2>
+          <span className="rounded-full border border-stone-200 bg-stone-100 px-3 py-1 text-sm tabular-nums text-stone-600">Hiển thị {visible.length} trên {units.length} gian kho</span>
         </div>
-      <Card className="min-w-0 max-w-full overflow-hidden">
         <Table className="max-w-full" tableClassName="min-w-[900px] table-fixed [&_th]:px-3 [&_td]:px-3">
           <caption className="sr-only">Danh sách gian kho của cơ sở</caption>
           <colgroup>
@@ -532,7 +523,7 @@ export function InventoryContent({
           </Thead>
           <Tbody>
             {pagination.items.map((u) => (
-              <Tr key={u.id} className="odd:bg-white even:bg-stone-50/50">
+              <Tr key={u.id} className="bg-white">
                 <Td className="align-middle">
                   <p className="break-words font-mono text-sm font-bold leading-5 [overflow-wrap:anywhere]" title={u.code}>{u.code}</p>
                 </Td>
@@ -545,10 +536,7 @@ export function InventoryContent({
                     </p>}
                 </Td>
                 <Td className="min-w-0 align-middle">
-                  <div className="space-y-1">
-                    <p className="truncate" title={u.floor?.trim() ? `Tầng ${u.floor}` : missing}>{u.floor?.trim() ? `Tầng ${u.floor}` : missing}</p>
-                    <p className="truncate text-xs text-stone-500" title={location(u.zone)}>{location(u.zone)}</p>
-                  </div>
+                  <p className="truncate" title={location(u.zone)}>{location(u.zone)}</p>
                 </Td>
                 <Td className="align-middle">
                   <span className={`inline-flex whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold ${statusClasses[u.status]}`}>
@@ -603,8 +591,8 @@ export function InventoryContent({
           }}
         />
       </Card>
-      {showCatalog && <><Card>
-        <h2 className="border-b border-stone-200 p-4 font-bold">
+      {showCatalog && <><Card className="manager-inventory-list overflow-hidden !rounded-2xl !shadow-none">
+        <h2 className="border-b border-stone-200 px-5 py-5 text-lg font-semibold text-stone-900">
           Loại gian kho tại cơ sở
         </h2>
         <FacilityCatalogTable rows={inventory.catalog} />
@@ -628,7 +616,6 @@ export function InventoryContent({
             <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
               {([
                 ["Loại gian kho", typeLabel(selected)],
-                ["Tầng", location(selected.floor)],
                 ["Khu vực", location(selected.zone)],
                 ["Kích thước", dimensions(selected)],
                 ["Diện tích", measure(selected.definition.areaM2, "m²")],

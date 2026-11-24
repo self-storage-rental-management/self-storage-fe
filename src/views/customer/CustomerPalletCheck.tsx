@@ -142,7 +142,7 @@ function distributionRows(plan: PalletPlan, goodsItems: GoodsItemInput[]): Compa
 }
 
 function conditionNumber(value: number | undefined | null) {
-  return value == null || !Number.isFinite(value) ? '—' : String(Math.round(value * 1000) / 1000)
+  return value == null || !Number.isFinite(value) ? '-' : String(Math.round(value * 1000) / 1000)
 }
 
 function storageConditionKey(capacity: PalletAllocation['capacity'], cargoHeightCm?: number) {
@@ -266,7 +266,7 @@ function DistributionTable({ plan, goodsItems }: { plan: PalletPlan; goodsItems:
         <tbody>
           {rows.map(row => <tr key={row.key} className="border-t border-stone-200">
             <td className="px-3 py-2">{row.label}<span className="block text-[11px] text-stone-500">{row.palletCount} tấm kê</span>{plan.items.length > 1 && <span className="block text-[11px] text-stone-500">Hàng {row.itemNumbers.join(', ')}</span>}</td>
-            {layerColumns.map(index => <td key={index} className="px-3 py-2 text-center">{row.layerPieces[index] == null ? '—' : `${n(row.layerPieces[index]!)} kiện`}</td>)}
+            {layerColumns.map(index => <td key={index} className="px-3 py-2 text-center">{row.layerPieces[index] == null ? '-' : `${n(row.layerPieces[index]!)} kiện`}</td>)}
             <td className="px-3 py-2"><div className="flex items-center justify-between gap-3"><span>{n(row.cargoWeight)}/{n(row.cargoLimit)} kg</span><span className="min-w-24 flex-1"><ProgressBar value={row.cargoWeight} maximum={row.cargoLimit} /></span></div><span className="block text-[11px] text-stone-500">khối lượng hàng / giới hạn hàng của khoang; khối lượng tấm kê hiển thị riêng</span></td>
           </tr>)}
           <tr className="border-t border-stone-200 font-semibold">
@@ -302,7 +302,7 @@ function CompatiblePalletResult({ check, plan, goodsItems, unitTypeName }: {
   const freeCompartments = Math.max(0, totalCompartments - occupiedCompartments)
   return <div className="space-y-4 rounded-xl border border-stone-200 bg-white p-4">
     <div className="border-b border-stone-200 pb-4">
-      <h4 className="flex items-center gap-2 text-base font-semibold text-stone-900"><span aria-hidden="true" className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-[10px] font-bold leading-none text-white">✓</span>Hàng của bạn vừa {unitTypeName || 'kho đã chọn'}</h4>
+      <h4 className="flex items-center gap-2 text-base font-semibold text-stone-900"><span aria-hidden="true" className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-[10px] font-bold leading-none text-white">✓</span>Hàng của bạn vừa kho! {unitTypeName ? `(${unitTypeName})` : ''}</h4>
       <p className="mt-1 text-xs text-stone-500">{unitTypeName || 'Loại kho đã chọn'} · {n(totalQuantity)} kiện hàng</p>
       <div className="mt-4 grid grid-cols-2 gap-4">
         <div><p className="text-xs text-stone-500">Khối lượng hàng</p><p className="mt-1 text-lg font-semibold text-stone-900">{n(totalWeight)} / {n(unitLimit)} kg</p><ProgressBar value={totalWeight} maximum={unitLimit} /><p className="mt-1 text-[11px] text-stone-500">Còn {n(freeWeight)} kg hạn mức</p></div>
@@ -316,6 +316,7 @@ function CompatiblePalletResult({ check, plan, goodsItems, unitTypeName }: {
     </details>
     <p className="flex items-center gap-2 text-xs text-emerald-800"><span aria-hidden="true" className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-emerald-700 text-[10px] font-bold leading-none text-emerald-700">✓</span>Đáp ứng giới hạn kích thước và tải trọng.</p>
     {check.staffReviewRequired && <p className="text-xs text-amber-800">Hàng cần nhân viên cơ sở xét duyệt trước khi nhận.</p>}
+    <p className="text-[11px] text-stone-500">Phương án lưu trữ dự kiến. Nhân viên sẽ đối chiếu khi tiếp nhận hàng.</p>
   </div>
 }
 
@@ -329,10 +330,10 @@ export default function CustomerPalletCheck({ check, loading = false, goodsItems
   const plan = check?.palletPlan
   const compatible = Boolean(check && check.result !== 'INCOMPATIBLE' && plan)
   const reviewRequired = Boolean(check && (check.result === 'REVIEW_REQUIRED' || check.physicalFitStatus === 'REVIEW_REQUIRED'))
-  return <section className={compatible ? 'space-y-3 text-sm text-stone-800' : 'space-y-3 rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-800'}>
+  return <section aria-busy={loading} className={compatible ? 'space-y-3 text-sm text-stone-800' : 'space-y-3 rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-800'}>
     {!compatible && <h4 className="font-semibold">{reviewRequired ? 'Cần xác minh cấu hình kho' : 'Hàng của bạn có vừa kho không?'}</h4>}
     {!compatible && unitTypeName && <p>Loại kho đang kiểm tra <strong>{unitTypeName}</strong></p>}
-    {loading ? <p role="status">Đang tính theo cấu hình kệ và kiểm tra số gian còn trống…</p>
+    {loading && !check ? <p role="status">Đang tính theo cấu hình kệ và kiểm tra số gian còn trống…</p>
       : !check ? <p>Nhập đủ thông tin hàng và gói thuê để kiểm tra.</p>
       : check.result === 'INCOMPATIBLE' || !plan ? <p role="status" className="rounded-lg bg-red-50 p-3 text-red-900">
         {customerRackIssue(check.issues[0], check.palletLayoutMissing

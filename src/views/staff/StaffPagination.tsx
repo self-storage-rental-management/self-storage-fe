@@ -27,7 +27,7 @@ export default function StaffPagination({
   total: number
   onPageChange: (page: number) => void
 }) {
-  if (total <= STAFF_PAGE_SIZE) return null
+  if (pageCount <= 1 && total <= STAFF_PAGE_SIZE) return null
   const pages = Array.from(
     { length: pageCount },
     (_, index) => index + 1,

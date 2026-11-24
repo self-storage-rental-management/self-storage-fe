@@ -6,6 +6,9 @@ export type RenewalApiAction = "CANCEL" | "ACCEPT_REVISED_QUOTE"
 export interface RenewalApiRecord {
   effectivePeriod?: { startDate: string; endExclusive: string; newEndDate: string; finalized: boolean } | null
   statusSummary?: RenewalStatusSummary | null
+  rentalDisplayCode?: string | null
+  renewalSequence?: number | null
+  /** Legacy renewal alias retained for lookup and compatibility. */
   displayCode?: string | null
   id: string
   rentalId: string
@@ -50,6 +53,7 @@ export interface RenewalApiOption {
   pricingPackageName?: string | null
   signingWindowDays?: number | null
   rentalMonths: number
+  discountRate?: number | null
 }
 export interface RenewalVnpayPaymentResponse {
   paymentId: string
@@ -72,6 +76,7 @@ export interface RenewalVnpayPaymentResponse {
   receiptAvailable?: boolean
 }
 export interface RenewalApiQuote {
+  continuousPeriod?: boolean | null
   id: string
   rentalId: string
   customerId: string
