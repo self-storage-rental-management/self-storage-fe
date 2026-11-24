@@ -1,3 +1,4 @@
+import type { InventoryDecision } from './inventoryDecision'
 import { apiDownload, apiRequest } from './apiClient'
 import type { ApiInvoiceStatus, ApiPaymentStatus, ApiReservationStatus } from '../types/statusContracts'
 import { checkedPayment, checkedReservation, checkedReservationDetail, checkedReservationState, checkedStatusPage } from './statusContractValidation'
@@ -546,6 +547,7 @@ export interface CustomerReservationDetail {
   inventoryAppointmentAt?: string | null
   inventoryArrivedAt?: string | null
   inventoryIdentityVerifiedAt?: string | null
+  inventoryDecision?: InventoryDecision | null
   inventoryResolutionStatus?: InventoryResolutionStatus | null
   inventoryFullFit?: boolean
   inventoryPartialFitAvailable?: boolean
@@ -891,7 +893,7 @@ export async function markCustomerPreparationComplete(reservationId: string, not
 
 export async function resolveCustomerInventory(
   reservationId: string,
-  decision: 'ACCEPT_FULL' | 'ACCEPT_PARTIAL' | 'CANCEL_AND_RETURN',
+  decision: 'ACCEPT_FULL' | 'CANCEL_AND_RETURN',
   note?: string,
   scheduledDate?: string,
 ) {
