@@ -43,7 +43,7 @@ export default function ManagerInventoryAppointments({ onCountChange }: { onCoun
               : visit?.arrivedAt ? 'Khách đã đến, chờ xác minh' : visit?.appointmentAt ? 'Đã đặt lịch' : 'Chờ khách chọn lịch'
           return <Tr key={item.reservationId}>
             <Td><strong>{item.reservationCode}</strong><p>{item.customerName}</p>
-              {item.setupCompletedAt && <p className="text-xs text-stone-600">Báo setup xong {formatManagerDateTime(item.setupCompletedAt)}</p>}</Td>
+              {item.setupCompletedAt && <p className="text-xs text-stone-600">Báo chuẩn bị xong {formatManagerDateTime(item.setupCompletedAt)}</p>}</Td>
             <Td>{visit?.appointmentAt ? formatManagerDateTime(visit.appointmentAt) : 'Chưa đặt lịch'}</Td>
             <Td>{item.inventoryDueAt && <p>Nhắc {formatManagerDateTime(item.inventoryDueAt)}</p>}
               {item.inventoryFinalDeadlineAt && <p>Hạn {formatManagerDateTime(item.inventoryFinalDeadlineAt)}</p>}</Td>

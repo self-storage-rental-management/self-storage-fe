@@ -1,3 +1,5 @@
+import { formatHistoryPaymentMethod } from '../views/customer/paymentLabels'
+import { displayStatusLabel, displayRoleLabel } from '../presentation/statusLabels'
 import React, { createContext, useContext, useState, useEffect, useMemo, type Context, type ReactNode } from 'react'
 import type {
   Facility,
@@ -206,7 +208,7 @@ function addCalendarMonths(value: string, months: number): string {
 
 function assertFacilityManager(user: User, facilityId: string, facilityName: string) {
   if (user.role !== 'manager' && user.role !== 'admin' && user.role !== 'business') {
-    throw new Error('Chỉ Facility Manager hoặc Ban Điều Hành được thực hiện thao tác này.')
+    throw new Error('Chỉ Quản lý cơ sở hoặc Ban Điều Hành được thực hiện thao tác này.')
   }
   if (user.role === 'admin' || user.role === 'business' || isManagerFacilityVisible(user, facilityId, facilityName)) return
   throw new Error('Bạn không có quyền thao tác dữ liệu của cơ sở khác.')
@@ -1127,7 +1129,7 @@ const INITIAL_ACTIVITIES: ActivityRecord[] = [
     facilityId: 'fac-001',
     entityType: 'hold',
     entityId: 'RSV-2048',
-    notes: `Khách hàng đặt cỡ kho Small Storage, cọc giữ chỗ 20% (${formatVnd(6_600_000)}) thành công.`,
+    notes: `Khách hàng đặt cỡ kho nhỏ, cọc giữ chỗ 20% (${formatVnd(6_600_000)}) thành công.`,
     timestamp: '2026-09-17 08:30:00'
   },
   {
@@ -1702,7 +1704,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         entityId: role,
         beforeState: { role, permissions: current },
         afterState: { role, permissions: next },
-        notes: `Cập nhật bảng quyền cho vai trò ${role}.`,
+        notes: `Cập nhật bảng quyền cho vai trò ${displayRoleLabel(role)}.`,
         timestamp
       }, ...prev.activities]
     }))
@@ -1948,7 +1950,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       ? actor.permissions.includes(permission)
       : Boolean(state.rolePermissions[canonical.role as Role]?.[permission])
     if (!hasPermission) {
-      throw new Error(`Vai trò ${canonical.role} không có quyền thực hiện thao tác này.`)
+      throw new Error(`Vai trò ${displayRoleLabel(canonical.role)} không có quyền thực hiện thao tác này.`)
     }
     return canonical
   }
@@ -2029,7 +2031,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           facilityId: rental.facilityId,
           entityType: 'rental' as const,
           entityId: rental.id,
-          notes: `Hết ${rental.freeSetupDays || 0} ngày chuẩn bị miễn phí, hợp đồng tự chuyển sang ACTIVE.`,
+          notes: `Hết ${rental.freeSetupDays || 0} ngày chuẩn bị miễn phí, hợp đồng tự chuyển sang đang hiệu lực.`,
           timestamp: new Date(nowMs).toISOString(),
         }))
         const inventoryTasks: FacilityTask[] = inventoryTaskRentals.map(rental => ({
@@ -2042,7 +2044,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           dueAt: rentals.find(item => item.id === rental.id)?.inventoryDueAt || new Date(nowMs + 3 * 86_400_000).toISOString(),
           priority: 'high',
           status: 'open',
-          notes: 'Rental đã ACTIVE theo thời gian, cần Staff kiểm kê và khóa snapshot hàng hóa.',
+          notes: 'Hồ sơ thuê đã có hiệu lực; nhân viên cần kiểm kê và chốt bản ghi hàng hóa.',
           createdAt: new Date(nowMs).toISOString(),
         }))
         return { ...prev, holds, units, rentals, staffTasks: [...inventoryTasks, ...prev.staffTasks], activities: [...setupActivities, ...prev.activities] }
@@ -2351,7 +2353,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       appointmentTime: params.appointmentTime,
       expiresAt: paymentExpiresAt || emailExpiresAt,
       evidence: [requiresGoodsReview
-        ? `${holdId} · Đã giữ một suất kho loại ${unitType.name}. Chờ khách xác minh email trước khi gửi Staff duyệt hàng hóa “Khác”.`
+        ? `${holdId} · Đã giữ một suất kho loại ${unitType.name}. Chờ khách xác minh email trước khi gửi Nhân viên duyệt hàng hóa “Khác”.`
         : `${holdId} · Đã giữ một suất kho loại ${unitType.name}. Chờ thanh toán cọc 20% trước ${paymentExpiresAt}.`],
       createdAt: now.toISOString()
     }
@@ -2371,7 +2373,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           entityType: 'hold',
           entityId: holdId,
           notes: requiresGoodsReview
-            ? `Khách hàng chọn loại kho ${unitType.name}. Chờ Staff duyệt hàng hóa “Khác”, chưa thu cọc.`
+            ? `Khách hàng chọn loại kho ${unitType.name}. Chờ Nhân viên duyệt hàng hóa “Khác”, chưa thu cọc.`
             : `Khách hàng chọn loại kho ${unitType.name}. Chờ cọc 20% (${formatVnd(reservationDepositAmount)}) trong 24 giờ.`,
           timestamp: now.toLocaleString('vi-VN')
         },
@@ -2382,14 +2384,14 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     return {
       outcome: 'PASS',
       hold: newReservation,
-      messageVi: requiresGoodsReview ? 'Suất kho theo loại đã được giữ. Hồ sơ đang được chuyển cho Staff duyệt.' : 'Suất kho theo loại đã được giữ. Vui lòng chuyển sang bước thanh toán cọc.',
+      messageVi: requiresGoodsReview ? 'Suất kho theo loại đã được giữ. Hồ sơ đang được chuyển cho Nhân viên duyệt.' : 'Suất kho theo loại đã được giữ. Vui lòng chuyển sang bước thanh toán cọc.',
       messageEn: 'Request created. Verify your email before the facility review.'
     }
   }
 
   const approveReservation = (reservationId: string, reviewer: User) => {
     assertPermission(reviewer, 'reservations:approve')
-    if (reviewer.role === 'manager' && !isManagerOperationAllowed('approve_reservation')) throw new Error('Duyệt hồ sơ đặt kho thuộc nghiệp vụ của Facility Staff.')
+    if (reviewer.role === 'manager' && !isManagerOperationAllowed('approve_reservation')) throw new Error('Duyệt hồ sơ đặt kho thuộc nghiệp vụ của Nhân viên cơ sở.')
     const reservation = state.holds.find(item => item.id === reservationId)
     if (!reservation) throw new Error('Không tìm thấy yêu cầu đặt giữ kho.')
     if (reviewer.role !== 'staff' && reviewer.role !== 'manager' && reviewer.role !== 'admin') throw new Error('Chỉ nhân viên cơ sở được phê duyệt yêu cầu.')
@@ -2440,7 +2442,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
   const rejectGoodsReview = (reservationId: string, reviewer: User, note: string) => {
     assertPermission(reviewer, 'reservations:approve')
-    if (reviewer.role === 'manager' && !isManagerOperationAllowed('approve_reservation')) throw new Error('Duyệt hồ sơ hàng hóa thuộc nghiệp vụ của Facility Staff.')
+    if (reviewer.role === 'manager' && !isManagerOperationAllowed('approve_reservation')) throw new Error('Duyệt hồ sơ hàng hóa thuộc nghiệp vụ của Nhân viên cơ sở.')
     const reservation = state.holds.find(item => item.id === reservationId)
     if (!reservation || reservation.goodsReviewStatus !== 'PENDING') throw new Error('Không tìm thấy yêu cầu hàng hóa đang chờ duyệt.')
     if (!reservation.emailVerification?.verified || reservation.status !== 'awaiting_review') throw new Error('Khách hàng chưa xác minh email, hồ sơ chưa sẵn sàng để duyệt.')
@@ -2511,7 +2513,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     )
 
     if (isConflicted) {
-      throw new Error(`Gian kho ${unit.code} đã có booking/hợp đồng khác trùng khoảng thời gian ${reservation.startDate} đến ${reservation.endDate}.`)
+      throw new Error(`Gian kho ${unit.code} đã có đặt kho/hợp đồng khác trùng khoảng thời gian ${reservation.startDate} đến ${reservation.endDate}.`)
     }
 
     const now = new Date()
@@ -2577,7 +2579,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
               unitAssignedAt: now.toISOString(),
               status: nextStatus,
               generatedAccessPin: generatedPin,
-              evidence: [...h.evidence, `UNIT_RESERVED · Manager ${managerUser.name} đã phân kho ${unit.code} (${reservation.startDate} → ${reservation.endDate})`]
+              evidence: [...h.evidence, `UNIT_RESERVED · Quản lý ${managerUser.name} đã phân kho ${unit.code} (${reservation.startDate} → ${reservation.endDate})`]
             }
           }
           return h
@@ -2596,7 +2598,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
             facilityId: unit.facilityId,
             entityType: 'unit',
             entityId: unit.id,
-            notes: `Manager phân kho ${unit.code} cho khách ${reservation.customerName} từ ${reservation.startDate} đến ${reservation.endDate}.`,
+            notes: `Quản lý phân kho ${unit.code} cho khách ${reservation.customerName} từ ${reservation.startDate} đến ${reservation.endDate}.`,
             correlationId: reservation.id,
             beforeState: { assignedUnitId: reservation.assignedUnitId, status: reservation.status },
             afterState: { assignedUnitId: unit.id, status: nextStatus },
@@ -2733,7 +2735,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   }) => {
     const reservation = state.holds.find(h => h.id === params.holdId)
     assertPermission(params.staffUser, 'checkins:process')
-    if (params.staffUser.role === 'manager' && !isManagerOperationAllowed('perform_handover')) throw new Error('Ký và ghi nhận bàn giao trực tiếp thuộc nghiệp vụ của Facility Staff.')
+    if (params.staffUser.role === 'manager' && !isManagerOperationAllowed('perform_handover')) throw new Error('Ký và ghi nhận bàn giao trực tiếp thuộc nghiệp vụ của Nhân viên cơ sở.')
     if (params.staffUser.role !== 'staff') {
       throw new Error('Chỉ nhân viên cơ sở được ghi nhận hợp đồng giấy.')
     }
@@ -2894,7 +2896,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
               depositConvertedAt: now.toISOString(), // Booking deposit is credited toward rent; security deposit is collected separately.
               status: nextStatus,
               generatedAccessPin: generatedPin,
-              evidence: [...h.evidence, `PAYMENT_PAID · Thu ${formatVnd(paymentDetails.amount)} qua ${paymentDetails.paymentMethod} (Mã: ${paymentDetails.transactionReference})`]
+              evidence: [...h.evidence, `PAYMENT_PAID · Thu ${formatVnd(paymentDetails.amount)} qua ${formatHistoryPaymentMethod(paymentDetails.paymentMethod)} (Mã: ${paymentDetails.transactionReference})`]
             }
           }
           return h
@@ -2910,7 +2912,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
             facilityId: reservation.facilityId,
             entityType: 'payment',
             entityId: txId,
-            notes: `Nhân viên ${staffUser.name} lập phiếu thu ${formatVnd(paymentDetails.amount)} (${paymentDetails.paymentMethod} - ${paymentDetails.transactionReference}), gồm tiền thuê còn lại và tiền cọc đảm bảo thuê ${formatVnd(reservation.securityDepositAmount)}.`,
+            notes: `Nhân viên ${staffUser.name} lập phiếu thu ${formatVnd(paymentDetails.amount)} (${formatHistoryPaymentMethod(paymentDetails.paymentMethod)} - ${paymentDetails.transactionReference}), gồm tiền thuê còn lại và tiền cọc đảm bảo thuê ${formatVnd(reservation.securityDepositAmount)}.`,
             timestamp: now.toLocaleString('vi-VN')
           },
           ...prev.activities
@@ -2949,11 +2951,11 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     handedOverItems: string[]
   }): void => {
     assertPermission(params.staffUser, 'checkins:process')
-    if (params.staffUser.role !== 'staff') throw new Error('Chỉ nhân viên ca trực được hoàn tất check-in.')
+    if (params.staffUser.role !== 'staff') throw new Error('Chỉ nhân viên ca trực được hoàn tất nhận kho.')
     const reservation = state.holds.find(h => h.id === params.holdId)
     if (!reservation) throw new Error('Không tìm thấy đơn đặt kho.')
     if (reservation.status !== 'READY_FOR_CHECKIN') {
-      throw new Error('Đơn chưa đạt trạng thái READY_FOR_CHECKIN (Cần: Cọc PAID, Hợp đồng SIGNED, Tiền còn lại PAID, Unit RESERVED).')
+      throw new Error('Đơn chưa sẵn sàng nhận kho. Cần thanh toán cọc và tiền thuê còn lại, ký hợp đồng và giữ gian kho.')
     }
     const unit = state.units.find(u => u.id === reservation.assignedUnitId)
     if (!unit) throw new Error('Không tìm thấy gian kho được phân.')
@@ -2990,7 +2992,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           facilityId: unit.facilityId,
           entityType: 'hold',
           entityId: reservation.id,
-          notes: `Check-in và bàn giao kho ${unit.code} đã hoàn tất. Chờ khách hàng xác nhận nhận kho để lập hồ sơ thuê.`,
+          notes: `Nhận kho và bàn giao kho ${unit.code} đã hoàn tất. Chờ khách hàng xác nhận nhận kho để lập hồ sơ thuê.`,
           timestamp: now.toLocaleString('vi-VN')
         },
         ...prev.activities
@@ -3361,7 +3363,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         id: `MNT-${Date.now().toString().slice(-6)}`,
         unitId,
         facilityId: unit.facilityId,
-        reason: reason?.trim() || 'Manager chuyển gian kho sang bảo trì.',
+        reason: reason?.trim() || 'Quản lý chuyển gian kho sang bảo trì.',
         priority,
         faultCategory,
         status: 'pending',
@@ -3408,7 +3410,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const targetUnit = state.units.find(u => u.id === params.targetUnitId)
     if (!sourceUnit || !targetUnit) throw new Error('Không tìm thấy gian kho nguồn hoặc gian kho đích.')
     if (targetUnit.facilityId !== sourceUnit.facilityId) throw new Error('Gian kho thay thế phải thuộc cùng cơ sở lưu trữ.')
-    if (targetUnit.status !== 'available') throw new Error(`Gian kho ${targetUnit.code} không khả dụng (hiện trạng: ${targetUnit.status}).`)
+    if (targetUnit.status !== 'available') throw new Error(`Gian kho ${targetUnit.code} không khả dụng (hiện trạng: ${displayStatusLabel(targetUnit.status)}).`)
 
     const now = new Date()
     const newPin = Math.floor(100000 + Math.random() * 900000).toString()
@@ -3551,7 +3553,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       ? state.users.find(user => user.id === task.assignedStaffId)
       : undefined
     if (manager.role === 'manager' && task.assignedStaffId && (!assignedStaff || !canManagerAssignStaff(manager, assignedStaff))) {
-      throw new Error('Chỉ được phân công nhân viên thuộc cơ sở của Manager.')
+      throw new Error('Chỉ được phân công nhân viên thuộc cơ sở của Quản lý.')
     }
     const referenceId = task.referenceId?.trim()
     if (manager.role === 'manager' && referenceId) {
@@ -3567,7 +3569,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         }))
       ]
       if (!canManagerLinkTaskReference(manager, task.type, referenceId, references)) {
-        throw new Error('Hồ sơ liên quan không tồn tại, không đúng loại hoặc không thuộc cơ sở của Manager.')
+        throw new Error('Hồ sơ liên quan không tồn tại, không đúng loại hoặc không thuộc cơ sở của Quản lý.')
       }
     }
     const createdAt = new Date().toISOString()
@@ -3599,7 +3601,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       assertFacilityManager(actor, task.facilityId, task.facilityName)
       if (!canManagerEditFacilityTask(task)) throw new Error('Nhiệm vụ đã kết thúc và không thể chỉnh sửa lại.')
       if (updates.status === 'completed' || updates.status === 'in_progress') {
-        throw new Error('Manager không được nhận hoặc hoàn thành thay Staff trong luồng thông thường.')
+        throw new Error('Quản lý không được nhận hoặc hoàn thành thay Nhân viên trong luồng thông thường.')
       }
 
       if (updates.status === 'cancelled') {
@@ -3618,13 +3620,13 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           assignedStaffName: undefined
         }
         action = 'FACILITY_TASK_CANCELLED'
-        activityNote = `Manager hủy nhiệm vụ. Lý do: ${reason}`
+        activityNote = `Quản lý hủy nhiệm vụ. Lý do: ${reason}`
       } else if (Object.prototype.hasOwnProperty.call(updates, 'assignedStaffId')) {
         if (!canManagerReassignFacilityTask(task)) throw new Error('Nhiệm vụ đã kết thúc và không thể giao lại.')
         if (!updates.assignedStaffId) throw new Error('Nhiệm vụ luôn phải có nhân viên phụ trách.')
         const assignedStaff = state.users.find(user => user.id === updates.assignedStaffId)
         if (!assignedStaff || !canManagerAssignStaff(actor, assignedStaff)) {
-          throw new Error('Chỉ được phân công nhân viên thuộc cơ sở của Manager.')
+          throw new Error('Chỉ được phân công nhân viên thuộc cơ sở của Quản lý.')
         }
         normalizedUpdates = {
           assignedStaffId: assignedStaff.id,
@@ -3641,7 +3643,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           unableReason: undefined
         }
         action = 'FACILITY_TASK_REASSIGNED'
-        activityNote = `Manager giao nhiệm vụ cho ${assignedStaff.name}, chờ Staff nhận việc.`
+        activityNote = `Quản lý giao nhiệm vụ cho ${assignedStaff.name}, chờ Nhân viên nhận việc.`
       } else {
         normalizedUpdates = {
           ...(updates.dueAt !== undefined ? { dueAt: updates.dueAt } : {}),
@@ -3657,10 +3659,10 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         if (!reason) throw new Error('Vui lòng nhập lý do không thể thực hiện.')
         normalizedUpdates = { unableReason: reason, reportedUnableAt: now }
         action = 'FACILITY_TASK_UNABLE_REPORTED'
-        activityNote = `Staff báo không thể thực hiện. Lý do: ${reason}`
+        activityNote = `Nhân viên báo không thể thực hiện. Lý do: ${reason}`
       } else {
         if (updates.status !== 'in_progress' && updates.status !== 'completed') {
-          throw new Error('Staff chỉ có thể nhận việc hoặc đánh dấu hoàn thành.')
+          throw new Error('Nhân viên chỉ có thể nhận việc hoặc đánh dấu hoàn thành.')
         }
         if (!canStaffTransitionFacilityTask(task, actor.id, updates.status)) {
           throw new Error('Trạng thái nhiệm vụ không hợp lệ hoặc nhiệm vụ không được giao cho bạn.')
@@ -3714,7 +3716,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
   // 10. Operations Config & Support Tickets
   const updateBusinessConfig = (newConfig: Partial<BusinessConfig>, actor: User) => {
     assertPermission(actor, 'policies:update')
-    if (actor.role === 'manager' && !isManagerOperationAllowed('policies:update')) throw new Error('Chính sách thuê không thuộc phạm vi Facility Manager.')
+    if (actor.role === 'manager' && !isManagerOperationAllowed('policies:update')) throw new Error('Chính sách thuê không thuộc phạm vi Quản lý cơ sở.')
     if (actor.role !== 'admin' && actor.role !== 'business') throw new Error('Chỉ Admin và Business Owner được cập nhật cấu hình vận hành tại đây.')
     setState(prev => ({
       ...prev,
@@ -3724,7 +3726,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
   const respondSupportTicket = (ticketId: string, replyText: string, status: TicketItem['status'], staffUser: User) => {
     assertPermission(staffUser, 'support:update')
-    if (staffUser.role === 'manager' && !isManagerOperationAllowed('handle_support')) throw new Error('Xử lý yêu cầu hỗ trợ thuộc nghiệp vụ của Facility Staff.')
+    if (staffUser.role === 'manager' && !isManagerOperationAllowed('handle_support')) throw new Error('Xử lý yêu cầu hỗ trợ thuộc nghiệp vụ của Nhân viên cơ sở.')
     if (staffUser.role !== 'staff' && staffUser.role !== 'admin') throw new Error('Chỉ nhân viên cơ sở được cập nhật yêu cầu hỗ trợ.')
     if (!replyText.trim()) throw new Error('Vui lòng nhập nội dung phản hồi.')
     const ticket = state.tickets.find(item => item.id === ticketId)
@@ -3734,7 +3736,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       (staffUser.facility && staffUser.facility !== 'All facilities')
     )
     if (!staffHasFacilityScope || !isFacilityVisible(staffUser, ticket.facilityId, ticket.facility)) {
-      throw new Error('Tài khoản Staff chỉ được xử lý phiếu thuộc đúng facility scope của mình.')
+      throw new Error('Tài khoản Nhân viên chỉ được xử lý phiếu thuộc đúng phạm vi cơ sở của mình.')
     }
     const now = new Date().toISOString()
     setState(prev => ({
@@ -3838,10 +3840,10 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const phone = params.phone?.trim() || ''
     if (!name || !email) throw new Error('Họ tên và email là bắt buộc.')
     if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error('Email không hợp lệ.')
-    if (params.role === 'customer' && !params.supportReason?.trim()) throw new Error('Tài khoản Customer hỗ trợ phải có lý do và audit log.')
+    if (params.role === 'customer' && !params.supportReason?.trim()) throw new Error('Tài khoản Khách hàng hỗ trợ phải có lý do và nhật ký hoạt động.')
     if (params.role !== 'customer' && !['staff', 'manager', 'business', 'admin'].includes(params.role)) throw new Error('Role tài khoản không hợp lệ.')
     const requestedFacility = params.facility?.trim() || ''
-    if ((params.role === 'staff' || params.role === 'manager') && (!requestedFacility || requestedFacility === 'All facilities')) throw new Error('Staff và Manager phải được gán một cơ sở cụ thể.')
+    if ((params.role === 'staff' || params.role === 'manager') && (!requestedFacility || requestedFacility === 'All facilities')) throw new Error('Nhân viên và Quản lý phải được gán một cơ sở cụ thể.')
 
     if (state.users.some(item => item.email.toLowerCase() === email)) throw new Error('Email đã tồn tại trong hệ thống.')
     const facility = requestedFacility || (params.role === 'business' || params.role === 'admin' ? 'All facilities' : undefined)
@@ -3858,7 +3860,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     } as StoredUser
     const now = new Date().toISOString()
     const action = params.role === 'customer' ? 'CUSTOMER_ACCOUNT_CREATED_BY_SUPPORT' : 'INTERNAL_ACCOUNT_CREATED'
-    const notes = params.role === 'customer' ? `Customer được tạo bởi bộ phận hỗ trợ. Lý do: ${params.supportReason!.trim()}` : `Tạo tài khoản ${params.role} và gán cơ sở ${facility || 'chưa gán'}.`
+    const notes = params.role === 'customer' ? `Khách hàng được tạo bởi bộ phận hỗ trợ. Lý do: ${params.supportReason!.trim()}` : `Tạo tài khoản ${displayRoleLabel(params.role)} và gán cơ sở ${facility || 'chưa gán'}.`
     setState(prev => ({
       ...prev,
       users: [created, ...prev.users],
@@ -3896,14 +3898,14 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const email = updates.email.trim().toLowerCase()
     if (!name || !/^\S+@\S+\.\S+$/.test(email)) throw new Error('Họ tên và email hợp lệ là bắt buộc.')
     if (state.users.some(item => item.id !== userId && item.email.toLowerCase() === email)) throw new Error('Email đã tồn tại trong hệ thống.')
-    if (target.role === 'customer' && updates.role) throw new Error('Customer không được đổi sang role nội bộ từ màn hình này.')
+    if (target.role === 'customer' && updates.role) throw new Error('Khách hàng không được đổi sang role nội bộ từ màn hình này.')
     const nextRole = target.role === 'customer' ? 'customer' : (updates.role ?? target.role) as CompanyRole
     const nextStatus = updates.status ?? target.status
     if (target.id === canonicalAdmin.id && nextStatus !== 'active') throw new Error('Không thể tự khóa tài khoản Admin hiện tại.')
     if (target.role === 'admin' && nextRole !== 'admin' && state.users.filter(item => item.role === 'admin' && item.status === 'active').length <= 1) throw new Error('Không thể hạ quyền Admin cuối cùng đang hoạt động.')
     if (target.role === 'admin' && target.status === 'active' && nextStatus !== 'active' && state.users.filter(item => item.role === 'admin' && item.status === 'active').length <= 1) throw new Error('Phải giữ lại ít nhất một Admin đang hoạt động.')
     const nextFacility = updates.facility?.trim() || (nextRole === 'business' || nextRole === 'admin' ? 'All facilities' : target.facility)
-    if ((nextRole === 'staff' || nextRole === 'manager') && (!nextFacility || nextFacility === 'All facilities')) throw new Error('Staff và Manager phải được gán một cơ sở cụ thể.')
+    if ((nextRole === 'staff' || nextRole === 'manager') && (!nextFacility || nextFacility === 'All facilities')) throw new Error('Nhân viên và Quản lý phải được gán một cơ sở cụ thể.')
     const updated = { ...target, name, email, phone: updates.phone?.trim() || '', role: nextRole, facility: nextFacility, status: nextStatus } as StoredUser
     const now = new Date().toISOString()
     setState(prev => ({
@@ -4021,7 +4023,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     avatar?: string
   }, customer: User) => {
     const canonicalCustomer = resolveCanonicalActor(customer)
-    if (canonicalCustomer.role !== 'customer') throw new Error('Chỉ Customer được tự cập nhật thông tin cá nhân.')
+    if (canonicalCustomer.role !== 'customer') throw new Error('Chỉ Khách hàng được tự cập nhật thông tin cá nhân.')
     const name = updates.name.trim()
     const email = updates.email.trim().toLowerCase()
     const phone = updates.phone?.trim() || ''
@@ -4057,7 +4059,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         entityId: canonicalCustomer.id,
         beforeState: before,
         afterState: after,
-        notes: 'Customer tự cập nhật thông tin cá nhân.',
+        notes: 'Khách hàng tự cập nhật thông tin cá nhân.',
         timestamp: now
       }, ...prev.activities]
     }))
@@ -4065,7 +4067,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
   const submitProfileChangeRequest = ({ requestedFields, reason }: { requestedFields: string[]; reason: string }, requester: User): ProfileChangeRequest => {
     const canonicalRequester = resolveCanonicalActor(requester)
-    if (canonicalRequester.role === 'customer') throw new Error('Customer không dùng luồng yêu cầu chỉnh sửa nội bộ.')
+    if (canonicalRequester.role === 'customer') throw new Error('Khách hàng không dùng luồng yêu cầu chỉnh sửa nội bộ.')
     const fields = [...new Set(requestedFields.map(field => field.trim()).filter(Boolean))].slice(0, 10)
     const cleanReason = reason.trim()
     if (!fields.length) throw new Error('Vui lòng chọn ít nhất một nội dung cần chỉnh sửa.')
@@ -4675,7 +4677,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
   const createUnit = (data: Partial<StorageUnit>, actor: User): StorageUnit => {
     const requestedCode = (data.code || data.id || '').toUpperCase().trim()
-    if (actor.role === 'manager' && !requestedCode) throw new Error('Manager phải nhập mã gian kho thực tế.')
+    if (actor.role === 'manager' && !requestedCode) throw new Error('Quản lý phải nhập mã gian kho thực tế.')
     const code = requestedCode || `UNIT-${Date.now().toString(36)}`.toUpperCase()
     if (state.units.some(item => item.id.toUpperCase() === code || item.code.toUpperCase() === code)) throw new Error('Mã gian kho đã tồn tại trong hệ thống.')
     const targetFacility = state.facilities.find(f => f.id === data.facilityId || f.code === data.facilityId)
@@ -4696,7 +4698,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     if (actor.role === 'manager' && (!canonicalType || !policyTemplate)) {
       throw new Error('Chưa có cấu hình loại kho hoặc chính sách hàng hóa để tạo gian kho tại cơ sở này.')
     }
-    if (actor.role === 'manager' && !data.zone?.trim()) throw new Error('Manager phải nhập khu vực vật lý của gian kho.')
+    if (actor.role === 'manager' && !data.zone?.trim()) throw new Error('Quản lý phải nhập khu vực vật lý của gian kho.')
     const lengthM = actor.role === 'manager' ? canonicalType!.lengthM : data.dimensions?.lengthM ?? (type === 'Medium' ? 9.0 : type === 'Large' ? 13.5 : type === 'Extra Large' ? 19.0 : 5.6)
     const widthM = actor.role === 'manager' ? canonicalType!.widthM : data.dimensions?.widthM ?? (type === 'Medium' ? 6.4 : type === 'Large' ? 6.8 : type === 'Extra Large' ? 7.2 : 6.0)
     const heightM = actor.role === 'manager' ? canonicalType!.heightM : data.dimensions?.heightM ?? (type === 'Medium' ? 3.4 : type === 'Large' ? 3.6 : type === 'Extra Large' ? 4.0 : 3.2)
@@ -4761,7 +4763,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           entityType: 'unit',
           entityId: newUnit.id,
           afterState: newUnit,
-          notes: `Manager tạo gian kho ${newUnit.code} từ cấu hình loại kho và chính sách hiện có.`,
+          notes: `Quản lý tạo gian kho ${newUnit.code} từ cấu hình loại kho và chính sách hiện có.`,
           timestamp: new Date().toISOString()
         }, ...prev.activities] : prev.activities
       }
@@ -4855,7 +4857,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           entityId: targetUnit.id,
           beforeState: targetUnit,
           afterState: nextUnits.find(item => item.id === targetUnit.id),
-          notes: `Manager cập nhật thông tin vật lý gian kho ${targetUnit.code}. Giá và chính sách được giữ theo cấu hình hệ thống.`,
+          notes: `Quản lý cập nhật thông tin vật lý gian kho ${targetUnit.code}. Giá và chính sách được giữ theo cấu hình hệ thống.`,
           timestamp: new Date().toISOString()
         }, ...prev.activities] : prev.activities
       }
@@ -4978,13 +4980,13 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const targetHold = assertHoldPermission(holdId, 'reservations:create')
     if (targetHold.customerId !== customer.id && targetHold.customerEmail !== customer.email) throw new Error('Đơn đặt giữ kho không thuộc tài khoản này.')
     assertPermission(customer, 'reservations:create')
-    if (targetHold.depositRequired === false || targetHold.goodsReviewStatus === 'PENDING') throw new Error('Hàng hóa đang chờ Staff cơ sở duyệt, chưa thể thanh toán tiền cọc.')
+    if (targetHold.depositRequired === false || targetHold.goodsReviewStatus === 'PENDING') throw new Error('Hàng hóa đang chờ Nhân viên cơ sở duyệt, chưa thể thanh toán tiền cọc.')
     if (!targetHold.emailVerification?.verified) throw new Error('Bạn cần xác minh email trước khi thanh toán.')
     if (!targetHold.paymentExpiresAt || new Date(targetHold.paymentExpiresAt).getTime() <= paidAt.getTime()) throw new Error('Đã quá 15 phút thanh toán. Vui lòng tạo đơn đặt giữ kho mới.')
     const paidStatus = transitionReservation(targetHold.status as LegacyReservationStatus, 'PAY_DEPOSIT')
-    if (!targetHold.appointmentDate || !targetHold.appointmentTime) throw new Error('Đơn chưa có lịch Check-in hợp lệ.')
+    if (!targetHold.appointmentDate || !targetHold.appointmentTime) throw new Error('Đơn chưa có lịch Nhận kho hợp lệ.')
     const scheduledDate = toValidDate(targetHold.appointmentDate)
-    if (scheduledDate.getTime() > checkInDeadline.getTime()) throw new Error('Lịch Check-in phải nằm trong cửa sổ 7 ngày. Vui lòng đổi lịch trước khi thanh toán.')
+    if (scheduledDate.getTime() > checkInDeadline.getTime()) throw new Error('Lịch Nhận kho phải nằm trong cửa sổ 7 ngày. Vui lòng đổi lịch trước khi thanh toán.')
     setState(prev => {
       const nextHolds = prev.holds.map(h => {
         if (h.id === holdId) {
@@ -5038,7 +5040,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
 
   const replySupportTicket = (ticketId: string, replyText: string, customer: User) => {
     assertPermission(customer, 'support:read')
-    if (customer.role !== 'customer') throw new Error('Chỉ Customer được phản hồi từ cổng khách hàng.')
+    if (customer.role !== 'customer') throw new Error('Chỉ Khách hàng được phản hồi từ cổng khách hàng.')
     if (!replyText.trim()) throw new Error('Vui lòng nhập nội dung tin nhắn.')
     const ticket = state.tickets.find(item => item.id === ticketId)
     if (!ticket || (ticket.email !== customer.email && ticket.customer !== customer.name)) throw new Error('Không tìm thấy yêu cầu hỗ trợ thuộc tài khoản này.')
@@ -5105,7 +5107,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       facilityId: unit.facilityId,
       reason: needsMaintenance
         ? (returnCase.staffNotes || 'Xử lý hiện trạng sau trả kho')
-        : 'Manager nghiệm thu cuối, xác nhận vệ sinh và điều kiện vận hành trước khi mở lại kho.',
+        : 'Quản lý nghiệm thu cuối, xác nhận vệ sinh và điều kiện vận hành trước khi mở lại kho.',
       damageClassification: returnCase.damageClassification,
       status: 'pending',
       createdAt: now.toISOString()
@@ -5120,7 +5122,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
       returns: prev.returns.map(r => r.id === returnId ? { ...r, status: amountDueFromCustomer > 0 ? 'payment_due' : returnCase.netRefundAmount > 0 ? 'refund_pending' : 'completed', customerConfirmed: true, customerConfirmedAt: now.toISOString(), customerDecision: 'accepted', customerDecisionNote: note?.trim(), completedAt: amountDueFromCustomer > 0 || returnCase.netRefundAmount > 0 ? undefined : now.toISOString() } : r),
       accessCredentials: prev.accessCredentials.map(ac => ac.rentalId === rental.id ? { ...ac, status: 'REVOKED', revokedAt: now.toISOString() } : ac),
       maintenanceTasks: prev.maintenanceTasks.some(task => task.unitId === unit.id && task.status !== 'completed') ? prev.maintenanceTasks : [maintenanceTask, ...prev.maintenanceTasks],
-      activities: [{ id: `act-${Date.now()}`, action: 'RETURN_SETTLEMENT_CONFIRMED', actorId: customer.id, actorName: customer.name, actorRole: customer.role, facilityId: returnCase.facilityId, entityType: 'return', entityId: returnId, notes: `${amountDueFromCustomer > 0 ? `Khách xác nhận quyết toán và cần đóng thêm ${formatVnd(amountDueFromCustomer)} do tổng phí vượt tiền đảm bảo.` : returnCase.netRefundAmount > 0 ? `Khách hàng xác nhận quyết toán. Chờ Staff xác nhận chuyển hoàn cọc ${formatVnd(returnCase.netRefundAmount)}.` : 'Khách hàng xác nhận quyết toán, không phát sinh khoản hoàn cọc.'} Gian kho chuyển sang chờ Manager nghiệm thu trước khi mở lại.`, timestamp: now.toLocaleString('vi-VN') }, ...prev.activities]
+      activities: [{ id: `act-${Date.now()}`, action: 'RETURN_SETTLEMENT_CONFIRMED', actorId: customer.id, actorName: customer.name, actorRole: customer.role, facilityId: returnCase.facilityId, entityType: 'return', entityId: returnId, notes: `${amountDueFromCustomer > 0 ? `Khách xác nhận quyết toán và cần đóng thêm ${formatVnd(amountDueFromCustomer)} do tổng phí vượt tiền đảm bảo.` : returnCase.netRefundAmount > 0 ? `Khách hàng xác nhận quyết toán. Chờ Nhân viên xác nhận chuyển hoàn cọc ${formatVnd(returnCase.netRefundAmount)}.` : 'Khách hàng xác nhận quyết toán, không phát sinh khoản hoàn cọc.'} Gian kho chuyển sang chờ Quản lý nghiệm thu trước khi mở lại.`, timestamp: now.toLocaleString('vi-VN') }, ...prev.activities]
     }))
   }
 
@@ -5284,7 +5286,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         } : undefined,
         afterState: settlement ? { ...settlement, ...recalculated, preset } : undefined,
         evidence: returnCase.evidence,
-        notes: resolutionNote?.trim() || 'Manager đã rà soát và gửi lại quyết toán cho khách.',
+        notes: resolutionNote?.trim() || 'Quản lý đã rà soát và gửi lại quyết toán cho khách.',
         timestamp: now.toISOString()
       }, ...prev.activities]
     }))
@@ -5338,7 +5340,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         facilityId: returnCase.facilityId,
         entityType: 'return',
         entityId: returnId,
-        notes: `Manager phân công ${assignedStaff.name} nghiệm thu trả kho gian ${returnCase.unitId} vào ngày ${scheduledDate}.`,
+        notes: `Quản lý phân công ${assignedStaff.name} nghiệm thu trả kho gian ${returnCase.unitId} vào ngày ${scheduledDate}.`,
         timestamp: now.toISOString()
       }, ...prev.activities]
     }))
@@ -5383,7 +5385,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         facilityId: returnCase.facilityId,
         entityType: 'return',
         entityId: returnId,
-        notes: `Manager xác nhận hoàn tất hồ sơ trả kho ${returnId}. Gian kho ${returnCase.unitId} chuyển sang ${isMaintenanceNeeded ? 'BẢO TRÌ' : 'AVAILABLE'}.`,
+        notes: `Quản lý xác nhận hoàn tất hồ sơ trả kho ${returnId}. Gian kho ${returnCase.unitId} chuyển sang ${isMaintenanceNeeded ? 'BẢO TRÌ' : 'AVAILABLE'}.`,
         timestamp: now.toISOString()
       }, ...prev.activities]
     }))
@@ -5417,7 +5419,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
               paymentExpiresAt,
               expiresAt: requiresGoodsReview ? goodsReviewDueAt! : paymentExpiresAt!,
               evidence: requiresGoodsReview
-                ? [...h.evidence, `EMAIL_VERIFIED · Khách đã xác minh email, hồ sơ hàng hóa được gửi Staff duyệt trước ${goodsReviewDueAt}.`]
+                ? [...h.evidence, `EMAIL_VERIFIED · Khách đã xác minh email, hồ sơ hàng hóa được gửi Nhân viên duyệt trước ${goodsReviewDueAt}.`]
                 : h.evidence,
               emailVerification: {
                 ...h.emailVerification,
@@ -5466,7 +5468,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     setState(prev => {
       const reservation = prev.holds.find(h => h.id === holdId)
       if (!reservation) return prev
-      if (!appointmentTime) throw new Error('Vui lòng chọn khung giờ Check-in.')
+      if (!appointmentTime) throw new Error('Vui lòng chọn khung giờ Nhận kho.')
       const requestedDate = toValidDate(appointmentDate)
       requestedDate.setHours(0, 0, 0, 0)
       const today = new Date()
@@ -5477,7 +5479,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
         : new Date(toValidDate(paidAt || reservation.createdAt).getTime() + 7 * 24 * 60 * 60 * 1000)
       deadline.setHours(23, 59, 59, 999)
       if (requestedDate < today || requestedDate > deadline) {
-        throw new Error(`Lịch Check-in phải từ hôm nay đến ${toDateInputValue(deadline)} (trong cửa sổ 7 ngày).`)
+        throw new Error(`Lịch Nhận kho phải từ hôm nay đến ${toDateInputValue(deadline)} (trong cửa sổ 7 ngày).`)
       }
       const nextEndDate = addCalendarMonths(appointmentDate, reservation.rentalMonths)
       if (reservation.assignedUnitId) {

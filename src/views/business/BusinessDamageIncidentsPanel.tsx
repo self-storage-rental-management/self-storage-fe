@@ -1,3 +1,4 @@
+import { displayStatusLabel } from '../../presentation/statusLabels'
 import LocalizedDateInput from '../../components/LocalizedDateInput'
 import { useEffect, useMemo, useState } from 'react'
 import { Badge, Button, Card, Input, Modal, Select, Table, Thead, Tbody, Th, Td, Tr } from '../../components/ui'
@@ -410,7 +411,7 @@ export default function BusinessDamageIncidentsPanel({ user, lang = 'vi', facili
                       <div className="text-[11px] text-stone-500">
                         {inc.storageUnitCode ? (
                           <span className="font-mono text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                            Unit: {inc.storageUnitCode}
+                            Gian kho: {inc.storageUnitCode}
                           </span>
                         ) : (
                           <span className="text-stone-400 italic">
@@ -501,7 +502,7 @@ export default function BusinessDamageIncidentsPanel({ user, lang = 'vi', facili
               />
               <datalist id="incident-facility-units">
                 {facilityUnits.map(unit => (
-                  <option key={unit.id} value={unit.code}>{unit.code} ({unit.status})</option>
+                  <option key={unit.id} value={unit.code}>{unit.code} ({displayStatusLabel(unit.status)})</option>
                 ))}
               </datalist>
               <span className="text-[10px] text-stone-400 mt-1 block">

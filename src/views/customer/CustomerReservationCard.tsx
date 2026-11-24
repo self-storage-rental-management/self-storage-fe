@@ -87,7 +87,7 @@ export function ReservationPreparationNotice({ checkInStatus, submitting, onRead
             <>
               <p className="mt-1">Sau khi sắp xếp hàng hóa xong, nhấn nút để báo nhân viên có thể kiểm kê.</p>
               <Button type="button" className="mt-2" size="sm" disabled={submitting} onClick={onReady}>
-                {submitting ? 'Đang gửi…' : 'Đã setup xong'}
+                {submitting ? 'Đang gửi…' : 'Đã chuẩn bị xong'}
               </Button>
             </>
           )}
@@ -658,7 +658,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
             {receiptCountdown.expired && <p className="mt-1 font-semibold">Hồ sơ đang chờ cơ sở xử lý tiếp. Bạn vẫn có thể xác nhận nhận kho hoặc liên hệ cơ sở để được hỗ trợ.</p>}
             <Button type="button" className="mt-2" size="sm" disabled={confirmingReceipt} onClick={() => void confirmReceipt()}>{confirmingReceipt ? 'Đang xác nhận…' : 'Xác nhận đã nhận kho'}</Button>
           </div>}
-          {r.status === 'PREPARING' && <p className="rounded-lg border border-violet-200 bg-violet-50 p-3 text-left text-xs text-violet-950">Đơn đã bàn giao sang <b>Hồ sơ thuê</b>. Vui lòng thực hiện xác nhận setup, chọn lịch kiểm kê và cập nhật hồ sơ sau kiểm kê tại mục <b>Hồ sơ thuê</b>.</p>}
+          {r.status === 'PREPARING' && <p className="rounded-lg border border-violet-200 bg-violet-50 p-3 text-left text-xs text-violet-950">Đơn đã bàn giao sang <b>Hồ sơ thuê</b>. Vui lòng thực hiện xác nhận chuẩn bị, chọn lịch kiểm kê và cập nhật hồ sơ sau kiểm kê tại mục <b>Hồ sơ thuê</b>.</p>}
           {documentAvailable && <Button variant="outline" size="sm" className="reservation-action reservation-action-document min-h-10 w-full justify-center" disabled={busy} onClick={() => void prepareBookingDocument()}>{busy ? 'Đang chuẩn bị…' : 'Xem phiếu giữ kho'}</Button>}
           {handoverDocumentsAvailable && <Button variant="outline" size="sm" className="min-h-10 w-full justify-center" disabled={busy} onClick={() => void loadHandoverDocuments()}>{busy ? 'Đang tải…' : 'Xem hợp đồng đã ký'}</Button>}
           {remainingPayment && <Button variant="outline" size="sm" className="min-h-10 w-full justify-center" onClick={() => setPaymentReceipt(remainingPayment)}>Xem biên lai tiền thuê còn lại</Button>}
@@ -694,7 +694,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
                   ? ` · ${displayedUnitType.rackLengthM.toLocaleString('vi-VN', { maximumFractionDigits: 3 })} × ${displayedUnitType.rackWidthM.toLocaleString('vi-VN', { maximumFractionDigits: 3 })} × ${displayedUnitType.rackHeightM.toLocaleString('vi-VN', { maximumFractionDigits: 3 })} m/khung` : ''}</p>}
                 {displayedUnitType.maxLoadKg != null && <p><b>Tải trọng:</b> {displayedUnitType.maxLoadKg.toLocaleString('vi-VN')} kg</p>}
               </>}
-              {r.assignedUnitCode && <p><b>Gian kho đã phân:</b> {r.assignedUnitCode}{r.assignedUnitStatus ? ` (${r.assignedUnitStatus})` : ''}</p>}
+              {r.assignedUnitCode && <p><b>Gian kho đã phân:</b> {r.assignedUnitCode}</p>}
               {detail?.lockReference && (
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-left">
                   <span className="font-semibold text-amber-950">Mã ổ khóa đã bàn giao</span>
