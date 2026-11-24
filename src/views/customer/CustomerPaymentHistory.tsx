@@ -1,5 +1,6 @@
 import { displayStatusLabel } from '../../presentation/statusLabels'
 import { formatCustomerDateTime } from '../../i18n/customerDate'
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import { userFacingError } from '../../presentation/userFacingError'
 import { useEffect, useState } from "react"
 import { Button, Card, Modal, Table, Thead, Tbody, Th, Td, Tr } from "../../components/ui"
@@ -48,12 +49,16 @@ export function paymentStatusBadgeClass(status: string, label: string): string {
   return "bg-amber-100 text-amber-900"
 }
 
+export function historyTransactionCode(entry: HistoryEntry) {
+  return entry.receiptCode?.trim() || entry.reservationPayment?.receiptCode?.trim()
+    || entry.paymentReference?.trim() || entry.reservationPayment?.transactionReference?.trim() || entry.id
+}
+
 function ShortCode({ value }: { value: string }) {
   const [copied, setCopied] = useState(false)
-  const compact = formatCompactPaymentCode(value)
-  return <span className="group inline-flex items-center gap-1.5 whitespace-nowrap font-mono text-xs text-stone-700" title={value}>
-    #{compact}
-    <button type="button" className="rounded p-0.5 text-stone-500 hover:bg-stone-100 hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-500 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100" aria-label={`Sao chép mã ${value}`} title={copied ? "Đã sao chép" : "Sao chép mã đầy đủ"} onClick={async () => {
+  return <span className="group inline-flex max-w-full items-start gap-1.5 font-mono text-xs text-stone-700" title={value}>
+    <span className="break-all">{value}</span>
+    <button type="button" className="shrink-0 rounded p-0.5 text-stone-500 hover:bg-stone-100 hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-500 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100" aria-label={`Sao chép mã ${value}`} title={copied ? "Đã sao chép" : "Sao chép mã đầy đủ"} onClick={async () => {
       try { await navigator.clipboard.writeText(value); setCopied(true) }
       catch { setCopied(false) }
     }}>{copied ? "Đã chép" : "Sao chép"}</button>
@@ -106,7 +111,7 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
     const settlement = ['damage', 'refund', 'returnOffset'].includes(entry.category) || ['REFUND', 'DAMAGE_FEE'].includes(entry.reservationPayment?.purpose || '')
     const matchesFilter = historyFilter === 'all' || (historyFilter === 'settlement' ? settlement : !settlement)
     const query = search.trim().toLocaleLowerCase('vi-VN')
-    const matchesSearch = !query || [entry.paymentReference, entry.reservationPayment?.transactionReference, entry.reference, entry.unitCode, entry.facilityName].some(value => value?.toLocaleLowerCase('vi-VN').includes(query))
+    const matchesSearch = !query || [historyTransactionCode(entry), entry.id, entry.paymentReference, entry.reservationPayment?.transactionReference, entry.reference, entry.unitCode, entry.facilityName].some(value => value?.toLocaleLowerCase('vi-VN').includes(query))
     return matchesFilter && matchesSearch
   })
   useEffect(() => {
@@ -200,7 +205,7 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
           <colgroup><col className="w-[14%]" /><col className="w-[18%]" /><col className="w-[18%]" /><col className="w-[11%]" /><col className="w-[13%]" /><col className="w-[16%]" /><col className="w-[10%]" /></colgroup>
           <Thead>
             <tr>
-              <Th>Mã Giao Dịch</Th>
+              <Th>Mã giao dịch / biên nhận</Th>
               <Th>Hồ Sơ</Th>
               <Th>Nội Dung</Th>
               <Th>Phương Thức</Th>
@@ -215,7 +220,7 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
               return (
                 <Tr key={entry.id}>
                   <Td>
-                    <ShortCode value={entry.paymentReference || entry.reservationPayment?.transactionReference || entry.id} />
+                    <ShortCode value={historyTransactionCode(entry)} />
                     <p className="mt-0.5 text-[10px] text-stone-400">{paymentHistoryTimestamp(entry.timestamp)}</p>
                   </Td>
                   <Td><PaymentHistoryDossier entry={entry} onOpenRentals={onOpenRentals} /></Td>
@@ -282,7 +287,7 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
               {[
                 ["Nội dung", paymentCategories[receipt.category]],
                 ["Hồ sơ", receipt.reference],
-                ["Mã giao dịch", receipt.id],
+                ["Mã giao dịch", recordDisplayCode(receipt.id)],
                 [
                   "Thời điểm ghi nhận",
                   paymentHistoryTimestamp(receipt.timestamp),

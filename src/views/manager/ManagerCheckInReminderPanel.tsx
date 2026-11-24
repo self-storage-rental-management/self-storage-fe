@@ -154,7 +154,7 @@ export default function ManagerCheckInReminderPanel({ showToast, onCountChange }
         {releaseTarget && (
           <div className="space-y-4">
             <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-950">
-              <p className="font-bold">Khách chưa xác nhận nhận kho trong 3 ngày</p>
+              <p className="font-bold">Khách chưa xác nhận nhận kho trong 24 giờ</p>
               <p className="mt-2 leading-6">
                 Xác nhận giải phóng gian <b>{releaseTarget.storageUnitCode}</b> cho đơn <b>{releaseTarget.reservationCode}</b>.
                 Hồ sơ sẽ được đóng và gian kho được đưa về trạng thái sẵn sàng.

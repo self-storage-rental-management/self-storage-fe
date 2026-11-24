@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  historyTransactionCode,
   PaymentHistoryDossier,
   formatCompactPaymentCode,
   paymentHistoryTimestamp,
@@ -19,6 +20,19 @@ const paid: ReservationPaymentResult = {
   paymentStatus: 'PAID', reservationStatus: 'CONFIRMED', responseCode: '00', transactionStatus: '00',
   gatewayPayDate: '20261011080000', message: '', processedAt: '2026-10-11T01:00:00Z', lastReconciledAt: null,
 }
+
+describe('mã giao dịch trong lịch sử', () => {
+  const entry: HistoryEntry = {
+    id: 'payment-id', reference: 'RSV-TEST', category: 'checkin', amount: 600000,
+    currency: 'VND', timestamp: null, status: 'PAID', method: 'Tiền mặt',
+    reservationPayment: { ...paid, transactionReference: 'MANUAL-RENTAL-123456789', receiptCode: 'PT-2026-123' },
+  }
+  it('ưu tiên mã phiếu thu và hiển thị đầy đủ mã tham chiếu của giao dịch cũ', () => {
+    expect(historyTransactionCode(entry)).toBe('PT-2026-123')
+    expect(historyTransactionCode({ ...entry, reservationPayment: { ...entry.reservationPayment!, receiptCode: null } })).toBe('MANUAL-RENTAL-123456789')
+    expect(historyTransactionCode({ ...entry, receiptCode: 'PT-RENEWAL-1' })).toBe('PT-RENEWAL-1')
+  })
+})
 
 describe('Số hóa đơn trên biên lai', () => {
   it.each([[null, 'Chưa cấp'], ['   ', 'Chưa cấp'], ['INV-OLD-123', 'INV-OLD-123']])(
