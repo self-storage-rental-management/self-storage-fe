@@ -136,8 +136,8 @@ export default function CustomerReservationPayment({ user, reservation, facility
     if (paymentLock.current) return
     if (busy || countdown.expired || !acceptedNoRefund || reservation.status !== 'AWAITING_PAYMENT' || !snapshot) return
     const actor = getAuthenticatedActor()
-    if (!actor || !profileUser || profileProgress(profileUser) < 5) {
-      onMessage('Vui lòng cập nhật đủ số điện thoại, CCCD và người liên hệ khẩn cấp trong Hồ sơ trước khi thanh toán trước 20% (giữ chỗ).')
+    if (!actor || profileProgress(actorToUser(actor)) < 5) {
+      onMessage('Vui lòng cập nhật đủ số điện thoại, giấy tờ tùy thân và người liên hệ khẩn cấp trong Hồ sơ trước khi thanh toán giữ chỗ.')
       return
     }
     paymentLock.current = true
@@ -158,7 +158,7 @@ export default function CustomerReservationPayment({ user, reservation, facility
   if (!snapshot) return <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{MISSING_RESERVATION_SNAPSHOT}</p>
   return <>
     {reservation.status === 'AWAITING_PAYMENT' && <div className={`rounded-lg p-3 text-right text-xs ${timerTone}`}>
-      <p className="font-bold">Thời gian thanh toán đặt cọc giữ chỗ còn lại · Hạn thanh toán trước 20% (giữ chỗ)</p>
+      <p className="font-bold">Thời gian thanh toán đặt cọc giữ chỗ còn lại · giờ:phút:giây</p>
       {(paymentStartedAt || paymentExpiresAt) && <div className="mt-2 space-y-0.5 text-left text-[11px] text-inherit">
         {paymentStartedAt && <p>Bắt đầu tính 15 phút: <b>{formatDisplayDateTime(paymentStartedAt)}</b></p>}
         {paymentExpiresAt && <p>Hạn cuối: <b>{formatDisplayDateTime(paymentExpiresAt)}</b></p>}
@@ -166,13 +166,13 @@ export default function CustomerReservationPayment({ user, reservation, facility
       <p role="timer" className="mt-1 text-2xl font-extrabold tabular-nums">{countdown.text}</p>
       <p className="mt-1">{countdown.expired ? 'Đã hết thời hạn. Đang chờ cập nhật trạng thái đơn.' : 'Vui lòng hoàn tất thanh toán trước khi hết thời hạn.'}</p>
       <div className="mt-2 rounded border border-amber-300/40 bg-amber-500/20 px-2 py-1.5 text-center text-[11px] font-semibold text-inherit">
-        {payment?.paymentStatus === 'PAID' ? 'Khoản trả trước đã thanh toán không được hoàn lại khi tự ý hủy trước nhận kho.' : 'Bạn chưa thanh toán. Hủy ngay không mất phí.'}
+        {payment?.paymentStatus === 'PAID' ? 'Nếu bạn tự hủy trước khi nhận kho, khoản trả trước được xử lý theo điều khoản đã chấp nhận.' : 'Bạn chưa thanh toán. Hủy ngay không mất phí.'}
       </div>
       {profileIncomplete && <div role="alert" className="mt-2 rounded-lg border border-rose-200 bg-rose-50 p-2 text-left text-[11px] leading-5 text-rose-900"><b>Chưa thể thanh toán</b><p>Hoàn thiện hồ sơ trước khi thanh toán, gồm: {missingProfileFields.length ? missingProfileFields.join(', ') : 'thông tin tài khoản'}.</p><p className="mt-1">Mở mục Hồ sơ để bổ sung rồi quay lại đơn này.</p></div>}
       <Button className="mt-2" size="sm" disabled={busy || countdown.expired || profileIncomplete} onClick={() => {
         const actor = getAuthenticatedActor()
-        if (!actor || !profileUser || profileProgress(profileUser) < 5) {
-          onMessage('Vui lòng hoàn thiện Hồ sơ trước khi thanh toán trước 20% (giữ chỗ): số điện thoại, CCCD và người liên hệ khẩn cấp.')
+        if (!actor || profileProgress(actorToUser(actor)) < 5) {
+          onMessage('Vui lòng cập nhật đủ số điện thoại, giấy tờ tùy thân và người liên hệ khẩn cấp trong Hồ sơ trước khi thanh toán giữ chỗ.')
           return
         }
         setAcceptedNoRefund(false); setPayOpen(true)
@@ -186,7 +186,7 @@ export default function CustomerReservationPayment({ user, reservation, facility
           <p className="font-bold text-stone-900">Thông tin khách hàng đã khai báo</p>
           <div className="mt-2 grid gap-x-4 gap-y-1.5 sm:grid-cols-2">
             <p><span className="text-stone-500">Họ và tên:</span> <b>{displayValue(reservation.customerName)}</b></p>
-            <p><span className="text-stone-500">CCCD/CMND:</span> <b>{displayValue(reservation.identityDocumentNumber)}</b></p>
+            <p><span className="text-stone-500">CCCD/Hộ chiếu:</span> <b>{displayValue(reservation.identityDocumentNumber)}</b></p>
             <p><span className="text-stone-500">Số điện thoại:</span> <b>{displayValue(reservation.customerPhone)}</b></p>
             <p className="break-all"><span className="text-stone-500">Email:</span> <b>{displayValue(reservation.customerEmail)}</b></p>
             <p className="sm:col-span-2"><span className="text-stone-500">Địa chỉ:</span> <b>{displayValue(reservation.customerAddress)}</b></p>

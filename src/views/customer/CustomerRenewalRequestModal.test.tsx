@@ -107,7 +107,7 @@ describe("CustomerRenewalRequestModal UI improvement", () => {
     expect(html).toMatch(/<button[^>]*class="[^"]*renewal-confirm-button[^"]*"[^>]*disabled=""[^>]*>Xác nhận và xem yêu cầu<\/button>/)
 
     // Dropdown contains package name with 'Gói gia hạn' and accurate discount percent
-    expect(html).toContain("Gói gia hạn 1 tháng – giảm 0%")
+    expect(html).toContain("Gói gia hạn 1 tháng, giảm 0%")
     expect(html).not.toContain("Gói thuê")
 
     // No conflict alert card

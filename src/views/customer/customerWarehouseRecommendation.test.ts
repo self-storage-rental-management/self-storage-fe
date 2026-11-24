@@ -66,7 +66,7 @@ it('giải thích vì sao kho được gợi ý vừa hàng và so sánh chi ph�
     'chiều dài 210 cm và chiều rộng 170 cm', '9 trong 36 khoang',
     'Có 2 gian phù hợp trong kỳ thuê đã chọn', 'Chuyển sang kho lớn hơn',
     'So sánh chi phí kỳ thuê 6 tháng', 'mức giảm 5%', '31.350.000 ₫', '54.150.000 ₫', '+22.800.000 ₫',
-    'Tiền cọc đảm bảo (hoàn lại khi trả kho)', '+4.000.000 ₫', 'Thanh toán trước 20% (đã nằm trong tổng)', '+5.360.000 ₫',
+    'Tiền cọc đảm bảo kho (hoàn lại khi trả kho)', '+4.000.000 ₫', 'Phí giữ chỗ (thanh toán trước 20%)', '+5.360.000 ₫',
   ]) expect(html).toContain(expected)
 })
 

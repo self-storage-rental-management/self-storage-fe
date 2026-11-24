@@ -487,13 +487,20 @@ export const FacilityImageManager: React.FC<FacilityImageManagerProps> = ({
   lang = 'vi',
 }) => {
   const [loadError, setLoadError] = useState<boolean>(false)
+  const [uploadError, setUploadError] = useState('')
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (!file.type.startsWith('image/')) return
+    setUploadError('')
+    if (!file.type.startsWith('image/')) {
+      setUploadError(lang === 'vi' ? 'Vui lòng chọn tệp ảnh.' : 'Choose an image file.')
+      e.target.value = ''
+      return
+    }
     if (file.size > 5 * 1024 * 1024) {
-      alert('Kích thước ảnh vượt quá giới hạn 5MB!')
+      setUploadError(lang === 'vi' ? 'Ảnh vượt quá 5 MB. Chọn ảnh nhỏ hơn hoặc bằng 5 MB.' : 'The image exceeds 5 MB. Choose a smaller image.')
+      e.target.value = ''
       return
     }
 
@@ -633,6 +640,7 @@ export const FacilityImageManager: React.FC<FacilityImageManagerProps> = ({
                 </button>
               ) : null}
             </div>
+            {uploadError && <p role="alert" className="mt-1 text-xs text-red-700">{uploadError}</p>}
             {loadError && (
               <p className="text-[10px] text-red-600 mt-1 font-semibold">
                 Không thể tải ảnh. Hãy kiểm tra liên kết hoặc chọn tệp từ máy tính.

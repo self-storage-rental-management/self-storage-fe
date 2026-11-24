@@ -10,7 +10,7 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Không thể tải hàng đợi hoàn tiền.'
 }
 
-export default function BusinessRefundRequestsPanel() {
+export default function BusinessRefundRequestsPanel({ refreshVersion = 0 }: { refreshVersion?: number }) {
   const actor = getAuthenticatedActor()
   const [rows, setRows] = useState<RefundRequestView[]>([])
   const [loading, setLoading] = useState(false)
@@ -38,6 +38,10 @@ export default function BusinessRefundRequestsPanel() {
     void load()
   }, [load])
 
+  useEffect(() => {
+    if (refreshVersion > 0) void load()
+  }, [refreshVersion, load])
+
   if (!actor || (!actor.roles.includes('BUSINESS') && !actor.roles.includes('ADMIN'))) return null
 
   async function approve(row: RefundRequestView) {
@@ -55,17 +59,22 @@ export default function BusinessRefundRequestsPanel() {
   }
 
   return (
-    <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm" aria-label="Yêu cầu hoàn tiền chờ Ban điều hành duyệt">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="text-base font-bold text-amber-950">Yêu cầu hoàn tiền cần Ban điều hành duyệt</h3>
-          <p className="mt-1 text-sm text-amber-900">Các khoản hoàn cần phê duyệt, gồm hồ sơ khiếu nại hoặc bồi hoàn vượt hạn mức của Quản lý cơ sở. Chỉ duyệt hồ sơ có thanh toán VNPay gốc thành công.</p>
+    <section className="rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3" aria-label="Yêu cầu hoàn tiền chờ Ban điều hành duyệt">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-800" aria-hidden="true">
+          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 3 22 20H2L12 3Z"/><path d="M12 9v5m0 3h.01"/></svg>
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-sm font-semibold text-amber-950">Yêu cầu hoàn tiền cần Ban điều hành duyệt</h3>
+            <span className="rounded-full border border-amber-200 bg-white px-2 py-0.5 text-xs font-semibold tabular-nums text-stone-600" aria-label={`${rows.length} yêu cầu`}>{rows.length}</span>
+          </div>
+          <p className="mt-1 text-xs leading-5 text-amber-900">Chỉ duyệt hoàn tiền qua VNPay khi giao dịch gốc đã thành công. Các yêu cầu khiếu nại hoặc vượt hạn mức sẽ được chuyển đến đây.</p>
         </div>
-        <Button variant="outline" size="sm" disabled={loading} onClick={() => void load()}>{loading ? 'Đang tải…' : 'Làm mới'}</Button>
       </div>
       {feedback && <p role="status" className="mt-3 rounded-lg border border-amber-300 bg-white p-2 text-sm text-amber-950">{feedback}</p>}
-      {!loading && rows.length === 0 && <p className="mt-3 rounded-lg bg-white p-3 text-sm text-stone-600">Không có yêu cầu đang chờ duyệt.</p>}
-      <div className="mt-3 space-y-3">
+      {loading && rows.length === 0 && <p className="mt-2 text-xs text-amber-900">Đang tải danh sách yêu cầu…</p>}
+      <div className="mt-3 space-y-2">
         {rows.map((row) => (
           <article key={row.id} className="rounded-lg border border-amber-200 bg-white p-3">
             <div className="flex flex-wrap items-start justify-between gap-3">

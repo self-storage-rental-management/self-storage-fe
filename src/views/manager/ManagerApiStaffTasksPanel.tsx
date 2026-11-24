@@ -1,4 +1,5 @@
 import EmergencyContactsPanel from '../../components/EmergencyContactsPanel'
+import './managerStaffTasks.css'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Badge, Button, Card, Input, Modal, SectionHeader, Select, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import { getAuthenticatedActor } from '../../services/authApi'
@@ -12,6 +13,7 @@ import RecoveryTaskDetail, { recoveryStatusLabels } from '../rental-api/Recovery
 import { rentalDate } from '../rental-api/presentation'
 import { managerFacilityNotice, singleManagerFacility } from './managerFacilityUi'
 import ManagerCheckInReminderPanel from './ManagerCheckInReminderPanel'
+import ManagerInventoryAppointments from './ManagerInventoryAppointments'
 import ManagerIntakeWorkflowPanel from './ManagerIntakeWorkflowPanel'
 import {
   assignMaintenanceTask,
@@ -54,6 +56,9 @@ function statusVariant(status: MaintenanceTaskApi['status']) {
 }
 
 export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onInitialUnitConsumed }: Props) {
+  const [activeTab, setActiveTab] = useState<'tasks' | 'handover'>('tasks')
+  const [receiptCount, setReceiptCount] = useState<number | null>(null)
+  const [inventoryCount, setInventoryCount] = useState<number | null>(null)
   const actor = getAuthenticatedActor()
   const facilityId = singleManagerFacility(actor)
   const [tasks, setTasks] = useState<MaintenanceTaskApi[]>([])
@@ -235,12 +240,12 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
   }
 
   return (
-    <div className="fade-in space-y-5">
+    <div className="manager-staff-tasks fade-in space-y-5">
       <SectionHeader
         eyebrow="Điều phối ca làm việc"
         title="Nhân viên & Nhiệm vụ"
         subtitle="Theo dõi công việc bảo trì và thu hồi kho tại cơ sở."
-        action={
+        action={activeTab === 'tasks' && (
           <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
@@ -256,12 +261,27 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
               Tạo nhiệm vụ
             </Button>
           </div>
-        }
+        )}
       />
 
-      <ManagerCheckInReminderPanel showToast={showToast} />
-      <ManagerIntakeWorkflowPanel />
+      <div className="flex flex-wrap gap-2 border-b border-stone-200" role="tablist" aria-label="Nội dung điều phối">
+        <button type="button" role="tab" id="staff-tasks-tab" aria-selected={activeTab === 'tasks'} aria-controls="staff-tasks-panel"
+          className={`border-b-2 px-4 py-3 text-sm font-semibold ${activeTab === 'tasks' ? 'border-amber-500 text-stone-900' : 'border-transparent text-stone-600 hover:text-stone-900'}`}
+          onClick={() => setActiveTab('tasks')}>Nhiệm vụ</button>
+        <button type="button" role="tab" id="staff-handover-tab" aria-selected={activeTab === 'handover'} aria-controls="staff-handover-panel"
+          className={`border-b-2 px-4 py-3 text-sm font-semibold ${activeTab === 'handover' ? 'border-amber-500 text-stone-900' : 'border-transparent text-stone-600 hover:text-stone-900'}`}
+          onClick={() => setActiveTab('handover')}>Bàn giao &amp; kiểm kê
+          {receiptCount !== null && inventoryCount !== null && <span className="ml-2 rounded-full bg-stone-100 px-2 py-0.5 text-xs tabular-nums">{receiptCount + inventoryCount}</span>}
+        </button>
+      </div>
 
+      <div id="staff-handover-panel" role="tabpanel" aria-labelledby="staff-handover-tab" hidden={activeTab !== 'handover'} className="space-y-5">
+        <ManagerCheckInReminderPanel showToast={showToast} onCountChange={setReceiptCount} />
+        <ManagerInventoryAppointments onCountChange={setInventoryCount} />
+        <ManagerIntakeWorkflowPanel />
+      </div>
+
+      <div id="staff-tasks-panel" role="tabpanel" aria-labelledby="staff-tasks-tab" hidden={activeTab !== 'tasks'} className="space-y-5">
       {!loading && !taskError && !staffReadFailed && !staff.length && <ManagerActionNotice tone="info">Chưa có nhân viên được phân công để nhận nhiệm vụ tại cơ sở này.</ManagerActionNotice>}
       {!loading && !taskError && !unitReadFailed && !units.length && <ManagerActionNotice tone="info">Chưa có gian kho khả dụng để tạo nhiệm vụ bảo trì.</ManagerActionNotice>}
       {!loading && (unitReadFailed || staffReadFailed) && <p className="text-xs text-stone-500">Chưa tải được danh sách kho hoặc nhân viên để tạo nhiệm vụ. Dữ liệu nhiệm vụ vẫn được tải riêng.</p>}
@@ -272,8 +292,13 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
         <Card className="col-span-2 p-4 lg:col-span-1"><p className="text-sm text-stone-500">Nhân viên đủ điều kiện</p><p className="mt-1 text-2xl font-bold">{loading ? '…' : staffReadFailed ? '-' : staff.length}</p></Card>
       </div>
 
-      <Card className="overflow-x-auto">
-        <Table>
+      <Card className="manager-staff-task-table overflow-hidden !rounded-2xl !shadow-none">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 px-5 py-5">
+          <h2 className="text-lg font-semibold text-stone-900">Danh sách nhiệm vụ</h2>
+          {!loading && !taskError && !recoveryError && <span className="rounded-full border border-stone-200 bg-stone-100 px-3 py-1 text-sm tabular-nums text-stone-600">{tasks.length + recoveryTasks.length} nhiệm vụ</span>}
+        </div>
+        <Table tableClassName="min-w-[1050px] table-fixed">
+          <colgroup><col className="w-[29%]" /><col className="w-[10%]" /><col className="w-[19%]" /><col className="w-[12%]" /><col className="w-[11%]" /><col className="w-[11%]" /><col className="w-[8%]" /></colgroup>
           <Thead><tr><Th>Nhiệm vụ</Th><Th>Loại</Th><Th>Gian kho</Th><Th>Người phụ trách</Th><Th>Thời gian</Th><Th>Trạng thái</Th><Th>Thao tác</Th></tr></Thead>
           <Tbody>
             {loading && <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-stone-500">Đang tải dữ liệu nhiệm vụ…</td></tr>}
@@ -282,25 +307,25 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
             {!loading && recoveryDisabled && <tr><td colSpan={7} className="px-4 py-3 text-center text-sm text-stone-500">Chức năng nhiệm vụ thu hồi kho chưa được bật.</td></tr>}
             {!loading && !taskError && !recoveryError && !tasks.length && !recoveryTasks.length && <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-stone-500">{recoveryDisabled ? 'Chưa có nhiệm vụ bảo trì tại cơ sở này.' : 'Chưa có nhiệm vụ tại cơ sở này.'}</td></tr>}
             {!loading && recoveryTasks.map(task => <Tr key={`recovery-${task.id}`}>
-              <Td><p className="font-semibold text-stone-900">Thu hồi kho - {task.customerName}</p><p className="mt-1 text-xs text-stone-500">{task.reason === 'AUTO_OVERDUE_DAY_8' ? 'Hợp đồng quá hạn, chưa hoàn tất gia hạn.' : managerDisplayText(task.reason)}</p></Td>
+              <Td><p className="font-semibold text-stone-900">Thu hồi kho - {task.customerName}</p><p className="mt-1 text-xs text-stone-500">{task.reason === 'AUTO_OVERDUE_DAY_8' ? 'Hợp đồng quá hạn, chưa gia hạn.' : managerDisplayText(task.reason)}</p></Td>
               <Td><Badge variant="warning">Thu hồi kho</Badge></Td>
               <Td>{task.storageUnitCode}</Td>
-              <Td><span className="text-sm text-stone-500">Cơ sở tiếp nhận</span></Td>
-              <Td><p className="text-xs text-stone-500">Tiếp nhận lúc</p>{rentalDate(task.receivedAt)}</Td>
+              <Td><span className="text-sm text-stone-600">Cơ sở</span></Td>
+              <Td className="tabular-nums"><p className="text-xs text-stone-500">Tiếp nhận</p>{rentalDate(task.receivedAt)}</Td>
               <Td><Badge variant={task.status === 'CLOSED' ? 'muted' : task.status === 'IN_PROGRESS' ? 'info' : 'warning'}>{recoveryStatusLabels[task.status]}</Badge></Td>
               <Td><Button size="sm" variant="outline" onClick={() => setSelectedRecovery(task)}>Chi tiết</Button></Td>
             </Tr>)}
             {!loading && tasks.map(task => (
               <Tr key={task.id}>
-                <Td><p className="font-semibold text-stone-900">{task.title}</p><p className="text-xs text-stone-500">{task.id} · {taskPriorityLabel[task.priority]}</p><p className="mt-1 text-xs text-stone-500">{task.reason}</p></Td>
+                <Td><p className="font-semibold text-stone-900">{task.title}</p><p className="mt-1 text-xs text-stone-500">Ưu tiên: {taskPriorityLabel[task.priority]}</p><details className="mt-1 text-xs text-stone-600"><summary className="w-fit cursor-pointer">Xem nội dung</summary><p className="mt-1 whitespace-pre-wrap">{task.reason}</p><p className="mt-1 break-all">Mã nhiệm vụ: {task.id}</p></details></Td>
                 <Td><Badge variant="muted">Bảo trì</Badge></Td>
-                <Td>{task.unitCode}<EmergencyContactsPanel key={task.storageUnitId} unitId={task.storageUnitId} /></Td>
+                <Td>{task.unitCode}<div className="manager-task-contacts mt-1"><EmergencyContactsPanel key={task.storageUnitId} unitId={task.storageUnitId} /></div></Td>
                 <Td>
                   {task.status === 'completed' || task.status === 'cancelled'
                     ? (task.assignedStaffName || 'Chưa phân công')
                     : <Select label="" value={task.assignedStaffId || ''} onChange={event => void reassign(task.id, event.target.value)}><option value="" disabled>Chọn nhân viên</option>{staff.map(member => <option key={member.id} value={member.id}>{member.fullName}</option>)}</Select>}
                 </Td>
-                <Td>{task.dueAt || 'Chưa đặt hạn'}</Td>
+                <Td className="tabular-nums">{task.dueAt ? rentalDate(task.dueAt) : 'Chưa đặt hạn'}</Td>
                 <Td><Badge variant={statusVariant(task.status)}>{taskStatusLabel[task.status]}</Badge></Td>
                 <Td>
                   {(task.status === 'open' || task.status === 'in_progress') ? (
@@ -323,6 +348,7 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
           </Tbody>
         </Table>
       </Card>
+      </div>
 
       {selectedRecovery && <Modal open size="xl" title="Chi tiết nhiệm vụ thu hồi" onClose={() => { if (!recoveryCloseGuard.current()) setSelectedRecovery(null) }}>
         <RecoveryTaskDetail key={selectedRecovery.id} role="manager" id={selectedRecovery.id} facilityId={selectedRecovery.facilityId} closeGuard={recoveryCloseGuard} onChanged={() => { void reload() }} />

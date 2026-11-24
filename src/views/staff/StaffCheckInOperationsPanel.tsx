@@ -15,6 +15,7 @@ import {
   confirmPartialInventoryRemoval,
   confirmCheckInPayment,
   downloadCheckInEvidence,
+  listStaffAccessCredentials,
   listCheckIns,
   markCheckInNoShow,
   recordCheckInRemainingPayment,
@@ -74,11 +75,11 @@ const checklistLabels: Array<[keyof CheckInChecklist, string]> = [
 
   ["measurementVerified", "Đã đo và đối chiếu hàng hóa thực tế"],
 
-  ["unitWalkthrough", "Đã bàn giao kho trống cho khách hàng"],
+  ["unitWalkthrough", "Dẫn khách đi bàn giao"],
 
-  ["conditionRecorded", "Đã ghi nhận tình trạng hàng hóa"],
+  ["conditionRecorded", "Không gian không bị hư hỏng, tróc sơn"],
 
-  ["accessHandedOver", "Đã bàn giao mã truy cập, thẻ hoặc chìa khóa"],
+  ["accessHandedOver", "Bên trong sạch sẽ, không có gì tồn đọng"],
 ]
 
 const emptyChecklist = () =>
@@ -494,7 +495,7 @@ function receiptReleaseState(item: CheckInCase, now = Date.now()) {
   }
   const remaining = new Date(item.receiptConfirmationReleaseAt).getTime() - now
   if (!Number.isFinite(remaining) || remaining <= 0) {
-    return { text: "Đã đủ điều kiện để Manager giải phóng kho", eligible: true }
+    return { text: "Đã đủ điều kiện để quản lý cơ sở giải phóng kho", eligible: true }
   }
   const minutes = Math.ceil(remaining / 60_000)
   const days = Math.floor(minutes / 1_440)
@@ -506,7 +507,7 @@ function receiptReleaseState(item: CheckInCase, now = Date.now()) {
     rest > 0 ? `${rest} phút` : "",
   ].filter(Boolean)
   return {
-    text: "Manager có thể giải phóng sau " + parts.join(" "),
+    text: "Quản lý cơ sở có thể giải phóng sau " + parts.join(" "),
     eligible: false,
   }
 }
@@ -999,7 +1000,17 @@ export default function StaffCheckInOperationsPanel({
         ]) === false))
     : checkInComparison?.hasVariance ?? false)
   const hasEmptyStorageEvidence = evidenceFiles.length > 0 || evidenceReferences.length > 0
-  const emptyStorageHandoverReady = Boolean(keyLockReference.trim() && initialCondition.trim() && hasEmptyStorageEvidence)
+  const isHandoverChecklistComplete = Boolean(
+    checklist.accessHandedOver &&
+    checklist.conditionRecorded &&
+    checklist.unitWalkthrough
+  )
+  const emptyStorageHandoverReady = Boolean(
+    keyLockReference.trim() &&
+    initialCondition.trim() &&
+    hasEmptyStorageEvidence &&
+    isHandoverChecklistComplete
+  )
 
   const workflowCurrentStep = handoverTarget ? stepForCheckIn(handoverTarget) : 1
   const handoverDeadlinePassed = handoverTarget ? handoverExpired(handoverTarget, now) : false
@@ -1435,7 +1446,26 @@ export default function StaffCheckInOperationsPanel({
           throw new Error("Không nhập mật khẩu hoặc mã PIN vào ô Mã ổ khóa / Chìa khóa.")
         }
         if (!emptyStorageHandoverReady) {
+          if (!isHandoverChecklistComplete) {
+            throw new Error("Vui lòng tích xác nhận đầy đủ 3 mục trong Danh mục kiểm tra bàn giao (*).")
+          }
           throw new Error("Cần nhập mã ổ khóa, ghi nhận hiện trạng và chọn ít nhất một ảnh hoặc PDF bằng chứng kho trống.")
+        }
+        const lockReference = keyLockReference.trim()
+        const activeCredentials = await listStaffAccessCredentials({
+          facilityId: handoverTarget.facilityId,
+          q: lockReference,
+          status: "ACTIVE",
+          pageSize: 100,
+        })
+        const normalizedLockReference = lockReference.replace(/\s+/g, " ").toLocaleUpperCase("vi-VN")
+        const duplicateLock = activeCredentials.data.some((credential) =>
+          credential.type === "LOCK"
+          && credential.reservationId !== handoverTarget.reservationId
+          && credential.reference.trim().replace(/\s+/g, " ").toLocaleUpperCase("vi-VN") === normalizedLockReference,
+        )
+        if (duplicateLock) {
+          throw new Error("Mã ổ khóa đang được sử dụng tại cơ sở này.")
         }
         const emptyStorageEvidence = checkInEvidenceAssetIds(evidenceReferences)
         for (const file of evidenceFiles) {
@@ -1799,7 +1829,7 @@ export default function StaffCheckInOperationsPanel({
           }
         >
           {receiptRelease.eligible
-            ? "Đủ điều kiện để Manager giải phóng kho"
+            ? "Đủ điều kiện để quản lý cơ sở giải phóng kho"
             : receiptState.expired
             ? "Đã quá hạn xác nhận nhận kho"
             : staffCheckInStatusLabel(item.checkInStatus, item.reservationStatus)}
@@ -2056,6 +2086,11 @@ export default function StaffCheckInOperationsPanel({
                       <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-amber-600" checked={confirmedSetupTerms === setupTermsKey} disabled={submitting || isReviewingCompletedStep || !contractFile || handoverTarget.setupEarlyExitFee == null} onChange={event => setConfirmedSetupTerms(event.target.checked ? setupTermsKey : null)} />
                       <span>
                         Tôi đã kiểm tra hợp đồng đã ký và xác nhận khoản phí khớp với điều khoản khách đồng ý khi đặt kho.
+                        <span className="mt-1 block">
+                          {handoverTarget.setupEarlyExitFee == null
+                            ? 'Chưa xác định được mức phí trả kho trong thời gian chuẩn bị. Cần đối soát trước khi tiếp tục.'
+                            : <>Nếu khách trả kho trong thời gian chuẩn bị, hệ thống giữ lại <strong>{handoverTarget.setupEarlyExitFee.toLocaleString('vi-VN')} đồng</strong> (20% tiền thuê sau ưu đãi) và hoàn 80% tiền thuê; tiền cọc đảm bảo quyết toán riêng.</>}
+                        </span>
                       </span>
                     </label>}
                   </>
@@ -2153,7 +2188,7 @@ export default function StaffCheckInOperationsPanel({
                           checked={checklist.unitWalkthrough}
                           onChange={(e) => setChecklist(cur => ({ ...cur, unitWalkthrough: e.target.checked }))}
                         />
-                        <span>Đã dẫn khách kiểm tra gian kho trực tiếp *</span>
+                        <span>Dẫn khách đi bàn giao *</span>
                       </label>
                       <label className="flex items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 p-2.5 cursor-pointer hover:bg-stone-100 transition">
                         <input
@@ -2163,7 +2198,7 @@ export default function StaffCheckInOperationsPanel({
                           checked={checklist.conditionRecorded}
                           onChange={(e) => setChecklist(cur => ({ ...cur, conditionRecorded: e.target.checked }))}
                         />
-                        <span>Trần, sàn, vách nguyên vẹn & sạch sẽ *</span>
+                        <span>Không gian không bị hư hỏng, tróc sơn *</span>
                       </label>
                       <label className="flex items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 p-2.5 cursor-pointer hover:bg-stone-100 transition">
                         <input
@@ -2173,9 +2208,14 @@ export default function StaffCheckInOperationsPanel({
                           checked={checklist.accessHandedOver}
                           onChange={(e) => setChecklist(cur => ({ ...cur, accessHandedOver: e.target.checked }))}
                         />
-                        <span>Đã bàn giao mã khóa & hướng dẫn ra vào *</span>
+                        <span>Bên trong sạch sẽ, không có gì tồn đọng *</span>
                       </label>
                     </div>
+                    {!isHandoverChecklistComplete && !isReviewingCompletedStep && (
+                      <p className="text-xs font-medium text-amber-800">
+                        * Cần tích xác nhận đầy đủ 3 mục trong Danh mục kiểm tra bàn giao để có thể tiếp tục.
+                      </p>
+                    )}
                   </div>
                 </div>
 

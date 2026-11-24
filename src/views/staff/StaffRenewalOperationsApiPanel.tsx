@@ -206,7 +206,7 @@ function StaffSession({ identity, onLocked }: { identity: string; onLocked: (val
         <Modal
           open
           size="xl"
-          title="Xử lý ký gia hạn - Nhân viên"
+          title="Xử lý ký gia hạn"
           onClose={() => {
             if (!lockRef.current) setSelected(undefined)
           }}

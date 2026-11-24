@@ -4,7 +4,7 @@ import { userFacingError } from '../../presentation/userFacingError'
 import { listCheckIns } from '../../services/checkInApi'
 import { formatManagerDateTime } from './managerList'
 
-export default function ManagerInventoryAppointments() {
+export default function ManagerInventoryAppointments({ onCountChange }: { onCountChange?: (count: number | null) => void } = {}) {
   const [page, setPage] = useState(0)
   const [refresh, setRefresh] = useState(0)
   const [result, setResult] = useState<Awaited<ReturnType<typeof listCheckIns>>>()
@@ -16,11 +16,11 @@ export default function ManagerInventoryAppointments() {
     setLoading(true)
     setError('')
     void listCheckIns({ group: 'ONGOING', status: 'setup_completed', page, pageSize: 20 })
-      .then(value => { if (active) setResult(value) })
-      .catch(error => { if (active) setError(userFacingError(error, 'Không tải được lịch kiểm kê.')) })
+      .then(value => { if (active) { setResult(value); onCountChange?.(value.pagination.totalItems) } })
+      .catch(error => { if (active) { setError(userFacingError(error, 'Không tải được lịch kiểm kê.')); onCountChange?.(null) } })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [page, refresh])
+  }, [page, refresh, onCountChange])
 
   return <Card className="space-y-3 p-4">
     <div className="flex items-center justify-between gap-3">

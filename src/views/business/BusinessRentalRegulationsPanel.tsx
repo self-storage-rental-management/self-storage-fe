@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { getBusinessConfigApi, type BusinessConfigApi } from '../../services/businessConfigApi'
-import { getActiveCentralizedPolicyApi, type CentralizedPolicyApi } from '../../services/centralizedPolicyApi'
 import { isApiAuthenticated } from '../../services/authApi'
 import { formatVnd } from '../../i18n/currency'
 import { Card, Badge, Button } from '../../components/ui'
@@ -15,12 +14,10 @@ interface Props {
 export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
   const [copied, setCopied] = useState(false)
   const [config, setConfig] = useState<BusinessConfigApi | null>(null)
-  const [activePolicy, setActivePolicy] = useState<CentralizedPolicyApi | null>(null)
 
   useEffect(() => {
     if (isApiAuthenticated()) {
       void getBusinessConfigApi().then(setConfig).catch(() => {})
-      void getActiveCentralizedPolicyApi().then(setActivePolicy).catch(() => {})
     }
   }, [])
 
@@ -48,7 +45,7 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
           <div className="space-y-2 max-w-3xl">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-amber-400/20 text-amber-200 border border-amber-300/30">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-              Văn bản ban hành chính thức · Áp dụng toàn hệ thống {activePolicy ? `· Phiên bản ${activePolicy.policyVersion}` : ''}
+              Văn bản ban hành chính thức · Áp dụng toàn hệ thống
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white uppercase">
               QUY ĐỊNH CHO THUÊ KHO STORAGEHUB
@@ -59,6 +56,14 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            <Button
+              type="button"
+              variant="outline"
+              className="bg-white/10 hover:bg-white/20 text-white border-white/20 text-xs px-3.5 py-2 cursor-pointer"
+              onClick={handleCopyAll}
+            >
+              {copied ? 'Đã sao chép toàn văn' : 'Sao chép toàn văn'}
+            </Button>
             <Button
               type="button"
               variant="primary"
@@ -93,44 +98,44 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
                 : "These parameters are published directly to customers when viewing units, reserving, and settling agreements on the Customer Portal."}
             </p>
           </div>
+
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            className="bg-amber-700 hover:bg-amber-800 text-white font-semibold text-xs px-4 py-2 self-start md:self-auto shrink-0 shadow-sm flex items-center gap-1.5 cursor-pointer"
+            onClick={() => {
+              const el = document.getElementById('regulations-articles')
+              if (el) el.scrollIntoView({ behavior: 'smooth' })
+            }}
+          >
+            <span>{lang === "vi" ? "Xem Toàn Văn 12 Điều Khoản" : "View Full 12 Articles"}</span>
+            <span>↓</span>
+          </Button>
         </div>
 
         {/* 5 Chỉ Số Vận Hành Cốt Lõi */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 pt-4">
           <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
             <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Phí Quá Hạn</span>
-            <div className="text-base font-extrabold text-amber-700 font-mono mt-1">
-              {activePolicy ? `${formatVnd(activePolicy.lateFeeAmount)}/ngày` : config ? `${formatVnd(config.lateFeeAmount)}/ngày` : '50.000 đ/ngày'}
-            </div>
-            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
-              {activePolicy?.latePenaltyCalculationMethod === 'PERCENTAGE_DAILY_RATE'
-                ? `Tỷ lệ ${((activePolicy.lateFeePercentageRate || 0.005) * 100).toFixed(1)}%/ngày theo giá kho`
-                : 'Mức phạt cố định mỗi ngày trễ hạn sau thời gian ân hạn.'}
-            </p>
+            <div className="text-base font-extrabold text-amber-700 font-mono mt-1">{config ? `${formatVnd(config.lateFeeAmount)}/ngày` : '50% / ngày'}</div>
+            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30). Tự động tính theo số ngày trễ.</p>
           </div>
 
           <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
             <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
-              Phương Thức Cọc
+              Phí Giữ Chỗ ({config ? `${Math.round(config.defaultDepositRatio * 100)}%` : '20%'})
             </span>
-            <div className="text-base font-extrabold text-amber-600 font-mono mt-1">
-              {activePolicy?.depositCalculationMethod === 'MONTHLY_RENT_MULTIPLE'
-                ? `${activePolicy.depositMonthlyMultiple} tháng tiền thuê`
-                : activePolicy ? `${Math.round(activePolicy.depositPercentageRate * 100)}% giá trị kho` : '1 tháng tiền thuê'}
-            </div>
+            <div className="text-base font-extrabold text-amber-600 font-mono mt-1">{config ? `${Math.round(config.defaultDepositRatio * 100)}%` : '10% - 30%'}</div>
             <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
-              Bắt buộc thanh toán trước khi nhận kho. Mức cọc sàn: {formatVnd(activePolicy?.minimumDepositAmount || 500000)}.
+              Cấu hình theo từng gói thuê (mặc định {config ? `${Math.round(config.defaultDepositRatio * 100)}%` : '20%'}). Trừ trực tiếp vào tiền thuê khi nhận kho.
             </p>
           </div>
 
           <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Hoàn Cọc Đảm Bảo</span>
-            <div className="text-base font-extrabold text-emerald-700 font-mono mt-1">
-              {activePolicy ? `SLA ${activePolicy.refundProcessingDays} ngày` : 'Theo loại kho'}
-            </div>
-            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
-              Hoàn trả sau {activePolicy?.refundProcessingDays || 7} ngày làm việc kể từ khi nghiệm thu trả kho và khấu trừ công nợ.
-            </p>
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Tiền Cọc Đảm Bảo Thuê</span>
+            <div className="text-base font-extrabold text-emerald-700 font-mono mt-1">Theo loại kho</div>
+            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Thu khi nhận kho, hoàn trả lại sau kiểm tra nghiệm thu trả kho, vệ sinh và công nợ.</p>
           </div>
 
           <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
@@ -140,12 +145,10 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
           </div>
 
           <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Thời Gian Ân Hạn</span>
-            <div className="text-base font-extrabold text-blue-700 font-mono mt-1">
-              {activePolicy ? `Ân hạn ${activePolicy.gracePeriodDays} ngày` : config ? `Ân hạn ${config.gracePeriodDays} ngày` : 'Ân hạn 3 ngày'}
-            </div>
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Gia Hạn Quá Hạn</span>
+            <div className="text-base font-extrabold text-blue-700 font-mono mt-1">{config ? `Ân hạn ${config.gracePeriodDays} ngày` : 'Tối Đa 7 Ngày'}</div>
             <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
-              Khách có tối đa {activePolicy?.gracePeriodDays ?? 3} ngày để hoàn tất gia hạn trước khi tính phí quá hạn.
+              Khách có tối đa {config?.gracePeriodDays ?? 7} ngày để hoàn tất gia hạn. Đến ngày thứ {(config?.gracePeriodDays ?? 7) + 1} chuyển thu hồi kho.
             </p>
           </div>
         </div>

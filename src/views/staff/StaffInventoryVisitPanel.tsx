@@ -71,7 +71,7 @@ export default function StaffInventoryVisitPanel({ item, now, busy, onBusyChange
     {visit?.identityVerifiedAt ? <div className="flex flex-wrap items-center gap-2">
       <span>Đã xác minh lúc {format(visit.identityVerifiedAt)}{visit.verifiedByName ? ` bởi ${visit.verifiedByName}` : ''}.</span>
       {visit.photoId && <Button type="button" size="sm" variant="outline" onClick={() => onPreview(visit.photoId!)}>Xem ảnh xác minh</Button>}
-    </div> : open && (expired ? <p className="font-semibold text-red-800">Đã quá hạn kiểm kê. Hồ sơ cần Manager xử lý.</p>
+    </div> : open && (expired ? <p className="font-semibold text-red-800">Đã quá hạn kiểm kê. Hồ sơ cần quản lý cơ sở xử lý.</p>
       : !visit?.appointmentAt ? <p>Đang chờ khách chọn lịch kiểm kê.</p>
       : !visit.arrivedAt ? <Button type="button" size="sm" disabled={busy || !item.checkInId}
         onClick={() => { if (item.checkInId) void run(() => recordInventoryArrival(item.checkInId!)) }}>Ghi nhận khách đã đến</Button>

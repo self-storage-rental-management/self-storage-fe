@@ -6,8 +6,8 @@ import { listFacilityContentPolicies, saveFacilityContentPolicies, type Facility
 import BusinessReturnsPanel from "./BusinessReturnsPanel"
 import BusinessRefundRequestsPanel from "./BusinessRefundRequestsPanel"
 import BusinessDamageIncidentsPanel from "./BusinessDamageIncidentsPanel"
-import BusinessRentalRegulationsPanel from "./BusinessRentalRegulationsPanel"
 import CentralizedPolicyWorkspace from "./CentralizedPolicyWorkspace"
+import BusinessRentalRegulationsPanel from "./BusinessRentalRegulationsPanel"
 import BusinessFacilityLifecycleRequests from "./BusinessFacilityLifecycleRequests"
 import BusinessFacilityDetailsModal from "./BusinessFacilityDetailsModal"
 import BusinessDashboardPanel from "./BusinessDashboardPanel"
@@ -679,7 +679,7 @@ export default function BusinessApp({
       id: "centralized-policies",
       label: "Chính sách",
       icon: Icon.shield,
-      group: "Quy định pháp lý",
+      group: "Quy Định & Pháp Lý",
       permission: "policies:read",
     },
     {
@@ -689,10 +689,18 @@ export default function BusinessApp({
       group: "Quy định pháp lý",
       permission: "policies:read",
     },
+    {
+      id: "rental-source-policies",
+      label: "Chính sách gia hạn",
+      icon: Icon.policy,
+      group: "Quy định pháp lý",
+      permission: "policies:read",
+    },
   ]
 
   const [page, setPage] = useState(() => getInitialPage(NAV, "facilities"))
   const [integrationLocked, setIntegrationLocked] = useState(false)
+  const [returnsRefreshVersion, setReturnsRefreshVersion] = useState(0)
 
   const [pricingModal, setPricingModal] = useState(false)
   const [pricingCollapsedMap, setPricingCollapsedMap] = useState<Record<string, boolean>>({})
@@ -1969,7 +1977,7 @@ export default function BusinessApp({
       if (!editableUnitTypes.length) {
         showToast(backendPricingArchivedCount > 0
           ? 'Các loại kho đã lưu trữ không thể cập nhật giá. Hãy khôi phục loại kho trước khi định giá.'
-          : 'Manager chưa khai báo loại kho thực tế cho cơ sở này.')
+          : 'Quản lý cơ sở chưa khai báo loại kho thực tế cho cơ sở này.')
         return
       }
       const invalid = editableUnitTypes.some(unitType => {
@@ -1989,7 +1997,7 @@ export default function BusinessApp({
           })
         }))
       } catch (error) {
-        showToast(error instanceof Error ? error.message : 'Không thể lưu biểu giá lên backend.')
+        showToast(error instanceof Error ? error.message : 'Không thể lưu biểu giá. Vui lòng thử lại.')
         return
       }
     }
@@ -2590,7 +2598,6 @@ export default function BusinessApp({
       performance: 'Hiệu Suất Mặt Bằng',
       pricing: 'Thiết lập giá kho',
       policies: 'Gói thuê',
-      'centralized-policies': 'Chính sách (9 Quy tắc)',
       'rental-regulations': 'Quy định khi thuê',
       'rental-source-policies': 'Chính Sách Gia Hạn',
       returns: 'Trả kho',
@@ -3884,9 +3891,7 @@ export default function BusinessApp({
       roleLabel={"Giám Đốc Thương Mại"}
       roleColor="bg-amber-100 text-amber-700"
     >
-      {page === "centralized-policies" && (
-        <CentralizedPolicyWorkspace user={user} lang={lang} />
-      )}
+      {page === "centralized-policies" && <CentralizedPolicyWorkspace user={user} lang={lang} />}
       {page === "rental-source-policies" && <DuongPolicyWorkspace user={user} onLocked={setIntegrationLocked} />}
       {page === "returns" && (
         <div className="fade-in space-y-5">
@@ -3897,9 +3902,15 @@ export default function BusinessApp({
                 ? "Theo dõi, giám sát và thẩm định hồ sơ nghiệm thu trả kho toàn hệ thống"
                 : "Monitor, supervise, and resolve warehouse return cases and deposit settlements across all facilities"
             }
+            action={
+              <Button variant="outline" size="sm" onClick={() => setReturnsRefreshVersion((version) => version + 1)}>
+                <span className="mr-1.5 inline-flex" aria-hidden="true"><svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M20 7v5h-5"/><path d="M19 12a7 7 0 1 1-2-4.9L20 12"/></svg></span>
+                Làm mới
+              </Button>
+            }
           />
-          <BusinessRefundRequestsPanel />
-          <BusinessReturnsPanel user={user} />
+          <BusinessRefundRequestsPanel refreshVersion={returnsRefreshVersion} />
+          <BusinessReturnsPanel user={user} refreshVersion={returnsRefreshVersion} />
         </div>
       )}
       {/* ── QUẢN LÝ CƠ SỞ (CRUD FACILITIES) ──────────────────── */}
@@ -5259,11 +5270,11 @@ export default function BusinessApp({
 
             {isApiAuthenticated() ? (
               <div className="space-y-3">
-                {backendPricingLoading && <p className="rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-600">Đang tải danh sách loại kho Manager đã khai báo...</p>}
+                {backendPricingLoading && <p className="rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-600">Đang tải danh sách loại kho quản lý cơ sở đã khai báo...</p>}
                 {!backendPricingLoading && backendPricingUnitTypes.length === 0 && <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
                   {backendPricingArchivedCount > 0
                     ? 'Các loại kho của cơ sở đã được lưu trữ nên không thể cập nhật giá. Hãy khôi phục loại kho trước khi định giá.'
-                    : 'Manager chưa khai báo loại kho thực tế. BO chỉ có thể định giá sau khi danh sách này tồn tại.'}
+                    : 'Quản lý cơ sở chưa khai báo loại kho thực tế. Ban điều hành chỉ có thể định giá sau khi danh sách này tồn tại.'}
                 </p>}
                 {!backendPricingLoading && backendPricingArchivedCount > 0 && backendPricingUnitTypes.length > 0 && <p className="rounded-xl border border-stone-200 bg-stone-50 p-3 text-xs text-stone-600">
                   Đã bỏ qua {backendPricingArchivedCount} loại kho đã lưu trữ vì không thể cập nhật giá.

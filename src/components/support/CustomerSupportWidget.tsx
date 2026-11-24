@@ -13,6 +13,7 @@ import { useCustomerChatPersistence } from '../../hooks/useCustomerChatPersisten
 import { ApiClientError } from '../../services/apiClient'
 import { getSupportTicket } from '../../services/supportApi'
 import { useSupportUnread } from '../../hooks/useSupportMessageReads'
+import { useMovableChatLauncher } from '../../hooks/useMovableChatLauncher'
 
 export type ChatOpenRequest = { request: number; ticketId?: string; target?: SupportRecordTarget }
 
@@ -57,6 +58,7 @@ function WidgetSession({ actorId, initialSession, onReload, openRequest }: { act
   const panelId = useId()
   const titleId = useId()
   const launcher = useRef<HTMLButtonElement>(null)
+  const launcherProps = useMovableChatLauncher(() => { setStarted(true); setOpen(true) })
   const closeButton = useRef<HTMLButtonElement>(null)
   const consumedRequest = useRef<number | undefined>(undefined)
   const [openError, setOpenError] = useState<string>()
@@ -157,17 +159,10 @@ function WidgetSession({ actorId, initialSession, onReload, openRequest }: { act
   const hide = () => { setOpen(false) }
 
   return createPortal(<>
-    <button ref={launcher} type="button" aria-label="Mở chat hỗ trợ" title="Nhấn để mở chat · Kéo để di chuyển vị trí tự do"
+    <button {...launcherProps} ref={launcher} type="button" aria-label="Mở chat hỗ trợ"
       aria-expanded={open} aria-controls={started ? panelId : undefined} aria-haspopup="dialog"
       hidden={open} data-expanded={open} aria-hidden={open} inert={open}
-      onPointerDown={handlePointerDown}
-      onClick={() => {
-        if (isDraggingRef.current) return
-        setStarted(true)
-        setOpen(true)
-      }}
-      style={btnPos ? { left: `${btnPos.x}px`, top: `${btnPos.y}px`, bottom: 'auto', right: 'auto' } : undefined}
-      className={`support-chat-launcher fixed ${btnPos ? '' : 'bottom-5 right-5 sm:bottom-6 sm:right-6'} z-40 flex h-12 w-12 touch-none select-none items-center justify-center rounded-full border border-[#a8d1b8] bg-[#c2e2cf] text-[#335b44] shadow-lg shadow-stone-900/10 transition-transform duration-75 hover:bg-[#aed7bf] ${isDragging ? 'cursor-grabbing scale-105 shadow-2xl ring-2 ring-[#659c7c]/50' : 'cursor-grab hover:scale-105'} focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#659c7c]`}>
+      className="support-chat-launcher fixed bottom-5 right-5 z-40 flex h-12 w-12 touch-none cursor-grab select-none items-center justify-center rounded-full border border-[#a8d1b8] bg-[#c2e2cf] text-[#335b44] shadow-lg shadow-stone-900/10 hover:bg-[#aed7bf] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#659c7c] active:cursor-grabbing sm:bottom-6 sm:right-6">
       <ChatIcon className="h-6 w-6" />
       {unreadCount > 0 && <span aria-label={`${unreadCount} tin chưa đọc`} className="absolute -right-1 -top-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-[#335b44] px-1 text-[10px] font-semibold text-white">{Math.min(unreadCount, 99)}</span>}
     </button>

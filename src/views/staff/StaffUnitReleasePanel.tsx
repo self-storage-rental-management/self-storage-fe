@@ -22,6 +22,7 @@ import {
   type UnitReleaseDisposition,
 } from '../../services/unitReleaseApi'
 import { formatStaffDateTime, staffErrorMessage, staffStorageUnitStatusLabel } from './staffPresentation'
+import './staffDailyTaskQueue.css'
 
 export default function StaffUnitReleasePanel({ showToast }: { showToast: (message: string) => void }) {
   const [cases, setCases] = useState<UnitReleaseCase[]>([])
@@ -89,7 +90,7 @@ export default function StaffUnitReleasePanel({ showToast }: { showToast: (messa
   }
 
   return (
-    <div className="fade-in space-y-5">
+    <div className="staff-task-queue fade-in space-y-5">
       <SectionHeader
         eyebrow="CỔNG NHÂN VIÊN · GIẢI PHÓNG KHO HỦY"
         title="Giải phóng kho từ đơn đã hủy"
@@ -97,8 +98,8 @@ export default function StaffUnitReleasePanel({ showToast }: { showToast: (messa
         action={<Button variant="outline" size="sm" onClick={refresh} disabled={loading}>Làm mới</Button>}
       />
 
-      <Card className="p-4">
-        <div className="grid gap-3 md:grid-cols-3">
+      <Card className="!rounded-2xl !shadow-none p-5">
+        <div className="staff-task-filters grid gap-4 md:grid-cols-2">
           <Input
             label="Tìm kiếm mã đơn / mã kho"
             value={query}
@@ -122,7 +123,11 @@ export default function StaffUnitReleasePanel({ showToast }: { showToast: (messa
         </div>
       )}
 
-      <Card className="overflow-hidden">
+      <Card className="staff-task-group overflow-hidden !rounded-2xl !shadow-none">
+        <div className="flex items-center justify-between gap-3 border-b border-stone-200 px-5 py-5">
+          <h2 className="text-lg font-semibold text-stone-900">Danh sách giải phóng kho</h2>
+          {!loading && !error && <span className="rounded-full border border-stone-200 bg-stone-100 px-3 py-1 text-sm tabular-nums text-stone-600">{cases.length} hồ sơ</span>}
+        </div>
         <Table>
           <Thead>
             <Tr>
