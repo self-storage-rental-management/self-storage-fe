@@ -350,7 +350,7 @@ export async function listSupportEvents(
   p = 0,
   size = 20,
 ) {
-  check(role !== "customer", "Customer không được đọc lịch sử nội bộ.")
+  check(role !== "customer", "Khách hàng không được đọc lịch sử nội bộ.")
   return page<SupportEvent>(
     await apiRequest(
       `${path(role, id)}/events${queryString({ page: p, size }, false, true)}`,
@@ -365,7 +365,7 @@ export async function listSupportEscalations(
   p = 0,
   size = 20,
 ) {
-  check(role !== "customer", "Customer không được đọc escalation nội bộ.")
+  check(role !== "customer", "Khách hàng không được đọc yêu cầu chuyển bộ phận nội bộ.")
   return page<SupportEscalation>(
     await apiRequest(
       `${path(role, id)}/escalations${queryString({ page: p, size }, false, true)}`,
@@ -518,11 +518,11 @@ export async function sendSupportCommand(
       "Cần chọn công khai hoặc nội bộ.",
     )
   if (kind === "message" && role === "manager")
-    check("visibility" in payload && payload.visibility === "INTERNAL", "Manager chỉ được gửi trao đổi nội bộ.")
+    check("visibility" in payload && payload.visibility === "INTERNAL", "Quản lý chỉ được gửi trao đổi nội bộ.")
   if (kind === "assign")
     check(
       "assignedStaffId" in payload && isUuid(payload.assignedStaffId),
-      "Bắt buộc chọn Staff theo mã.",
+      "Bắt buộc chọn Nhân viên theo mã.",
     )
   if (kind === "escalate")
     check(
@@ -534,7 +534,7 @@ export async function sendSupportCommand(
     check(
       isUuid(command.escalationId) &&
         inList(command.action, ["ROUTE", "REJECT"]),
-      "Quyết định escalation không hợp lệ.",
+      "Quyết định yêu cầu chuyển bộ phận không hợp lệ.",
     )
     route = `escalations/${encodeURIComponent(command.escalationId)}/decision`
     delete (payload as Record<string, unknown>).escalationId

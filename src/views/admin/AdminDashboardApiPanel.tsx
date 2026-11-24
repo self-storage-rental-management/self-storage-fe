@@ -114,7 +114,7 @@ export default function AdminDashboardApiPanel() {
         <Card className="overflow-hidden">
           <div className="flex items-center justify-between border-b border-stone-200 bg-[#f8f7f1] px-5 py-4">
             <div><h2 className="font-semibold text-stone-900">Nhật ký an ninh gần đây</h2><p className="mt-1 text-sm text-stone-500">Các thay đổi tài khoản, phiên và phân quyền.</p></div>
-            <Badge variant="info">Audit</Badge>
+            <Badge variant="info">Nhật ký hoạt động</Badge>
           </div>
           <Table>
             <Thead><Tr><Th>Sự kiện</Th><Th>Người thực hiện</Th><Th>Thời điểm</Th></Tr></Thead>

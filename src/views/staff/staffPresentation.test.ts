@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  compareCheckInSchedule,
   compareStaffTaskSchedule,
   formatStaffDate,
   parseEmptyStorageHandover,
@@ -100,5 +101,24 @@ describe("trình bày dữ liệu cho giao diện nhân viên", () => {
         )
         .map((task) => task.id),
     ).toEqual(["som-cao", "som-thap", "muon"])
+  })
+
+  it("sắp xếp hồ sơ nhận kho gần nhất, mới nhất và đơn đang chờ xử lý lên đầu", () => {
+    const checkIns = [
+      { reservationCode: "RSV-218059", checkInStatus: "completed", appointmentAt: "2026-11-09T19:58:00" },
+      { reservationCode: "RSV-235461", checkInStatus: "completed", appointmentAt: "2026-11-10T20:35:00" },
+      { reservationCode: "RSV-ER2T", checkInStatus: "completed", appointmentAt: "2026-11-03T06:37:00" },
+      { reservationCode: "RSV-3WJN", checkInStatus: "completed", appointmentAt: "2026-11-24T02:00:00" },
+      { reservationCode: "RSV-ZBWR", checkInStatus: "setup_completed", appointmentAt: "2026-11-25T23:10:00" },
+    ]
+
+    const sorted = [...checkIns].sort(compareCheckInSchedule)
+    expect(sorted.map(item => item.reservationCode)).toEqual([
+      "RSV-ZBWR", // Chờ kiểm kê hàng hóa (active & 25/11/2026) -> Lên đầu
+      "RSV-3WJN", // Đã hoàn tất (24/11/2026)
+      "RSV-235461", // Đã hoàn tất (10/11/2026)
+      "RSV-218059", // Đã hoàn tất (09/11/2026)
+      "RSV-ER2T", // Đã hoàn tất (03/11/2026)
+    ])
   })
 })

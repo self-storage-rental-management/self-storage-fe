@@ -98,7 +98,7 @@ export const ROLE_NOTIFICATION_CONFIGS: Record<Role, RoleNotificationConfig> = {
   admin: {
     roleTitle: 'Quản Trị Viên Hệ Thống',
     title: 'Kênh Giám Sát & An Ninh Toàn Hệ Thống',
-    subtitle: 'Cấu hình cảnh báo an ninh hạ tầng, audit log bảo mật và giám sát dịch vụ toàn nền tảng StorageHub.',
+    subtitle: 'Cấu hình cảnh báo an ninh hạ tầng, nhật ký hoạt động bảo mật và giám sát dịch vụ toàn nền tảng StorageHub.',
     channels: [
       {
         id: 'admin_security_threats',
@@ -901,16 +901,16 @@ setSavingProfile(true)
             <div className="flex items-center justify-between gap-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
               <div>
                 <p className="font-semibold text-stone-900">Google Authenticator / FIDO2</p>
-                <p className="mt-1 text-xs text-stone-600">Chưa có cấu hình MFA từ backend.</p>
+                <p className="mt-1 text-xs text-stone-600">Chưa thiết lập xác thực nhiều lớp.</p>
               </div>
-              <Button variant="outline" size="sm" onClick={() => showToast('Tính năng MFA sẽ mở sau khi backend cung cấp cấu hình bảo mật.')}>Cấu hình</Button>
+              <Button variant="outline" size="sm" onClick={() => showToast('Xác thực nhiều lớp hiện chưa khả dụng.')}>Cấu hình</Button>
             </div>
             <div className="mt-3 flex items-center justify-between gap-4 rounded-xl border border-stone-200 p-4">
               <div>
                 <p className="font-semibold text-stone-900">Mã khôi phục khẩn cấp</p>
                 <p className="mt-1 text-xs text-stone-600">Chưa phát hành bộ mã dự phòng.</p>
               </div>
-              <Button variant="outline" size="sm" onClick={() => showToast('Chưa thể tạo mã khôi phục khi backend chưa bật MFA.')}>Tạo mã</Button>
+              <Button variant="outline" size="sm" onClick={() => showToast('Cần bật xác thực nhiều lớp trước khi tạo mã khôi phục.')}>Tạo mã</Button>
             </div>
           </Card>
 
@@ -926,14 +926,14 @@ setSavingProfile(true)
                   <Badge variant={session.active ? 'success' : 'muted'}>{session.active ? 'Đang hoạt động' : 'Đã đóng'}</Badge>
                 </div>
               ))}
-              {!apiSessions.length && <p className="rounded-lg bg-stone-50 p-4 text-sm text-stone-600">Chưa có dữ liệu truy cập từ backend.</p>}
+              {!apiSessions.length && <p className="rounded-lg bg-stone-50 p-4 text-sm text-stone-600">Chưa có dữ liệu truy cập.</p>}
             </div>
           </Card>
 
           <Card className="p-6 xl:col-span-2">
             <SectionTitle title="API Key & Personal Access Token" description="Dành cho tích hợp nội bộ, webhook và công cụ DevOps." />
             <div className="flex flex-col gap-3 rounded-xl border border-dashed border-stone-300 bg-stone-50 p-4 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-stone-600">Chưa có token cá nhân nào. Token chỉ được hiển thị một lần sau khi backend hỗ trợ phát hành.</p>
+              <p className="text-sm text-stone-600">Chưa có mã truy cập cá nhân.</p>
               <Button variant="outline" size="sm" onClick={() => showToast('API token chưa được bật cho tài khoản này.')}>Tạo token</Button>
             </div>
           </Card>
@@ -1044,7 +1044,7 @@ setSavingProfile(true)
             <SectionTitle title="Nhiệm vụ hôm nay" description="Công việc được phân công từ hệ thống vận hành." />
             {apiMode ? (
               apiMaintenanceError ? (
-                <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700">Không tải được nhiệm vụ vận hành từ backend.</p>
+                <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700">Không tải được nhiệm vụ vận hành.</p>
               ) : (
                 <>
                   <div className="grid grid-cols-2 gap-3">
@@ -1082,7 +1082,7 @@ setSavingProfile(true)
             <SectionTitle title="Ủy quyền ca trực" description="Thiết lập người thay thế khi vắng mặt hoặc nghỉ phép." />
             <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50 p-4">
               <p className="font-semibold text-stone-800">Chưa có người được ủy quyền</p>
-              <p className="mt-1 text-xs text-stone-600">Dữ liệu ủy quyền cần được lưu và kiểm tra từ backend.</p>
+              
               <Button className="mt-3" variant="outline" size="sm" onClick={() => showToast('Tính năng ủy quyền chưa được bật.')}>Thiết lập</Button>
             </div>
           </Card>
@@ -1111,7 +1111,7 @@ setSavingProfile(true)
             <InfoRow
               label="Quyền nghiệp vụ"
               value={apiMode
-                ? grantedBusinessCapabilities.join(', ') || 'Chưa có quyền nghiệp vụ từ backend'
+                ? grantedBusinessCapabilities.join(', ') || 'Chưa có quyền nghiệp vụ'
                 : 'Báo cáo, chính sách và phê duyệt theo phân quyền'}
             />
           </div>
@@ -1120,10 +1120,10 @@ setSavingProfile(true)
           <SectionTitle title="Mã xác nhận phê duyệt" description="Xác nhận riêng cho các thao tác nhạy cảm về giá và chính sách." />
           <div className="flex items-center justify-between gap-3 rounded-xl border border-dashed border-stone-300 bg-stone-50 p-4">
             <div>
-              <p className="font-semibold text-stone-800">Approval PIN</p>
-              <p className="mt-1 text-xs text-stone-600">Chưa thiết lập mã xác nhận trong backend.</p>
+              <p className="font-semibold text-stone-800">Mã PIN phê duyệt</p>
+              <p className="mt-1 text-xs text-stone-600">Chưa thiết lập mã xác nhận.</p>
             </div>
-            <Button variant="outline" size="sm" onClick={() => showToast('Approval PIN chưa được bật.')}>Thiết lập</Button>
+            <Button variant="outline" size="sm" onClick={() => showToast('Mã PIN phê duyệt chưa được bật.')}>Thiết lập</Button>
           </div>
         </Card>
       </div>
@@ -1310,7 +1310,7 @@ setSavingProfile(true)
             {isInternal && (
               <Card className="p-5 bg-[#fbfaf6] border-stone-200">
                 <h3 className="font-semibold text-stone-900 mb-2 text-sm">Thông tin tổ chức</h3>
-                <p className="text-xs text-stone-600 leading-relaxed">Vai trò và cơ sở của tài khoản do công ty cấp. Mọi thay đổi cần Admin/HR duyệt và lưu audit log.</p>
+                <p className="text-xs text-stone-600 leading-relaxed">Vai trò và cơ sở của tài khoản do công ty cấp. Mọi thay đổi cần Admin/HR duyệt và lưu nhật ký hoạt động.</p>
                 {apiMode ? (
                   <p className="mt-3 text-xs text-stone-500">Vui lòng liên hệ Quản trị viên hoặc HR để điều chỉnh vai trò / phạm vi cơ sở.</p>
                 ) : (
@@ -1542,7 +1542,7 @@ setSavingProfile(true)
       <Modal open={requestModalOpen && isInternal} onClose={() => setRequestModalOpen(false)} title="Gửi yêu cầu chỉnh sửa hồ sơ">
         <div className="space-y-5">
           <p className="text-xs text-stone-600 leading-relaxed">
-            Chọn các hạng mục thông tin cần điều chỉnh. Đề xuất sẽ được chuyển trực tiếp đến bộ phận Quản Trị & Nhân Sự (Admin/HR) xem xét, phê duyệt và lưu nhật ký kiểm toán (audit log).
+            Chọn các hạng mục thông tin cần điều chỉnh. Đề xuất sẽ được chuyển trực tiếp đến bộ phận Quản Trị & Nhân Sự (Admin/HR) xem xét, phê duyệt và lưu nhật ký kiểm toán (nhật ký hoạt động).
           </p>
 
           <div>

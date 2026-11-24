@@ -13,7 +13,8 @@ export default function StaffInventoryVisitPanel({ item, now, busy, onBusyChange
   onSaved: (updated: CheckInCase) => void
   onPreview: (photoId: string) => void
 }) {
-  const [document, setDocument] = useState('')
+  const declaredIdentityDocument = item.identityDocumentNumber?.trim() || ''
+  const [document, setDocument] = useState(declaredIdentityDocument)
   const [file, setFile] = useState<File>()
   const [photoId, setPhotoId] = useState<string>()
   const [present, setPresent] = useState(false)
@@ -56,7 +57,7 @@ export default function StaffInventoryVisitPanel({ item, now, busy, onBusyChange
       }
       let uploadedPhotoId = photoId
       if (!uploadedPhotoId && file) {
-        const photo = await uploadCheckInEvidence(checkInId, file, 'CHECK_IN_IDENTITY')
+        const photo = await uploadCheckInEvidence(checkInId, file, 'CHECK_IN_IDENTITY', 'anh-doi-chieu-khach-luc-kiem-ke', item.reservationCode)
         uploadedPhotoId = photo.id
         setPhotoId(uploadedPhotoId)
       }
@@ -74,11 +75,16 @@ export default function StaffInventoryVisitPanel({ item, now, busy, onBusyChange
       {expired && <p role="status" className="font-semibold text-red-800">Đã quá hạn kiểm kê. Hồ sơ cần quản lý cơ sở xử lý.</p>}
       {!visit?.appointmentAt && <p role="status">Đang chờ khách chọn lịch kiểm kê.</p>}
       <fieldset className="space-y-4" disabled={busy || expired || !visit?.appointmentAt}>
+        <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-blue-950">
+          <span className="text-xs font-medium uppercase tracking-wide text-blue-700">CCCD hoặc hộ chiếu khách đã khai báo</span>
+          <p className="mt-1 font-semibold">{declaredIdentityDocument || 'Chưa có dữ liệu'}</p>
+          <p className="mt-1 text-xs text-blue-800">Đối chiếu số này với giấy tờ gốc khách xuất trình tại buổi kiểm kê.</p>
+        </div>
         <label className="grid gap-1">Số CCCD hoặc hộ chiếu trên giấy tờ gốc
           <input className="rounded-md border border-stone-300 bg-white p-2" autoComplete="off" maxLength={30}
             value={document} disabled={busy} onChange={event => setDocument(event.target.value)} />
         </label>
-        <label className="grid gap-1">Ảnh khách tại buổi kiểm kê
+        <label className="grid gap-1">Ảnh đối chiếu khách lúc kiểm kê
           <input className="block w-full rounded-lg border border-stone-300 bg-white p-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-stone-100 file:px-3 file:py-2 file:font-medium" type="file" accept="image/jpeg,image/png,image/webp" capture="user" disabled={busy}
             onChange={event => { setFile(event.target.files?.[0]); setPhotoId(undefined) }} />
         </label>

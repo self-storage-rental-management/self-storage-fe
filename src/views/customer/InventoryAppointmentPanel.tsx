@@ -63,8 +63,8 @@ export default function InventoryAppointmentPanel({ detail, now, onSaved }: {
 
   return (
     <section className="space-y-2 rounded-lg border border-violet-200 bg-violet-50 p-3 text-left text-xs text-violet-950">
-      <p className="font-semibold">Lịch kiểm kê đầu vào</p>
-      {detail.setupCompletedAt && <p>Báo setup xong lúc {formatTime(detail.setupCompletedAt)}</p>}
+      <p className="font-semibold text-sm text-violet-900">Lịch kiểm kê đầu vào</p>
+      {detail.setupCompletedAt && <p>Báo chuẩn bị xong lúc {formatTime(detail.setupCompletedAt)}</p>}
       {detail.inventoryAppointmentAt && <p>Giờ hẹn <b>{formatTime(detail.inventoryAppointmentAt)}</b></p>}
       {detail.inventoryDueAt && <p>Mốc nhắc {formatTime(detail.inventoryDueAt)}</p>}
       {detail.inventoryFinalDeadlineAt && <p>Hạn kiểm kê <b>{formatTime(detail.inventoryFinalDeadlineAt)}</b>{!expired && timeRemaining ? ` · ${timeRemaining}` : ''}</p>}
@@ -107,3 +107,4 @@ export default function InventoryAppointmentPanel({ detail, now, onSaved }: {
     </section>
   )
 }
+

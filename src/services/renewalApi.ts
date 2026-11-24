@@ -105,7 +105,7 @@ export async function listRenewals(
   query: RenewalApiQuery = {},
 ) {
   if (role === "staff") {
-    throw new ApiClientError("Staff không có API danh sách gia hạn.", {
+    throw new ApiClientError("Nhân viên không có API danh sách gia hạn.", {
       status: 403,
     })
   }
@@ -281,7 +281,7 @@ function isRenewalPaymentResponse(value: unknown,renewalId: string): value is Re
 }
 
 export function renewalPaymentRedirectUrl(payment: RenewalVnpayPaymentResponse): string {
-  if(!payment.paymentUrl)throw new Error("Backend chưa trả về đường dẫn thanh toán. Vui lòng thử lại hoặc liên hệ hỗ trợ.")
+  if(!payment.paymentUrl)throw new Error("Chưa mở được trang thanh toán. Vui lòng thử lại hoặc liên hệ hỗ trợ.")
   let url: URL
   try { url=new URL(payment.paymentUrl) } catch { throw new Error("Đường dẫn thanh toán VNPay không hợp lệ.") }
   if(url.protocol!=="https:"||!["sandbox.vnpayment.vn","pay.vnpay.vn"].includes(url.hostname)

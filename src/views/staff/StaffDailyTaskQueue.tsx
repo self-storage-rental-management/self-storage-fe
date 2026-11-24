@@ -335,7 +335,7 @@ export default function StaffDailyTaskQueue({
         <Td className="text-xs [overflow-wrap:anywhere]">
           {row.customer && <p>{row.customer}</p>}
           {row.notes && <p className="text-stone-500">{row.notes}</p>}
-          {!row.customer && !row.notes && "—"}
+          {!row.customer && !row.notes && "-"}
         </Td>
         <Td className={`text-xs ${!isFinished(row.status) && new Date(row.deadlineAt || row.dueAt).getTime() < now ? "font-semibold text-red-700" : ""}`}>
           <p>{row.deadlineAt ? formatStaffDate(row.deadlineAt) : row.dueAt ? formatStaffDate(row.dueAt) : "Không đặt hạn"}</p>

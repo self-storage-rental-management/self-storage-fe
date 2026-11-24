@@ -12,7 +12,7 @@ export default function ManagerIntakeWorkflowPanel() {
         Date.parse(a.inventoryFinalDeadlineAt || a.setupDueAt || '9999-12-31') - Date.parse(b.inventoryFinalDeadlineAt || b.setupDueAt || '9999-12-31')))
     }).catch(() => setError('Chưa tải được hồ sơ kiểm kê. Vui lòng tải lại trang.'))
   }, [])
-  return <section className="space-y-3 rounded-xl border bg-white p-4"><h3 className="font-bold">Setup và lịch kiểm kê đầu vào</h3>
+  return <section className="space-y-3 rounded-xl border bg-white p-4"><h3 className="font-bold">Chuẩn bị hàng và lịch kiểm kê đầu vào</h3>
     {error && <p role="alert">{error}</p>}
     {items.length === 0 && !error && <p>Không có hồ sơ đang chờ.</p>}
     {items.map(i => <div key={i.reservationId} className="border-b py-2"><button type="button" className="text-left font-semibold underline" onClick={() => setSelected(selected === i.reservationId ? null : i.reservationId)}>{i.reservationCode} · {i.customerName}</button>{selected === i.reservationId && <IntakeWorkflowPanel reservationId={i.reservationId} role="MANAGER" />}</div>)}

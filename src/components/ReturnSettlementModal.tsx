@@ -1,3 +1,4 @@
+import { displayStatusLabel } from '../presentation/statusLabels'
 import { useState } from 'react'
 import { Badge, Button, Card, Modal, Table, Thead, Tbody, Th, Td, Tr } from './ui'
 import { formatVnd as legacyMoney } from '../i18n/currency'
@@ -183,7 +184,7 @@ export default function ReturnSettlementModal({
                       </Td>
                     </Tr>
                     {apiRecord?.setupEarlyExit && <>
-                      <Tr><Td className="font-semibold">Tiền thuê thực thu được quyết toán</Td><Td className="text-xs text-stone-500">Theo bảng kê backend</Td><Td className="text-right font-bold">{apiRecord.rentalRefundCredit == null ? 'Chưa xác định' : formatVnd(apiRecord.rentalRefundCredit)}</Td></Tr>
+                      <Tr><Td className="font-semibold">Tiền thuê thực thu được quyết toán</Td><Td className="text-xs text-stone-500"></Td><Td className="text-right font-bold">{apiRecord.rentalRefundCredit == null ? 'Chưa xác định' : formatVnd(apiRecord.rentalRefundCredit)}</Td></Tr>
                       {role !== 'customer' && <Tr><Td className="font-semibold">Phí chấm dứt sớm một lần</Td><Td className="text-xs text-stone-500">Theo điều khoản đã chấp nhận</Td><Td className="text-right font-bold">{apiRecord.earlyTerminationFee == null ? 'Chưa xác định' : formatVnd(apiRecord.earlyTerminationFee)}</Td></Tr>}
                     </>}
                     {damageFee > 0 && (
@@ -444,7 +445,7 @@ export default function ReturnSettlementModal({
                 </div>
                 <div className="text-right">
                   <p className="font-semibold text-stone-700">Đại diện StorageHub</p>
-                  <p className="mt-1 font-mono text-[11px] text-emerald-700">{apiRecord ? "Chứng từ theo hồ sơ backend" : "ĐÃ KÝ ĐIỆN TỬ"}</p>
+                  {!apiRecord && <p className="mt-1 font-mono text-[11px] text-emerald-700">ĐÃ KÝ ĐIỆN TỬ</p>}
                   <p className="mt-3 font-medium text-stone-800">{returnCase.facilityName || 'Quản lý cơ sở'}</p>
                 </div>
               </div>
@@ -495,12 +496,12 @@ export default function ReturnSettlementModal({
                       <Tr key={p.id}>
                         <Td className="text-xs text-stone-500">{p.paidAt || p.receivedAt || docDate}</Td>
                         <Td className="font-semibold text-stone-800">
-                          {p.type === 'RENT' ? 'Tiền thuê định kỳ' : p.type === 'DAMAGE_FEE' ? 'Phí phát sinh' : p.type}
+                          {p.type === 'RENT' ? 'Tiền thuê định kỳ' : p.type === 'DAMAGE_FEE' ? 'Phí phát sinh' : p.type === 'REFUND' ? 'Hoàn tiền' : p.type === 'RENEWAL' ? 'Thanh toán gia hạn' : p.type === 'RESERVATION_DEPOSIT' ? 'Cọc giữ chỗ' : p.type === 'RENTAL_BALANCE' ? 'Tiền thuê còn lại' : p.type === 'SECURITY_DEPOSIT' ? 'Tiền cọc đảm bảo' : 'Giao dịch khác'}
                         </Td>
                         <Td className="font-mono text-xs text-stone-500">{p.transactionReference || p.id}</Td>
                         <Td className="text-xs">{formatHistoryPaymentMethod(p.paymentMethod)}</Td>
                         <Td className="text-right font-semibold text-stone-800">{formatVnd(p.amount)}</Td>
-                        <Td><Badge variant={p.status === 'PAID' ? 'success' : 'warning'}>{p.status}</Badge></Td>
+                        <Td><Badge variant={p.status === 'PAID' ? 'success' : 'warning'}>{displayStatusLabel(p.status)}</Badge></Td>
                       </Tr>
                     ))}
 

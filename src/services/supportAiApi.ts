@@ -59,7 +59,7 @@ export function supportAiErrorMessage(error: unknown): string {
     case 'CONFLICT': return 'Yêu cầu cần được kiểm tra lại bằng cùng mã gửi. Không gửi lặp câu hỏi mới.'
     case 'INVALID_AI_RESPONSE': return 'Chưa xác nhận được phản hồi AI. Hãy kiểm tra lại cùng câu hỏi.'
     default: return error.status === 404
-      ? 'Máy chủ chưa có API trợ lý AI. Vui lòng cập nhật và khởi động lại backend.'
+      ? 'Trợ lý hiện chưa sẵn sàng. Vui lòng thử lại sau.'
       : 'Chưa xác nhận được kết quả gửi. Bạn có thể kiểm tra lại cùng câu hỏi hoặc gặp nhân viên.'
   }
 }

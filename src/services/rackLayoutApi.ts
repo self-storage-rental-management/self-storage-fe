@@ -1,4 +1,4 @@
-import { ApiClientError, apiRequest } from './apiClient'
+import { apiRequest } from './apiClient'
 import type { PageResponse, PalletPlan } from './customerReservationApi'
 
 export interface RackInput {
@@ -276,8 +276,5 @@ export async function getCustomerRackLayout(facilityId: string, unitTypeId: stri
 
 export function rackLayoutError(error: unknown) {
   const message = error instanceof Error ? error.message : 'Không xử lý được cấu hình kệ.'
-  const details = error instanceof ApiClientError && Array.isArray(error.details)
-    ? error.details.filter((issue): issue is string => typeof issue === 'string')
-    : []
-  return { message, details }
+  return { message, details: [] as string[] }
 }

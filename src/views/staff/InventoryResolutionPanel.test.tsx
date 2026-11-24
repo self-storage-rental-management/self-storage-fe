@@ -36,9 +36,20 @@ it('offers acceptance and rejection of declared OTHER goods even when the goods 
 
 it('captures the signed paper record as uploaded photos instead of asking for a file code', () => {
   const html = render({ inventoryFullFit: true })
-  expect(html).toContain('Ảnh biên bản có chữ ký khách')
+  expect(html).toContain('Biên bản xác nhận phương án hàng hóa có chữ ký khách')
   expect(html).toContain('type="file"')
   expect(html).toContain('multiple=""')
   expect(html).not.toContain('Mã ảnh biên bản')
   expect(html).not.toContain('Mã tệp ảnh biên bản')
+})
+
+
+it('offers removal and a transfer request when the inspected goods exceed capacity', () => {
+  const html = render({ inventoryFullFit: false, inventoryPartialFitAvailable: false })
+  expect(html).toContain('đưa phần dư ra')
+  expect(html).toContain('Tạo yêu cầu thu xếp chuyển hàng')
+  expect(html).not.toContain('Trả lại kho')
+  const submitted = render({ inventoryResolutionStatus: 'TRANSFER_REQUESTED', inventoryFullFit: false })
+  expect(submitted).toContain('Đã tạo yêu cầu thu xếp chuyển hàng')
+  expect(submitted).not.toContain('type="radio"')
 })
