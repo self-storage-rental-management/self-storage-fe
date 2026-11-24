@@ -12,6 +12,7 @@ import { isCheckInHandoverExpired, staffCheckInActions } from "../../domain/rese
 import { packageVolumeM3 } from '../../domain/reservationCapacity'
 import { inventoryResult } from '../../domain/inventoryResult'
 import { canOpenInventory } from '../../domain/inventoryAccess'
+import { canReturnToInventoryStage, isInventoryStageReadOnly, INVENTORY_STAGE_LABELS, type InventoryStage } from '../../domain/inventoryStages'
 
 import {
   archiveCompletedCheckIn,
@@ -664,7 +665,7 @@ export default function StaffCheckInOperationsPanel({
   const [customerWaitTarget, setCustomerWaitTarget] = useState<"receipt" | "preparation" | null>(null)
 
   const [handoverStep, setHandoverStep] = useState(1)
-  const [inventoryStage, setInventoryStage] = useState<1 | 2 | 3 | 4>(1)
+  const [inventoryStage, setInventoryStage] = useState<InventoryStage>(1)
   const inventoryCommandLock = useRef(false)
   const [inventoryDraftRevision, setInventoryDraftRevision] = useState(0)
   const [inventorySavedAt, setInventorySavedAt] = useState<string | null>(null)
@@ -672,6 +673,26 @@ export default function StaffCheckInOperationsPanel({
   const [confirmedInventoryReview, setConfirmedInventoryReview] = useState<string | null>(null)
   const inventoryMode = handoverStep === 6
   const inventoryPublished = Boolean(handoverTarget?.inventoryResolutionStatus && handoverTarget.inventoryResolutionStatus !== "NOT_STARTED" && handoverTarget.inventoryResolutionStatus !== "ACCEPTED") || handoverTarget?.checkInStatus === "completed"
+
+  /** Steps already passed stay reachable so a mistaken entry does not trap the operator. */
+  const canGoBackToInventoryStage = (stage: InventoryStage) => canReturnToInventoryStage({
+    target: stage,
+    current: inventoryStage,
+    submitting,
+    checkInStatus: handoverTarget?.checkInStatus ?? null,
+  })
+
+  const returnToInventoryStage = (stage: InventoryStage) => {
+    if (!canGoBackToInventoryStage(stage)) return
+    setError(null)
+    setFieldErrors({})
+    if (stage === 2) {
+      // Re-open the editable inspection form even when a draft was already saved.
+      setInventoryEditing(true)
+      setConfirmedInventoryReview(null)
+    }
+    setInventoryStage(stage)
+  }
 
   const [checklist, setChecklist] = useState<CheckInChecklist>(emptyChecklist)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
@@ -1010,11 +1031,14 @@ export default function StaffCheckInOperationsPanel({
 
   const workflowCurrentStep = handoverTarget ? stepForCheckIn(handoverTarget) : 1
   const handoverDeadlinePassed = handoverTarget ? handoverExpired(handoverTarget, now) : false
+  // Walking back into an already published inspection must not reopen an editable form the
+  // backend would reject; those earlier stages are shown read-only instead.
+  const inventoryStageReadOnly = inventoryMode && isInventoryStageReadOnly({ stage: inventoryStage, published: inventoryPublished })
   const isReviewingCompletedStep = Boolean(
     handoverTarget &&
       (handoverTarget.checkInStatus === "completed" || handoverStep < workflowCurrentStep ||
         (handoverStep === 4 && ["handover_pending_receipt", "setup_in_progress", "setup_completed", "completed"].includes(handoverTarget.checkInStatus || ""))),
-  )
+  ) || inventoryStageReadOnly
 
   const declaredIdentityDocument = handoverTarget?.identityDocumentNumber?.trim() || ""
   const identityVerificationBlocked = !normalizeIdentityDocument(identityDocumentNumber)
@@ -1865,15 +1889,6 @@ export default function StaffCheckInOperationsPanel({
           <Button size="sm" variant="outline" className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]" disabled={submitting || !canOpenInventory(item.checkInStatus, item.inventoryVisit?.appointmentAt)} title={!canOpenInventory(item.checkInStatus, item.inventoryVisit?.appointmentAt) ? "Chờ khách xác nhận lịch kiểm kê" : "Mở form kiểm kê riêng"} onClick={() => openHandover(item, true)}>Xem tiến trình kiểm kê</Button>
           {group === "ONGOING" && item.checkInStatus !== "completed" && (
             <>
-              {item.checkInStatus === "handover_pending_receipt" && item.checkInId && <Button
-                className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
-                size="sm"
-                variant="outline"
-                disabled={submitting || Boolean(remindingCustomerCheckInId)}
-                onClick={() => void remindCustomerReceipt(item)}
-              >
-                {remindingCustomerCheckInId === item.checkInId ? "Đang gửi…" : "Nhắc khách xác nhận"}
-              </Button>}
               {item.inventoryResolutionStatus === "PARTIAL_ACCEPTED" && <Button
                 className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
                 size="sm"
@@ -2003,21 +2018,21 @@ export default function StaffCheckInOperationsPanel({
               {workflowStepLabels.slice(0, 5).map((label, index) => <Button key={label} variant={handoverStep === index + 1 ? "primary" : "outline"} disabled={submitting || index + 1 > Math.min(5, workflowCurrentStep)} onClick={() => { setError(null); setHandoverStep(index + 1) }}>{index + 1}. {label}</Button>)}
             </nav>}
             {inventoryMode && <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4" aria-label="Tiến độ kiểm kê">
-              {(inventoryMode ? ["Kiểm tra khách", "Kiểm kê hàng hóa", "Xác nhận hàng hóa kiểm kê", "Xử lý sai lệch"] : workflowStepLabels.slice(0, 5)).map((label, index) => {
-                const step = index + 1
+              {([1, 2, 3, 4] as InventoryStage[]).map(step => {
+                const current = inventoryStage === step
                 return (
                   <div
-                    key={label}
-                    aria-current={(inventoryMode ? inventoryStage : handoverStep) === step ? "step" : undefined}
+                    key={step}
+                    aria-current={current ? "step" : undefined}
                     className={`rounded-lg border px-3 py-2 text-left text-xs transition select-none cursor-default ${
-                    (inventoryMode ? inventoryStage : handoverStep) === step
-                      ? "border-amber-500 bg-amber-50 font-semibold text-amber-950"
-                      : (inventoryMode ? inventoryStage : workflowCurrentStep) >= step
-                        ? "border-emerald-300 bg-emerald-50 text-emerald-900"
-                        : "border-stone-200 bg-stone-50 text-stone-500 opacity-70"
+                      current
+                        ? "border-amber-500 bg-amber-50 font-semibold text-amber-950"
+                        : inventoryStage >= step
+                          ? "border-emerald-300 bg-emerald-50 text-emerald-900"
+                          : "border-stone-200 bg-stone-50 text-stone-500 opacity-70"
                     }`}
                   >
-                    <span className="mr-1 font-bold">{step}.</span>{label}
+                    <span className="mr-1 font-bold">{step}.</span>{INVENTORY_STAGE_LABELS[step]}
                   </div>
                 )
               })}
@@ -2849,6 +2864,7 @@ export default function StaffCheckInOperationsPanel({
 
             {inventoryMode && inventoryStage === 4 && <InventoryResolutionPanel item={handoverTarget} busy={submitting}
               onRefresh={() => void refreshHandoverTarget()} onOpenReturns={onOpenReturns}
+              onPreview={assetId => void previewEvidenceFile(assetId)}
               onResolve={async request => {
                 if (!handoverTarget?.checkInId || inventoryCommandLock.current) return
                 inventoryCommandLock.current = true; setSubmitting(true)
@@ -2863,13 +2879,14 @@ export default function StaffCheckInOperationsPanel({
               <Button variant="outline" onClick={closeHandover} disabled={submitting}>Đóng</Button>
               {inventoryMode ? (
                 <div className="flex flex-wrap justify-end gap-3">
-                  {inventoryStage === 2 && !inventoryPublished && <Button variant="outline" disabled={submitting} onClick={() => setInventoryStage(1)}>Quay lại</Button>}
-                  {inventoryStage === 3 && !inventoryPublished && <Button variant="outline" disabled={submitting} onClick={() => { setInventoryEditing(true); setConfirmedInventoryReview(null); setInventoryStage(2) }}>Chỉnh sửa</Button>}
-                  {inventoryStage === 4 && <Button variant="outline" disabled={submitting} onClick={() => setInventoryStage(3)}>Xem hàng hóa kiểm kê đã lưu</Button>}
-                  {inventoryStage === 3 && inventoryPublished && <Button onClick={() => setInventoryStage(4)}>Theo dõi xử lý sai lệch</Button>}
+                  {inventoryStage === 4 && <Button variant="outline" disabled={submitting} onClick={() => returnToInventoryStage(3)}>← Quay lại bước 3</Button>}
+                  {inventoryStage === 3 && <Button variant="outline" disabled={submitting} onClick={() => returnToInventoryStage(2)}>← Quay lại bước 2</Button>}
+                  {inventoryStage === 2 && <Button variant="outline" disabled={submitting} onClick={() => returnToInventoryStage(1)}>← Quay lại bước 1</Button>}
                   {inventoryStage === 1 && <Button disabled={submitting || handoverTarget.checkInStatus === 'setup_in_progress' || !handoverTarget.inventoryVisit?.identityVerifiedAt} onClick={() => setInventoryStage(2)}>Tiếp tục kiểm kê hàng hóa</Button>}
-                  {inventoryStage === 2 && <Button disabled={submitting || !inventoryLinesComplete || (lineInventory && !inventoryReviewConfirmed) || !actualPackagingMethod.trim() || !packagingCondition || (packagingNoteRequired && !handoverNotes.trim()) || (!evidenceFiles.length && !evidenceReferences.length) || (measurementVariance && !effectiveVarianceReason.trim())} onClick={() => void submitHandover()}>{submitting ? "Đang lưu kiểm kê…" : "Xác nhận hàng hóa kiểm kê"}</Button>}
+                  {inventoryStage === 2 && inventoryStageReadOnly && <Button onClick={() => setInventoryStage(4)}>Xem lại kết quả kiểm kê</Button>}
+                  {inventoryStage === 2 && !inventoryStageReadOnly && <Button disabled={submitting || !inventoryLinesComplete || (lineInventory && !inventoryReviewConfirmed) || !actualPackagingMethod.trim() || !packagingCondition || (packagingNoteRequired && !handoverNotes.trim()) || (!evidenceFiles.length && !evidenceReferences.length) || (measurementVariance && !effectiveVarianceReason.trim())} onClick={() => void submitHandover()}>{submitting ? "Đang lưu kiểm kê…" : "Xác nhận hàng hóa kiểm kê"}</Button>}
                   {inventoryStage === 3 && !inventoryPublished && <Button disabled={submitting || (lineInventory && !inventoryReviewConfirmed) || Boolean(handoverTarget.inventoryFinalDeadlineAt && Date.parse(handoverTarget.inventoryFinalDeadlineAt) <= now)} onClick={() => void continueInventoryResolution()}>{submitting ? "Đang kiểm tra sức chứa…" : "Tiếp tục xử lý sai lệch"}</Button>}
+                  {inventoryStage === 3 && inventoryPublished && <Button onClick={() => setInventoryStage(4)}>Theo dõi xử lý sai lệch</Button>}
                 </div>
               ) : isReviewingCompletedStep ? (
                 <div className="flex flex-wrap items-center justify-end gap-3">
