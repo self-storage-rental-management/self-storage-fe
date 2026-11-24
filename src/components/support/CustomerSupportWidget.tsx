@@ -13,7 +13,6 @@ import { useCustomerChatPersistence } from '../../hooks/useCustomerChatPersisten
 import { ApiClientError } from '../../services/apiClient'
 import { getSupportTicket } from '../../services/supportApi'
 import { useSupportUnread } from '../../hooks/useSupportMessageReads'
-import { useMovableChatLauncher } from '../../hooks/useMovableChatLauncher'
 
 export type ChatOpenRequest = { request: number; ticketId?: string; target?: SupportRecordTarget }
 
@@ -58,10 +57,81 @@ function WidgetSession({ actorId, initialSession, onReload, openRequest }: { act
   const panelId = useId()
   const titleId = useId()
   const launcher = useRef<HTMLButtonElement>(null)
-  const launcherProps = useMovableChatLauncher(() => { setStarted(true); setOpen(true) })
   const closeButton = useRef<HTMLButtonElement>(null)
   const consumedRequest = useRef<number | undefined>(undefined)
   const [openError, setOpenError] = useState<string>()
+  const [btnPos, setBtnPos] = useState<{ x: number; y: number } | null>(() => {
+    if (typeof window === 'undefined') return null
+    try {
+      const saved = localStorage.getItem('storagehub_chat_btn_pos') || sessionStorage.getItem('storagehub_chat_btn_pos')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (typeof parsed?.x === 'number' && typeof parsed?.y === 'number') {
+          return {
+            x: Math.max(12, Math.min((window.innerWidth || 1024) - 60, parsed.x)),
+            y: Math.max(12, Math.min((window.innerHeight || 768) - 60, parsed.y)),
+          }
+        }
+      }
+    } catch {}
+    return null
+  })
+  const dragRef = useRef<{ startX: number; startY: number; initialX: number; initialY: number } | null>(null)
+  const isDraggingRef = useRef(false)
+  const [isDragging, setIsDragging] = useState(false)
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.button !== 0 && e.pointerType === 'mouse') return
+    const rect = launcher.current?.getBoundingClientRect()
+    if (!rect) return
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      initialX: rect.left,
+      initialY: rect.top,
+    }
+    isDraggingRef.current = false
+
+    const onPointerMove = (ev: PointerEvent) => {
+      if (!dragRef.current) return
+      const dx = ev.clientX - dragRef.current.startX
+      const dy = ev.clientY - dragRef.current.startY
+      if (!isDraggingRef.current && Math.hypot(dx, dy) > 4) {
+        isDraggingRef.current = true
+        setIsDragging(true)
+      }
+      if (isDraggingRef.current) {
+        const nextX = Math.max(12, Math.min((window.innerWidth || 1024) - 60, dragRef.current.initialX + dx))
+        const nextY = Math.max(12, Math.min((window.innerHeight || 768) - 60, dragRef.current.initialY + dy))
+        setBtnPos({ x: nextX, y: nextY })
+      }
+    }
+
+    const onPointerUp = () => {
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('pointercancel', onPointerUp)
+      dragRef.current = null
+      if (isDraggingRef.current) {
+        setIsDragging(false)
+        setBtnPos(current => {
+          if (current) {
+            try {
+              localStorage.setItem('storagehub_chat_btn_pos', JSON.stringify(current))
+              sessionStorage.setItem('storagehub_chat_btn_pos', JSON.stringify(current))
+            } catch {}
+          }
+          return current
+        })
+        setTimeout(() => { isDraggingRef.current = false }, 80)
+      }
+    }
+
+    window.addEventListener('pointermove', onPointerMove, { passive: true })
+    window.addEventListener('pointerup', onPointerUp)
+    window.addEventListener('pointercancel', onPointerUp)
+  }
+
   useEffect(() => {
     if (!openRequest || consumedRequest.current === openRequest.request || staffLocked) return
     consumedRequest.current = openRequest.request
@@ -87,10 +157,17 @@ function WidgetSession({ actorId, initialSession, onReload, openRequest }: { act
   const hide = () => { setOpen(false) }
 
   return createPortal(<>
-    <button {...launcherProps} ref={launcher} type="button" aria-label="Mở chat hỗ trợ"
+    <button ref={launcher} type="button" aria-label="Mở chat hỗ trợ" title="Nhấn để mở chat · Kéo để di chuyển vị trí tự do"
       aria-expanded={open} aria-controls={started ? panelId : undefined} aria-haspopup="dialog"
       hidden={open} data-expanded={open} aria-hidden={open} inert={open}
-      className="support-chat-launcher fixed bottom-5 right-5 z-40 flex h-12 w-12 touch-none cursor-grab select-none items-center justify-center rounded-full border border-[#a8d1b8] bg-[#c2e2cf] text-[#335b44] shadow-lg shadow-stone-900/10 hover:bg-[#aed7bf] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#659c7c] active:cursor-grabbing sm:bottom-6 sm:right-6">
+      onPointerDown={handlePointerDown}
+      onClick={() => {
+        if (isDraggingRef.current) return
+        setStarted(true)
+        setOpen(true)
+      }}
+      style={btnPos ? { left: `${btnPos.x}px`, top: `${btnPos.y}px`, bottom: 'auto', right: 'auto' } : undefined}
+      className={`support-chat-launcher fixed ${btnPos ? '' : 'bottom-5 right-5 sm:bottom-6 sm:right-6'} z-40 flex h-12 w-12 touch-none select-none items-center justify-center rounded-full border border-[#a8d1b8] bg-[#c2e2cf] text-[#335b44] shadow-lg shadow-stone-900/10 transition-transform duration-75 hover:bg-[#aed7bf] ${isDragging ? 'cursor-grabbing scale-105 shadow-2xl ring-2 ring-[#659c7c]/50' : 'cursor-grab hover:scale-105'} focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#659c7c]`}>
       <ChatIcon className="h-6 w-6" />
       {unreadCount > 0 && <span aria-label={`${unreadCount} tin chưa đọc`} className="absolute -right-1 -top-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-[#335b44] px-1 text-[10px] font-semibold text-white">{Math.min(unreadCount, 99)}</span>}
     </button>
