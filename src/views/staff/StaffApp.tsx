@@ -37,7 +37,6 @@ import StaffCheckInOperationsPanel from "./StaffCheckInOperationsPanel"
 import StaffCredentialReissuePanel from "./StaffCredentialReissuePanel"
 import StaffMaintenanceOperationsPanel from "./StaffMaintenanceOperationsPanel"
 import StaffRenewalOperationsApiPanel from "./StaffRenewalOperationsApiPanel"
-import StaffUnitReleasePanel from "./StaffUnitReleasePanel"
 import StaffDailyTaskQueue from "./StaffDailyTaskQueue"
 import RecoveryTaskDetail from "../rental-api/RecoveryTaskDetail"
 import ReturnApiPanel from "../return-api/ReturnApiPanel"
@@ -878,9 +877,6 @@ export default function StaffApp({
     },
 
     ...(isApiAuthenticated() ? [{ id: "renewal-signing", label: "Ký gia hạn", icon: Icon.policy, group: "Vận hành", permission: "renewals:operate" as const }] : []),
-    ...(isApiAuthenticated() ? [
-      { id: "unit-release", label: "Giải phóng kho hủy", icon: Icon.box, group: "Vận hành", permission: "checkins:read" as const },
-    ] : []),
 
     {
       id: "support",
@@ -2997,7 +2993,6 @@ export default function StaffApp({
 
       {/* ── CHECK-IN / HANDOVER ───────────────────────────────── */}
       {page === "checkin" && <StaffCheckInOperationsPanel showToast={showToast} />}
-      {page === "unit-release" && isApiAuthenticated() && <StaffUnitReleasePanel showToast={showToast} />}
       {page === "credentials" && isApiAuthenticated() && <StaffCredentialReissuePanel showToast={showToast} />}
 
       {/* ── RETURN INSPECTION ────────────────────────────────── */}

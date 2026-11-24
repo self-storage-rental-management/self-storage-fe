@@ -25,9 +25,31 @@ export function paymentHistoryTimestamp(value: string | null) {
   return formatCustomerDateTime(new Date(value))
 }
 
+export function formatCompactPaymentCode(value: string | null | undefined): string {
+  if (!value) return "—"
+  const trimmed = value.trim()
+  const cleaned = trimmed.replace(
+    /^(SIMULATED-|MANUAL-RENTAL-|MANUAL-|PAY-RNW-BAL-|RET-BAL-|TM-)/i,
+    "",
+  )
+  return cleaned.slice(0, 8)
+}
+
+export function paymentStatusBadgeClass(status: string, label: string): string {
+  const isSuccess =
+    ["PAID", "SUCCEEDED", "REFUNDED", "SETTLED", "PARTIALLY_REFUNDED"].includes(status) ||
+    ["Thanh toán thành công", "Đã hoàn", "Đã đối trừ", "Hoàn tất", "Đã hoàn tiền toàn bộ", "Đã hoàn tiền một phần"].includes(label)
+  const isFailure =
+    ["FAILED", "CANCELLED", "EXPIRED"].includes(status) ||
+    ["Thanh toán thất bại", "Giao dịch đã hủy", "Phiên thanh toán hết hạn"].includes(label)
+  if (isSuccess) return "bg-emerald-700 text-white"
+  if (isFailure) return "bg-red-100 text-red-800"
+  return "bg-amber-100 text-amber-900"
+}
+
 function ShortCode({ value }: { value: string }) {
   const [copied, setCopied] = useState(false)
-  const compact = value.startsWith("SIMULATED-") ? value.slice(10, 18) : value.slice(0, 8)
+  const compact = formatCompactPaymentCode(value)
   return <span className="group inline-flex items-center gap-1.5 whitespace-nowrap font-mono text-xs text-stone-700" title={value}>
     #{compact}
     <button type="button" className="rounded p-0.5 text-stone-500 hover:bg-stone-100 hover:text-stone-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-500 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100" aria-label={`Sao chép mã ${value}`} title={copied ? "Đã sao chép" : "Sao chép mã đầy đủ"} onClick={async () => {
@@ -171,40 +193,60 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
         <Button variant={historyFilter === 'settlement' ? 'primary' : 'outline'} onClick={() => setHistoryFilter('settlement')}>Quyết toán</Button>
       </div>
       <Card>
-        <Table tableClassName="min-w-[1120px]">
+        <Table tableClassName="min-w-[1120px] table-fixed [&_td]:align-middle [&_th]:align-middle [&_td]:py-3.5">
           <Thead>
             <tr>
-              <Th>Mã Giao Dịch</Th>
-              <Th>Hồ Sơ</Th>
-              <Th>Nội Dung</Th>
-              <Th>Phương Thức</Th>
-              <Th className="text-right">Số Tiền</Th>
-              <Th className="text-center">Trạng Thái</Th>
-              <Th>Thao tác</Th>
+              <Th className="w-[130px]">Mã Giao Dịch</Th>
+              <Th className="w-[210px]">Hồ Sơ</Th>
+              <Th className="w-[230px]">Nội Dung</Th>
+              <Th className="w-[120px]">Phương Thức</Th>
+              <Th className="w-[140px] text-right">Số Tiền</Th>
+              <Th className="w-[170px] text-center">Trạng Thái</Th>
+              <Th className="w-[120px] text-center">Thao Tác</Th>
             </tr>
           </Thead>
           <Tbody>
-            {visibleEntries.map((entry) => (
-              <Tr key={entry.id}>
-                <Td>
-                  <ShortCode value={entry.paymentReference || entry.reservationPayment?.transactionReference || entry.id} />
-                  <p className="mt-0.5 text-[10px] text-stone-400">{paymentHistoryTimestamp(entry.timestamp)}</p>
-                </Td>
-                <Td><PaymentHistoryDossier entry={entry} onOpenRentals={onOpenRentals} /></Td>
-                <Td>{paymentCategories[entry.category]}</Td>
-                <Td><span className="whitespace-nowrap text-xs text-stone-600">{formatHistoryPaymentMethod(entry.method)}</span></Td>
-                <Td className="text-right"><b className="whitespace-nowrap text-stone-950">{historyAmount(entry.amount)}</b>
-                  {isRenewalHistoryEntry(entry) && entry.statusSource === 'RENEWAL_PROJECTION' && entry.refundedAmount != null && entry.refundedAmount > 0 && <p className="mt-1 text-xs text-stone-500">Đã hoàn: {historyAmount(entry.refundedAmount)}</p>}
-                </Td>
-                <Td>
-                  <div className="space-y-2">
-                    <span className={"inline-flex rounded px-2.5 py-1 text-xs font-bold " + (["PAID", "REFUNDED", "SETTLED"].includes(entry.status) ? "bg-emerald-700 text-white" : ["FAILED", "CANCELLED"].includes(entry.status) ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-900")}>{statusLabel(entry)}</span>
-                    {entry.reservationPayment?.invoiceNumber && <p className="font-mono text-[10px] text-stone-500">Hóa đơn: {entry.reservationPayment.invoiceNumber} · {entry.reservationPayment.invoiceStatus || "DRAFT"}</p>}
-                  </div>
-                </Td>
-                <Td>{!loading && !error && canViewCustomerHistoryReceipt(entry) && <Button variant="outline" size="sm" onClick={() => setReceiptId(entry.id)}>Xem biên lai</Button>}</Td>
-              </Tr>
-            ))}
+            {visibleEntries.map((entry) => {
+              const label = statusLabel(entry)
+              return (
+                <Tr key={entry.id}>
+                  <Td>
+                    <ShortCode value={entry.paymentReference || entry.reservationPayment?.transactionReference || entry.id} />
+                    <p className="mt-0.5 text-[10px] text-stone-400">{paymentHistoryTimestamp(entry.timestamp)}</p>
+                  </Td>
+                  <Td><PaymentHistoryDossier entry={entry} onOpenRentals={onOpenRentals} /></Td>
+                  <Td><span className="text-sm text-stone-800">{paymentCategories[entry.category]}</span></Td>
+                  <Td><span className="whitespace-nowrap text-xs text-stone-600">{formatHistoryPaymentMethod(entry.method)}</span></Td>
+                  <Td className="text-right">
+                    <b className="whitespace-nowrap text-stone-950">{historyAmount(entry.amount)}</b>
+                    {isRenewalHistoryEntry(entry) && entry.statusSource === 'RENEWAL_PROJECTION' && entry.refundedAmount != null && entry.refundedAmount > 0 && (
+                      <p className="mt-0.5 text-xs text-stone-500">Đã hoàn: {historyAmount(entry.refundedAmount)}</p>
+                    )}
+                  </Td>
+                  <Td className="text-center">
+                    <div className="flex flex-col items-center justify-center gap-1">
+                      <span className={`inline-flex whitespace-nowrap rounded px-2.5 py-1 text-xs font-bold ${paymentStatusBadgeClass(entry.status, label)}`}>
+                        {label}
+                      </span>
+                      {entry.reservationPayment?.invoiceNumber && (
+                        <p className="max-w-[150px] truncate font-mono text-[10px] text-stone-500" title={`Hóa đơn: ${entry.reservationPayment.invoiceNumber} · ${entry.reservationPayment.invoiceStatus || "DRAFT"}`}>
+                          Hóa đơn: {entry.reservationPayment.invoiceNumber}
+                        </p>
+                      )}
+                    </div>
+                  </Td>
+                  <Td className="text-center">
+                    {!loading && !error && canViewCustomerHistoryReceipt(entry) ? (
+                      <Button variant="outline" size="sm" onClick={() => setReceiptId(entry.id)}>
+                        Xem biên lai
+                      </Button>
+                    ) : (
+                      <span className="text-xs text-stone-400">—</span>
+                    )}
+                  </Td>
+                </Tr>
+              )
+            })}
             {!loading && !error && !visibleEntries.length && (
               <tr><td colSpan={7}><p className="py-6 text-center text-sm text-stone-500">Chưa có giao dịch trong nhóm đã chọn.</p></td></tr>
             )}

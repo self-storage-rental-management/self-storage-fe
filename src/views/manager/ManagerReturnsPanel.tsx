@@ -26,9 +26,10 @@ interface ManagerReturnsPanelProps {
   showToast: (msg: string) => void
   sb: (v: string) => React.ReactNode
   onCreateMaintenanceWork?: (draft: { referenceId: string; title: string; notes: string }) => void
+  onNavigateToComplaints?: (tab?: 'payment' | 'returns') => void
 }
 
-export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaintenanceWork }: ManagerReturnsPanelProps) {
+export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaintenanceWork, onNavigateToComplaints }: ManagerReturnsPanelProps) {
   const {
     returns: legacyReturns,
     users,
@@ -55,7 +56,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
   const formatManagerMoney = (value?: number) => useApi
     ? value == null || !Number.isFinite(value) ? 'Chưa xác định' : formatVnd(value)
     : legacyManagerMoney(value)
-  const [returnTab, setReturnTab] = useState(() => storeReturns.some(r => r.status === 'disputed' && isManagerFacilityVisible(user, r.facilityId, r.facilityName)) ? 'disputed' : 'All')
+  const [returnTab, setReturnTab] = useState('All')
   const [returnSearch, setReturnSearch] = useState('')
   const [damageFilter, setDamageFilter] = useState('all')
   const [settlementFilter, setSettlementFilter] = useState('all')
@@ -532,6 +533,32 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
         Quản lý cơ sở phân công nhân viên kiểm tra nghiệm thu hiện trường, xem xét báo cáo hư hỏng để kích hoạt sửa chữa bảo trì kho, và xác nhận hoàn tất giải phóng gian kho về trạng thái khả dụng.
       </ManagerActionNotice>
 
+      {/* Disputed Cases Unified Notice Banner */}
+      {disputedCount > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-900 text-sm shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-3 w-3 relative flex-shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-600"></span>
+            </span>
+            <div>
+              <span className="font-semibold">Cơ sở có {disputedCount} hồ sơ đang khiếu nại quyết toán.</span>
+              <span className="text-rose-700 ml-1">Đã được chuyển tập trung sang trang Quản lý khiếu nại để giải quyết.</span>
+            </div>
+          </div>
+          {onNavigateToComplaints && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-rose-400 bg-white hover:bg-rose-100 text-rose-900 font-medium whitespace-nowrap self-start sm:self-auto"
+              onClick={() => onNavigateToComplaints('returns')}
+            >
+              Đến trang Quản lý khiếu nại →
+            </Button>
+          )}
+        </div>
+      )}
+
       {/* Filter Tabs & Search Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <Tabs
@@ -540,7 +567,6 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
             `Chờ nghiệm thu (${awaitingInspectionCount})`,
             `Đã kiểm tra (${inspectedCount})`,
             `Cần bảo trì (${needsMaintenanceCount})`,
-            `Khiếu nại (${disputedCount})`,
             `Đã hoàn tất (${completedCount})`
           ]}
           active={
@@ -548,7 +574,6 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
             returnTab === 'awaiting_inspection' ? `Chờ nghiệm thu (${awaitingInspectionCount})` :
             returnTab === 'inspected' ? `Đã kiểm tra (${inspectedCount})` :
             returnTab === 'needs_maintenance' ? `Cần bảo trì (${needsMaintenanceCount})` :
-            returnTab === 'disputed' ? `Khiếu nại (${disputedCount})` :
             returnTab === 'completed' ? `Đã hoàn tất (${completedCount})` : `Tất cả (${facilityReturns.length})`
           }
           onChange={val => {
@@ -556,7 +581,6 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
             else if (val.startsWith('Chờ nghiệm thu')) setReturnTab('awaiting_inspection')
             else if (val.startsWith('Đã kiểm tra')) setReturnTab('inspected')
             else if (val.startsWith('Cần bảo trì')) setReturnTab('needs_maintenance')
-            else if (val.startsWith('Khiếu nại')) setReturnTab('disputed')
             else if (val.startsWith('Đã hoàn tất')) setReturnTab('completed')
           }}
         />
@@ -768,10 +792,14 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                             size="sm"
                             className="bg-rose-600 hover:bg-rose-700 text-white font-medium whitespace-nowrap"
                             onClick={() => {
-                              openDisputeReview(ret)
+                              if (onNavigateToComplaints) {
+                                onNavigateToComplaints('returns')
+                              } else {
+                                openDisputeReview(ret)
+                              }
                             }}
                           >
-                            {'Xử lý khiếu nại'}
+                            {'Xử lý khiếu nại →'}
                           </Button>
                         )}
 

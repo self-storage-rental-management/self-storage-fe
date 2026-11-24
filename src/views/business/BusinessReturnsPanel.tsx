@@ -44,6 +44,18 @@ export const statusLabels: Record<string, string> = {
   cancelled: 'Đã hủy yêu cầu',
 }
 
+export const returnTypeLabels: Record<string, string> = {
+  NORMAL: 'Đúng hạn / Thông thường',
+  EARLY_RETURN: 'Trả kho trước hạn',
+  CANCELLED_IN_SETUP: 'Hủy trong thời gian chuẩn bị',
+  RETURN_IN_SETUP: 'Trả trong thời gian chuẩn bị',
+}
+
+export const settlementModeLabels: Record<string, string> = {
+  AUTO: 'Tự động (Hệ thống tính)',
+  MANUAL_REVIEW: 'Thẩm định thủ công',
+}
+
 export const statusBadgeVariant = (status: string) => {
   switch (status) {
     case 'disputed':
@@ -1292,14 +1304,15 @@ export default function BusinessReturnsPanel({ user }: Props) {
           open={modalOpen}
           onClose={() => { if (!submitting && !refundLock.current) setModalOpen(false) }}
           title={`Hồ sơ trả kho: ${selectedItem.unitNumber} (${selectedItem.facilityName})`}
+          size="2xl"
         >
           <div className="space-y-5 text-sm max-h-[80vh] overflow-y-auto pr-1">
             {/* 1. THANH TIẾN TRÌNH 5 BƯỚC QUY TRÌNH CHUẨN HOÁ */}
             <div className="p-3.5 bg-stone-50 rounded-xl border border-stone-200">
               <p className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-2.5">
-                Tiến Trình Quy Trình Nghiệp Vụ (Lifecycle Progress)
+                Tiến trình quy trình nghiệp vụ trả kho
               </p>
-              <div className="grid grid-cols-5 gap-1.5 text-center">
+              <div className="grid grid-cols-5 gap-1.5 sm:gap-2.5 text-center">
                 {[
                   {
                     step: 1,
@@ -1422,11 +1435,16 @@ export default function BusinessReturnsPanel({ user }: Props) {
             {activeTab === 'overview' && (
               <div className="space-y-4">
                 {/* Thông tin hồ sơ */}
-                <div className="grid grid-cols-2 gap-3 p-3 bg-stone-50 rounded-xl border border-stone-200">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5 p-4 bg-stone-50 rounded-xl border border-stone-200">
                   <div>
                     <p className="text-xs text-stone-500 font-medium">Khách hàng</p>
                     <p className="font-bold text-stone-900">{selectedItem.customerName}</p>
                     <p className="text-xs text-stone-500 font-mono mt-0.5">{selectedItem.customerPhone || '0901 888 999'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-stone-500 font-medium">Gian kho & Cơ sở</p>
+                    <p className="font-bold text-stone-900 font-mono">{selectedItem.unitNumber}</p>
+                    <p className="text-xs text-stone-500 truncate mt-0.5">{selectedItem.facilityName}</p>
                   </div>
                   <div>
                     <p className="text-xs text-stone-500 font-medium">Ngày hẹn trả kho</p>
@@ -1434,21 +1452,27 @@ export default function BusinessReturnsPanel({ user }: Props) {
                   </div>
                   <div>
                     <p className="text-xs text-stone-500 font-medium">Trạng thái hồ sơ</p>
-                    <Badge variant={statusBadgeVariant(selectedItem.status)}>
-                      {statusLabels[selectedItem.status] || selectedItem.status}
-                    </Badge>
+                    <div className="mt-0.5">
+                      <Badge variant={statusBadgeVariant(selectedItem.status)}>
+                        {statusLabels[selectedItem.status] || selectedItem.status}
+                      </Badge>
+                    </div>
                   </div>
                   <div>
                     <p className="text-xs text-stone-500 font-medium">Phân loại trả kho</p>
-                    <p className="font-bold text-stone-900">{selectedItem.returnType || 'Chưa phân loại'}</p>
+                    <p className="font-bold text-stone-900">
+                      {returnTypeLabels[selectedItem.returnType || ''] || selectedItem.returnType || 'Chưa phân loại'}
+                    </p>
                   </div>
                   <div>
-                    <p className="text-xs text-stone-500 font-medium">Cách quyết toán</p>
-                    <p className="font-bold text-stone-900">{selectedItem.settlementMode || 'AUTO'}</p>
+                    <p className="text-xs text-stone-500 font-medium">Phương thức quyết toán</p>
+                    <p className="font-bold text-stone-900">
+                      {settlementModeLabels[selectedItem.settlementMode || ''] || selectedItem.settlementMode || 'Tự động (Hệ thống tính)'}
+                    </p>
                   </div>
                   <div>
                     <p className="text-xs text-stone-500 font-medium">Tiền cọc an ninh ban đầu</p>
-                    <p className="font-bold text-stone-900">{formatAmount(selectedItem.depositAmount)}</p>
+                    <p className="font-bold text-emerald-800 font-mono">{formatAmount(selectedItem.depositAmount)}</p>
                   </div>
                 </div>
 
@@ -1550,14 +1574,14 @@ export default function BusinessReturnsPanel({ user }: Props) {
                 )}
 
                 {selectedItem.activeReturnPolicy?.recalculationRequired && (
-                  <div className="mb-3 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950">
-                    <p className="font-bold">Tính lại ưu đãi do trả kho sau khi ACTIVE</p>
-                    <p className="mt-1">
-                      Đã đủ {selectedItem.activeReturnPolicy.completedRentalMonths} tháng, áp dụng tier {selectedItem.activeReturnPolicy.pricingTierMonths ?? 'niêm yết'}.
+                  <div className="mb-3 rounded-xl border border-blue-200 bg-blue-50 p-3.5 text-xs text-blue-950">
+                    <p className="font-bold text-sm">Tính lại ưu đãi do trả kho trước hạn sau khi kích hoạt hợp đồng</p>
+                    <p className="mt-1 leading-relaxed">
+                      Đã sử dụng {selectedItem.activeReturnPolicy.completedRentalMonths} tháng (áp dụng mức giá gói {selectedItem.activeReturnPolicy.pricingTierMonths != null ? `${selectedItem.activeReturnPolicy.pricingTierMonths} tháng` : 'niêm yết'}).
                       Phí chấm dứt sớm: <b>{formatAmount(selectedItem.activeReturnPolicy.earlyTerminationFee)}</b> ·
-                      Phí sử dụng/notice: <b>{formatAmount(selectedItem.activeReturnPolicy.totalRentalCharge - selectedItem.activeReturnPolicy.earlyTerminationFee)}</b> ·
+                      Phí thời gian sử dụng & báo trước: <b>{formatAmount(selectedItem.activeReturnPolicy.totalRentalCharge - selectedItem.activeReturnPolicy.earlyTerminationFee)}</b> ·
                       Hoàn tiền thuê dự kiến: <b>{formatAmount(selectedItem.activeReturnPolicy.rentalRefundAmount)}</b>.
-                      Tiền đảm bảo kho vẫn đối soát riêng.
+                      (Tiền đảm bảo kho vẫn được đối soát riêng bên dưới).
                     </p>
                   </div>
                 )}
@@ -1596,11 +1620,11 @@ export default function BusinessReturnsPanel({ user }: Props) {
                     </div>
                     {selectedItem.activeReturnPolicy?.recalculationRequired && <>
                       <div className="flex justify-between p-2 border-b border-stone-100 text-stone-600 text-xs">
-                        <span>• Phí tính lại khi trả sớm sau ACTIVE</span>
+                        <span>• Phí thuê thực tế khi trả kho trước hạn</span>
                         <span className="text-red-600 font-mono">-{formatAmount(selectedItem.activeReturnPolicy.totalRentalCharge)}</span>
                       </div>
                       <div className="flex justify-between p-2 border-b border-stone-100 text-stone-600 text-xs">
-                        <span>• Hoàn tiền thuê theo bảng giá đã lưu</span>
+                        <span>• Tiền thuê hoàn lại dự kiến theo chính sách</span>
                         <span className="text-emerald-700 font-mono">+{formatAmount(selectedItem.activeReturnPolicy.rentalRefundAmount)}</span>
                       </div>
                     </>}
@@ -1924,8 +1948,8 @@ export default function BusinessReturnsPanel({ user }: Props) {
                       onChange={(e) => setProposedUnit(e.target.value as any)}
                       className="w-full px-2 py-1 border border-stone-300 rounded bg-white text-xs"
                     >
-                      <option value="available">Sẵn sàng (Available)</option>
-                      <option value="maintenance">Bảo trì (Maintenance)</option>
+                      <option value="available">Sẵn sàng đưa vào sử dụng</option>
+                      <option value="maintenance">Bảo trì / Sửa chữa kho</option>
                     </select>
                   </div>
                 </div>
