@@ -635,12 +635,103 @@ export default function CustomerReservationCard({ reservation: r, facilityName, 
         {detail && <PackagingInspectionResult detail={detail} />}
         {detail && <InventoryLineInspectionResult detail={detail} />}
         {detail && <InventoryResolutionNotice detail={detail} now={now} submitting={resolvingInventory} onResolve={(decision, scheduledDate) => void resolveInventoryDecision(decision, scheduledDate)} />}
-        {documentAvailable && <Button variant="outline" size="sm" className="reservation-action reservation-action-document min-h-10 w-full justify-center" disabled={busy} onClick={() => void prepareBookingDocument()}>{busy ? 'Đang chuẩn bị…' : 'Xem phiếu giữ kho'}</Button>}
-        {handoverDocumentsAvailable && <Button variant="outline" size="sm" className="min-h-10 w-full justify-center" disabled={busy} onClick={() => void loadHandoverDocuments()}>{busy ? 'Đang tải…' : 'Xem hợp đồng đã ký'}</Button>}
-        {onRequestSupport && <Button type="button" variant="outline" size="sm" className="min-h-10 w-full justify-center" onClick={onRequestSupport}>Hỗ trợ đơn này</Button>}
         {['PAYMENT_GRACE', 'PAYMENT_REVIEW'].includes(r.status) && <CustomerPaymentComplaint reservation={r} complaintExpiresAt={detail?.complaintExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />}
-        {APPOINTMENT_EDITABLE_STATUSES.some(status => status === r.status) && <Button variant="ghost" size="sm" className="reservation-action reservation-action-cancel" onClick={() => setCancelConfirmOpen(true)}>Hủy giữ kho</Button>}
-        {['EXPIRED', 'COMPLETED'].includes(r.status) && onDelete && <Button variant="danger" size="sm" className="min-h-10 w-full justify-center" onClick={() => setDeleteConfirmOpen(true)}>Xóa đơn đặt giữ kho</Button>}
+          {/* Menu ⋮ (More actions) */}
+          <div className="relative inline-block">
+            <button
+              type="button"
+              aria-label="Thao tác khác"
+              title="Thao tác khác (Xem biên lai, hợp đồng, hủy đơn...)"
+              aria-haspopup="menu"
+              aria-expanded={moreMenuOpen}
+              onClick={() => setMoreMenuOpen(!moreMenuOpen)}
+              className="flex h-8 items-center gap-1 px-2.5 rounded-lg border border-stone-300 bg-white text-stone-700 hover:bg-stone-100 hover:text-stone-900 transition-colors text-xs font-semibold"
+            >
+              <span className="text-sm font-bold leading-none select-none text-stone-500">⋮</span>
+              <span>Thao tác</span>
+              <span className={`text-[9px] text-stone-400 transition-transform ${moreMenuOpen ? 'rotate-180' : ''}`}>▼</span>
+            </button>
+
+            <div
+              ref={moreMenuRef}
+              role="menu"
+              aria-orientation="vertical"
+              className="absolute right-0 top-full z-30 mt-1 min-w-[210px] rounded-xl border border-stone-200 bg-white py-1.5 shadow-xl text-xs"
+              hidden={!moreMenuOpen}
+            >
+              {documentAvailable && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center px-4 py-2.5 text-left font-medium text-stone-700 hover:bg-stone-50 hover:text-stone-900 transition-colors"
+                  disabled={busy}
+                  onClick={() => { setMoreMenuOpen(false); void prepareBookingDocument() }}
+                >
+                  <span>{busy ? 'Đang chuẩn bị…' : 'Xem phiếu giữ kho'}</span>
+                </button>
+              )}
+
+              {handoverDocumentsAvailable && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center px-4 py-2.5 text-left font-medium text-stone-700 hover:bg-stone-50 hover:text-stone-900 transition-colors"
+                  disabled={busy}
+                  onClick={() => { setMoreMenuOpen(false); void loadHandoverDocuments() }}
+                >
+                  <span>{busy ? 'Đang tải…' : 'Xem hợp đồng đã ký'}</span>
+                </button>
+              )}
+
+              {(remainingPayment || (detail?.payments && detail.payments.some(p => p.paymentStatus === 'PAID'))) && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center px-4 py-2.5 text-left font-medium text-stone-700 hover:bg-stone-50 hover:text-stone-900 transition-colors"
+                  onClick={() => {
+                    setMoreMenuOpen(false)
+                    const p = remainingPayment || detail?.payments?.find(item => item.paymentStatus === 'PAID')
+                    if (p) setPaymentReceipt(p)
+                  }}
+                >
+                  <span>Xem biên lai thanh toán</span>
+                </button>
+              )}
+
+              {onRequestSupport && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center px-4 py-2.5 text-left font-medium text-stone-700 hover:bg-stone-50 hover:text-stone-900 transition-colors"
+                  onClick={() => { setMoreMenuOpen(false); onRequestSupport() }}
+                >
+                  <span>Yêu cầu hỗ trợ</span>
+                </button>
+              )}
+
+              {APPOINTMENT_EDITABLE_STATUSES.some(status => status === r.status) && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center border-t border-stone-100 px-4 py-2.5 text-left font-medium text-red-600 hover:bg-red-50 transition-colors"
+                  onClick={() => { setMoreMenuOpen(false); setCancelConfirmOpen(true) }}
+                >
+                  <span>Hủy giữ kho</span>
+                </button>
+              )}
+
+              {['EXPIRED', 'COMPLETED'].includes(r.status) && onDelete && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center border-t border-stone-100 px-4 py-2.5 text-left font-medium text-red-600 hover:bg-red-50 transition-colors"
+                  onClick={() => { setMoreMenuOpen(false); setDeleteConfirmOpen(true) }}
+                >
+                  <span>Xóa đơn đặt giữ kho</span>
+                </button>
+              )}
+            </div>
+          </div>
       </div>
       </div>
       <button type="button" className="text-sm font-semibold text-amber-800 underline underline-offset-4" aria-expanded={detailsOpen} aria-controls={`reservation-details-${r.id}`} onClick={() => setDetailsOpen(!detailsOpen)}>{detailsOpen ? 'Thu gọn chi tiết' : 'Xem chi tiết đơn và báo giá'}</button>
