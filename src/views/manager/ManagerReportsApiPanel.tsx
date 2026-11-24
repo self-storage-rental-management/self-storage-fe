@@ -193,8 +193,7 @@ function ManagerReportsSession({ actor, facilityId, overview }: { actor: ApiActo
       />
     )}
     {summaryRead.loading ? <Card className="p-5" role="status">Đang tải báo cáo cơ sở...</Card> : summaryRead.error ? <Card className="flex flex-wrap items-center justify-between gap-3 p-5" role="alert"><p>{managerDisplayError(summaryRead.error)}</p><Button variant="outline" onClick={summaryRead.refresh}>Thử lại</Button></Card> : summary ? <>
-      <div className="grid min-w-0 grid-cols-2 gap-3 xl:grid-cols-3 2xl:grid-cols-6">
-        <ReportMetric title="Tỷ lệ lấp đầy" value={`${summary.occupancyRate}%`} detail="Tỷ lệ gian kho đang được sử dụng" />
+      <div className="grid min-w-0 grid-cols-2 gap-3 xl:grid-cols-3 2xl:grid-cols-5">
         <ReportMetric title="Tiền thuê dự kiến/tháng" value={formatVndAmount(summary.monthlyRecurringRevenue)} detail="Theo các hợp đồng đang hiệu lực" />
         <ReportMetric
           title="Tiền đã thu"

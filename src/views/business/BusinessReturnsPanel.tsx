@@ -51,6 +51,7 @@ export const returnTypeLabels: Record<string, string> = {
   EARLY_RETURN: 'Trả kho trước hạn',
   CANCELLED_IN_SETUP: 'Hủy trong thời gian chuẩn bị',
   RETURN_IN_SETUP: 'Trả trong thời gian chuẩn bị',
+  INVENTORY_MISMATCH: 'Trả kho do sai lệch kiểm kê',
 }
 
 export const settlementModeLabels: Record<string, string> = {
@@ -120,6 +121,43 @@ const SAMPLE_RETURNS: Array<{
   legacyPricingSnapshotAvailable?: boolean
   legacyPricingEvidenceFileId?: string | null
 }> = [
+  {
+    id: 'sample-ret-gemini',
+    rentalId: 'sample-rnt-gemini',
+    unitNumber: 'HCM-BN-F01-S-002',
+    facilityName: 'Kho Bình Nước',
+    customerName: 'gemini 3.8',
+    customerPhone: '0901 888 999',
+    scheduledDate: '2026-11-26',
+    status: 'requested',
+    returnType: 'EARLY_RETURN',
+    settlementMode: 'AUTO',
+    depositAmount: 1200000,
+    totalDeductions: 0,
+    netRefundAmount: 1200000,
+    amountDueFromCustomer: 0,
+    damageFee: 0,
+    cleaningFee: 0,
+    lostItemFee: 0,
+    overdueFee: 0,
+    outstandingFee: 0,
+    returnedKey: false,
+    returnedCard: false,
+    returnedLock: false,
+    inspectionNotes: 'Khách hàng gemini 3.8 xin thanh lý và trả kho sớm.',
+    customerDecisionNote: null,
+    managerResolutionNote: null,
+    proposedUnitStatus: 'available',
+    activeReturnPolicy: {
+      recalculationRequired: true,
+      completedRentalMonths: 1,
+      pricingTierMonths: 1,
+      earlyTerminationFee: 240000,
+      totalRentalCharge: 1200000,
+      rentalRefundAmount: 960000,
+      policySnapshot: null,
+    },
+  },
   {
     id: 'sample-ret-001',
     rentalId: 'sample-rnt-001',
@@ -1843,8 +1881,8 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                       onChange={(e) => setInspectProposedUnit(e.target.value as any)}
                       className="w-full px-2.5 py-1.5 border border-stone-300 rounded-lg bg-white text-xs"
                     >
-                      <option value="available">Sẵn sàng đón khách mới (Available)</option>
-                      <option value="maintenance">Cần bảo trì sửa chữa (Maintenance)</option>
+                      <option value="available">Sẵn sàng đón khách mới</option>
+                      <option value="maintenance">Cần bảo trì sửa chữa</option>
                     </select>
                   </div>
                 </div>
@@ -2003,7 +2041,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                 </p>
 
                 <div className="p-3 bg-white rounded-lg border border-purple-200 flex items-center justify-between">
-                  <span className="text-xs text-stone-600 font-medium">Số tiền cọc thực hoàn (Net Refund):</span>
+                  <span className="text-xs text-stone-600 font-medium">Số tiền cọc thực hoàn:</span>
                   <span className="text-base font-extrabold text-purple-900 font-mono">
                     {formatAmount(selectedItem.netRefundAmount)}
                   </span>

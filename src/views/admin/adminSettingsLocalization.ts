@@ -66,7 +66,7 @@ export const ITEM_DESCRIPTIONS: Record<string, string> = {
   emailAlerts: 'Tự động gửi email thông báo nhắc nợ định kỳ khi hóa đơn thuê kho chưa được thanh toán.',
   smsGateAlerts: 'Gửi tin nhắn SMS tức thì tới số điện thoại của quản lý cơ sở khi phát hiện có lượt mở cổng ngoài giờ quy định.',
   slackWebhook: 'Đường dẫn Webhook để gửi cảnh báo an ninh khẩn cấp và sự cố vận hành vào kênh Slack nội bộ.',
-  dailyDigest: 'Gửi email tổng hợp các chỉ số vận hành (tỉ lệ lấp đầy, doanh thu, đơn đặt mới) cho ban quản lý mỗi sáng.',
+  dailyDigest: 'Gửi email tổng hợp các chỉ số vận hành (công suất kho, doanh thu, đơn đặt mới) cho ban quản lý mỗi sáng.',
   maintenanceMode: 'Tạm khóa chức năng đặt kho mới và thanh toán trực tuyến để đội ngũ kỹ thuật nâng cấp hệ thống.',
   bannerNotice: 'Dòng thông báo nổi bật xuất hiện trên thanh đầu trang của trang chủ và cổng đặt kho công khai.',
 }
