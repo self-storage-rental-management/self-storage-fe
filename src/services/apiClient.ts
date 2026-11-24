@@ -109,9 +109,13 @@ function responseError(status: number, payload: unknown): ApiClientError {
     409: 'Hồ sơ đã thay đổi hoặc chưa đủ điều kiện. Vui lòng kiểm tra lại.',
     422: 'Vui lòng kiểm tra lại các mục đã nhập.',
   }
-  return new ApiClientError(messages[status] ?? 'Chưa thể thực hiện yêu cầu. Vui lòng thử lại sau.', {
+  const backendMessage = typeof error.message === 'string' && error.message.trim()
+    ? error.message
+    : undefined
+  const message = backendMessage ?? messages[status] ?? 'Chưa thể thực hiện yêu cầu. Vui lòng thử lại sau.'
+  return new ApiClientError(message, {
     status, code: typeof error.code === 'string' ? error.code : 'API_ERROR', details: error.details,
-    diagnosticMessage: typeof error.message === 'string' ? error.message : undefined,
+    diagnosticMessage: backendMessage ?? message,
   })
 }
 

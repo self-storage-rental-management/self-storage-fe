@@ -2788,6 +2788,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       visualTone={reservation.status === 'EXPIRED' ? 'expired' : reservation.status === 'COMPLETED' ? 'completed' : 'active'}
                       facilityName={reservation.facilitySnapshot?.name || facilities.find(item => item.id === reservation.facilityId)?.name || 'Chưa cập nhật cơ sở'}
                       unitTypeName={reservation.unitTypeSnapshot?.name || reservation.unitTypeName || unitTypes.find(item => item.id === reservation.unitTypeId)?.name || 'Chưa cập nhật loại kho'}
+                      onOpenReturns={() => navigateTo('rental-records')}
                       onRequestSupport={() => openRecordSupport({
                         linkedRecord: { type: 'RESERVATION', id: reservation.id },
                         label: `đơn đặt kho ${reservation.reservationCode}`,
