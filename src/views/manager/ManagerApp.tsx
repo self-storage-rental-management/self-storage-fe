@@ -182,8 +182,6 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     if (notification.type === 'PAYMENT' || notification.type === 'OVERDUE') return notification.type === 'OVERDUE' ? 'overdue-cases' : 'complaints'
     return 'dashboard'
   }
-    return 'dashboard'
-  }
   const managerApiNotifications: LayoutNotification[] = backendNotifications.map(notification => ({
     id: `api-notification-${notification.id}`,
     title: notification.title,

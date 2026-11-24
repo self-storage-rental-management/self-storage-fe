@@ -149,6 +149,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
   const awaitingInspectionCount = facilityReturns.filter(r => r.status === 'requested' || r.status === 'scheduled').length
   const inspectedCount = facilityReturns.filter(r => r.status === 'inspected' || r.status === 'awaiting_business_review' || r.status === 'awaiting_customer_confirmation').length
   const needsMaintenanceCount = facilityReturns.filter(r => (r.damageClassification && r.damageClassification !== 'no_damage') || r.proposedUnitStatus === 'maintenance').length
+  const disputedCount = facilityReturns.filter(r => r.status === 'disputed').length
 
   const filteredReturns = facilityReturns.filter(r => {
     const matchTab =
