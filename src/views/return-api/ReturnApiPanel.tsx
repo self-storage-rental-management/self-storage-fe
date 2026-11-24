@@ -57,14 +57,6 @@ const returnStatusOptions: Array<[ApiReturn['status'] | 'all', string]> = [
   ['completed', 'Đã hoàn tất'],
 ]
 
-function returnRecoveryCutoff(value: string | null | undefined) {
-  if (!value) return null
-  const at = new Date(value)
-  return Number.isFinite(at.getTime())
-    ? at.toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
-    : null
-}
-
 export function returnRecoveryCountdown(value: string | null | undefined, now = Date.now()) {
   if (!value) return null
   const deadline = Date.parse(value)
@@ -79,24 +71,8 @@ export function returnRecoveryCountdown(value: string | null | undefined, now = 
   return `Còn ${days} ngày ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
-function statusLabel(record: Pick<ApiReturn, 'status' | 'returnType'>) {
-  if (record.status === 'awaiting_business_review' && record.returnType === 'INVENTORY_MISMATCH') {
-    return 'Chờ quản lý cơ sở duyệt quyết toán'
-  }
-  if (record.status === 'awaiting_business_review') return 'Chờ Ban điều hành duyệt bảng giá cũ'
-  return labels[record.status]
-}
-
 export function ReturnSummary({ record, hideTerminationFee = false, hideHeader = false }: { record: ApiReturn; hideTerminationFee?: boolean; hideHeader?: boolean }) {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    if (!(['requested', 'scheduled'].includes(record.status) && record.recoveryEligibleAt)) return
-    const timer = window.setInterval(() => setNow(Date.now()), 1000)
-    return () => window.clearInterval(timer)
-  }, [record.status, record.recoveryEligibleAt])
   if (record.sourceType === "RECOVERY") return <RecoveryReturnSummary record={record} hideTerminationFee={hideTerminationFee} hideHeader={hideHeader} />
-  const inventoryMismatch = record.returnType === 'INVENTORY_MISMATCH'
-  const showFixedTerminationFee = !hideTerminationFee && !inventoryMismatch
   const badgeClass =
     record.status === 'disputed'
       ? 'bg-rose-100 text-rose-800 border border-rose-300 font-bold'
@@ -110,228 +86,38 @@ export function ReturnSummary({ record, hideTerminationFee = false, hideHeader =
         <>
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div><h4 className="text-lg font-bold text-stone-900">{record.unitNumber}</h4><p className="mt-1 text-sm text-stone-500">{record.facilityName}</p></div>
-            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${badgeClass}`}>{statusLabel(record)}</span>
+            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${badgeClass}`}>{labels[record.status]}</span>
           </div>
           <p className="text-sm text-stone-600">{'Ngày dự kiến trả: '}<strong className="text-stone-900">{rentalDate(record.scheduledDate)}</strong></p>
+          {/* Deadline/recovery signals carried by the return record. They state what is
+              automatic and what is not, so Staff never assumes the goods moved on their own. */}
+          {record.recoveryEligibleAt && <p role="status" className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-900">Hàng chưa được tự động di chuyển. Sau {rentalDate(record.recoveryEligibleAt)} hệ thống mới mở bước thu hồi.</p>}
+          {record.returnType === 'INVENTORY_MISMATCH' && <p className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-900">Hồ sơ kiểm kê sai lệch: trả kho bắt buộc từ ngày hôm sau, tính tiền sử dụng theo ngày.</p>}
+          {record.status === 'recovery_required' && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900">Cần thu hồi hàng hóa. Cơ sở phải hoàn tất biên bản thu hồi.</p>}
+          {record.status === 'recovery_required' && record.recoveryTaskDeadlineAt && <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">Hạn xử lý nhiệm vụ thu hồi: <strong>{rentalDate(record.recoveryTaskDeadlineAt)}</strong></p>}
+          {record.returnType === 'INVENTORY_MISMATCH' && record.earlyTerminationPolicy && <div className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-950">
+            <p className="font-semibold">Trả kho do hàng hóa sai khai báo</p>
+            <ul className="mt-1 list-disc space-y-1 pl-5">
+              <li>Tính tiền từ ngày xác nhận nhận kho đến ngày hẹn trả kho dự kiến.</li>
+              <li>Quản lý cơ sở lập quyết toán, khách xác nhận trước khi hoàn tiền hoặc thu thêm.</li>
+            </ul>
+          </div>}
         </>
       )}
-      {['requested', 'scheduled'].includes(record.status) && record.recoveryEligibleAt && <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">Nếu khách chưa đến và chưa hoàn tất trả kho, hồ sơ sẽ chuyển sang nhiệm vụ xử lý sau <strong>{returnRecoveryCountdown(record.recoveryEligibleAt, now) || returnRecoveryCutoff(record.recoveryEligibleAt)}</strong>. Hàng chưa được tự động di chuyển.</p>}
-      {record.returnType === 'INVENTORY_MISMATCH' && <p className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-950">Yêu cầu trả kho này liên quan đến hàng hóa không khớp khai báo. Phí và thời gian được tính theo kết quả kiểm kê.</p>}
-      {record.status === 'recovery_required' && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-950">Khách chưa đến theo lịch và đã hết hạn xử lý. Hàng chưa được tự động di chuyển. Cơ sở cần lập biên bản, kiểm kê và bàn giao hai người trước khi thu hồi.</p>}
-      {record.status === 'recovery_required' && record.recoveryTaskDeadlineAt && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-950">Hạn xử lý nhiệm vụ thu hồi: {returnRecoveryCutoff(record.recoveryTaskDeadlineAt)}</p>}
-      {inventoryMismatch && record.earlyTerminationPolicy && <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-950">
-        <p className="font-semibold">Trả kho do hàng hóa sai khai báo</p>
-        <ul className="mt-1 list-disc space-y-1 pl-5">
-          <li>Tính tiền từ ngày xác nhận nhận kho đến ngày hẹn trả kho dự kiến.</li>
-          <li>Quản lý cơ sở lập quyết toán, khách xác nhận trước khi hoàn tiền hoặc thu thêm.</li>
-        </ul>
-      </div>}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {([
           ['Cọc theo hợp đồng', record.depositAmount], ['Phí đã ghi nhận', record.totalDeductions],
-          ...(record.setupEarlyExit ? [['Tiền thuê được hoàn (80%)', record.rentalRefundCredit], ...(showFixedTerminationFee ? [['Khoản giữ lại theo chính sách setup (Phí chấm dứt sớm một lần)', record.earlyTerminationFee]] as const : [])] as const : []),
-          ...(!record.setupEarlyExit && record.activeReturnPolicy ? [['Tiền thuê các tháng còn lại chưa sử dụng', record.activeReturnPolicy.rentalRefundAmount]] as const : []),
+          ...(record.setupEarlyExit ? [['Tiền thuê được hoàn (80%)', record.rentalRefundCredit], ...(!hideTerminationFee ? [[(record.returnType === 'INVENTORY_MISMATCH' ? 'Khoản giữ lại theo chính sách setup' : 'Khoản giữ lại theo chính sách setup (Phí chấm dứt sớm một lần)'), record.earlyTerminationFee]] as const : [])] as const : []),
+          ...(!record.setupEarlyExit && record.activeReturnPolicy ? [['Tiền thuê các tháng chưa bắt đầu', record.activeReturnPolicy.rentalRefundAmount]] as const : []),
           ['Khoản hoàn tiền', record.netRefundAmount], ['Khách cần đóng thêm', record.amountDueFromCustomer],
         ] as const).map(([label, amount]) => <div key={label} className="rounded-lg bg-stone-50 p-3"><p className="text-xs text-stone-500">{label}</p><p className="mt-1 text-sm font-bold text-stone-900">{amount == null ? 'Chưa xác định' : rentalMoney(amount, 'VND')}</p></div>)}
       </div>
-      {record.setupExitRequested && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{inventoryMismatch
-        ? 'Chỉ tính thời gian sử dụng thực tế và các khoản có bằng chứng, không áp dụng phí chấm dứt sớm cố định.'
-        : record.setupEarlyExit
-          ? hideTerminationFee ? 'Trả trong thời gian chuẩn bị: hoàn 80% tiền thuê sau ưu đãi, giữ lại 20%; tiền cọc đảm bảo quyết toán riêng sau khi trừ hư hỏng theo bảng giá.' : 'Trả trong thời gian chuẩn bị: hệ thống giữ lại 20% tiền thuê sau ưu đãi và hoàn 80%. Hư hỏng trừ vào cọc một tháng; phần vượt cọc được bù vào tiền thuê chưa sử dụng trước khi yêu cầu khách trả thêm.'
+      {record.setupExitRequested && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{record.setupEarlyExit
+        ? hideTerminationFee ? 'Trả trong thời gian chuẩn bị: hoàn 80% tiền thuê sau ưu đãi, giữ lại 20%; tiền cọc đảm bảo quyết toán riêng sau khi trừ hư hỏng theo bảng giá.' : 'Trả trong thời gian chuẩn bị: hệ thống giữ lại 20% tiền thuê sau ưu đãi và hoàn 80%. Hư hỏng trừ vào cọc một tháng; chỉ phần vượt cọc mới yêu cầu khách trả thêm.'
         : record.setupReturnedAt ? 'Kho được nghiệm thu sau hạn chuẩn bị, áp dụng quyết toán của kỳ thuê đã bắt đầu.' : 'Nhân viên cần xác nhận đã dọn hết hàng và bàn giao kho trống. Điều khoản thời gian chuẩn bị áp dụng theo thời điểm nghiệm thu thực tế.'}</p>}
       {record.settlementBlocker && (
         <p role="status" className="rounded bg-amber-50 p-3">
           {record.settlementBlocker}
-        </p>
-      )}
-    </div>
-  )
-}
-
-function SettlementCalculationBreakdown({ record }: { record: ApiReturn }) {
-  const deposit = record.depositAmount ?? 0
-  const feeValues = [record.damageFee, record.cleaningFee, record.lostItemFee, record.overdueFee, record.outstandingFee]
-  const totalFees = record.totalDeductions ?? feeValues.reduce((sum, value) => sum + (value || 0), 0)
-  const setupExit = !!record.setupEarlyExit
-  const rentalCredit = setupExit
-    ? (record.rentalRefundCredit ?? record.earlyTerminationPolicy?.rentalRefundAmount ?? 0)
-    : (record.activeReturnPolicy?.rentalRefundAmount ?? record.earlyTerminationPolicy?.rentalRefundAmount ?? 0)
-  const usedRental = setupExit
-    ? (record.earlyTerminationPolicy?.totalRentalCharge ?? record.earlyTerminationFee ?? 0)
-    : (record.activeReturnPolicy?.totalRentalCharge ?? record.earlyTerminationPolicy?.totalRentalCharge ?? 0)
-  const totalRental = usedRental + rentalCredit
-  const activePolicy = record.activeReturnPolicy
-  const rentalMonths = record.activeReturnPolicy?.rentalMonths
-    ?? record.activeReturnPolicy?.pricingTierMonths
-    ?? null
-  // The current API may come from an older BE that does not yet include
-  // monthlyPrice/rentalMonths. In that case, the active-return rule charges
-  // the first started month in full, so the used month count is authoritative.
-  const usedMonthsFromPolicy = !setupExit && activePolicy
-    ? Math.max(1, activePolicy.completedRentalMonths + 1)
-    : null
-  // The security deposit is one effective monthly rent in the contract.
-  // This keeps older return responses readable while the BE starts returning
-  // the explicit discounted monthly price.
-  const monthlyPrice = record.activeReturnPolicy?.monthlyPrice
-    ?? (deposit > 0
-      ? deposit
-      : rentalMonths && rentalMonths > 0
-        ? totalRental / rentalMonths
-        : null)
-  const usedMonths = usedMonthsFromPolicy
-    ?? (monthlyPrice && monthlyPrice > 0 && usedRental > 0
-      ? Math.max(1, Math.round(usedRental / monthlyPrice))
-      : null)
-  const remainingMonths = !setupExit && monthlyPrice && monthlyPrice > 0 && rentalCredit > 0
-    ? Math.max(0, Math.round(rentalCredit / monthlyPrice))
-    : null
-  const displayRentalMonths = rentalMonths && rentalMonths > 0
-    ? rentalMonths
-    : usedMonths != null && remainingMonths != null ? usedMonths + remainingMonths : null
-  const depositAfterFees = deposit - totalFees
-  const refundableDeposit = Math.max(0, depositAfterFees)
-  const depositShortfall = Math.max(0, -depositAfterFees)
-  const rentalRefundAfterOffset = Math.max(0, rentalCredit - depositShortfall)
-  const calculatedRefund = refundableDeposit + rentalRefundAfterOffset
-  const calculatedDue = Math.max(0, depositShortfall - rentalCredit)
-  const storedAmount = record.netRefundAmount ?? null
-  const hasDifference = storedAmount != null && Math.abs(storedAmount - calculatedRefund) >= 0.01
-  const formulaClass = 'mt-1 text-xs font-normal leading-5 text-stone-500'
-
-  return (
-    <div className="mt-4 space-y-3">
-      <p className="text-xs font-bold uppercase tracking-wider text-stone-700">Tính toán theo báo giá và bảng kê</p>
-
-      <div className="space-y-2.5 rounded-xl border border-stone-200 bg-white p-4">
-        {!setupExit && usedMonths != null && remainingMonths != null && (
-          <>
-            <div className="flex justify-between gap-4 rounded-lg bg-amber-50 px-3 py-2 text-xs sm:text-sm">
-              <div>
-                <span className="font-semibold text-amber-900">Thời gian đã sử dụng</span>
-                <p className="mt-0 text-xs leading-4 text-amber-800">Số tháng đã bắt đầu tính tiền thuê.</p>
-              </div>
-              <span className="shrink-0 text-right font-mono text-amber-900">{usedMonths} tháng</span>
-            </div>
-            <div className="flex justify-between gap-4 rounded-lg bg-emerald-50 px-3 py-2 text-xs sm:text-sm">
-              <div>
-                <span className="font-semibold text-emerald-900">Thời gian còn lại</span>
-                <p className="mt-0 text-xs leading-4 text-emerald-800">{usedMonths} tháng đã sử dụng + {remainingMonths} tháng còn lại = {displayRentalMonths} tháng.</p>
-              </div>
-              <span className="shrink-0 text-right font-mono text-emerald-900">{remainingMonths} tháng</span>
-            </div>
-          </>
-        )}
-
-        <div className="flex justify-between gap-4 text-xs sm:text-sm">
-          <div>
-            <span className="font-semibold text-stone-800">Tiền cọc đảm bảo</span>
-            <p className={formulaClass}>1 × đơn giá tháng = {rentalMoney(deposit, 'VND')}.</p>
-          </div>
-          <span className="shrink-0 font-mono text-sm text-stone-900">+ {rentalMoney(deposit, 'VND')}</span>
-        </div>
-
-        <div className="flex justify-between gap-4 text-xs sm:text-sm">
-          <div>
-            <span className="font-semibold text-stone-800">Chi phí phát sinh</span>
-            <p className={formulaClass}>Hư hỏng + vệ sinh + mất đồ + quá hạn + còn thiếu = {rentalMoney(totalFees, 'VND')}.</p>
-          </div>
-          <span className="shrink-0 font-mono text-sm text-rose-700">− {rentalMoney(totalFees, 'VND')}</span>
-        </div>
-
-        <div className={`flex justify-between gap-4 rounded-lg px-3 py-2 text-xs sm:text-sm ${depositAfterFees >= 0 ? 'bg-emerald-50 text-emerald-900' : 'bg-rose-50 text-rose-900'}`}>
-          <div>
-            <span className="font-semibold">{depositAfterFees >= 0 ? 'Phí hoàn đảm bảo sau phát sinh' : 'Khoản phí còn thiếu sau khi trừ tiền cọc'}</span>
-            <p className="mt-0 text-xs leading-4 opacity-80">{rentalMoney(deposit, 'VND')} − {rentalMoney(totalFees, 'VND')} = {rentalMoney(depositAfterFees, 'VND')}.</p>
-          </div>
-          <span className="shrink-0 font-mono font-bold">{depositAfterFees >= 0 ? `+ ${rentalMoney(refundableDeposit, 'VND')}` : rentalMoney(depositAfterFees, 'VND')}</span>
-        </div>
-
-        <div className="flex justify-between gap-4 text-xs sm:text-sm">
-          <div>
-            <span className="font-semibold text-stone-800">Đơn giá mỗi tháng sau giảm giá</span>
-            <p className={formulaClass}>
-              {monthlyPrice != null && usedMonths != null
-                ? `${rentalMoney(usedRental, 'VND')} ÷ ${usedMonths} tháng đã sử dụng = ${rentalMoney(monthlyPrice, 'VND')}.`
-                : 'Theo đơn giá sau giảm giá trong báo giá đã chốt.'}
-            </p>
-          </div>
-          <span className="shrink-0 font-mono text-sm text-stone-900">
-            {monthlyPrice == null ? 'Chưa xác định' : rentalMoney(monthlyPrice, 'VND')}
-          </span>
-        </div>
-
-        <div className="flex justify-between gap-4 text-xs sm:text-sm">
-          <div>
-            <span className="font-semibold text-stone-800">Tiền thuê theo kỳ đã chốt</span>
-            <p className={formulaClass}>
-              {monthlyPrice != null && displayRentalMonths
-                ? `${rentalMoney(monthlyPrice, 'VND')} × ${displayRentalMonths} tháng = ${rentalMoney(totalRental, 'VND')}.`
-                : `Tiền đã sử dụng/giữ lại ${rentalMoney(usedRental, 'VND')} + tiền thuê các tháng còn lại chưa sử dụng ${rentalMoney(rentalCredit, 'VND')} = ${rentalMoney(totalRental, 'VND')}.`}
-            </p>
-          </div>
-          <span className="shrink-0 font-mono text-sm text-stone-900">{rentalMoney(totalRental, 'VND')}</span>
-        </div>
-
-        <div className="flex justify-between gap-4 text-xs sm:text-sm">
-          <div>
-            <span className="font-semibold text-stone-800">Tiền thuê số tháng đã sử dụng</span>
-            <p className={formulaClass}>{monthlyPrice != null && usedMonths != null ? `${rentalMoney(monthlyPrice, 'VND')} × ${usedMonths} tháng = ${rentalMoney(usedRental, 'VND')}.` : 'Theo số tiền thuê đã ghi nhận.'}</p>
-          </div>
-          <span className="shrink-0 font-mono text-sm text-stone-900">{rentalMoney(usedRental, 'VND')}</span>
-        </div>
-
-        <div className="flex justify-between gap-4 rounded-lg bg-emerald-50 px-3 py-2.5 text-xs text-emerald-800 sm:text-sm">
-          <div>
-            <span className="font-semibold">Tiền thuê số tháng còn lại được hoàn</span>
-            <p className="mt-0 text-xs font-normal leading-4 text-emerald-700">
-              {remainingMonths != null && monthlyPrice != null
-                ? `${rentalMoney(totalRental, 'VND')} − ${rentalMoney(usedRental, 'VND')} = ${remainingMonths} tháng × ${rentalMoney(monthlyPrice, 'VND')} = ${rentalMoney(rentalCredit, 'VND')}.`
-                : `${rentalMoney(totalRental, 'VND')} − ${rentalMoney(usedRental, 'VND')} = ${rentalMoney(rentalCredit, 'VND')}.`}
-            </p>
-          </div>
-          <span className="shrink-0 font-mono font-bold">+ {rentalMoney(rentalCredit, 'VND')}</span>
-        </div>
-      </div>
-
-      <div className="rounded-xl bg-stone-900 p-4 text-white">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-bold">Kết quả quyết toán</p>
-            <p className="text-xs leading-5 text-stone-300">Tiền hoàn = phí hoàn cọc sau phát sinh + tiền thuê còn lại sau bù trừ.</p>
-          </div>
-          <span className="shrink-0 font-mono text-xl font-bold">{rentalMoney(calculatedRefund, 'VND')}</span>
-        </div>
-        <p className="mt-2 text-xs leading-5 text-stone-300">
-          {depositAfterFees >= 0
-            ? `${rentalMoney(refundableDeposit, 'VND')} + ${rentalMoney(rentalCredit, 'VND')} = ${rentalMoney(calculatedRefund, 'VND')}.`
-            : `${rentalMoney(rentalCredit, 'VND')} − ${rentalMoney(depositShortfall, 'VND')} = ${rentalMoney(calculatedRefund, 'VND')}.`}
-        </p>
-        <p className="mt-1 text-xs leading-5 text-stone-300">
-          Tổng phí khấu trừ = {feeValues.map((value) => rentalMoney(value || 0, 'VND')).join(' + ')} = {rentalMoney(totalFees, 'VND')}.
-        </p>
-        {depositShortfall > 0 && (
-          <p className="mt-1 text-xs leading-5 text-stone-300">
-            Phí phát sinh vượt tiền cọc {rentalMoney(depositShortfall, 'VND')}; đã dùng tiền thuê còn lại để bù trừ {rentalMoney(Math.min(rentalCredit, depositShortfall), 'VND')}.
-          </p>
-        )}
-      </div>
-
-      {calculatedDue > 0 && (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
-          <div className="flex justify-between gap-3">
-            <div>
-              <p className="font-bold">Khách cần đóng thêm</p>
-              <p className="mt-1 text-xs leading-5">Phí khấu trừ vượt quá các khoản tiền có thể bù trừ.</p>
-            </div>
-            <span className="shrink-0 font-mono font-bold">{rentalMoney(calculatedDue, 'VND')}</span>
-          </div>
-        </div>
-      )}
-
-      {hasDifference && (
-        <p className="rounded border border-amber-200 bg-amber-50 p-2 text-xs font-medium text-amber-900">
-          Số tiền đang lưu trong bảng kê là {rentalMoney(storedAmount, 'VND')}, khác số tính lại {rentalMoney(calculatedRefund, 'VND')}. Cần đồng bộ lại quyết toán trước khi hoàn tiền.
         </p>
       )}
     </div>
@@ -360,13 +146,13 @@ function RecoveryReturnSummary({ record, hideTerminationFee, hideHeader = false 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {([
           ['Tiền cọc đảm bảo thuê thực thu', record.depositAmount], ['Phí đã ghi nhận', record.totalDeductions],
-          ...(record.setupEarlyExit ? [['Tiền thuê được hoàn (80%)', record.rentalRefundCredit], ...(!hideTerminationFee ? [['Khoản giữ lại theo chính sách setup (Phí chấm dứt sớm một lần)', record.earlyTerminationFee]] as const : [])] as const : []),
-          ...(!record.setupEarlyExit && record.activeReturnPolicy ? [['Tiền thuê các tháng còn lại chưa sử dụng', record.activeReturnPolicy.rentalRefundAmount]] as const : []),
+          ...(record.setupEarlyExit ? [['Tiền thuê được hoàn (80%)', record.rentalRefundCredit], ...(!hideTerminationFee ? [[(record.returnType === 'INVENTORY_MISMATCH' ? 'Khoản giữ lại theo chính sách setup' : 'Khoản giữ lại theo chính sách setup (Phí chấm dứt sớm một lần)'), record.earlyTerminationFee]] as const : [])] as const : []),
+          ...(!record.setupEarlyExit && record.activeReturnPolicy ? [['Tiền thuê các tháng chưa bắt đầu', record.activeReturnPolicy.rentalRefundAmount]] as const : []),
           ['Khoản hoàn tiền', record.netRefundAmount], ['Khách cần đóng thêm', record.amountDueFromCustomer],
         ] as const).map(([label, amount]) => <div key={label} className="rounded-lg bg-stone-50 p-3"><p className="text-xs text-stone-500">{label}</p><p className="mt-1 text-sm font-bold text-stone-900">{amount == null ? 'Chưa xác định' : rentalMoney(amount, 'VND')}</p></div>)}
       </div>
       {record.setupExitRequested && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{record.setupEarlyExit
-          ? hideTerminationFee ? 'Trả trong thời gian chuẩn bị: hoàn 80% tiền thuê sau ưu đãi, giữ lại 20%; tiền cọc đảm bảo quyết toán riêng sau khi trừ hư hỏng theo bảng giá.' : 'Trả trong thời gian chuẩn bị: hệ thống giữ lại 20% tiền thuê sau ưu đãi và hoàn 80%. Hư hỏng trừ vào cọc một tháng; phần vượt cọc được bù vào tiền thuê chưa sử dụng trước khi yêu cầu khách trả thêm.'
+        ? hideTerminationFee ? 'Trả trong thời gian chuẩn bị: hoàn 80% tiền thuê sau ưu đãi, giữ lại 20%; tiền cọc đảm bảo quyết toán riêng sau khi trừ hư hỏng theo bảng giá.' : 'Trả trong thời gian chuẩn bị: hệ thống giữ lại 20% tiền thuê sau ưu đãi và hoàn 80%. Hư hỏng trừ vào cọc một tháng; chỉ phần vượt cọc mới yêu cầu khách trả thêm.'
         : record.setupReturnedAt ? 'Kho được nghiệm thu sau hạn chuẩn bị, áp dụng quyết toán của kỳ thuê đã bắt đầu.' : 'Nhân viên cần xác nhận đã dọn hết hàng và bàn giao kho trống. Điều khoản thời gian chuẩn bị áp dụng theo thời điểm nghiệm thu thực tế.'}</p>}
       {record.settlementBlocker && (
         <p role="status" className="rounded bg-amber-50 p-3">
@@ -587,7 +373,6 @@ function ReturnWorkspace({
 
           {/* Form Actions / 2-Column Inspection */}
           <ReturnActions
-            key={selectedRecord.id}
             role={role}
             record={selectedRecord}
             run={run}
@@ -953,8 +738,8 @@ function getNextStepText(status: ApiReturn['status'], role: ReturnRole, recovery
       disputed: 'Hồ sơ đang có khiếu nại từ bạn. Chờ Ban điều hành hoặc Quản lý cơ sở giải quyết.',
       payment_due: 'Thanh toán khoản quyết toán còn thiếu để tiếp tục hoàn tất trả kho.',
       refund_pending: 'Cơ sở đang xử lý hoàn cọc. Khoản tiền sẽ được chuyển hoàn theo thông tin của bạn.',
-      recovery_required: 'Khách chưa đến theo lịch và đã hết hạn xử lý. Cơ sở cần xử lý hồ sơ thu hồi theo quy trình.',
       completed: 'Hồ sơ trả kho và quyết toán đã hoàn tất.',
+      recovery_required: 'Hồ sơ đã chuyển sang chờ thu hồi. Cơ sở sẽ liên hệ để thống nhất thời gian xử lý hàng.',
     }
     return customerSteps[status] || 'Đang xử lý hồ sơ trả kho.'
   }
@@ -969,8 +754,8 @@ function getNextStepText(status: ApiReturn['status'], role: ReturnRole, recovery
     disputed: 'Hồ sơ đang có khiếu nại từ khách hàng. Cần Ban điều hành hoặc Quản lý cơ sở giải quyết trước khi tiếp tục.',
     payment_due: 'Khách hàng có phụ phí vượt cọc cần thanh toán. Ghi nhận thanh toán và phát hành biên lai thu tiền.',
     refund_pending: 'Cơ sở thực hiện hoàn cọc cho khách hàng và ghi nhận biên lai hoàn tiền để hoàn tất hồ sơ.',
-    recovery_required: 'Khách chưa đến theo lịch và đã hết hạn xử lý. Cơ sở cần lập biên bản và xử lý thu hồi theo quy trình.',
     completed: 'Hồ sơ trả kho và quyết toán đã hoàn tất.',
+    recovery_required: 'Hồ sơ đã chuyển sang chờ thu hồi. Cần phân công nhân viên xử lý hàng.',
   }
   return staffSteps[status] || 'Đang xử lý hồ sơ trả kho.'
 }
@@ -984,7 +769,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
   const [goodsLeft, setGoodsLeft] = useState(false)
   const [damage, setDamage] = useState<InspectionInput['damageClassification']>('no_damage')
   const [unit, setUnit] = useState<'available' | 'maintenance'>('available')
-  const [lockInspectionResult, setLockInspectionResult] = useState<LockInspectionResult | ''>('')
+  const [returnedLock, setReturnedLock] = useState((record.lostItemFee ?? 0) <= 0)
   const [vacatedReturnId, setVacatedReturnId] = useState<string | null>(null)
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([])
   const initialized = useRef(false)
@@ -992,10 +777,12 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
   useEffect(() => {
     if (record && !initialized.current) {
       initialized.current = true
+      const initialLock = record.returnedLock !== undefined ? record.returnedLock : (record.lostItemFee ?? 0) <= 0
+      setReturnedLock(initialLock)
       setFees({
         damageFee: record.damageFee,
         cleaningFee: record.cleaningFee,
-        lostItemFee: record.lostItemFee ?? 0,
+        lostItemFee: initialLock ? 0 : (record.lostItemFee || 150000),
         overdueFee: record.overdueFee,
         outstandingFee: record.outstandingFee,
       })
@@ -1003,10 +790,10 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
     }
   }, [record])
 
-  const missingLockFee = 150000
-  const handleLockInspection = (result: LockInspectionResult | '') => {
-    setLockInspectionResult(result)
-    setFees((f) => ({ ...f, lostItemFee: result === 'MISSING_OR_INCOMPLETE' ? missingLockFee : 0 }))
+  const handleToggleLock = () => {
+    const next = !returnedLock
+    setReturnedLock(next)
+    setFees((f) => ({ ...f, lostItemFee: next ? 0 : 150000 }))
   }
 
   const handleToggleGoods = () => {
@@ -1053,7 +840,6 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
         : record.status === 'refund_pending' ? 'Cơ sở thực hiện hoàn tiền và ghi nhận biên lai quyết toán. Thu hồi kho được hoàn tất riêng sau đó.' : null
   const hasEvidence = evidenceFiles.length > 0 || (Array.isArray(record.evidencePhotos) && record.evidencePhotos.length > 0)
   const submitInspection = async () => {
-    if (!lockInspectionResult) throw new Error('Vui lòng chọn kết quả kiểm tra ổ khóa và chìa khóa.')
     if (canInspect && !hasEvidence) {
       throw new Error('Vui lòng tải lên ít nhất một ảnh hiện trường (trần, vách, sàn hoặc cửa) để làm bằng chứng nghiệm thu.')
     }
@@ -1074,10 +860,10 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       damageClassification: goodsLeft ? 'abandoned_goods' : damage,
       staffNotes: note,
       evidencePhotos,
-      returnedKey: lockInspectionResult === 'RETURNED_USABLE',
+      returnedKey: returnedLock,
       returnedCard: false,
-      returnedLock: lockInspectionResult === 'RETURNED_USABLE' || lockInspectionResult === 'DAMAGED',
-      lockInspectionResult,
+      returnedLock,
+      lockInspectionResult: returnedLock ? 'RETURNED_USABLE' : 'MISSING_OR_INCOMPLETE',
       proposedUnitStatus: unit,
       unitVacated,
     })
@@ -1099,9 +885,6 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                 {([
                   ['Khách hàng', record.customerName], ['Lý do trả kho', record.customerNotes || 'Chưa ghi nhận'],
                   ['Ghi chú nghiệm thu', record.inspectionNotes || record.staffNotes || (record as any).notes || 'Chưa ghi nhận'],
-                  ...(role !== 'customer' && record.inspectedAt
-                    ? [['Ổ khóa và chìa khóa', lockInspectionLabels[record.lockInspectionResult ?? 'UNVERIFIED']]]
-                    : []),
                   ...(record.customerDecisionNote ? [['Ý kiến khiếu nại của khách', record.customerDecisionNote]] : []),
                   ['Kết quả xem xét', record.managerResolutionNote || 'Chưa có'],
                   ['Khách xác nhận quyết toán', record.customerConfirmed ? 'Đã xác nhận' : 'Chưa xác nhận'],
@@ -1120,7 +903,6 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                 {feeKeys.map((key, index) => <div key={key} className="flex justify-between gap-3 py-2"><dt className="text-stone-500">{['Phí hư hỏng', 'Phí vệ sinh', 'Phí mất đồ', 'Phí quá hạn', 'Phí còn thiếu'][index]}</dt><dd className="shrink-0 font-medium">{rentalMoney(record[key], 'VND')}</dd></div>)}
                 <div className="flex justify-between gap-3 py-3 font-bold"><dt>Tổng phí ghi nhận</dt><dd>{rentalMoney(record.totalDeductions, 'VND')}</dd></div>
               </dl>
-              <SettlementCalculationBreakdown record={record} />
             </div>
           </div>
         </>
@@ -1183,16 +965,55 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                           </h4>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <div className="p-3.5 rounded-xl border border-stone-200 bg-stone-50/40 space-y-2">
-                            <label className="block space-y-2">
-                              <span className="text-xs font-bold text-stone-800">Kết quả kiểm tra ổ khóa và chìa khóa</span>
-                              <LockInspectionSelect value={lockInspectionResult} onChange={handleLockInspection} disabled={busy}
-                                className="w-full rounded-lg border border-stone-300 bg-white px-2 py-2 text-sm text-stone-900"
-                              />
-                            </label>
-                            <p className="text-xs text-stone-600">
-                              Hệ thống chỉ cho cấp lại mã khi đã nhận đủ ổ và chìa còn dùng được.
-                            </p>
+                          <div className="p-3.5 rounded-xl border border-stone-200 bg-stone-50/40 text-left transition select-none flex flex-col justify-between">
+                            <div>
+                              <div className="flex w-full items-center justify-between gap-2">
+                                <span className="text-xs font-bold text-stone-800">Ổ khóa / Chìa khóa</span>
+                                <div className="inline-flex rounded-lg border border-stone-300 bg-stone-100 p-0.5 text-xs">
+                                  <button
+                                    type="button"
+                                    disabled={busy}
+                                    onClick={() => {
+                                      if (!returnedLock) handleToggleLock()
+                                    }}
+                                    className={`px-3 py-1 rounded-md text-xs font-semibold transition cursor-pointer ${
+                                      returnedLock
+                                        ? 'bg-white text-stone-900 shadow-xs'
+                                        : 'text-stone-500 hover:text-stone-800'
+                                    }`}
+                                  >
+                                    Đã thu hồi đủ
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={busy}
+                                    onClick={() => {
+                                      if (returnedLock) handleToggleLock()
+                                    }}
+                                    className={`px-3 py-1 rounded-md text-xs font-semibold transition cursor-pointer ${
+                                      !returnedLock
+                                        ? 'bg-white text-stone-900 shadow-xs'
+                                        : 'text-stone-500 hover:text-stone-800'
+                                    }`}
+                                  >
+                                    Làm mất / Thiếu
+                                  </button>
+                                </div>
+                              </div>
+                              <p className="text-[11px] text-stone-500 leading-tight mt-2">
+                                {returnedLock
+                                  ? 'Đã nhận lại đủ bộ khóa đã cấp.'
+                                  : 'Khách làm mất hoặc không bàn giao bộ khóa.'}
+                              </p>
+                            </div>
+                            {!returnedLock && (
+                              <div className="mt-3 pt-2.5 border-t border-stone-200 flex items-center justify-between gap-2">
+                                <span className="text-xs text-stone-600 font-medium">Phí làm lại khóa:</span>
+                                <span className="font-mono font-bold text-xs text-stone-900">
+                                  150.000 ₫
+                                </span>
+                              </div>
+                            )}
                           </div>
 
                           <div className="p-3.5 rounded-xl border border-stone-200 bg-stone-50/40 text-left transition select-none flex flex-col justify-between">
@@ -1508,7 +1329,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                       <div className="rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs text-stone-600 flex items-center justify-between">
                         <div>
                           <span className="font-semibold text-stone-800 block">Phí mất khóa đã bàn giao</span>
-                          {lockInspectionResult === 'MISSING_OR_INCOMPLETE' && <span className="text-xs text-stone-600">Mất hoặc thiếu ổ / chìa</span>}
+                          <span className="text-[10px] text-stone-400">{returnedLock ? 'Đã nhận đủ khóa' : 'Khách làm mất / thiếu khóa'}</span>
                         </div>
                         <span className={`font-mono font-bold ${fees.lostItemFee > 0 ? 'text-rose-700' : 'text-stone-700'}`}>
                           {fees.lostItemFee > 0 ? `− ${rentalMoney(fees.lostItemFee, 'VND')}` : '0 ₫'}
@@ -1527,7 +1348,6 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                       </div>
 
                       {/* Phí quá hạn & công nợ nếu có */}
-                      <p className="text-sm">Phí quá hạn được hệ thống tính khi lưu kết quả nghiệm thu.</p>
                       {fees.overdueFee > 0 && (
                         <div className="flex items-center justify-between rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs">
                           <span className="text-stone-600">Phí quá hạn (tự động)</span>
@@ -1597,7 +1417,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                       <Button
                         type="submit"
                         variant="primary"
-                        disabled={busy || (canReview && !note.trim()) || missingDamageItems || (canInspect && (!hasEvidence || !lockInspectionResult)) || (canInspect && !!record.setupExitRequested && (vacatedReturnId !== id || goodsLeft))}
+                        disabled={busy || (canReview && !note.trim()) || missingDamageItems || (canInspect && !hasEvidence) || (canInspect && !!record.setupExitRequested && (vacatedReturnId !== id || goodsLeft))}
                         className="w-full font-bold py-3 text-sm shadow-xs flex items-center justify-center gap-2 cursor-pointer"
                       >
                         <span>{canInspect ? 'Ghi nhận kết quả nghiệm thu' : 'Ghi nhận xem xét khiếu nại'}</span>
@@ -1607,15 +1427,16 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                         type="button"
                         disabled={busy}
                         onClick={() => {
-                          setFees({ damageFee: 0, cleaningFee: 0, lostItemFee: canInspect && lockInspectionResult === 'MISSING_OR_INCOMPLETE' ? missingLockFee : 0, overdueFee: 0, outstandingFee: record.outstandingFee || 0 })
+                          setFees({ damageFee: 0, cleaningFee: 0, lostItemFee: 0, overdueFee: 0, outstandingFee: record.outstandingFee || 0 })
                           setDamageItems([])
                           setDamage('no_damage')
                           setGoodsLeft(false)
+                          setReturnedLock(true)
                           setUnit('available')
                         }}
                         className="w-full py-1.5 text-xs font-semibold text-stone-500 hover:text-stone-800 transition cursor-pointer"
                       >
-                        {canInspect ? 'Đặt lại phí hư hỏng và vệ sinh' : 'Đặt lại tất cả phụ phí về 0đ'}
+                        Đặt lại tất cả phụ phí về 0đ
                       </button>
                     </div>
                   </div>

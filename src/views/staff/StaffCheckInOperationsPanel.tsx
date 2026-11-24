@@ -1030,17 +1030,7 @@ export default function StaffCheckInOperationsPanel({
   const packagingNoteRequired = Boolean(packagingCondition && packagingCondition !== "INTACT")
   const effectiveVarianceReason = varianceReason.trim()
   const hasEmptyStorageEvidence = evidenceFiles.length > 0 || evidenceReferences.length > 0
-  const isHandoverChecklistComplete = Boolean(
-    checklist.accessHandedOver &&
-    checklist.conditionRecorded &&
-    checklist.unitWalkthrough
-  )
-  const emptyStorageHandoverReady = Boolean(
-    standardLock &&
-    initialCondition.trim() &&
-    hasEmptyStorageEvidence &&
-    isHandoverChecklistComplete
-  )
+  const emptyStorageHandoverReady = Boolean(keyLockReference.trim() && initialCondition.trim() && hasEmptyStorageEvidence)
 
   const workflowCurrentStep = handoverTarget ? stepForCheckIn(handoverTarget) : 1
   const handoverDeadlinePassed = handoverTarget ? handoverExpired(handoverTarget, now) : false
@@ -1907,15 +1897,6 @@ export default function StaffCheckInOperationsPanel({
           <Button size="sm" variant="outline" className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]" disabled={submitting || !canOpenInventory(item.checkInStatus, item.inventoryVisit?.appointmentAt)} title={!canOpenInventory(item.checkInStatus, item.inventoryVisit?.appointmentAt) ? "Chờ khách xác nhận lịch kiểm kê" : "Mở form kiểm kê riêng"} onClick={() => openHandover(item, true)}>Xem tiến trình kiểm kê</Button>
           {group === "ONGOING" && item.checkInStatus !== "completed" && (
             <>
-              {item.checkInStatus === "handover_pending_receipt" && item.checkInId && <Button
-                className="shrink-0 whitespace-nowrap !px-3 !py-1.5 !text-xs"
-                size="sm"
-                variant="outline"
-                disabled={submitting || Boolean(remindingCustomerCheckInId)}
-                onClick={() => void remindCustomerReceipt(item)}
-              >
-                {remindingCustomerCheckInId === item.checkInId ? "Đang gửi…" : "Nhắc khách xác nhận"}
-              </Button>}
               {item.inventoryResolutionStatus === "PARTIAL_ACCEPTED" && <Button
                 className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
                 size="sm"

@@ -1,4 +1,5 @@
 import ReturnPolicyNotice from '../../components/ReturnPolicyNotice'
+import InventoryMismatchReturnNotice from '../../components/InventoryMismatchReturnNotice'
 import { useState } from 'react'
 import { getAuthenticatedActor, resendEmailVerificationWithApi } from '../../services/authApi'
 import { formatCustomerDateTime } from '../../i18n/customerDate'
@@ -177,7 +178,8 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
 
 
 
-      <ReturnPolicyNotice terms={q} />
+      {context === 'reservation' && !hidePaymentNotices && <InventoryMismatchReturnNotice />}
+      <ReturnPolicyNotice terms={q} showQuoteFees={context === 'reservation' && !hidePaymentNotices} />
 
       {/* ── FOOTER HIỆU LỰC & XÉT DUYỆT ── */}
       {context === 'reservation' && <p className="text-xs text-stone-500">Báo giá đã lưu khi tạo đơn. Các khoản thanh toán được đối chiếu theo số tiền đã chốt.</p>}
