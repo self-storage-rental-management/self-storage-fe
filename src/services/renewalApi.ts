@@ -105,7 +105,7 @@ export async function listRenewals(
   query: RenewalApiQuery = {},
 ) {
   if (role === "staff") {
-    throw new ApiClientError("Staff không có API danh sách gia hạn.", {
+    throw new ApiClientError("Nhân viên không có API danh sách gia hạn.", {
       status: 403,
     })
   }

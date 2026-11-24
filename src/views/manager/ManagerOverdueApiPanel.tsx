@@ -1,3 +1,4 @@
+import { displayStatusLabel } from '../../presentation/statusLabels'
 import { useEffect, useState } from "react"
 import type { ReactNode } from "react"
 import { singleManagerFacility, managerFacilityNotice } from "./managerFacilityUi"
@@ -54,7 +55,7 @@ const statusStyles: Record<string, string> = {
 function OverdueStatusBadge({ status }: { status: string }) {
   return <span data-status={status} className={`overdue-status inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${statusStyles[status] ?? "border-stone-200 bg-stone-50 text-stone-700"}`}>
     <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
-    {priorityLabels[status] ?? status}
+    {priorityLabels[status] ?? displayStatusLabel(status)}
   </span>
 }
 export function OverdueCompleteness({ page: p }: { page: OverduePage }) {

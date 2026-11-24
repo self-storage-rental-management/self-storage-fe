@@ -454,13 +454,13 @@ export async function decideLegacyPricing(id: string, body: {
     !body.resolutionNote.trim() || body.resolutionNote.length > 2000 ||
     !body.pricingSnapshotJson.trim() || body.pricingSnapshotJson.length > 12000 ||
     !isUuid(body.sourceDocumentFileId)) {
-    throw new Error('Thiếu snapshot giá cũ hoặc bằng chứng hợp đồng/báo giá.')
+    throw new Error('Thiếu bản ghi đã lưu giá cũ hoặc bằng chứng hợp đồng/báo giá.')
   }
   try {
     const parsed = JSON.parse(body.pricingSnapshotJson)
     if (parsed === null || (typeof parsed !== 'object')) throw new Error('invalid')
   } catch {
-    throw new Error('Snapshot giá cũ phải là JSON hợp lệ.')
+    throw new Error('Bản ghi đã lưu giá cũ phải là JSON hợp lệ.')
   }
   return bound(await apiRequest(`/api/business/returns/${id}/legacy-pricing-decision`, {
     method: 'POST',
