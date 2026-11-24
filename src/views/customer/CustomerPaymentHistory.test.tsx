@@ -118,11 +118,11 @@ describe('standardized payment method labels in payment history', () => {
     ['Chuyển khoản', 'Chuyển khoản'],
     ['DEPOSIT_OFFSET', 'Đối trừ quyết toán'],
     ['Đối trừ quyết toán', 'Đối trừ quyết toán'],
-    [null, '—'],
-    [undefined, '—'],
-    ['', '—'],
-    ['Chưa có', '—'],
-    ['Chưa có thông tin', '—'],
+    [null, '-'],
+    [undefined, '-'],
+    ['', '-'],
+    ['Chưa có', '-'],
+    ['Chưa có thông tin', '-'],
   ])('formats %s to %s', (input, expected) => {
     expect(formatHistoryPaymentMethod(input)).toBe(expected)
   })

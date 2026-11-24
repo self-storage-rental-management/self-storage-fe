@@ -146,7 +146,7 @@ const supportTask = (item: SupportTicket): StaffDailyOperation => {
 const maintenanceTask = (item: MaintenanceTaskApi): StaffDailyOperation => ({
   id: `maintenance-${item.id}`,
   title: formatMaintenanceTaskTitle(item),
-  customer: item.customerName?.trim() || "—",
+  customer: item.customerName?.trim() || "-",
   time: item.dueAt || item.createdAt,
   dueAt: item.dueAt || item.createdAt,
   sla: "Nhiệm vụ bảo trì được phân công",

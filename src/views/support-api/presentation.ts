@@ -47,7 +47,7 @@ export function supportError(error: unknown) {
       return "Bạn không có quyền xử lý yêu cầu hỗ trợ tại cơ sở này."
     if (error.status === 404)
       return "Không tìm thấy yêu cầu trong phạm vi truy cập hoặc bạn không còn được phân công."
-    if (error.code === "DEFERRED_SOURCE" || error.message.includes("DEFERRED_SOURCE"))
+    if (error.code === "DEFERRED_SOURCE" || error.diagnosticMessage.includes("DEFERRED_SOURCE"))
       return "Chưa đủ dữ liệu hoặc chính sách để tiếp tục xử lý."
     if (error.status === 409)
       return "Yêu cầu đã thay đổi hoặc chưa đủ điều kiện xử lý. Vui lòng mở lại yêu cầu."

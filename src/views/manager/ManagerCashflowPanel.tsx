@@ -31,7 +31,7 @@ export default function ManagerCashflowPanel({ facilityId, identity, onReport }:
       <Button type="submit" disabled={read.loading}>Xem báo cáo</Button>
     </form>
     {read.loading ? <p role="status">Đang đối soát dòng tiền…</p> : read.error ? <div role="alert"><p>Chưa tải được dữ liệu tài chính. Vui lòng kiểm tra khoảng ngày và thử lại.</p><Button variant="outline" onClick={read.refresh}>Thử lại</Button></div> : report && <>
-      <p className="text-sm text-stone-600">Kỳ dòng tiền: {report.from} → {report.to} · Giờ Việt Nam. Trạng thái: <b>{report.completeness === 'RECORDED' ? 'Đã tổng hợp giao dịch ghi nhận' : 'Có hồ sơ thiếu thông tin — số liệu đã ghi nhận vẫn được hiển thị'}</b>.</p>
+      <p className="text-sm text-stone-600">Kỳ dòng tiền: {report.from} → {report.to} · Giờ Việt Nam. Trạng thái: <b>{report.completeness === 'RECORDED' ? 'Đã tổng hợp giao dịch ghi nhận' : 'Có hồ sơ thiếu thông tin - số liệu đã ghi nhận vẫn được hiển thị'}</b>.</p>
       {report.warnings.length > 0 && <ul role="status" className="list-disc space-y-1 rounded-lg border border-amber-200 bg-amber-50 p-4 pl-8 text-sm text-amber-950">{report.warnings.map(w => <li key={w}>{w}</li>)}</ul>}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">{[
         ['Tiền đã thu', report.collected, 'Giao dịch thu có trạng thái Đã thu trong kỳ'],

@@ -1738,7 +1738,7 @@ export default function BusinessApp({
           growthNum = diff / 100
         }
       } else {
-        growthStr = "—"
+        growthStr = "-"
       }
 
       previousMonthRevenue = monthRevenue
@@ -2886,7 +2886,7 @@ export default function BusinessApp({
       }
     } catch (err) {
       if (isApiAuthenticated()) {
-        showToast(err instanceof Error ? err.message : 'Không thể tạo cơ sở trên backend.')
+        showToast(err instanceof Error ? err.message : 'Không thể tạo cơ sở.')
         return
       }
       console.warn("Backend create facility API failed/offline:", err)
@@ -3470,7 +3470,7 @@ export default function BusinessApp({
             (facility) => facility.code.trim().toUpperCase() === code,
           )
           if (!persistedFacility) {
-            throw new Error(`Không tìm thấy cơ sở "${code}" trên backend. Vui lòng tải lại trang.`)
+            throw new Error(`Không tìm thấy cơ sở "${code}". Vui lòng tải lại trang.`)
           }
           backendFacilityId = persistedFacility.id
           setBackendFacilityIdsByCode((current) => ({ ...current, [code]: persistedFacility.id }))
@@ -3486,7 +3486,7 @@ export default function BusinessApp({
           securityDescription: formFacSecurity.trim() || null,
         })
       } catch (error) {
-        showToast(error instanceof Error ? error.message : 'Không thể cập nhật cơ sở trên backend.')
+        showToast(error instanceof Error ? error.message : 'Không thể cập nhật cơ sở.')
         return
       }
     }
