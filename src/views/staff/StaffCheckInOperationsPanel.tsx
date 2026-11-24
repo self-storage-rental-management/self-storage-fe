@@ -807,10 +807,6 @@ export default function StaffCheckInOperationsPanel({
   const standardLock = /^LOCK-(?!000$)[0-9]{3}$/i.test(keyLockReference.trim())
   const [handoverRackCount, setHandoverRackCount] = useState("")
   const [handoverPalletCount, setHandoverPalletCount] = useState("")
-  const lockHelpId = useId()
-  const [lockChecked, setLockChecked] = useState(false)
-
-  const standardLock = /^LOCK-(?!000$)[0-9]{3}$/i.test(keyLockReference.trim())
   const [paymentMethod, setPaymentMethod] = useState<CheckInPaymentMethod>("CASH")
 
   const [noShowTarget, setNoShowTarget] = useState<CheckInCase | null>(null)
@@ -2479,6 +2475,7 @@ export default function StaffCheckInOperationsPanel({
                     </p>}
                   </div>
                 ) : (
+                  <>
                   <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-emerald-950">
                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-200 pb-3">
                       <div>
@@ -2518,6 +2515,7 @@ export default function StaffCheckInOperationsPanel({
                       Khách báo đã chuẩn bị xong và tự chọn lịch. Khi khách đến, Nhân viên ghi nhận giờ đến và xác minh đúng người đặt kho trước khi kiểm kê.
                     </p>
                   </div>
+                  </>
                 )}
               </div>
             )}
