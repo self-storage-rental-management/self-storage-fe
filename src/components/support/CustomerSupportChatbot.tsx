@@ -365,10 +365,12 @@ export default function CustomerSupportChatbot({
       {!isOpen && (
         <button
           {...launcherProps}
+          ref={launcherRef}
           type="button"
           aria-label="Mở Trợ lý StorageHub"
+          title="Nhấn để mở Trợ lý StorageHub · Kéo để di chuyển vị trí tự do"
           aria-haspopup="dialog"
-          className="fixed right-4 bottom-4 sm:right-6 sm:bottom-6 z-50 flex h-12 w-12 touch-none cursor-grab select-none items-center justify-center rounded-full border border-amber-600/30 bg-[#181b22] text-white shadow-lg transition-colors hover:bg-[#20242d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 active:cursor-grabbing"
+          className={`fixed ${btnPos ? '' : 'right-4 bottom-4 sm:right-6 sm:bottom-6'} z-50 flex h-12 w-12 touch-none select-none items-center justify-center rounded-full border border-amber-600/30 bg-[#181b22] text-white shadow-lg transition-transform duration-75 hover:bg-[#20242d] ${isDragging ? 'cursor-grabbing scale-105 shadow-2xl ring-2 ring-amber-500/50' : 'cursor-grab hover:scale-105'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2`}
         >
           <svg aria-hidden="true" className="show-icon h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
             <path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H5l-3 3V11.5A7.5 7.5 0 0 1 9.5 4h3a7.5 7.5 0 0 1 7.5 7.5Z" />

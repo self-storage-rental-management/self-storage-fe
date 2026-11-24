@@ -12,8 +12,10 @@ it.each([
   expect(html).toContain(title)
   expect(html).toContain('144 kg')
   expect(html).toContain('Phương án xác nhận của khách')
-  if (result !== 'MATCHED') {
+  if (result === 'NOT_FIT') {
     expect(html).toContain('disabled=""')
-    expect(html).toContain('Công bố kết quả kiểm kê trước khi tìm kho thay thế.')
+    expect(html).toContain('Kiểm tra sức chứa chính thức trước khi tìm kho thay thế.')
+  } else {
+    expect(html).not.toContain('Gợi ý chuyển sang kho phù hợp')
   }
 })
