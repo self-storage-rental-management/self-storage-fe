@@ -171,7 +171,7 @@ export async function loginWithApi(email: string, password: string): Promise<Api
     skipAuth: true,
     timeoutMs: 10_000,
   })
-  return completeApiLogin(response, 'Backend trả về dữ liệu đăng nhập không hợp lệ.')
+  return completeApiLogin(response, 'Chưa tải được thông tin. Vui lòng thử lại.')
 }
 
 export async function loginWithGoogleApi(idToken: string, captcha?: { captchaId: string; captchaAnswer: string } | null): Promise<ApiActor> {
@@ -184,7 +184,7 @@ export async function loginWithGoogleApi(idToken: string, captcha?: { captchaId:
     skipAuth: true,
     timeoutMs: 10_000,
   })
-  return completeApiLogin(response, 'Backend trả về dữ liệu đăng nhập Google không hợp lệ.')
+  return completeApiLogin(response, 'Chưa tải được thông tin. Vui lòng thử lại.')
 }
 
 export async function changePasswordWithApi(currentPassword: string, newPassword: string): Promise<ApiActor> {
@@ -193,7 +193,7 @@ export async function changePasswordWithApi(currentPassword: string, newPassword
     body: JSON.stringify({ currentPassword, newPassword }),
   })
   if (!response?.data?.accessToken || !response.data.refreshToken || !response.data.actor) {
-    throw new Error('Backend trả về dữ liệu đổi mật khẩu không hợp lệ.')
+    throw new Error('Chưa tải được thông tin. Vui lòng thử lại.')
   }
   setAccessToken(response.data.accessToken)
   setRefreshToken(response.data.refreshToken)
@@ -216,7 +216,7 @@ export async function registerWithApi(input: {
     body: JSON.stringify(input),
     skipAuth: true,
   })
-  if (!response?.data?.actor) throw new Error('Backend trả về dữ liệu đăng ký không hợp lệ.')
+  if (!response?.data?.actor) throw new Error('Chưa tải được thông tin. Vui lòng thử lại.')
   return response.data
 }
 
@@ -244,7 +244,7 @@ export async function updateCurrentProfileWithApi(input: {
     method: 'PUT',
     body: JSON.stringify(input),
   })
-  if (!response?.data) throw new Error('Backend trả về dữ liệu hồ sơ không hợp lệ.')
+  if (!response?.data) throw new Error('Chưa tải được thông tin. Vui lòng thử lại.')
   persistActor(normalizeApiActor(response.data))
   window.dispatchEvent(new Event('storagehub:actor-updated'))
   return currentActor!
@@ -252,7 +252,7 @@ export async function updateCurrentProfileWithApi(input: {
 
 export async function refreshCurrentProfileWithApi(): Promise<ApiActor> {
   const response = await apiRequest<ApiEnvelope<ApiActor>>('/api/auth/me')
-  if (!response?.data) throw new Error('Backend trả về dữ liệu hồ sơ không hợp lệ.')
+  if (!response?.data) throw new Error('Chưa tải được thông tin. Vui lòng thử lại.')
   persistActor(normalizeApiActor(response.data))
   window.dispatchEvent(new Event('storagehub:actor-updated'))
   return currentActor!
@@ -260,7 +260,7 @@ export async function refreshCurrentProfileWithApi(): Promise<ApiActor> {
 
 export async function listMySessions(): Promise<ApiSession[]> {
   const response = await apiRequest<ApiEnvelope<ApiSession[]>>('/api/auth/sessions')
-  if (!response?.data) throw new Error('Backend trả về dữ liệu phiên đăng nhập không hợp lệ.')
+  if (!response?.data) throw new Error('Chưa tải được thông tin. Vui lòng thử lại.')
   return response.data
 }
 
@@ -270,7 +270,7 @@ export async function verifyEmailWithApi(email: string | undefined, codeOrToken:
     body: JSON.stringify({ ...(email ? { email } : {}), codeOrToken }),
     skipAuth: true,
   })
-  if (!response?.data) throw new Error('Backend trả về dữ liệu xác minh không hợp lệ.')
+  if (!response?.data) throw new Error('Chưa tải được thông tin. Vui lòng thử lại.')
   return response.data
 }
 
@@ -333,7 +333,7 @@ export async function refreshApiSession(): Promise<ApiActor> {
     skipAuth: true,
   })
   if (!response?.data?.accessToken || !response.data.refreshToken || !response.data.actor) {
-    throw new Error('Backend trả về dữ liệu refresh không hợp lệ.')
+    throw new Error('Chưa tải được thông tin. Vui lòng thử lại.')
   }
   setAccessToken(response.data.accessToken)
   setRefreshToken(response.data.refreshToken)
@@ -367,7 +367,7 @@ export async function updateProfileWithApi(input: { fullName: string; phone: str
     body: JSON.stringify({ ...input, avatarUrl: currentActor?.avatarUrl ?? null }),
   })
   if (!response?.data?.id || response.data.id !== currentActor?.id) {
-    throw new Error('Backend trả về dữ liệu hồ sơ không hợp lệ.')
+    throw new Error('Chưa tải được thông tin. Vui lòng thử lại.')
   }
   persistActor(response.data)
   return currentActor!

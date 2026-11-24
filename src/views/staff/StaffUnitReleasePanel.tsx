@@ -168,7 +168,7 @@ export default function StaffUnitReleasePanel({ showToast }: { showToast: (messa
                   </p>
                 </Td>
                 <Td className="text-xs text-stone-600">
-                  {item.cancelledAt ? formatStaffDateTime(item.cancelledAt) : '—'}
+                  {item.cancelledAt ? formatStaffDateTime(item.cancelledAt) : '-'}
                 </Td>
                 <Td>
                   {item.eligibility.releasable ? (

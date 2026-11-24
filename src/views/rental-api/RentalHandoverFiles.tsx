@@ -75,7 +75,7 @@ export default function RentalHandoverFiles({ role,id,contractsOnly=false }: { r
     <h3 className="font-bold">{contractsOnly ? 'Hợp đồng đã ký' : 'Hợp đồng và tài liệu bàn giao'}</h3>
     {read.loading && <p role="status" className="mt-3 text-sm text-stone-500">Đang tải tài liệu...</p>}
     {Boolean(read.error) && <p role="status" className="mt-3 text-sm text-stone-500">{rentalError(read.error)}</p>}
-    {!read.loading && !read.error && !files?.length && <p className="mt-3 text-sm text-stone-500">{contractsOnly ? 'Không có dữ liệu' : 'Chưa có hợp đồng hoặc tài liệu từ bàn giao, ký gia hạn đã hoàn tất.'}</p>}
+    {!read.loading && !read.error && !files?.length && <p className="mt-3 text-sm text-stone-500">{contractsOnly ? 'Không có dữ liệu' : 'Hồ sơ này chưa có hợp đồng hoặc tài liệu bàn giao.'}</p>}
     {files && <ul className="mt-2 divide-y divide-stone-100">{files.map(file => <DocumentRow key={file.id} file={file} />)}</ul>}
   </Card>
 }

@@ -99,7 +99,7 @@ export default function CustomerReservationPayment({ user, reservation, facility
         } else if (value.paymentStatus === 'PAID') {
           setReturnFailure('VNPay đã ghi nhận giao dịch, nhưng trạng thái đơn hiện không xác nhận khoản trả trước. Vui lòng kiểm tra và đối soát trước khi thanh toán thêm.')
         } else {
-          setReturnFailure(value.paymentStatus === 'PENDING' || value.paymentStatus === 'NOT_RECEIVED'
+          setReturnFailure(status === 'review' || value.paymentStatus === 'PROCESSING' || value.paymentStatus === 'PENDING' || value.paymentStatus === 'NOT_RECEIVED'
             ? `StorageHub chưa nhận được kết quả cuối cùng từ VNPay (mã ${code}). Hệ thống sẽ tiếp tục đối soát. Không thanh toán lại nếu tài khoản đã bị trừ tiền.`
             : `Giao dịch VNPay không thành công (mã ${code}). Bạn có thể thử lại nếu đơn vẫn còn thời hạn.`)
         }
@@ -133,7 +133,7 @@ export default function CustomerReservationPayment({ user, reservation, facility
   }, [reservation.status, countdown.expired])
 
   const pay = async () => {
-    if (paymentLock.current) return
+    if (paymentLock.current || payment?.paymentStatus === 'PROCESSING') return
     if (busy || countdown.expired || !acceptedNoRefund || reservation.status !== 'AWAITING_PAYMENT' || !snapshot) return
     const actor = getAuthenticatedActor()
     if (!actor || !profileUser || profileProgress(profileUser) < 5) {
@@ -162,10 +162,10 @@ export default function CustomerReservationPayment({ user, reservation, facility
       <p role="timer" className="mt-1 text-2xl font-extrabold tabular-nums">{countdown.text}</p>
       <p className="mt-1">{countdown.expired ? 'Đã hết thời hạn. Đang chờ cập nhật trạng thái đơn.' : 'Vui lòng hoàn tất thanh toán trước khi hết thời hạn.'}</p>
       <div className="mt-2 rounded border border-amber-300/40 bg-amber-500/20 px-2 py-1.5 text-center text-[11px] font-semibold text-inherit">
-        {payment?.paymentStatus === 'PAID' ? 'Nếu bạn tự hủy trước khi nhận kho, khoản trả trước được xử lý theo điều khoản đã chấp nhận.' : 'Bạn chưa thanh toán. Hủy ngay không mất phí.'}
+        {payment?.paymentStatus === 'PROCESSING' ? 'Đang xác minh thanh toán VNPay. Vui lòng chờ kết quả đối soát.' : payment?.paymentStatus === 'PAID' ? 'Nếu bạn tự hủy trước khi nhận kho, khoản trả trước được xử lý theo điều khoản đã chấp nhận.' : 'Bạn chưa thanh toán. Hủy ngay không mất phí.'}
       </div>
       {profileIncomplete && <div role="alert" className="mt-2 rounded-lg border border-rose-200 bg-rose-50 p-2 text-left text-[11px] leading-5 text-rose-900"><b>Chưa thể thanh toán</b><p>Hoàn thiện hồ sơ trước khi thanh toán, gồm: {missingProfileFields.length ? missingProfileFields.join(', ') : 'thông tin tài khoản'}.</p><p className="mt-1">Mở mục Hồ sơ để bổ sung rồi quay lại đơn này.</p></div>}
-      <Button className="mt-2" size="sm" disabled={busy || countdown.expired || profileIncomplete} onClick={() => {
+      <Button className="mt-2" size="sm" disabled={busy || payment?.paymentStatus === 'PROCESSING' || countdown.expired || profileIncomplete} onClick={() => {
         const actor = getAuthenticatedActor()
         if (!actor || !profileUser || profileProgress(profileUser) < 5) {
           onMessage('Vui lòng cập nhật đủ số điện thoại, giấy tờ tùy thân và người liên hệ khẩn cấp trong Hồ sơ trước khi thanh toán giữ chỗ.')
@@ -208,7 +208,7 @@ export default function CustomerReservationPayment({ user, reservation, facility
         <div className={`rounded-lg p-3 text-center ${timerTone}`}><p className="text-xs font-bold uppercase tracking-wide">Hạn thanh toán · giờ:phút:giây</p><p className="mt-1 text-2xl font-extrabold tabular-nums">{countdown.text}</p></div>
 
         <p className="text-sm text-stone-600">Bạn sẽ được chuyển sang VNPay thử nghiệm. Sau khi thanh toán thành công, bạn có thể xem biên lai trong đơn hoặc qua email.</p>
-        <Button className="w-full" disabled={busy || countdown.expired || profileIncomplete} onClick={() => { setAcceptedNoRefund(false); setConfirmModalOpen(true) }}>
+        <Button className="w-full" disabled={busy || payment?.paymentStatus === 'PROCESSING' || countdown.expired || profileIncomplete} onClick={() => { setAcceptedNoRefund(false); setConfirmModalOpen(true) }}>
           {busy ? 'Đang chuyển sang VNPay…' : `Thanh toán qua VNPay ${formatVnd(snapshot.reservationDepositAmount)}`}
         </Button>
       </div>
@@ -250,7 +250,7 @@ export default function CustomerReservationPayment({ user, reservation, facility
             Quay lại
           </Button>
           <Button
-            disabled={busy || countdown.expired || !acceptedNoRefund}
+            disabled={busy || payment?.paymentStatus === 'PROCESSING' || countdown.expired || !acceptedNoRefund}
             onClick={() => void pay()}
           >
             {busy ? 'Đang chuyển sang VNPay…' : 'Xác nhận & Chuyển sang VNPay'}

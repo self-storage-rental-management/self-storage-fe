@@ -73,9 +73,9 @@ function initialRackForm(initial?: UnitTypeEditorTarget): RackForm {
 }
 
 const format = (value: number | null | undefined, digits = 2) => value == null || !Number.isFinite(value)
-  ? '—' : value.toLocaleString('vi-VN', { maximumFractionDigits: digits })
-const cm = (value: number | null | undefined) => value == null ? '—' : `${format(value)} cm`
-const kg = (value: number | null | undefined) => value == null ? '—' : `${format(value)} kg`
+  ? '-' : value.toLocaleString('vi-VN', { maximumFractionDigits: digits })
+const cm = (value: number | null | undefined) => value == null ? '-' : `${format(value)} cm`
+const kg = (value: number | null | undefined) => value == null ? '-' : `${format(value)} kg`
 
 function Stat({ label, value }: { label: string; value: string }) {
   return <div className="rounded-lg bg-stone-50 p-3">
@@ -546,7 +546,7 @@ export default function ManagerUnitTypeModal({ open, facilityId, onClose, onCrea
       {step === 0 && <section className="space-y-5">
         <div className="grid gap-4 sm:grid-cols-2">
           {field('name', 'Tên loại kho *')}
-          {initial && <div className="rounded-lg bg-stone-50 p-3 text-sm text-stone-600"><span className="block text-xs text-stone-500">Mã loại kho</span><span className="mt-1 block font-mono font-semibold text-stone-900">{form.code || '—'}</span></div>}
+          {initial && <div className="rounded-lg bg-stone-50 p-3 text-sm text-stone-600"><span className="block text-xs text-stone-500">Mã loại kho</span><span className="mt-1 block font-mono font-semibold text-stone-900">{form.code || '-'}</span></div>}
         </div>
         <label className="block text-sm font-medium text-stone-700">Mô tả
           <textarea className={`${inputClass} mt-1 min-h-24 resize-y`} disabled={busy || imageReading} value={form.description} onChange={event => changeField('description', event.target.value)} />
@@ -627,7 +627,7 @@ export default function ManagerUnitTypeModal({ open, facilityId, onClose, onCrea
         </section>
         <section className="rounded-xl border border-stone-200 p-4">
           <h3 className="font-semibold text-stone-900">Tổng hợp cấu hình gian kho</h3>
-          <dl className="mt-3 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-3"><Stat label="Số lượng gian kho" value={`${format(validPhysicalUnitCount ? physicalUnitCount : undefined, 0)} gian`} /><Stat label="Kích thước gian kho" value={`${form.lengthM || '—'} × ${form.widthM || '—'} × ${form.heightM || '—'} m`} /><Stat label="Giới hạn khối lượng hàng" value={kg(Number(form.maxLoadKg))} /><Stat label="Số khung / khoang / tấm kê" value={`${format(confirmedResult?.rackCount ?? confirmedResult?.racks.length, 0)} / ${format(confirmedResult?.totalCompartments, 0)} / ${format(confirmedResult?.totalPallets ?? confirmedResult?.palletSlotCount, 0)}`} /><Stat label="Kích thước tấm kê" value={`${cm(confirmedResult?.palletLengthCm)} × ${cm(confirmedResult?.palletWidthCm)} × ${cm(confirmedResult?.palletHeightCm)}`} /><Stat label="Tổng khối lượng tấm kê và hàng" value={kg(confirmedResult?.maxStoredLoadAtCapacityKg)} /><Stat label="Thùng nhỏ tham khảo" value={`${format(confirmedResult?.smallBoxesPerUnit, 0)} thùng · ${confirmedResult?.smallBox.lengthCm ?? '—'} × ${confirmedResult?.smallBox.widthCm ?? '—'} × ${confirmedResult?.smallBox.heightCm ?? '—'} cm · ${confirmedResult?.smallBox.weightKg ?? '—'} kg/thùng`} /><Stat label="Thùng lớn tham khảo" value={`${format(confirmedResult?.largeBoxesPerUnit, 0)} thùng · ${confirmedResult?.largeBox.lengthCm ?? '—'} × ${confirmedResult?.largeBox.widthCm ?? '—'} × ${confirmedResult?.largeBox.heightCm ?? '—'} cm · ${confirmedResult?.largeBox.weightKg ?? '—'} kg/thùng`} /></dl>
+          <dl className="mt-3 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-3"><Stat label="Số lượng gian kho" value={`${format(validPhysicalUnitCount ? physicalUnitCount : undefined, 0)} gian`} /><Stat label="Kích thước gian kho" value={`${form.lengthM || '-'} × ${form.widthM || '-'} × ${form.heightM || '-'} m`} /><Stat label="Giới hạn khối lượng hàng" value={kg(Number(form.maxLoadKg))} /><Stat label="Số khung / khoang / tấm kê" value={`${format(confirmedResult?.rackCount ?? confirmedResult?.racks.length, 0)} / ${format(confirmedResult?.totalCompartments, 0)} / ${format(confirmedResult?.totalPallets ?? confirmedResult?.palletSlotCount, 0)}`} /><Stat label="Kích thước tấm kê" value={`${cm(confirmedResult?.palletLengthCm)} × ${cm(confirmedResult?.palletWidthCm)} × ${cm(confirmedResult?.palletHeightCm)}`} /><Stat label="Tổng khối lượng tấm kê và hàng" value={kg(confirmedResult?.maxStoredLoadAtCapacityKg)} /><Stat label="Thùng nhỏ tham khảo" value={`${format(confirmedResult?.smallBoxesPerUnit, 0)} thùng · ${confirmedResult?.smallBox.lengthCm ?? '-'} × ${confirmedResult?.smallBox.widthCm ?? '-'} × ${confirmedResult?.smallBox.heightCm ?? '-'} cm · ${confirmedResult?.smallBox.weightKg ?? '-'} kg/thùng`} /><Stat label="Thùng lớn tham khảo" value={`${format(confirmedResult?.largeBoxesPerUnit, 0)} thùng · ${confirmedResult?.largeBox.lengthCm ?? '-'} × ${confirmedResult?.largeBox.widthCm ?? '-'} × ${confirmedResult?.largeBox.heightCm ?? '-'} cm · ${confirmedResult?.largeBox.weightKg ?? '-'} kg/thùng`} /></dl>
           {confirmedResult?.warnings?.length ? <div className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900"><p className="font-semibold">Lưu ý kiểm tra</p><ul className="mt-1 list-disc space-y-1 pl-5">{confirmedResult.warnings.slice(0, 4).map((warning, index) => <li key={`${warning}-${index}`}>{warning}</li>)}</ul></div> : null}
         </section>
       </section>}

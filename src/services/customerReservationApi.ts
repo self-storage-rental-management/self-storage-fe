@@ -20,6 +20,7 @@ export type InventoryResolutionStatus =
   | 'PENDING_STAFF_RESOLUTION'
   | 'ACCEPTED'
   | 'PARTIAL_ACCEPTED'
+  | 'TRANSFER_REQUESTED'
   | 'RETURN_REQUESTED'
   | 'RECOVERY_REQUIRED'
 
@@ -591,6 +592,7 @@ export interface ReservationPaymentResult {
   initiatedByName?: string | null
   createdAt?: string | null
   reservationCode?: string
+  receiptCode?: string | null
   invoiceNumber?: string | null
   invoiceStatus?: InvoiceStatus
   invoiceIssuedAt?: string | null

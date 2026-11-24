@@ -84,10 +84,12 @@ describe('real Return transport and unknown settlement presentation', () => {
     const fetch = respond({ data: record })
     await inspectReturn(ids.event, { damageFee: 5000, cleaningFee: 0, lostItemFee: 0, overdueFee: 0, outstandingFee: 0,
       inventoryMatch: 'match', damageClassification: 'minor_damage', staffNotes: 'TEST inspection', evidencePhotos: [],
-      unitVacated: true, returnedKey: true, returnedCard: false, returnedLock: true, proposedUnitStatus: 'maintenance' })
+      unitVacated: true, returnedKey: true, returnedCard: false, returnedLock: true,
+      lockInspectionResult: 'RETURNED_USABLE', proposedUnitStatus: 'maintenance' })
     expect(fetch.mock.calls[0][0]).toContain(`/api/staff/returns/${ids.event}/inspection`)
     expect(JSON.parse(fetch.mock.calls[0][1].body).returnedCard).toBe(false)
     expect(JSON.parse(fetch.mock.calls[0][1].body).unitVacated).toBe(true)
+    expect(JSON.parse(fetch.mock.calls[0][1].body).lockInspectionResult).toBe('RETURNED_USABLE')
   })
   it('uploads return evidence and sends the stored asset ID to the inspection endpoint', async () => {
     state.actor = operationsActor('staff'); state.actor.permissions.push('returns:process', 'returns:read')

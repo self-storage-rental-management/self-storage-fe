@@ -23,7 +23,7 @@ export default function RenewalReceipt({ id,paymentId,role='customer' }: { id: s
     : rentalDate(p.paidAt)
   return <PaymentReceiptCard title={p.kind==='DEPOSIT'?'Biên lai tiền thuê gia hạn trả trước':remaining?'Biên lai thanh toán khi ký gia hạn':'Biên lai tiền thuê gia hạn'} reference={p.renewalId}
     status="Khoản thu đã đối soát" fields={[
-      ['Mã giao dịch StorageHub',p.paymentId], [remaining?'Mã tham chiếu thanh toán':'Mã tham chiếu VNPay',p.transactionReference || '-'],
+      ['Mã phiếu thu',p.receiptCode || p.transactionReference || p.paymentId], ['Mã giao dịch StorageHub',p.paymentId], [remaining?'Mã tham chiếu thanh toán':'Mã tham chiếu VNPay',p.transactionReference || '-'],
       [remaining?'Mã phiếu thu hoặc giao dịch':'Mã giao dịch VNPay',p.gatewayTransactionNo || '-'],['Yêu cầu gia hạn',p.renewalId],
       [remaining?'Thời điểm ghi nhận tại quầy':'Thời điểm VNPay ghi nhận',remaining ? rentalDate(p.paidAt) : gatewayTime],['Thời điểm StorageHub xử lý',rentalDate(p.processedAt)],
       ['Phương thức thanh toán',method],['Người ghi nhận',p.initiatedByName || '-'],
