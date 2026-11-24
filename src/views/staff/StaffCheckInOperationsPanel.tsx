@@ -1727,8 +1727,20 @@ export default function StaffCheckInOperationsPanel({
 
     setLockChecked(false)
     setKeyLockReference(item.lockReference || "")
-    setHandoverRackCount(item.handoverRecord?.rackCount != null ? String(item.handoverRecord.rackCount) : "")
-    setHandoverPalletCount(item.handoverRecord?.palletCount != null ? String(item.handoverRecord.palletCount) : "")
+    setHandoverRackCount(
+      item.handoverRecord?.rackCount != null
+        ? String(item.handoverRecord.rackCount)
+        : item.equipment?.rackCount != null
+          ? String(item.equipment.rackCount)
+          : ""
+    )
+    setHandoverPalletCount(
+      item.handoverRecord?.palletCount != null
+        ? String(item.handoverRecord.palletCount)
+        : item.equipment?.palletCount != null
+          ? String(item.equipment.palletCount)
+          : ""
+    )
 
     setPaymentMethod("CASH")
 
