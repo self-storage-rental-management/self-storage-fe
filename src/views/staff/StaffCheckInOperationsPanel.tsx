@@ -529,6 +529,7 @@ const workflowStepLabels = [
 type CheckInFilters = Pick<NonNullable<Parameters<typeof listCheckIns>[0]>, "q" | "status" | "scheduledFrom" | "scheduledTo">
 
 const checkInTableColumnWidths = ["18%", "13%", "15%", "19%", "35%"] as const
+const checkInActionButtonBaseClass = "h-9 shrink-0 whitespace-nowrap !px-2 !py-0 !text-xs font-medium"
 
 function CheckInTableColumns() {
   return (
@@ -1403,7 +1404,7 @@ export default function StaffCheckInOperationsPanel({
 
       setPaymentEvidenceFile(null)
 
-      showToast("Đã lưu hàng hóa kiểm kê. Bạn có thể đóng và mở lại hồ sơ hoặc chỉnh sửa trước khi xử lý sai lệch.")
+      showToast("Đã lưu hàng hóa kiểm kê. Bạn có thể đóng và mở lại hồ sơ hoặc chỉnh sửa trước khi chốt kết quả tiếp nhận.")
       setInventoryDraftRevision(savedDraft.revision)
       setInventorySavedAt(savedDraft.savedAt)
       setInventoryEditing(false)
@@ -1428,7 +1429,7 @@ export default function StaffCheckInOperationsPanel({
       setInventoryStage(4)
       showToast('Đã kiểm tra sức chứa. Ghi nhận phương án xử lý trực tiếp tại cơ sở.')
       refresh()
-    } catch (reason) { fail(reason, 'Không thể mở bước xử lý sai lệch.') }
+    } catch (reason) { fail(reason, 'Không thể mở bước kết quả tiếp nhận.') }
     finally { inventoryCommandLock.current = false; setSubmitting(false) }
   }
 
@@ -1835,6 +1836,20 @@ export default function StaffCheckInOperationsPanel({
     const actions = staffCheckInActions(item, now)
     const receiptState = receiptConfirmationState(item, now)
     const receiptRelease = receiptReleaseState(item, now)
+    const showsOngoingActions = group === "ONGOING" && item.checkInStatus !== "completed"
+    const showsDetailAction = ["handover_pending_receipt", "setup_in_progress", "setup_completed"].includes(item.checkInStatus || "")
+    const actionButtonCount = 1
+      + (showsOngoingActions ? 2 : 0)
+      + (showsOngoingActions && item.inventoryResolutionStatus === "PARTIAL_ACCEPTED" ? 1 : 0)
+      + (showsOngoingActions && actions.canReject ? 1 : 0)
+      + (showsDetailAction ? 1 : 0)
+      + (item.checkInStatus === "completed" ? 3 : 0)
+    const actionLayoutClass = actionButtonCount === 1
+      ? "flex max-w-md flex-wrap items-center justify-center"
+      : actionButtonCount === 3
+        ? "grid max-w-[31rem] grid-cols-3"
+        : "grid max-w-[25rem] grid-cols-2"
+    const actionButtonClass = `${checkInActionButtonBaseClass} ${actionButtonCount === 1 ? "w-48" : "w-full"}`
     return (
     <Tr key={item.reservationId} title={item.customerName ? `Khách hàng: ${item.customerName}` : undefined}>
       <Td>
@@ -1893,12 +1908,12 @@ export default function StaffCheckInOperationsPanel({
         </Badge>
       </Td>
       <Td className="whitespace-normal text-center">
-        <div className="mx-auto flex w-full max-w-md flex-wrap items-center justify-center gap-1.5">
-          <Button size="sm" variant="outline" className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]" disabled={submitting || !canOpenInventory(item.checkInStatus, item.inventoryVisit?.appointmentAt)} title={!canOpenInventory(item.checkInStatus, item.inventoryVisit?.appointmentAt) ? "Chờ khách xác nhận lịch kiểm kê" : "Mở form kiểm kê riêng"} onClick={() => openHandover(item, true)}>Xem tiến trình kiểm kê</Button>
-          {group === "ONGOING" && item.checkInStatus !== "completed" && (
+        <div className={`mx-auto w-full gap-1.5 ${actionLayoutClass}`}>
+          <Button size="sm" variant="outline" className={actionButtonClass} disabled={submitting || !canOpenInventory(item.checkInStatus, item.inventoryVisit?.appointmentAt)} title={!canOpenInventory(item.checkInStatus, item.inventoryVisit?.appointmentAt) ? "Chờ khách xác nhận lịch kiểm kê" : "Mở form kiểm kê riêng"} onClick={() => openHandover(item, true)}>Xem tiến trình kiểm kê</Button>
+          {showsOngoingActions && (
             <>
               {item.inventoryResolutionStatus === "PARTIAL_ACCEPTED" && <Button
-                className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
+                className={actionButtonClass}
                 size="sm"
                 variant="danger"
                 disabled={submitting}
@@ -1907,7 +1922,7 @@ export default function StaffCheckInOperationsPanel({
                 Xác nhận đã đưa phần dư ra
               </Button>}
               <Button
-                className="shrink-0 whitespace-nowrap !px-2.5 !py-1 !text-xs font-medium"
+                className={actionButtonClass}
                 size="sm"
                 disabled={submitting || !actions.canOpen}
                 onClick={() => beginHandover(item)}
@@ -1915,7 +1930,7 @@ export default function StaffCheckInOperationsPanel({
                 {stepForCheckIn(item) === 6 ? "Xem tiến trình bàn giao" : actions.label}
               </Button>
               {actions.canReject && <Button
-                className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
+                className={actionButtonClass}
                 size="sm"
                 variant="danger"
                 disabled={submitting}
@@ -1924,7 +1939,7 @@ export default function StaffCheckInOperationsPanel({
                 Từ chối nhận kho
               </Button>}
               <Button
-                className="shrink-0 whitespace-nowrap !px-2.5 !py-1 !text-xs font-medium"
+                className={actionButtonClass}
                 size="sm"
                 variant="danger"
                 disabled={submitting || !actions.canMarkAbsent}
@@ -1937,9 +1952,9 @@ export default function StaffCheckInOperationsPanel({
               </Button>
             </>
           )}
-          {["handover_pending_receipt", "setup_in_progress", "setup_completed"].includes(item.checkInStatus || "") && (
+          {showsDetailAction && (
             <Button
-              className="shrink-0 whitespace-nowrap !px-3 !py-1.5 !text-sm font-medium"
+              className={actionButtonClass}
               size="sm"
               variant="outline"
               onClick={() => setDetailTarget(item)}
@@ -1950,7 +1965,7 @@ export default function StaffCheckInOperationsPanel({
           {item.checkInStatus === "completed" && (
             <>
               <Button
-                className="shrink-0 whitespace-nowrap !px-3 !py-1.5 !text-sm font-medium"
+                className={actionButtonClass}
                 size="sm"
                 variant="outline"
                 onClick={() => openHandover(item)}
@@ -1958,7 +1973,7 @@ export default function StaffCheckInOperationsPanel({
                 Xem tiến trình bàn giao
               </Button>
               <Button
-                className="shrink-0 whitespace-nowrap !px-3 !py-1.5 !text-sm font-medium"
+                className={actionButtonClass}
                 size="sm"
                 variant="outline"
                 onClick={() => setDetailTarget(item)}
@@ -1966,7 +1981,7 @@ export default function StaffCheckInOperationsPanel({
                 Xem biên bản
               </Button>
               <Button
-                className="shrink-0 whitespace-nowrap !px-3 !py-1.5 !text-sm font-medium"
+                className={actionButtonClass}
                 size="sm"
                 variant="danger"
                 onClick={() => setDeleteTarget(item)}
@@ -2801,7 +2816,7 @@ export default function StaffCheckInOperationsPanel({
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
                             <p className="font-bold text-stone-900">Kết quả kiểm tra sức chứa</p>
-                            <p className="mt-1 text-xs text-stone-600">Đối chiếu sơ bộ số kiện, thể tích, tải trọng và kích thước. Hệ thống xác nhận phương án xếp hàng chính thức khi chuyển sang xử lý sai lệch.</p>
+                            <p className="mt-1 text-xs text-stone-600">Đối chiếu sơ bộ số kiện, thể tích, tải trọng và kích thước. Hệ thống xác nhận phương án xếp hàng chính thức khi chuyển sang kết quả tiếp nhận.</p>
                           </div>
                         </div>
                         <div className="mt-4 grid gap-2 sm:grid-cols-3" aria-label="Các kết quả kiểm tra sức chứa">
@@ -2860,7 +2875,7 @@ export default function StaffCheckInOperationsPanel({
             )}
 
             {inventoryMode && inventoryStage === 3 && <div>
-              {inventorySavedAt && !inventoryPublished && <p role="status" className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">Đã lưu bản kiểm kê lúc {formatStaffDateTime(inventorySavedAt)}. Có thể chỉnh sửa trước khi chuyển sang xử lý sai lệch.</p>}
+              {inventorySavedAt && !inventoryPublished && <p role="status" className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">Đã lưu bản kiểm kê lúc {formatStaffDateTime(inventorySavedAt)}. Có thể chỉnh sửa trước khi chuyển sang kết quả tiếp nhận.</p>}
               {(() => {
                 const fit = inventoryPublished ? handoverTarget.inventoryFullFit : !inventoryCapacity || ["UNKNOWN", "PENDING"].includes(inventoryCapacity.state) ? null : inventoryCapacity.state !== "NOT_FIT"
                 const result = inventoryResult(fit, inventoryPublished ? Boolean(handoverTarget.inventoryMismatchJson) : measurementVariance)
@@ -2914,8 +2929,8 @@ export default function StaffCheckInOperationsPanel({
                   {inventoryStage === 1 && <Button disabled={submitting || handoverTarget.checkInStatus === 'setup_in_progress' || !handoverTarget.inventoryVisit?.identityVerifiedAt} onClick={() => setInventoryStage(2)}>Tiếp tục kiểm kê hàng hóa</Button>}
                   {inventoryStage === 2 && inventoryStageReadOnly && <Button onClick={() => setInventoryStage(4)}>Xem lại kết quả kiểm kê</Button>}
                   {inventoryStage === 2 && !inventoryStageReadOnly && <Button disabled={submitting || !inventoryLinesComplete || (lineInventory && !inventoryReviewConfirmed) || !actualPackagingMethod.trim() || !packagingCondition || (packagingNoteRequired && !handoverNotes.trim()) || (!evidenceFiles.length && !evidenceReferences.length) || (measurementVariance && !effectiveVarianceReason.trim())} onClick={() => void submitHandover()}>{submitting ? "Đang lưu kiểm kê…" : "Xác nhận hàng hóa kiểm kê"}</Button>}
-                  {inventoryStage === 3 && !inventoryPublished && <Button disabled={submitting || (lineInventory && !inventoryReviewConfirmed) || Boolean(handoverTarget.inventoryFinalDeadlineAt && Date.parse(handoverTarget.inventoryFinalDeadlineAt) <= now)} onClick={() => void continueInventoryResolution()}>{submitting ? "Đang kiểm tra sức chứa…" : "Tiếp tục xử lý sai lệch"}</Button>}
-                  {inventoryStage === 3 && inventoryPublished && <Button onClick={() => setInventoryStage(4)}>Theo dõi xử lý sai lệch</Button>}
+                  {inventoryStage === 3 && !inventoryPublished && <Button disabled={submitting || (lineInventory && !inventoryReviewConfirmed) || Boolean(handoverTarget.inventoryFinalDeadlineAt && Date.parse(handoverTarget.inventoryFinalDeadlineAt) <= now)} onClick={() => void continueInventoryResolution()}>{submitting ? "Đang kiểm tra sức chứa…" : "Tiếp tục đến kết quả tiếp nhận"}</Button>}
+                  {inventoryStage === 3 && inventoryPublished && <Button onClick={() => setInventoryStage(4)}>Xem kết quả tiếp nhận</Button>}
                 </div>
               ) : isReviewingCompletedStep ? (
                 <div className="flex flex-wrap items-center justify-end gap-3">

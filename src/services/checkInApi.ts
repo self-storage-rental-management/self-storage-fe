@@ -19,6 +19,7 @@ export type InventoryResolutionStatus =
   | 'PENDING_STAFF_RESOLUTION'
   | 'ACCEPTED'
   | 'PARTIAL_ACCEPTED'
+  | 'TRANSFER_REQUESTED'
   | 'RETURN_REQUESTED'
   | 'RECOVERY_REQUIRED'
 
@@ -127,6 +128,7 @@ export interface CheckInCase {
   inventorySuggestedPackageCount?: number | null
   inventoryMismatchSummary?: string | null
   inventoryAcceptedQuantitiesJson?: string | null
+  inventoryRemainderDeadlineAt?: string | null
   inventoryRemainderRemovedAt?: string | null
   inventoryRemainderRemovalNote?: string | null
   inventoryActualJson?: string | null
@@ -704,7 +706,7 @@ export async function prepareInventoryResolution(checkInId: string, expectedRevi
 }
 
 export const publishInventoryDraft = prepareInventoryResolution
-export type AtSiteInventoryDecision = 'ACCEPT_FULL' | 'ACCEPT_PARTIAL' | 'CANCEL_AND_RETURN'
+export type AtSiteInventoryDecision = 'REQUEST_TRANSFER' | 'ACCEPT_FULL' | 'ACCEPT_PARTIAL' | 'CANCEL_AND_RETURN'
 export async function resolveInventoryAtSite(checkInId: string, request: { decision: AtSiteInventoryDecision; customerPresent: boolean; note?: string; scheduledDate?: string; evidenceReferences?: string[]; resultVersion?: number }) {
   return assertEnvelope(await apiRequest<unknown>(`/api/staff/check-ins/${encodeURIComponent(checkInId)}/inventory-resolution-at-site`,
     { method: 'POST', body: JSON.stringify(request) }))

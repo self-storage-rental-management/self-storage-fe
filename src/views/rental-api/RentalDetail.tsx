@@ -323,7 +323,17 @@ export default function RentalDetail({
           </div>
         )}
       </Card>}
-      {inventoryDetail?.reservation.id === rental.reservationId && inventoryDetail.inventoryResultPublishedAt && (
+      {rental.inventory ? (
+        <Card className="space-y-3 rounded-xl p-5">
+          <h3 className="font-bold">Kết quả kiểm kê hàng hóa</h3>
+          <p>{rental.inventory.fullFit ? rental.inventory.mismatch ? 'Có sai lệch so với khai báo, hàng vẫn vừa kho.' : 'Hàng thực tế khớp khai báo.' : 'Hàng thực tế vượt sức chứa của gian kho.'}</p>
+          {rental.inventory.decision === 'TRANSFER_REQUESTED' && <p>Đã tạo yêu cầu thu xếp chuyển hàng.</p>}
+          {rental.inventory.decision === 'PARTIAL_ACCEPTED' && rental.inventory.removalDeadline && <p>Ngày hẹn đưa hàng dư ra: {new Date(Date.parse(rental.inventory.removalDeadline) - 1).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</p>}
+          {rental.inventory.removedAt && <p>Đã xác nhận đưa hàng dư ra ngày {rentalDate(rental.inventory.removedAt)}.</p>}
+          <InventoryLineInspectionResult detail={{ inventoryActualJson: rental.inventory.actualJson, acceptedQuantitiesJson: rental.inventory.decision === 'PARTIAL_ACCEPTED' ? rental.inventory.acceptedQuantitiesJson : null, goodsItems: evidence?.goodsItems }} />
+          <PackagingInspectionResult detail={{ inventoryActualJson: rental.inventory.actualJson, goodsCondition: rental.inventory.declaredPackaging }} />
+        </Card>
+      ) : inventoryDetail?.reservation.id === rental.reservationId && inventoryDetail.inventoryResultPublishedAt && (
         <Card className="space-y-3 rounded-xl p-5">
           <InventoryLineInspectionResult detail={inventoryDetail} />
           <PackagingInspectionResult detail={inventoryDetail} />

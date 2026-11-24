@@ -4,7 +4,7 @@ export const INVENTORY_STAGE_LABELS: Record<InventoryStage, string> = {
   1: 'Kiểm tra khách',
   2: 'Kiểm kê hàng hóa',
   3: 'Xác nhận hàng hóa kiểm kê',
-  4: 'Xử lý sai lệch',
+  4: 'Kết quả tiếp nhận',
 }
 
 /**

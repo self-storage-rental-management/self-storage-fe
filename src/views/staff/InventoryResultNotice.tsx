@@ -12,8 +12,8 @@ interface Alternative {
 const screens = {
   MATCHED: { title: 'Hàng hóa khớp với khai báo', icon: '✓', color: 'border-emerald-300 bg-emerald-50 text-emerald-950', description: 'Hàng thực tế phù hợp khai báo và có thể tiếp nhận toàn bộ trong gian kho hiện tại.' },
   VARIANCE_FITS: { title: 'Hàng hóa không khớp nhưng vẫn vừa kho', icon: '!', color: 'border-amber-300 bg-amber-50 text-amber-950', description: 'Số lượng, số đo, loại hàng hoặc tình trạng thực tế có thay đổi. Staff ghi nhận việc tiếp nhận toàn bộ hàng sau khi trao đổi trực tiếp với khách.' },
-  NOT_FIT: { title: 'Hàng hóa không thể chứa vừa trong kho', icon: '!', color: 'border-red-300 bg-red-50 text-red-950', description: 'Không thể tiếp nhận toàn bộ hàng thực tế trong gian kho hiện tại. Ghi nhận tại cơ sở phương án nhận phần vừa kho và đưa phần dư ra, hoặc trả lại kho.' },
-  UNKNOWN: { title: 'Chờ đối chiếu phương án xếp hàng', icon: '?', color: 'border-stone-300 bg-stone-50 text-stone-900', description: 'Chưa đủ dữ liệu để kết luận. Chuyển sang xử lý sai lệch để hệ thống kiểm tra phương án xếp chính thức.' },
+  NOT_FIT: { title: 'Hàng hóa không thể chứa vừa trong kho', icon: '!', color: 'border-red-300 bg-red-50 text-red-950', description: 'Không thể tiếp nhận toàn bộ hàng thực tế trong gian kho hiện tại. Ghi nhận tại cơ sở phương án nhận phần vừa kho và đưa phần dư ra, hoặc tạo yêu cầu thu xếp chuyển hàng.' },
+  UNKNOWN: { title: 'Chờ đối chiếu phương án xếp hàng', icon: '?', color: 'border-stone-300 bg-stone-50 text-stone-900', description: 'Chưa đủ dữ liệu để kết luận. Chuyển đến bước Kết quả tiếp nhận để hệ thống kiểm tra phương án xếp chính thức.' },
 }
 
 export default function InventoryResultNotice({ result, published, checkInId, packages, weight, volume, children, showAlternatives = true }: {

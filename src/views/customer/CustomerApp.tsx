@@ -1,3 +1,4 @@
+import { getRentalRenewalEligibility } from '../rental-api/RentalDeadlineNotice'
 import { PACKAGING_METHOD_OPTIONS } from '../../domain/packagingMethods'
 import BookingArrivalDetails from './BookingArrivalDetails'
 import CustomerTransactionTerms from './CustomerTransactionTerms'
@@ -3347,25 +3348,17 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                         {['setup', 'active'].includes(rental.status) && (
                           <>
                             {rental.status === 'active' && (() => {
-                              const end = parseCustomerDate(rental.endDate)
-                              const today = new Date(now); today.setHours(0, 0, 0, 0)
-                              const remainingDays = end ? Math.round((end.getTime() - today.getTime()) / 86_400_000) : Infinity
-                              const isWithin7Days = Number.isFinite(remainingDays) && remainingDays === 7
-                              const hasOpenRenewal = renewals.some(item => item.rentalId === rental.id && !['cancelled', 'rejected', 'completed', 'payment_expired'].includes(item.status))
-                              const canRenew = isWithin7Days && !hasOpenRenewal
+                              const eligibility = getRentalRenewalEligibility(
+                                { id: rental.id, status: rental.status, contractEndDate: rental.endDate }, renewals, new Date(now)
+                              )
+                              const expired = eligibility.remainingDays < 0
 
                               return (
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  disabled={!canRenew}
-                                  title={
-                                    hasOpenRenewal
-                                      ? 'Hồ sơ đã có yêu cầu gia hạn đang được xử lý.'
-                                      : !isWithin7Days
-                                      ? 'Chỉ có thể gia hạn khi hợp đồng còn 7 ngày trước ngày hết hạn.'
-                                      : undefined
-                                  }
+                                  disabled={!eligibility.canRenew || expired}
+                                  title={eligibility.reason ?? (expired ? 'Hợp đồng đã hết hạn.' : undefined)}
                                   onClick={() => {
                                     if (isApiAuthenticated()) { navigateTo('rental-records'); return }
                                     setActiveRentalForRenewal(rental)
@@ -3374,7 +3367,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                                     setRenewalModalOpen(true)
                                   }}
                                 >
-                                  {hasOpenRenewal ? 'Đang xử lý gia hạn' : 'Yêu cầu gia hạn'}
+                                  {eligibility.hasOpenRenewal ? 'Đang xử lý gia hạn' : 'Yêu cầu gia hạn'}
                                 </Button>
                               )
                             })()}
