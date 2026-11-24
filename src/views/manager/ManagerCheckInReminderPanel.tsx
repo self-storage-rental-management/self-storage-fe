@@ -38,7 +38,7 @@ function releaseCountdown(value: string | null | undefined, now: number) {
   }
 }
 
-export default function ManagerCheckInReminderPanel({ showToast }: { showToast: (message: string) => void }) {
+export default function ManagerCheckInReminderPanel({ showToast, onCountChange }: { showToast: (message: string) => void; onCountChange?: (count: number | null) => void }) {
   const [items, setItems] = useState<CheckInCase[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<unknown>(null)
@@ -53,13 +53,15 @@ export default function ManagerCheckInReminderPanel({ showToast }: { showToast: 
     try {
       const result = await listCheckIns({ group: 'ONGOING', status: 'handover_pending_receipt', page: 0, pageSize: 100 })
       setItems(result.data.filter(item => item.checkInStatus === 'handover_pending_receipt'))
+      onCountChange?.(result.pagination.totalItems)
     } catch (reason) {
       setError(reason)
       setItems([])
+      onCountChange?.(null)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [onCountChange])
 
   useEffect(() => {
     void reload()

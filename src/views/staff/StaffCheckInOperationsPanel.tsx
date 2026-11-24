@@ -488,7 +488,7 @@ function receiptReleaseState(item: CheckInCase, now = Date.now()) {
   }
   const remaining = new Date(item.receiptConfirmationReleaseAt).getTime() - now
   if (!Number.isFinite(remaining) || remaining <= 0) {
-    return { text: "Đã đủ điều kiện để Manager giải phóng kho", eligible: true }
+    return { text: "Đã đủ điều kiện để quản lý cơ sở giải phóng kho", eligible: true }
   }
   const minutes = Math.ceil(remaining / 60_000)
   const days = Math.floor(minutes / 1_440)
@@ -500,7 +500,7 @@ function receiptReleaseState(item: CheckInCase, now = Date.now()) {
     rest > 0 ? `${rest} phút` : "",
   ].filter(Boolean)
   return {
-    text: "Manager có thể giải phóng sau " + parts.join(" "),
+    text: "Quản lý cơ sở có thể giải phóng sau " + parts.join(" "),
     eligible: false,
   }
 }
@@ -1854,7 +1854,7 @@ export default function StaffCheckInOperationsPanel({
           }
         >
           {receiptRelease.eligible
-            ? "Đủ điều kiện để Manager giải phóng kho"
+            ? "Đủ điều kiện để quản lý cơ sở giải phóng kho"
             : receiptState.expired
             ? "Đã quá hạn xác nhận nhận kho"
             : staffCheckInStatusLabel(item.checkInStatus, item.reservationStatus)}

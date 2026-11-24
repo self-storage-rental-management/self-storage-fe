@@ -44,10 +44,11 @@ describe('customer reservation layout regression', () => {
     const deadline = '2026-11-01T10:00:00Z'
     const timestamp = Date.parse(deadline)
     expect(paymentCountdown(deadline, timestamp - 600_000)).toEqual({ text: '10:00', expired: false })
-      expect(paymentCountdownUrgency(deadline, timestamp - 600_000)).toBe('normal')
+    expect(paymentCountdown(deadline, timestamp - 600_000)).toEqual({ text: '10:00', expired: false })
+    expect(paymentCountdownUrgency(deadline, timestamp - 600_000)).toBe('normal')
     expect(paymentCountdown(deadline, timestamp - 599_000).text).toBe('09:59')
     expect(paymentCountdown(deadline, timestamp + 1)).toEqual({ text: '00:00', expired: true })
-      expect(paymentCountdownUrgency(deadline, timestamp + 1)).toBe('danger')
+    expect(paymentCountdownUrgency(deadline, timestamp + 1)).toBe('danger')
     expect(paymentCountdown('invalid', timestamp).expired).toBe(true)
   })
 
@@ -71,7 +72,7 @@ describe('customer reservation layout regression', () => {
   it('shows countdown rather than only the expiry date', () => {
     const html = render('AWAITING_PAYMENT')
     expect(html).toContain('role="timer"')
-    expect(html).toContain('Hạn thanh toán trước 20% (giữ chỗ)')
+    expect(html).toContain('Thời gian thanh toán đặt cọc giữ chỗ còn lại')
     expect(html).not.toContain('Thanh toán mô phỏng')
   })
   it('restores the amber card, financial breakdown and five-step progress for real reservations', () => {
@@ -135,7 +136,7 @@ describe('customer reservation layout regression', () => {
     const cases: Array<[Partial<CustomerReservationDetail>, number, string]> = [
       [{ inventoryArrivedAt: '2026-11-02T09:00:00Z' }, Date.parse('2026-11-02T09:05:00Z'), 'Đang chờ xác minh danh tính.'],
       [{}, Date.parse('2026-11-08T08:00:00Z'), 'Đã quá hạn kiểm kê'],
-      [{ inventoryResolutionStatus: 'PENDING_CUSTOMER' }, Date.now(), 'Staff đã công bố kết quả kiểm kê'],
+      [{ inventoryResolutionStatus: 'PENDING_CUSTOMER' }, Date.now(), 'Nhân viên đã cập nhật kết quả kiểm kê'],
     ]
     for (const [overrides, now, text] of cases) {
       const html = renderToStaticMarkup(<InventoryAppointmentPanel detail={{ ...detail, ...overrides }} now={now} onSaved={vi.fn()} />)

@@ -290,7 +290,8 @@ describe("D4 truthful overdue presentation", () => {
         }}
       />,
     )
-    expect(html).toContain("Cập nhật:")
+    expect(html).toContain("Cập nhật lúc")
+    expect(html).toContain("10:00, 08/10/2026")
     expect(html).not.toContain("Chưa đủ dữ liệu")
     expect(html).not.toContain("FINANCIAL_COVERAGE_PARTIAL")
     expect(html).not.toContain("0 đ")

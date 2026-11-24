@@ -78,7 +78,7 @@ export default function IntakeWorkflowPanel({ reservationId, role, checkInId, st
     {deadline && <p className="font-semibold">Hạn: {show(deadline)} · {remaining! <= 0 ? 'Đã quá hạn' : `Còn ${Math.ceil(remaining! / 3_600_000)} giờ`}</p>}
     {!state.readyAt && <p>Đã dời {state.setupExtensionCount ?? 0}/2 lần. Mỗi lần tối đa {state.setupExtensionDays ?? 'chưa cấu hình'} ngày. Không cộng thời gian miễn phí.</p>}
     <p>Lịch kiểm kê: {show(state.appointmentAt)}</p>
-    {state.resultConfirmationDueAt && <p>Vui lòng xác nhận hoặc gửi ý kiến về kết quả trong 48 giờ. Quá hạn không tự động xác nhận thay bạn.</p>}
+    {state.resultConfirmationDueAt && <p>Vui lòng xác nhận hoặc góp ý về kết quả trong 48 giờ. Sau thời hạn này, hệ thống không tự xác nhận thay bạn.</p>}
     {role === 'MANAGER' && state.setupExtensionDays == null && !state.readyAt && <label className="block">Số ngày tối đa mỗi lần dời hạn<input className="ml-2 rounded border p-2" type="number" min="1" step="1" value={extensionDays} onChange={e => setExtensionDays(e.target.value)} /></label>}
     {(role === 'MANAGER' || role === 'CUSTOMER') && <label className="block">Ngày giờ mới theo giờ Việt Nam<input className="mt-1 block rounded border p-2" type="datetime-local" min={minimumDateTime} value={at} onChange={e => setAt(e.target.value)} /></label>}
     {role === 'CUSTOMER' && <div className="flex flex-wrap gap-2">{!state.readyAt && button('EXTEND_SETUP', 'Dời hạn setup', (state.setupExtensionCount ?? 0) >= 2 || !state.setupDeadlineAt || selectedDateTimeIsPast)}{state.readyAt && !state.arrivedAt && button('APPOINTMENT', 'Xác nhận lịch kiểm kê', selectedDateTimeIsPast)}</div>}

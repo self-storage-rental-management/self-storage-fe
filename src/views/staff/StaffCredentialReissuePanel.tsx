@@ -67,6 +67,10 @@ export default function StaffCredentialReissuePanel({ showToast }: { showToast: 
 
   const submit = async () => {
     if (!selected?.rentalId || !identityVerified || !reason.trim() || !reference.trim()) return
+    if (selected.type === 'PIN' && (!secret.trim() || [reference, reason, note].some(value => value.includes(secret.trim())))) {
+      setError('Nhập PIN mới và không ghi PIN vào mã tham chiếu, lý do hoặc ghi chú.')
+      return
+    }
     setBusy(true)
     setError(null)
     try {
@@ -135,7 +139,7 @@ export default function StaffCredentialReissuePanel({ showToast }: { showToast: 
           {selected.type === 'PIN' && <Input label="Mã truy cập mới (không lưu dạng gốc)" type="password" autoComplete="off" value={secret} maxLength={200} disabled={busy} onChange={(event) => setSecret(event.target.value)} />}
           <Input label="Lý do thay quyền truy cập" value={reason} maxLength={1000} disabled={busy} onChange={(event) => setReason(event.target.value)} placeholder="Ví dụ: khách báo mất chìa khóa tại quầy" />
           <Input label="Ghi chú bàn giao (tùy chọn)" value={note} maxLength={1000} disabled={busy} onChange={(event) => setNote(event.target.value)} />
-          <div className="flex justify-end"><Button disabled={busy || !identityVerified || !reason.trim() || !reference.trim()} onClick={() => void submit()}>{busy ? 'Đang thu hồi và cấp lại…' : 'Xác nhận thay quyền truy cập'}</Button></div>
+          <div className="flex justify-end"><Button disabled={busy || !identityVerified || !reason.trim() || !reference.trim() || (selected.type === 'PIN' && !secret.trim())} onClick={() => void submit()}>{busy ? 'Đang thu hồi và cấp lại…' : 'Xác nhận thay quyền truy cập'}</Button></div>
         </div>
       )}
       <p className="mt-3 text-xs text-stone-500">Không hiển thị hoặc lưu mã truy cập gốc trong danh sách. Chỉ mã tham chiếu được trả về để đối chiếu.</p>
