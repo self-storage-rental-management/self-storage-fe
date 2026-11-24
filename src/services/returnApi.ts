@@ -43,6 +43,8 @@ export interface ActiveReturnPolicyView {
   totalRentalCharge: number
   rentalRefundAmount: number
   noticeDays: number
+  rentalMonths?: number | null
+  monthlyPrice?: number | null
 }
 export function isOverdueSettlement(value: unknown): value is OverdueSettlement {
   if (!value || typeof value !== 'object') return false
