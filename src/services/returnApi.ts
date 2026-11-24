@@ -475,7 +475,7 @@ export function paySettlement(id: string, paymentMethod: string, notes = '') {
 }
 export function returnError(error: unknown) {
   if (error instanceof ApiClientError) {
-    const msg = error.message || ''
+    const msg = error.diagnosticMessage || error.message || ''
     if (error.status === 409 || msg.includes('409')) {
       if (msg === 'Cần đối soát lại phí quá hạn trước khi xác nhận hoặc thu hoàn tiền.') {
         return 'Cần cơ sở đối soát lại phí quá hạn trước khi xác nhận hoặc thu hoàn tiền.'
