@@ -44,9 +44,10 @@ describe('customer reservation layout regression', () => {
     const deadline = '2026-11-01T10:00:00Z'
     const timestamp = Date.parse(deadline)
     expect(paymentCountdown(deadline, timestamp - 600_000)).toEqual({ text: '10:00', expired: false })
+    expect(paymentCountdown(deadline, timestamp - 600_000)).toEqual({ text: '10:00', expired: false })
+    expect(paymentCountdownUrgency(deadline, timestamp - 600_000)).toBe('normal')
     expect(paymentCountdown(deadline, timestamp - 599_000).text).toBe('09:59')
     expect(paymentCountdown(deadline, timestamp + 1)).toEqual({ text: '00:00', expired: true })
-    expect(paymentCountdownUrgency(deadline, timestamp - 600_000)).toBe('normal')
     expect(paymentCountdownUrgency(deadline, timestamp + 1)).toBe('danger')
     expect(paymentCountdown('invalid', timestamp).expired).toBe(true)
   })

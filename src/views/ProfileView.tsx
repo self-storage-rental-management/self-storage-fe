@@ -42,6 +42,7 @@ function readProfileDraft(userId: string): ProfileDraft | null {
     const parsed = JSON.parse(raw) as Partial<ProfileDraft>
     if (typeof parsed.name !== 'string' || typeof parsed.phone !== 'string' || typeof parsed.permanentAddress !== 'string'
       || typeof parsed.emergencyContactName !== 'string' || typeof parsed.emergencyContactPhone !== 'string') return null
+    // Build the draft explicitly so the string fields stay typed after the guard above.
     return {
       name: parsed.name,
       phone: parsed.phone,
