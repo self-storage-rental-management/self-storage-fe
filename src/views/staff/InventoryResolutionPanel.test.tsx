@@ -26,3 +26,11 @@ it('routes an actual return request to inspection and settlement', () => {
   expect(html).toContain('Mở Trả kho &amp; nghiệm thu')
   expect(html).not.toContain('Xác nhận phần dư đã đưa ra')
 })
+
+it('offers acceptance and rejection of declared OTHER goods even when the goods fit', () => {
+  const html = render({ inventoryFullFit: true, declaredGoodsLines: [{ id: 'other', category: 'OTHER' }] as CheckInCase['declaredGoodsLines'] })
+  expect(html).toContain('Chấp nhận hàng hóa loại Khác')
+  expect(html).toContain('Từ chối hàng hóa loại Khác')
+  expect(html).toContain('tiền hoàn hoặc thu thêm')
+  expect(render({ inventoryFullFit: true })).not.toContain('Từ chối hàng hóa loại Khác')
+})
