@@ -39,6 +39,8 @@ export default function ReturnSettlementModal({
   const overdueFee = returnCase.overdueFee || 0
   const lostItemFee = returnCase.lostItemFee || 0
   const outstandingFee = returnCase.outstandingFee || 0
+  const palletLossFee = apiRecord?.palletLossFee || 0
+  const lockLossFee = Math.max(0, lostItemFee - palletLossFee)
   const totalDeductions = apiRecord ? apiRecord.totalDeductions : damageFee + cleaningFee + overdueFee + lostItemFee + outstandingFee
 
   // Lọc các giao dịch liên quan đến hồ sơ thuê này
@@ -217,22 +219,52 @@ export default function ReturnSettlementModal({
                       </Tr>
                     )}
                     {lostItemFee > 0 && (
-                      <Tr>
-                        <Td className="font-semibold text-rose-700">
-                          5. Phí làm mất chìa / thẻ / khóa
-                        </Td>
-                        <Td className="text-xs text-stone-500">
-                          Chi phí cấp lại phụ kiện mở kho
-                        </Td>
-                        <Td className="text-right font-bold text-rose-700">
-                          -{formatVnd(lostItemFee)}
-                        </Td>
-                      </Tr>
+                      <>
+                        {lockLossFee > 0 && (
+                          <Tr>
+                            <Td className="font-semibold text-rose-700">
+                              5. Phí làm mất chìa / thẻ / khóa
+                            </Td>
+                            <Td className="text-xs text-stone-500">
+                              Chi phí cấp lại phụ kiện mở kho
+                            </Td>
+                            <Td className="text-right font-bold text-rose-700">
+                              -{formatVnd(lockLossFee)}
+                            </Td>
+                          </Tr>
+                        )}
+                        {palletLossFee > 0 && (
+                          <Tr>
+                            <Td className="font-semibold text-rose-700">
+                              6. Phí thiếu / hư hại tấm kê (Pallet)
+                            </Td>
+                            <Td className="text-xs text-stone-500">
+                              {apiRecord?.missingPalletCount ? `Bồi thường thiếu ${apiRecord.missingPalletCount} tấm kê sàn` : 'Bồi thường tấm kê kệ hàng'}
+                            </Td>
+                            <Td className="text-right font-bold text-rose-700">
+                              -{formatVnd(palletLossFee)}
+                            </Td>
+                          </Tr>
+                        )}
+                        {lockLossFee === 0 && palletLossFee === 0 && (
+                          <Tr>
+                            <Td className="font-semibold text-rose-700">
+                              5. Phí phụ kiện & tài sản kho
+                            </Td>
+                            <Td className="text-xs text-stone-500">
+                              Chi phí bồi thường phụ kiện và tài sản bàn giao
+                            </Td>
+                            <Td className="text-right font-bold text-rose-700">
+                              -{formatVnd(lostItemFee)}
+                            </Td>
+                          </Tr>
+                        )}
+                      </>
                     )}
                     {outstandingFee > 0 && (
                       <Tr>
                         <Td className="font-semibold text-rose-700">
-                          6. Tiền thuê còn tồn đọng
+                          {lostItemFee > 0 && palletLossFee > 0 ? '7. Tiền thuê còn tồn đọng' : '6. Tiền thuê còn tồn đọng'}
                         </Td>
                         <Td className="text-xs text-stone-500">
                           Tiền thuê các kỳ chưa thanh toán
@@ -256,34 +288,61 @@ export default function ReturnSettlementModal({
                 </Table>
               </div>
 
-              {/* Tổng kết dòng tiền */}
+              {/* Tổng kết dòng tiền minh bạch */}
               <div className="mt-4 rounded-xl border border-stone-200 bg-stone-50 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs text-stone-500">Tổng các khoản khấu trừ:</p>
-                    <p className="font-mono font-semibold text-stone-700">{formatVnd(totalDeductions)}</p>
+                <div className="grid gap-4 sm:grid-cols-2 items-center">
+                  <div className="space-y-1.5 text-xs text-stone-600">
+                    <p className="font-bold uppercase tracking-wider text-stone-500 text-[11px] border-b border-stone-200 pb-1">
+                      Chiết tính dòng tiền
+                    </p>
+                    <div className="flex justify-between">
+                      <span className="flex items-center gap-1 font-medium text-stone-700">
+                        <span className="text-emerald-700 font-bold">(+)</span> Tiền cọc an ninh ban đầu:
+                      </span>
+                      <strong className="font-mono text-emerald-800">{formatVnd(deposit)}</strong>
+                    </div>
+                    {apiRecord?.rentalRefundCredit != null && apiRecord.rentalRefundCredit > 0 && (
+                      <div className="flex justify-between">
+                        <span className="flex items-center gap-1 font-medium text-stone-700">
+                          <span className="text-emerald-700 font-bold">(+)</span> Tiền cước thuê chưa sử dụng:
+                        </span>
+                        <strong className="font-mono text-emerald-800">+{formatVnd(apiRecord.rentalRefundCredit)}</strong>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-rose-700">
+                      <span className="flex items-center gap-1 font-medium">
+                        <span className="font-bold">(-)</span> Tổng chi phí khấu trừ biên bản:
+                      </span>
+                      <strong className="font-mono">-{formatVnd(totalDeductions)}</strong>
+                    </div>
+                    <p className="text-[10px] text-stone-400 italic pt-1 border-t border-stone-200">
+                      Công thức: [Tổng tiền quỹ khách đóng] − [Tổng chi phí phát sinh]
+                    </p>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right sm:border-l sm:border-stone-200 sm:pl-4">
                     {netRefund > 0 ? (
                       <>
                         <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
                           SỐ TIỀN HOÀN TRẢ KHÁCH HÀNG:
                         </p>
-                        <p className="text-2xl font-black text-emerald-700">{formatVnd(netRefund)}</p>
+                        <p className="text-2xl font-black text-emerald-700 font-mono">{formatVnd(netRefund)}</p>
+                        <p className="mt-1 text-[11px] text-stone-500">Tiền sẽ chuyển hoàn về tài khoản của khách sau khi duyệt</p>
                       </>
                     ) : amountDue > 0 ? (
                       <>
                         <p className="text-xs font-semibold uppercase tracking-wider text-rose-700">
                           SỐ TIỀN KHÁCH HÀNG CẦN NỘP THÊM:
                         </p>
-                        <p className="text-2xl font-black text-rose-700">{formatVnd(amountDue)}</p>
+                        <p className="text-2xl font-black text-rose-700 font-mono">{formatVnd(amountDue)}</p>
+                        <p className="mt-1 text-[11px] text-stone-500">Khách hàng vui lòng thanh toán khoản chi phí vượt cọc</p>
                       </>
                     ) : (
                       <>
                         <p className="text-xs font-semibold uppercase tracking-wider text-stone-600">
                           KẾT QUẢ QUYẾT TOÁN:
                         </p>
-                        <p className="text-xl font-bold text-stone-800">{balancedKnown ? 'Cân bằng (0 ₫)' : 'Chưa xác định'}</p>
+                        <p className="text-xl font-bold text-stone-800 font-mono">{balancedKnown ? 'Cân bằng (0 ₫)' : 'Chưa xác định'}</p>
+                        <p className="mt-1 text-[11px] text-stone-500">Tiền cọc cấn trừ vừa đủ toàn bộ chi phí</p>
                       </>
                     )}
                   </div>
