@@ -165,6 +165,7 @@ function InventoryResolutionNotice({ detail, now, submitting, onResolve }: {
   const [returnPlannerOpen, setReturnPlannerOpen] = useState(false)
   const [partialConfirmOpen, setPartialConfirmOpen] = useState(false)
   const [returnDateError, setReturnDateError] = useState('')
+  if (detail.inventoryResolutionStatus === 'TRANSFER_REQUESTED') return <p role="status" className="rounded-lg bg-blue-50 p-3 text-sm text-blue-950">Cơ sở đã nhận yêu cầu thu xếp chuyển hàng. Bạn có thể theo dõi tại mục hỗ trợ.</p>
   if (!['PENDING_CUSTOMER', 'PARTIAL_ACCEPTED', 'RETURN_REQUESTED'].includes(detail.inventoryResolutionStatus || '')) return null
   const confirmInventoryReturn = () => {
     if (!canPlanReturn || !returnDate || returnDate < minReturnDate || (removalLast && returnDate > removalLast)) {
@@ -226,7 +227,12 @@ function InventoryResolutionNotice({ detail, now, submitting, onResolve }: {
   )
 }
 
-export function InventoryLineInspectionResult({ detail }: { detail: CustomerReservationDetail }) {
+type InspectionDetail = {
+  inventoryActualJson?: string | null
+  acceptedQuantitiesJson?: string | null
+  goodsItems?: { id: string; categoryName?: string | null; materialName?: string | null; description?: string | null; customMaterial?: string | null; catalogCategoryId?: string | null; catalogMaterialId?: string | null; quantity: number }[]
+}
+export function InventoryLineInspectionResult({ detail }: { detail: InspectionDetail }) {
   let lines: CheckInInventoryLine[] = []
   try {
     const value: unknown = detail.inventoryActualJson ? JSON.parse(detail.inventoryActualJson) : null
@@ -234,12 +240,14 @@ export function InventoryLineInspectionResult({ detail }: { detail: CustomerRese
       lines = value.lines.filter((line): line is CheckInInventoryLine => Boolean(line && typeof line === 'object' && typeof line.goodsItemId === 'string' && typeof line.actualQuantity === 'number'))
   } catch { return null }
   if (!lines.length) return null
+  let retained: Record<string, number> | null = null
+  try { retained = JSON.parse(detail.acceptedQuantitiesJson || 'null') } catch { /* Older records may lack per-line quantities. */ }
   return <section className="space-y-2 rounded-lg border border-stone-300 p-3 text-left text-sm">
     <h4 className="font-bold">Đối chiếu kiểm kê từng dòng hàng</h4>
     {lines.map((line, index) => {
       const declared = detail.goodsItems?.find(item => item.id === line.goodsItemId)
       const actual = line.actualGoods
-      const matches = declared && actual && declared.catalogCategoryId === actual.catalogCategoryId && declared.catalogMaterialId === actual.catalogMaterialId && declared.quantity === line.actualQuantity
+      const matches = declared?.catalogCategoryId && actual && declared.catalogCategoryId === actual.catalogCategoryId && declared.catalogMaterialId === actual.catalogMaterialId && declared.quantity === line.actualQuantity
       return <div key={line.goodsItemId} className="space-y-1 border-t border-stone-200 pt-2">
         <p className="font-semibold">Dòng {index + 1} · {matches ? 'Khớp loại hàng, chất liệu và số kiện' : 'Xem kết quả đối chiếu thực tế'}</p>
         <p>Đã khai: {declared?.categoryName || declared?.description || 'Chưa ghi nhận'} · {declared?.materialName || declared?.customMaterial || 'Chưa ghi nhận'} · {declared?.quantity ?? 'Chưa ghi nhận'} kiện</p>
@@ -249,6 +257,7 @@ export function InventoryLineInspectionResult({ detail }: { detail: CustomerRese
             ['Chất liệu chính', actual?.customMaterial || actual?.materialName],
             ['Mô tả hàng hóa', actual?.description],
             ['Số lượng thực tế', line.actualQuantity],
+            ...(retained ? [['Số kiện giữ lại', retained[line.goodsItemId] ?? 0], ['Số kiện đưa ra', Math.max(0, line.actualQuantity - (retained[line.goodsItemId] ?? 0))]] : []),
             ['Chiều dài mỗi kiện', line.measurements && line.measurements.lengthCm + ' cm'],
             ['Chiều rộng mỗi kiện', line.measurements && line.measurements.widthCm + ' cm'],
             ['Chiều cao mỗi kiện', line.measurements && line.measurements.heightCm + ' cm'],
@@ -272,7 +281,7 @@ export function InventoryLineInspectionResult({ detail }: { detail: CustomerRese
   </section>
 }
 
-export function PackagingInspectionResult({ detail }: { detail: CustomerReservationDetail }) {
+export function PackagingInspectionResult({ detail }: { detail: { inventoryActualJson?: string | null; goodsCondition?: string | null } }) {
   let actual: { packagingMethod?: string; packagingCondition?: string } | null = null
   try { actual = detail.inventoryActualJson ? JSON.parse(detail.inventoryActualJson) : null } catch { return null }
   if (!actual?.packagingMethod && !actual?.packagingCondition) return null
@@ -649,7 +658,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-bold text-amber-700">{r.reservationCode}</span>
-          <span className={`rounded px-2.5 py-1 text-xs font-bold ${inventoryMismatchPending ? 'bg-red-700 text-white' : awaitingInventory ? (partialInventoryPending ? 'bg-amber-100 text-amber-900' : checkInStatus === 'completed' ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900') : visualTone === 'completed' ? 'bg-emerald-700 text-white' : visualTone === 'expired' ? 'bg-red-100 text-red-900' : progress !== null && progress >= 3 ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{inventoryReturnRequested ? 'Buộc trả kho do kiểm kê sai lệch' : inventoryMismatchPending ? 'Cần xử lý sai lệch kiểm kê' : awaitingInventory ? (partialInventoryPending ? 'Chờ xử lý phần hàng dư' : checkInStatus === 'completed' ? 'Đã kiểm kê' : 'Chờ kiểm kê') : reservationStatusLabels[r.status]}</span>
+          <span className={`rounded px-2.5 py-1 text-xs font-bold ${inventoryMismatchPending ? 'bg-red-700 text-white' : awaitingInventory ? (partialInventoryPending ? 'bg-amber-100 text-amber-900' : checkInStatus === 'completed' ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900') : visualTone === 'completed' ? 'bg-emerald-700 text-white' : visualTone === 'expired' ? 'bg-red-100 text-red-900' : progress !== null && progress >= 3 ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{detail?.inventoryResolutionStatus === 'TRANSFER_REQUESTED' ? 'Chờ thu xếp chuyển hàng' : inventoryReturnRequested ? 'Buộc trả kho do kiểm kê sai lệch' : inventoryMismatchPending ? 'Cần xử lý sai lệch kiểm kê' : awaitingInventory ? (partialInventoryPending ? 'Chờ xử lý phần hàng dư' : checkInStatus === 'completed' ? 'Đã kiểm kê' : 'Chờ kiểm kê') : reservationStatusLabels[r.status]}</span>
         </div>
         <h2 className="mt-1 text-lg font-bold text-stone-900">{displayedUnitTypeName} · {displayedFacilityName}</h2>
         <div className="mt-3 space-y-2">

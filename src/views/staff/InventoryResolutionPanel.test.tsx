@@ -42,3 +42,14 @@ it('captures the signed paper record as uploaded photos instead of asking for a 
   expect(html).not.toContain('Mã ảnh biên bản')
   expect(html).not.toContain('Mã tệp ảnh biên bản')
 })
+
+
+it('offers removal and a transfer request when the inspected goods exceed capacity', () => {
+  const html = render({ inventoryFullFit: false, inventoryPartialFitAvailable: false })
+  expect(html).toContain('đưa phần dư ra')
+  expect(html).toContain('Tạo yêu cầu thu xếp chuyển hàng')
+  expect(html).not.toContain('Trả lại kho')
+  const submitted = render({ inventoryResolutionStatus: 'TRANSFER_REQUESTED', inventoryFullFit: false })
+  expect(submitted).toContain('Đã tạo yêu cầu thu xếp chuyển hàng')
+  expect(submitted).not.toContain('type="radio"')
+})

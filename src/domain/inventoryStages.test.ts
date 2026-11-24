@@ -28,5 +28,5 @@ it('shows a published inspection form read-only instead of editable', () => {
 
 it('names all four inventory stages in order', () => {
   expect([1, 2, 3, 4].map(stage => INVENTORY_STAGE_LABELS[stage as InventoryStage]))
-    .toEqual(['Kiểm tra khách', 'Kiểm kê hàng hóa', 'Xác nhận hàng hóa kiểm kê', 'Xử lý sai lệch'])
+    .toEqual(['Kiểm tra khách', 'Kiểm kê hàng hóa', 'Xác nhận hàng hóa kiểm kê', 'Kết quả tiếp nhận'])
 })
