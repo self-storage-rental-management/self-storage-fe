@@ -2,12 +2,11 @@ import InventoryDecisionSummary from '../../components/InventoryDecisionSummary'
 import { useRef, useState } from 'react'
 import { userFacingError } from '../../presentation/userFacingError'
 import type { AtSiteInventoryDecision } from '../../services/checkInApi'
-import { uploadCheckInEvidence } from '../../services/checkInApi'
+import { sendInventoryReturnReminder, uploadCheckInEvidence } from '../../services/checkInApi'
 import { Button } from '../../components/ui'
 import type { CheckInCase } from '../../services/checkInApi'
 import { InventoryAlternatives } from './InventoryResultNotice'
 import InventoryMismatchEvidence from './InventoryMismatchEvidence'
-import { vietnamDateInput } from '../../utils/vietnamTime'
 import { inventoryResult } from '../../domain/inventoryResult'
 
 const MAX_EVIDENCE_FILES = 1
@@ -21,15 +20,18 @@ export default function InventoryResolutionPanel({ item, busy, onRefresh, onOpen
 }) {
   const [decision, setDecision] = useState<AtSiteInventoryDecision | ''>('')
   const [present, setPresent] = useState(false)
-  const [date, setDate] = useState('')
   const [note, setNote] = useState('')
   const [evidence, setEvidence] = useState<string[]>([])
   const [uploading, setUploading] = useState(false)
+  const [reminding, setReminding] = useState(false)
+  const [reminderMessage, setReminderMessage] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const locked = useRef(false)
   const otherGoods = item.declaredGoodsLines?.some(line => line.category === 'OTHER') ?? false
-  const rejectionReasonRequired = decision === 'CANCEL_AND_RETURN'
+  const singleForcedReturn = !item.inventoryFullFit && !otherGoods
+  const effectiveDecision: AtSiteInventoryDecision | '' = singleForcedReturn ? 'CANCEL_AND_RETURN' : decision
+  const rejectionReasonRequired = effectiveDecision === 'CANCEL_AND_RETURN'
   const disabled = busy || saving || uploading
   const uploadEvidence = async (files: File[]) => {
     if (!item.checkInId || locked.current || uploading) return
@@ -54,14 +56,10 @@ export default function InventoryResolutionPanel({ item, busy, onRefresh, onOpen
     } finally { setUploading(false) }
   }
   const returnWindowDays = item.inventoryReturnWindowDays ?? null
-  const needsDate = decision === 'CANCEL_AND_RETURN'
-  const today = vietnamDateInput()
-  const maxReturnDate = returnWindowDays != null ? vietnamDateInput(Date.now() + returnWindowDays * 86_400_000) : ''
-  const invalidDate = needsDate && (!date || date < today || (maxReturnDate !== '' && date > maxReturnDate))
   const submit = async () => {
-    if (!onResolve || !decision || !present || disabled || locked.current || evidence.length !== MAX_EVIDENCE_FILES || invalidDate || (rejectionReasonRequired && !note.trim())) return
+    if (!onResolve || !effectiveDecision || !present || disabled || locked.current || evidence.length !== MAX_EVIDENCE_FILES || (rejectionReasonRequired && !note.trim())) return
     locked.current = true; setSaving(true); setError('')
-    try { await onResolve({ decision, customerPresent: true, scheduledDate: needsDate ? date : undefined, note: note.trim() || undefined, evidenceReferences: evidence.length ? evidence : undefined, resultVersion: item.inventoryResultVersion }) }
+    try { await onResolve({ decision: effectiveDecision, customerPresent: true, note: note.trim() || undefined, evidenceReferences: evidence.length ? evidence : undefined, resultVersion: item.inventoryResultVersion }) }
     catch (error) { setError(userFacingError(error, 'Không thể ghi nhận phương án xử lý.')) }
     finally { locked.current = false; setSaving(false) }
   }
@@ -70,6 +68,25 @@ export default function InventoryResolutionPanel({ item, busy, onRefresh, onOpen
   const transferring = status === 'TRANSFER_REQUESTED'
   const returning = status === 'RETURN_REQUESTED'
   const done = status === 'ACCEPTED' || item.checkInStatus === 'completed'
+  const nowMs = Date.now()
+  const deadlineMs = item.inventoryRemovalDeadlineAt ? Date.parse(item.inventoryRemovalDeadlineAt) : null
+  const lastReminderMs = item.inventoryReturnLastReminderAt ? Date.parse(item.inventoryReturnLastReminderAt) : null
+  const inReminderWindow = deadlineMs != null && nowMs < deadlineMs && nowMs >= deadlineMs - 2 * 86_400_000
+  const inReminderCooldown = lastReminderMs != null && nowMs < lastReminderMs + 2 * 3_600_000
+  const canSendReminder = returning && !done && inReminderWindow && !inReminderCooldown && !reminding
+  const sendReminder = async () => {
+    if (!item.checkInId || !canSendReminder) return
+    setReminding(true); setError(''); setReminderMessage('')
+    try {
+      await sendInventoryReturnReminder(item.checkInId)
+      setReminderMessage('Đã gửi thông báo nhắc khách trả kho.')
+      onRefresh()
+    } catch (reason) {
+      setError(userFacingError(reason, 'Không thể gửi nhắc khách trả kho.'))
+    } finally {
+      setReminding(false)
+    }
+  }
   const result = inventoryResult(item.inventoryFullFit, Boolean(item.inventoryMismatchJson))
   const report = item.handover
   const formatNumber = (value: number, digits = 0) => value.toLocaleString('vi-VN', { maximumFractionDigits: digits })
@@ -81,11 +98,12 @@ export default function InventoryResolutionPanel({ item, busy, onRefresh, onOpen
         <p>Chuyển toàn bộ <b>{formatNumber(report?.packageCount ?? 0)} kiện</b> sang kho phù hợp · Đã tiếp nhận tại kho hiện tại: <b>0 kiện</b></p>
         <p className="text-xs">Theo dõi yêu cầu tại mục Hỗ trợ khách hàng.</p>
       </div>}
-      {!item.inventoryDecision && !transferring && <p role="status" className="rounded-lg border bg-white p-4 text-sm font-semibold text-stone-900">
-        {done ? 'Đã ghi nhận kết quả kiểm kê vào hồ sơ thuê.' : returning ? `Đã tạo yêu cầu buộc trả kho${returnWindowDays != null ? ` (hạn ${returnWindowDays} ngày)` : ''}. Tiếp tục nghiệm thu và quyết toán ở hồ sơ trả kho.`
+      {!item.inventoryDecision && !transferring && <p role="status" className={`rounded-lg border p-4 text-sm font-semibold ${done && returning ? 'border-emerald-300 bg-emerald-50 text-emerald-900' : !done && !item.inventoryFullFit ? 'border-red-300 bg-red-50 text-red-900' : 'bg-white text-stone-900'}`}>
+        {done && returning ? 'Đã trả kho thành công đơn hàng kiểm kê sai lệch (đã nghiệm thu và quyết toán hoàn tất).'
+          : done ? 'Đã ghi nhận kết quả kiểm kê vào hồ sơ thuê.' : returning ? `Đang đợi khách trả kho${returnWindowDays != null ? ` (hạn ${returnWindowDays} ngày)` : ''}. Tiếp tục nghiệm thu và quyết toán ở hồ sơ trả kho.`
           : partial ? `Hồ sơ đang dùng phương án cũ đã ngừng áp dụng. Vui lòng ghi nhận yêu cầu buộc trả kho${returnWindowDays != null ? ` trong ${returnWindowDays} ngày` : ' theo cỡ kho'}.`
-          : item.inventoryFullFit ? 'Hàng thực tế vẫn vừa kho. Staff ghi nhận phương án tiếp nhận trực tiếp với khách.'
-          : `Hàng thực tế không vừa gian kho. Staff tạo yêu cầu buộc khách trả kho${returnWindowDays != null ? ` trong vòng ${returnWindowDays} ngày` : ' theo cỡ kho'} để nghiệm thu và quyết toán.`}
+          : item.inventoryFullFit ? 'Hàng thực tế vẫn vừa kho. Nhân viên ghi nhận phương án tiếp nhận trực tiếp với khách.'
+          : `Hàng thực tế không vừa gian kho. Nhân viên tạo yêu cầu buộc khách trả kho${returnWindowDays != null ? ` trong vòng ${returnWindowDays} ngày` : ' theo cỡ kho'} để nghiệm thu và quyết toán.`}
       </p>}
       {report && <section className="space-y-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -97,12 +115,11 @@ export default function InventoryResolutionPanel({ item, busy, onRefresh, onOpen
       <InventoryAlternatives result={result} published checkInId={item.checkInId} packages={report?.packageCount ?? 0} weight={report?.actualMeasurements.weightKg ?? 0} volume={report?.actualMeasurements.actualVolumeM3 ?? 0} showAlternatives={!returning && !done && !transferring} />
       {!done && !returning && !transferring && <fieldset className="space-y-4 rounded-xl border border-amber-200 bg-white p-4 text-sm text-stone-900" disabled={disabled}>
         <legend className="px-1 font-bold">Phương án xử lý tại cơ sở</legend>
-        {otherGoods && <p className="rounded-lg bg-amber-50 p-3">Khách khai báo hàng hóa loại Khác. Staff có thể chấp nhận nếu đủ điều kiện hoặc từ chối kèm lý do. Từ chối sẽ mở hồ sơ trả kho, nghiệm thu và quyết toán để xác định tiền hoàn hoặc thu thêm.</p>}
-        {([
+        {otherGoods && <p className="rounded-lg bg-amber-50 p-3">Khách khai báo hàng hóa loại Khác. Nhân viên có thể chấp nhận nếu đủ điều kiện hoặc từ chối kèm lý do. Từ chối sẽ mở hồ sơ trả kho, nghiệm thu và quyết toán để xác định tiền hoàn hoặc thu thêm.</p>}
+        {!singleForcedReturn && ([
           ['ACCEPT_FULL', otherGoods ? 'Chấp nhận hàng hóa loại Khác và tiếp nhận toàn bộ' : 'Tiếp nhận toàn bộ hàng thực tế', Boolean(item.inventoryFullFit)],
           ['CANCEL_AND_RETURN', otherGoods ? `Từ chối hàng hóa loại Khác và buộc trả kho, quyết toán${returnWindowDays != null ? ` (hạn ${returnWindowDays} ngày)` : ''}` : `Buộc trả kho và quyết toán${returnWindowDays != null ? ` (hạn ${returnWindowDays} ngày)` : ''}`, !item.inventoryFullFit || otherGoods],
-        ] as const).filter(([, , enabled]) => enabled).map(([value, label]) => <label key={value} className="flex items-center gap-2"><input type="radio" name={`resolution-${item.checkInId}`} checked={decision === value} onChange={() => setDecision(value)} />{label}</label>)}
-        {decision === 'CANCEL_AND_RETURN' && <label className="grid gap-1">Ngày hẹn trả kho {returnWindowDays != null ? `(trong vòng ${returnWindowDays} ngày)` : '(theo cỡ kho)'} *<input type="date" className="rounded-lg border p-2" required min={today} max={maxReturnDate || undefined} value={date} onChange={event => setDate(event.target.value)} /><span className="text-xs text-stone-500">Yêu cầu trả kho có hiệu lực từ ngày kế tiếp, khách có {returnWindowDays != null ? `đủ ${returnWindowDays} ngày` : 'thời hạn theo cỡ kho'} để hoàn tất trả kho, nghiệm thu và quyết toán. Đổi lịch trong hạn không làm kéo dài thời hạn.</span></label>}
+        ] as const).filter(([, , enabled]) => enabled).map(([value, label]) => <label key={value} className="flex items-center gap-2"><input type="radio" name={`resolution-${item.checkInId}`} checked={effectiveDecision === value} onChange={() => setDecision(value)} />{label}</label>)}
         <label className="grid gap-1">{rejectionReasonRequired ? 'Lý do từ chối tiếp nhận *' : 'Ghi chú phương án (không bắt buộc)'}<textarea className="rounded-lg border p-2" required={rejectionReasonRequired} maxLength={1500} value={note} onChange={event => setNote(event.target.value)} /></label>
         <label className="flex items-start gap-2"><input type="checkbox" className="mt-1" checked={present} onChange={event => setPresent(event.target.checked)} />Đã trao đổi phương án với chính chủ đang có mặt tại cơ sở.</label>
         <div className="grid gap-2">
@@ -120,12 +137,34 @@ export default function InventoryResolutionPanel({ item, busy, onRefresh, onOpen
           </li>)}</ul>}
         </div>
         {error && <p role="alert" className="text-red-700">{error}</p>}
-        <Button disabled={!onResolve || !decision || !present || evidence.length !== MAX_EVIDENCE_FILES || invalidDate || (rejectionReasonRequired && !note.trim()) || disabled} onClick={() => void submit()}>{saving ? 'Đang lưu…' : decision === 'ACCEPT_FULL' ? 'Ghi nhận vào hồ sơ thuê' : 'Xác nhận buộc trả kho và tạo hồ sơ trả kho'}</Button>
+        <Button disabled={!onResolve || !effectiveDecision || !present || evidence.length !== MAX_EVIDENCE_FILES || (rejectionReasonRequired && !note.trim()) || disabled} onClick={() => void submit()}>{saving ? 'Đang lưu…' : effectiveDecision === 'ACCEPT_FULL' ? 'Ghi nhận vào hồ sơ thuê' : 'Xác nhận buộc trả kho và tạo hồ sơ trả kho'}</Button>
       </fieldset>}
+      {returning && !done && <div className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">
+        {(item.inventoryDecision?.decidedAt || item.inventoryRemovalPublishedAt) && (
+          <p>
+            <span className="font-semibold">Thời điểm xác nhận buộc trả kho:</span>{' '}
+            {new Date((item.inventoryDecision?.decidedAt || item.inventoryRemovalPublishedAt)!).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}
+          </p>
+        )}
+        {deadlineMs != null && (
+          <p>
+            <span className="font-semibold">Hạn cuối trả kho:</span>{' '}
+            {new Date(deadlineMs - 1).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}
+          </p>
+        )}
+        <p className="font-semibold">Theo dõi trả kho: có thể gửi nhắc khách trong vòng 2 ngày trước hạn cuối (tối đa 2 tiếng/lần).</p>
+        {item.inventoryReturnLastReminderAt && <p>Đã nhắc gần nhất: {new Date(item.inventoryReturnLastReminderAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</p>}
+        {reminderMessage && <p role="status" className="font-semibold text-emerald-800">{reminderMessage}</p>}
+        {error && <p role="alert" className="font-semibold text-red-700">{error}</p>}
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" size="sm" variant="outline" disabled={!canSendReminder} onClick={() => void sendReminder()}>
+            {reminding ? 'Đang gửi nhắc…' : inReminderCooldown ? 'Đã nhắc (chờ 2 tiếng)' : 'Nhắc khách trả kho'}
+          </Button>
+        </div>
+      </div>}
       <InventoryDecisionSummary decision={item.inventoryDecision} compact={transferring} onPreview={onPreview} onOpenReturns={onOpenReturns} />
       <div className="flex flex-wrap gap-2 border-t border-stone-200 pt-3">
         {onPreview && Array.from(new Set(report?.evidenceReferences || [])).map(id => <Button key={id} size="sm" variant="outline" onClick={() => onPreview(id)}>Xem bằng chứng kiểm kê</Button>)}
-        <Button variant="outline" disabled={busy} onClick={onRefresh}>Làm mới kết quả</Button>
         {returning && onOpenReturns && <Button disabled={busy} onClick={onOpenReturns}>Mở Trả kho & nghiệm thu</Button>}
       </div>
     </div>
