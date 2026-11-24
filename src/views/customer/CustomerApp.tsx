@@ -446,12 +446,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const [goodsCatalog, setGoodsCatalog] = useState<GoodsCatalog | null>(null)
   const [catalogUpdateNotice, setCatalogUpdateNotice] = useState('')
   const previousGoodsCatalog = useRef<GoodsCatalog | null>(null)
-  const GOODS_CATEGORY_OPTIONS = useMemo(() => goodsCatalog?.categories.map(category => [category.code, category.label] as const) ?? [], [goodsCatalog])
+  const GOODS_CATEGORY_OPTIONS = useMemo(() => goodsCatalog?.categories?.map(category => [category.code, category.label] as const) ?? [], [goodsCatalog])
   const MATERIALS_BY_CATEGORY = useMemo(() => Object.fromEntries((goodsCatalog?.categories ?? []).map(category => [category.code, {
-    normal: category.materials.filter(material => !material.fragile).map(material => material.label),
-    fragile: category.materials.filter(material => material.fragile).map(material => material.label),
+    normal: (category.materials || []).filter(material => !material.fragile).map(material => material.label),
+    fragile: (category.materials || []).filter(material => material.fragile).map(material => material.label),
   }])) as Record<GoodsCategoryCode, { normal: string[]; fragile: string[] }>, [goodsCatalog])
-  const catalogCategoryFor = (code: string) => goodsCatalog?.categories.find(category => category.code === code)
+  const catalogCategoryFor = (code: string) => goodsCatalog?.categories?.find(category => category.code === code)
   const [catalogLoading, setCatalogLoading] = useState(true)
   const [catalogError, setCatalogError] = useState<CatalogLoadError | null>(null)
   const [warehouseError, setWarehouseError] = useState<CatalogLoadError | null>(null)
@@ -593,7 +593,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   }, [facilities])
 
   const CUSTOMER_CATALOG_UNITS: CustomerCatalogUnit[] = useMemo(() => {
-    return units.map(unit => {
+    return (units || []).map(unit => {
       let sizeCode = (unit as any).sizeCode || ''
       if (!sizeCode) {
         if (unit.type === 'Small' || unit.code.includes('-S-') || unit.code.includes('-S')) sizeCode = 'S'
@@ -1677,7 +1677,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const bookingMaterials = (categoryCode: string) => {
     const category = bookingCategories.find(item => item.code === categoryCode)
     if (!category) return []
-    return category.materials.filter(material =>
+    return (category.materials || []).filter(material =>
       !selectedBackendUnitType?.acceptedGoodsMaterialIds?.length || selectedBackendUnitType.acceptedGoodsMaterialIds.includes(material.id))
   }
   const isMaterialOptional = (categoryCode: string) => OPTIONAL_MATERIAL_CATEGORY_CODES.has(categoryCode)
@@ -1685,11 +1685,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     selectedBackendUnitType?.acceptedGoodsCategoryIds, selectedBackendUnitType?.acceptedGoodsMaterialIds))
   const hasValidQuotedGoods = bookingReview && !!serverQuote && Date.parse(serverQuote.expiresAt) > Date.now() && !!quotedGoodsItems.current
   useEffect(() => {
-    if (!goodsCatalog || hasValidQuotedGoods) return
+    if (!goodsCatalog?.categories || hasValidQuotedGoods) return
     setGoodsItems(current => {
       let changed = false
       const next = current.map(item => {
-        const material = resolveDraftMaterial(item, goodsCatalog.categories.find(category => category.code === item.category))
+        const material = resolveDraftMaterial(item, goodsCatalog.categories?.find(category => category.code === item.category))
         if (!material || (material.id === item.catalogMaterialId && material.label === item.materialName)) return item
         changed = true
         return { ...item, catalogMaterialId: material.id, materialName: material.label }
@@ -2824,34 +2824,33 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   ))}
                 </div>
 
-                {currentTabTotalCount > reservationPageSize && (
-                  <nav aria-label="Phân trang đơn giữ kho" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-5 py-3 shadow-xs">
-                    <p className="text-xs text-stone-500 font-medium">
-                      Hiển thị <b>{currentTabPagination.start + 1}–{Math.min(currentTabPagination.end, currentTabTotalCount)}</b> trong tổng số <b>{currentTabTotalCount}</b> đơn ({reservationPageSize} đơn/trang)
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={reservationPageNumber <= 1}
-                        onClick={() => setReservationPageNumber(p => Math.max(1, p - 1))}
-                      >
-                        Trang trước
-                      </Button>
-                      <span className="px-2 text-xs font-semibold text-stone-600">
-                        Trang {currentTabPagination.page} / {currentTabPagination.pages}
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={reservationPageNumber >= currentTabPagination.pages}
-                        onClick={() => setReservationPageNumber(p => p + 1)}
-                      >
-                        Trang sau
-                      </Button>
-                    </div>
-                  </nav>
-                )}
+                {/* Phân trang: Luôn hiển thị để người dùng theo dõi số trang và tổng số đơn */}
+                <nav aria-label="Phân trang đơn giữ kho" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-5 py-3 shadow-xs">
+                  <p className="text-xs text-stone-500 font-medium">
+                    Hiển thị <b>{currentTabTotalCount === 0 ? 0 : currentTabPagination.start + 1}–{Math.min(currentTabPagination.end, currentTabTotalCount)}</b> trong tổng số <b>{currentTabTotalCount}</b> đơn ({reservationPageSize} đơn/trang)
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={reservationPageNumber <= 1}
+                      onClick={() => setReservationPageNumber(p => Math.max(1, p - 1))}
+                    >
+                      Trang trước
+                    </Button>
+                    <span className="px-2 text-xs font-semibold text-stone-600">
+                      Trang {currentTabPagination.page} / {Math.max(1, currentTabPagination.pages)}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={reservationPageNumber >= currentTabPagination.pages}
+                      onClick={() => setReservationPageNumber(p => p + 1)}
+                    >
+                      Trang sau
+                    </Button>
+                  </div>
+                </nav>
               </div>
             )
           ) : displayedReservationHolds.length ? (
@@ -3117,10 +3116,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   </div>
                 </Card></div>
               )})}
-              {displayedReservationHolds.length > reservationPageSize && (
                 <nav aria-label="Phân trang đơn giữ kho" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-5 py-3 shadow-xs">
                   <p className="text-xs text-stone-500 font-medium">
-                    Hiển thị <b>{currentTabPagination.start + 1}–{Math.min(currentTabPagination.end, displayedReservationHolds.length)}</b> trong tổng số <b>{displayedReservationHolds.length}</b> đơn ({reservationPageSize} đơn/trang)
+                    Hiển thị <b>{displayedReservationHolds.length === 0 ? 0 : currentTabPagination.start + 1}–{Math.min(currentTabPagination.end, displayedReservationHolds.length)}</b> trong tổng số <b>{displayedReservationHolds.length}</b> đơn ({reservationPageSize} đơn/trang)
                   </p>
                   <div className="flex items-center gap-2">
                     <Button
@@ -3132,7 +3130,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       Trang trước
                     </Button>
                     <span className="px-2 text-xs font-semibold text-stone-600">
-                      Trang {currentTabPagination.page} / {currentTabPagination.pages}
+                      Trang {currentTabPagination.page} / {Math.max(1, currentTabPagination.pages)}
                     </span>
                     <Button
                       variant="outline"
@@ -3144,7 +3142,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     </Button>
                   </div>
                 </nav>
-              )}
             </div>
           ) : (
             <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-12 text-center shadow-xs">
