@@ -497,7 +497,7 @@ export default function ReturnSettlementModal({
                       <Tr key={p.id}>
                         <Td className="text-xs text-stone-500">{p.paidAt || p.receivedAt || docDate}</Td>
                         <Td className="font-semibold text-stone-800">
-                          {p.type === 'RENT' ? 'Tiền thuê định kỳ' : p.type === 'DAMAGE_FEE' ? 'Phí phát sinh' : p.type === 'REFUND' ? 'Hoàn tiền' : p.type === 'RENEWAL' ? 'Thanh toán gia hạn' : p.type === 'RESERVATION_DEPOSIT' ? 'Cọc giữ chỗ' : p.type === 'RENTAL_BALANCE' ? 'Tiền thuê còn lại' : p.type === 'SECURITY_DEPOSIT' ? 'Tiền cọc đảm bảo' : 'Giao dịch khác'}
+                          {({ RENT: 'Tiền thuê định kỳ', DAMAGE_FEE: 'Phí phát sinh', REFUND: 'Hoàn tiền', RENEWAL: 'Thanh toán gia hạn', RESERVATION_DEPOSIT: 'Cọc giữ chỗ', RENTAL_BALANCE: 'Tiền thuê còn lại', SECURITY_DEPOSIT: 'Tiền cọc đảm bảo', INITIAL_RENT: 'Tiền thuê nhận kho' } as Record<string, string>)[p.type] || 'Giao dịch khác'}
                         </Td>
                         <Td className="font-mono text-xs text-stone-500">{p.transactionReference || p.id}</Td>
                         <Td className="text-xs">{formatHistoryPaymentMethod(p.paymentMethod)}</Td>
