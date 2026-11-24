@@ -17,7 +17,7 @@ import {
 const steps = ['Thông tin chung', 'Thông số gian kho', 'Cấu hình khung kệ', 'Thiết lập tấm kê', 'Loại hàng và xác nhận'] as const
 const inputClass = 'w-full border border-stone-300 rounded-lg px-3 py-2 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:bg-stone-100'
 
-type UnitTypeEditorTarget = CustomerUnitType & { floor?: string; zone?: string }
+type UnitTypeEditorTarget = CustomerUnitType & { zone?: string }
 
 type UnitTypeForm = {
   code: string
@@ -35,7 +35,6 @@ type UnitTypeForm = {
   overheadClearanceM: string
   trolleyType: string
   physicalUnitCount: string
-  floor: string
   zone: string
   imageUrl: string
   detailImageUrl: string
@@ -52,7 +51,7 @@ function initialForm(initial?: UnitTypeEditorTarget): UnitTypeForm {
     gateWidthM: text(initial?.gateWidthM, '2.4'), gateHeightM: text(initial?.gateHeightM, '3.0'),
     lowestObstructionHeightM: text(initial?.lowestObstructionHeightM), overheadClearanceM: text(initial?.overheadClearanceM),
     trolleyType: text(initial?.trolleyType, 'Xe đẩy tay / xe sàn nhỏ'),
-    physicalUnitCount: text(initial?.totalCount, '1'), floor: text(initial?.floor, '1'), zone: text(initial?.zone, 'Khu A'),
+    physicalUnitCount: text(initial?.totalCount, '1'), zone: text(initial?.zone, 'Khu A'),
     imageUrl: text(initial?.imageUrl), detailImageUrl: text(initial?.detailImageUrl),
   }
 }
@@ -366,8 +365,8 @@ export default function ManagerUnitTypeModal({ open, facilityId, onClose, onCrea
       if (!form.name.trim()) return 'Vui lòng nhập tên loại kho.'
       if (form.name.trim().length > 100 || form.description.trim().length > 500) return 'Tên loại kho tối đa 100 ký tự và mô tả tối đa 500 ký tự.'
       if (!validPhysicalUnitCount) return 'Số lượng gian kho phải là số nguyên không âm.'
-      if (physicalUnitCount > 0 && (!form.floor.trim() || !form.zone.trim())) return 'Khi tạo gian kho, cần nhập tầng và khu vực.'
-      if (form.floor.trim().length > 32 || form.zone.trim().length > 32) return 'Tầng và khu vực tối đa 32 ký tự.'
+      if (physicalUnitCount > 0 && !form.zone.trim()) return 'Khi tạo gian kho, cần nhập khu vực.'
+      if (form.zone.trim().length > 32) return 'Khu vực tối đa 32 ký tự.'
       return undefined
     }
     if (index === 1) {
@@ -492,7 +491,7 @@ export default function ManagerUnitTypeModal({ open, facilityId, onClose, onCrea
         lowestObstructionHeightM: form.lowestObstructionHeightM.trim() ? Number(form.lowestObstructionHeightM) : null,
         overheadClearanceM: form.overheadClearanceM.trim() ? Number(form.overheadClearanceM) : null,
         trolleyType: form.trolleyType.trim(), smallBoxCapacity: result.smallBoxesPerUnit, largeBoxCapacity: result.largeBoxesPerUnit,
-        physicalUnitCount, floor: form.floor.trim(), zone: form.zone.trim(), imageUrl: form.imageUrl.trim() || null, detailImageUrl: form.detailImageUrl.trim() || null,
+        physicalUnitCount, zone: form.zone.trim(), imageUrl: form.imageUrl.trim() || null, detailImageUrl: form.detailImageUrl.trim() || null,
         acceptedGoodsCategoryIds: selectedCategories, acceptedGoodsMaterialIds: selectedMaterials,
       }
       if (!initial) {
@@ -552,9 +551,8 @@ export default function ManagerUnitTypeModal({ open, facilityId, onClose, onCrea
         <label className="block text-sm font-medium text-stone-700">Mô tả
           <textarea className={`${inputClass} mt-1 min-h-24 resize-y`} disabled={busy || imageReading} value={form.description} onChange={event => changeField('description', event.target.value)} />
         </label>
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2">
           {field('physicalUnitCount', 'Số lượng gian kho', 'number')}
-          {field('floor', 'Tầng tòa nhà')}
           {field('zone', 'Khu vực')}
         </div>
         <div className="grid items-start gap-4 lg:grid-cols-2">

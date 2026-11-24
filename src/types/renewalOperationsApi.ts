@@ -3,6 +3,11 @@ import type { RentalApiPage } from "./rentalApi"
 export type RenewalOperationsRole = "customer" | "manager" | "staff"
 export type RenewalOperationsPhase = "UNKNOWN" | "AWAITING_PAYMENT_INTENT" | "AWAITING_DEPOSIT" | "SIGNING" | "SIGNING_EXPIRY_PENDING" | "NO_SHOW" | "SIGNING_EXPIRED" | "PAYMENT_EXPIRED" | "COMPLETED" | "PREPARATION_BLOCKED"
 export interface RenewalOperationState {
+  appointmentDetails?: {
+    customerName: string | null
+    customerEmail: string | null
+    proposedEndDate: string | null
+  } | null
   rentalDisplayCode?: string | null
   renewalSequence?: number | null
   /** Legacy renewal alias retained for lookup and compatibility. */

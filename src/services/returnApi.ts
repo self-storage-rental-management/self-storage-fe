@@ -4,7 +4,7 @@ import { readRentalEnvelope, readRentalPage } from './rentalApi'
 import { isUuid } from './renewalOperationsApi'
 
 export type ReturnRole = 'customer' | 'staff' | 'manager' | 'business'
-export const returnStatuses = ['requested', 'scheduled', 'inspected', 'awaiting_business_review', 'awaiting_customer_confirmation', 'disputed', 'payment_due', 'refund_pending', 'completed'] as const
+export const returnStatuses = ['requested', 'scheduled', 'inspected', 'awaiting_business_review', 'awaiting_customer_confirmation', 'disputed', 'payment_due', 'refund_pending', 'recovery_required', 'completed'] as const
 export interface OverdueSettlement {
   accruedAmount: number | null
   settlementAmount: number | null
@@ -13,6 +13,7 @@ export interface OverdueSettlement {
   requiresReconciliation: boolean
 }
 export interface ReturnSettlementReceiptView {
+  receiptCode?: string | null
   direction: 'COLLECTION' | 'REFUND' | 'OFFSET'
   amount: number
   paymentMethod: string
@@ -43,6 +44,8 @@ export interface ActiveReturnPolicyView {
   totalRentalCharge: number
   rentalRefundAmount: number
   noticeDays: number
+  rentalMonths?: number | null
+  monthlyPrice?: number | null
 }
 export function isOverdueSettlement(value: unknown): value is OverdueSettlement {
   if (!value || typeof value !== 'object') return false
@@ -72,15 +75,21 @@ export interface ApiReturn {
   returnedKey?: boolean
   returnedCard?: boolean
   returnedLock?: boolean
+  lockInspectionResult?: LockInspectionResult | null
   inventoryMatch?: 'match' | 'missing' | 'excess' | null
   damageClassification?: 'no_damage' | 'minor_damage' | 'major_damage' | 'abandoned_goods' | null
   status: typeof returnStatuses[number]; scheduledDate: string
-  returnType?: 'CANCELLED_IN_SETUP' | 'RETURN_IN_SETUP' | 'EARLY_RETURN' | 'NORMAL'
+  inventoryRemovalDeadlineAt?: string | null
+  returnType?: 'CANCELLED_IN_SETUP' | 'RETURN_IN_SETUP' | 'INVENTORY_MISMATCH' | 'EARLY_RETURN' | 'NORMAL'
   settlementMode?: 'AUTO' | 'MANUAL_REVIEW'
   inspectionNotes: string | null; managerResolutionNote: string | null
+  staffNotes?: string | null
   customerNotes?: string | null
   customerDecisionNote?: string | null
   inspectedAt?: string | null
+  managerReviewDueAt?: string | null
+  managerApprovalRequired?: boolean
+  customerConfirmationDueAt?: string | null
   depositAmount: number | null; totalDeductions: number; netRefundAmount: number | null; amountDueFromCustomer: number | null
   settlementBlocker?: string | null; customerConfirmed: boolean
   damageFee: number; cleaningFee: number; lostItemFee: number; overdueFee: number; outstandingFee: number
@@ -90,6 +99,12 @@ export interface ApiReturn {
   recoveryTaskId?: string | null
   recoveryTaskStatus?: 'OPEN' | 'IN_PROGRESS' | 'CLOSED' | null
   recoveryCompletedAt?: string | null
+  noShowAt?: string | null
+  recoveryEligibleAt?: string | null
+  recoveryTaskCreatedAt?: string | null
+  recoveryWitnessStaffId?: string | null
+  recoveryWitnessStaffName?: string | null
+  recoveryTaskDeadlineAt?: string | null
   setupExitReviewRequired?: boolean
   moveInCompletedAt?: string | null
   settlementReceipt?: ReturnSettlementReceiptView | null
@@ -110,7 +125,7 @@ export function isApiReturn(v: unknown): v is ApiReturn {
   const activePolicy = object(rawActivePolicy) ? rawActivePolicy : null
   return object(v) && ['id', 'rentalId', 'facilityId', 'customerId'].every(k => isUuid(v[k])) &&
     ['rentalRefundCredit', 'earlyTerminationFee'].every(k => v[k] == null || money(v[k])) &&
-    (v.returnType === undefined || ['CANCELLED_IN_SETUP', 'RETURN_IN_SETUP', 'EARLY_RETURN', 'NORMAL'].includes(String(v.returnType))) &&
+    (v.returnType === undefined || ['CANCELLED_IN_SETUP', 'RETURN_IN_SETUP', 'INVENTORY_MISMATCH', 'EARLY_RETURN', 'NORMAL'].includes(String(v.returnType))) &&
     (v.settlementMode === undefined || ['AUTO', 'MANUAL_REVIEW'].includes(String(v.settlementMode))) &&
     (v.overdueSettlement == null || isOverdueSettlement(v.overdueSettlement)) &&
     (terminationPolicy == null || (
@@ -140,6 +155,10 @@ export function isApiReturn(v: unknown): v is ApiReturn {
     (v.settlementPaymentId === undefined || v.settlementPaymentId === null || typeof v.settlementPaymentId === 'string') &&
     (v.settlementPaidAt === undefined || v.settlementPaidAt === null || (typeof v.settlementPaidAt === 'string' && Number.isFinite(Date.parse(v.settlementPaidAt)))) &&
     (v.completedAt === undefined || v.completedAt === null || (typeof v.completedAt === 'string' && Number.isFinite(Date.parse(v.completedAt)))) &&
+    ['noShowAt', 'recoveryEligibleAt', 'recoveryTaskCreatedAt', 'inventoryRemovalDeadlineAt'].every(k => v[k] === undefined || v[k] === null || (typeof v[k] === 'string' && Number.isFinite(Date.parse(v[k])))) &&
+    (v.recoveryWitnessStaffId === undefined || v.recoveryWitnessStaffId === null || isUuid(v.recoveryWitnessStaffId)) &&
+    (v.recoveryWitnessStaffName === undefined || v.recoveryWitnessStaffName === null || typeof v.recoveryWitnessStaffName === 'string') &&
+    (v.recoveryTaskDeadlineAt === undefined || v.recoveryTaskDeadlineAt === null || (typeof v.recoveryTaskDeadlineAt === 'string' && Number.isFinite(Date.parse(v.recoveryTaskDeadlineAt)))) &&
     (v.setupExitReviewRequired === undefined || typeof v.setupExitReviewRequired === 'boolean') &&
     (v.legacyPricingReviewRequired === undefined || typeof v.legacyPricingReviewRequired === 'boolean') &&
     (v.legacyPricingSnapshotAvailable === undefined || typeof v.legacyPricingSnapshotAvailable === 'boolean') &&
@@ -151,9 +170,12 @@ export function isApiReturn(v: unknown): v is ApiReturn {
     (v.proposedUnitStatus === null || v.proposedUnitStatus === 'available' || v.proposedUnitStatus === 'maintenance') &&
     (v.evidencePhotos === undefined || (Array.isArray(v.evidencePhotos) && v.evidencePhotos.every(item => typeof item === 'string'))) &&
     ['depositAmount', 'netRefundAmount', 'amountDueFromCustomer'].every(k => v[k] === null || money(v[k])) &&
-    ['inspectionNotes', 'managerResolutionNote', 'settlementBlocker', 'customerDecisionNote', 'customerNotes', 'inspectedAt'].every(k => v[k] === undefined || v[k] === null || typeof v[k] === 'string') &&
+    ['inspectionNotes', 'staffNotes', 'managerResolutionNote', 'settlementBlocker', 'customerDecisionNote', 'customerNotes', 'inspectedAt'].every(k => v[k] === undefined || v[k] === null || typeof v[k] === 'string') &&
     (v.sourceType === undefined ? v.recoveryTaskId == null && v.recoveryTaskStatus == null && v.recoveryCompletedAt == null :
-      v.sourceType === 'CUSTOMER_RETURN' ? v.recoveryTaskId == null && v.recoveryTaskStatus == null && v.recoveryCompletedAt == null :
+      v.sourceType === 'CUSTOMER_RETURN' ? (
+        (v.recoveryTaskId == null && v.recoveryTaskStatus == null && v.recoveryCompletedAt == null) ||
+        (isUuid(v.recoveryTaskId) && ['OPEN', 'IN_PROGRESS', 'CLOSED'].includes(String(v.recoveryTaskStatus)) && v.recoveryCompletedAt == null)
+      ) :
         v.sourceType === 'RECOVERY' && isUuid(v.recoveryTaskId) && ['OPEN', 'IN_PROGRESS', 'CLOSED'].includes(String(v.recoveryTaskStatus)) &&
         (v.recoveryTaskStatus === 'CLOSED' ? v.status === 'completed' && typeof v.recoveryCompletedAt === 'string' && Number.isFinite(Date.parse(v.recoveryCompletedAt)) : v.recoveryCompletedAt === null))
 }
@@ -219,6 +241,43 @@ export async function updateReturnRequest(id: string, scheduledDate: string, not
 export const feeKeys = ['damageFee', 'cleaningFee', 'lostItemFee', 'overdueFee', 'outstandingFee'] as const
 export type ReturnFees = Record<typeof feeKeys[number], number>
 
+export interface DamagePricingItem {
+  code: string
+  label: string
+  category: 'minor' | 'major'
+  unit: string
+  suggestedMin: number
+  suggestedMax: number
+  unitPrice: number
+}
+
+// The standard amount is the midpoint of the approved suggested range. Staff
+// selects an item and quantity; there is no free-form damage amount input.
+export const returnDamageCatalog: DamagePricingItem[] = [
+  { code: 'minor_wall_scratch', label: 'Trầy xước tường', category: 'minor', unit: 'điểm/vết', suggestedMin: 50000, suggestedMax: 150000, unitPrice: 100000 },
+  { code: 'minor_paint_peel', label: 'Bong tróc sơn', category: 'minor', unit: 'm²', suggestedMin: 80000, suggestedMax: 150000, unitPrice: 115000 },
+  { code: 'minor_hard_stain', label: 'Vết bẩn khó vệ sinh', category: 'minor', unit: 'vị trí', suggestedMin: 50000, suggestedMax: 100000, unitPrice: 75000 },
+  { code: 'minor_floor_scratch', label: 'Trầy xước sàn', category: 'minor', unit: 'm²', suggestedMin: 100000, suggestedMax: 200000, unitPrice: 150000 },
+  { code: 'minor_metal_dent', label: 'Móp nhẹ vách kim loại', category: 'minor', unit: 'vị trí', suggestedMin: 100000, suggestedMax: 250000, unitPrice: 175000 },
+  { code: 'minor_small_accessory', label: 'Hỏng phụ kiện nhỏ', category: 'minor', unit: 'cái', suggestedMin: 50000, suggestedMax: 200000, unitPrice: 125000 },
+  { code: 'major_bent_door', label: 'Cửa kho bị cong vênh', category: 'major', unit: 'cái', suggestedMin: 500000, suggestedMax: 2000000, unitPrice: 1250000 },
+  { code: 'major_broken_lock', label: 'Khóa cửa bị hỏng', category: 'major', unit: 'bộ', suggestedMin: 300000, suggestedMax: 1000000, unitPrice: 650000 },
+  { code: 'major_cracked_floor', label: 'Sàn kho bị nứt', category: 'major', unit: 'm²', suggestedMin: 300000, suggestedMax: 800000, unitPrice: 550000 },
+  { code: 'major_broken_floor', label: 'Sàn kho bị vỡ', category: 'major', unit: 'm²', suggestedMin: 500000, suggestedMax: 1500000, unitPrice: 1000000 },
+  { code: 'major_damaged_partition', label: 'Vách ngăn bị thủng', category: 'major', unit: 'vị trí', suggestedMin: 500000, suggestedMax: 1500000, unitPrice: 1000000 },
+  { code: 'major_serious_wall_crack', label: 'Tường bị nứt nghiêm trọng', category: 'major', unit: 'vị trí', suggestedMin: 500000, suggestedMax: 2000000, unitPrice: 1250000 },
+  { code: 'major_electrical_damage', label: 'Hệ thống điện bị hư hỏng', category: 'major', unit: 'lần', suggestedMin: 500000, suggestedMax: 3000000, unitPrice: 1750000 },
+  { code: 'major_unusable_door', label: 'Cửa kho không thể sử dụng', category: 'major', unit: 'cái', suggestedMin: 1500000, suggestedMax: 4000000, unitPrice: 2750000 },
+]
+
+export interface DamageItemInput { code: string; quantity: number }
+export function calculateDamageFee(items: DamageItemInput[]): number {
+  return Math.round(items.reduce((sum, item) => {
+    const price = returnDamageCatalog.find((entry) => entry.code === item.code)
+    return sum + (price ? price.unitPrice * Math.max(0, Number(item.quantity) || 0) : 0)
+  }, 0))
+}
+
 export function sanitizeFees(f: Partial<ReturnFees>): ReturnFees {
   return {
     damageFee: Number.isFinite(f.damageFee) && (f.damageFee ?? 0) >= 0 ? (f.damageFee ?? 0) : 0,
@@ -228,11 +287,18 @@ export function sanitizeFees(f: Partial<ReturnFees>): ReturnFees {
     outstandingFee: Number.isFinite(f.outstandingFee) && (f.outstandingFee ?? 0) >= 0 ? (f.outstandingFee ?? 0) : 0,
   }
 }
+export type LockInspectionResult = 'RETURNED_USABLE' | 'MISSING_OR_INCOMPLETE' | 'DAMAGED' | 'UNVERIFIED'
+
 export interface InspectionInput extends ReturnFees {
   unitVacated?: boolean
+  customerPresent?: boolean
+  recoveryHandoverLocation?: string
+  recoveryWitnessStaffId?: string
   inventoryMatch: 'match' | 'missing' | 'excess'; damageClassification: 'no_damage' | 'minor_damage' | 'major_damage' | 'abandoned_goods'
   staffNotes: string; evidencePhotos: string[]; returnedKey: boolean; returnedCard: boolean; returnedLock: boolean
+  lockInspectionResult?: LockInspectionResult
   proposedUnitStatus: 'available' | 'maintenance'
+  damageItems?: DamageItemInput[]
 }
 async function mutate(role: ReturnRole, id: string, action: string, body: object) {
   actor(role, true); if (!isUuid(id)) throw new Error('Mã hồ sơ không hợp lệ.')
@@ -245,9 +311,16 @@ export function inspectReturn(id: string, body: InspectionInput) {
   if (!['match', 'missing', 'excess'].includes(body.inventoryMatch) ||
     !['no_damage', 'minor_damage', 'major_damage', 'abandoned_goods'].includes(body.damageClassification) ||
     !['available', 'maintenance'].includes(body.proposedUnitStatus) || body.staffNotes.length > 4000 ||
+    (body.customerPresent !== undefined && typeof body.customerPresent !== 'boolean') ||
+    (body.recoveryHandoverLocation !== undefined && (typeof body.recoveryHandoverLocation !== 'string' || body.recoveryHandoverLocation.length > 500)) ||
+    (body.recoveryWitnessStaffId !== undefined && typeof body.recoveryWitnessStaffId !== 'string') ||
     !Array.isArray(body.evidencePhotos) || !body.evidencePhotos.every(p => typeof p === 'string') ||
-    !['returnedKey', 'returnedCard', 'returnedLock'].every(k => typeof body[k as keyof InspectionInput] === 'boolean')) throw new Error('Kiểm tra thông tin nghiệm thu.')
-  return mutate('staff', id, 'inspection', safeBody)
+    !['returnedKey', 'returnedCard', 'returnedLock'].every(k => typeof body[k as keyof InspectionInput] === 'boolean') ||
+    (body.damageItems !== undefined && (!Array.isArray(body.damageItems) || body.damageItems.some(item => {
+      const price = returnDamageCatalog.find((entry) => entry.code === item.code)
+      return !price || !Number.isFinite(item.quantity) || item.quantity <= 0
+    })))) throw new Error('Kiểm tra thông tin nghiệm thu.')
+  return mutate('staff', id, 'inspection', { ...safeBody, inspectionNotes: body.staffNotes })
 }
 export async function completeRefund(id: string, body: {
   transactionReference?: string
@@ -335,6 +408,23 @@ export async function uploadReturnEvidence(returnId: string, file: File, role: R
 export function reviewDispute(id: string, body: ReturnFees & { resolutionNote: string; proposedUnitStatus: 'available' | 'maintenance' }) {
   fees(body); if (!body.resolutionNote.trim() || body.resolutionNote.length > 2000) throw new Error('Nhập lý do giải quyết khiếu nại.')
   return mutate('manager', id, 'review-dispute', body)
+}
+export async function approveInventoryMismatch(id: string, body: {
+  resolutionNote: string
+  proposedUnitStatus?: 'available' | 'maintenance'
+}) {
+  actor('manager', true)
+  if (!isUuid(id) || !body.resolutionNote.trim() || body.resolutionNote.length > 2000 ||
+    (body.proposedUnitStatus !== undefined && !['available', 'maintenance'].includes(body.proposedUnitStatus))) {
+    throw new Error('Nhập lý do duyệt quyết toán kiểm kê sai lệch.')
+  }
+  return bound(await apiRequest(`/api/manager/returns/${id}/inventory-mismatch-decision`, {
+    method: 'POST',
+    body: JSON.stringify({
+      resolutionNote: body.resolutionNote.trim(),
+      proposedUnitStatus: body.proposedUnitStatus,
+    }),
+  }), 'manager', id, undefined, 'MANAGE')
 }
 export async function decideSetupExit(id: string, approvedRefundAmount: number, resolutionNote: string, approvedRentalRefundAmount?: number) {
   const a = actor('business')

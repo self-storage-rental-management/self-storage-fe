@@ -60,7 +60,12 @@ export default function ReturnSettlementModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Hồ Sơ Quyết Toán & Biên Lai Trả Kho" size="lg">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Hồ Sơ Quyết Toán & Biên Lai Trả Kho"
+      size={role === 'customer' ? '2xl' : 'lg'}
+    >
       <div className="space-y-4">
         {/* Header tóm tắt */}
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 p-4">

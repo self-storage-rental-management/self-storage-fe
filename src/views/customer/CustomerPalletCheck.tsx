@@ -330,10 +330,10 @@ export default function CustomerPalletCheck({ check, loading = false, goodsItems
   const plan = check?.palletPlan
   const compatible = Boolean(check && check.result !== 'INCOMPATIBLE' && plan)
   const reviewRequired = Boolean(check && (check.result === 'REVIEW_REQUIRED' || check.physicalFitStatus === 'REVIEW_REQUIRED'))
-  return <section className={compatible ? 'space-y-3 text-sm text-stone-800' : 'space-y-3 rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-800'}>
+  return <section aria-busy={loading} className={compatible ? 'space-y-3 text-sm text-stone-800' : 'space-y-3 rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-800'}>
     {!compatible && <h4 className="font-semibold">{reviewRequired ? 'Cần xác minh cấu hình kho' : 'Hàng của bạn có vừa kho không?'}</h4>}
     {!compatible && unitTypeName && <p>Loại kho đang kiểm tra <strong>{unitTypeName}</strong></p>}
-    {loading ? <p role="status">Đang tính theo cấu hình kệ và kiểm tra số gian còn trống…</p>
+    {loading && !check ? <p role="status">Đang tính theo cấu hình kệ và kiểm tra số gian còn trống…</p>
       : !check ? <p>Nhập đủ thông tin hàng và gói thuê để kiểm tra.</p>
       : check.result === 'INCOMPATIBLE' || !plan ? <p role="status" className="rounded-lg bg-red-50 p-3 text-red-900">
         {customerRackIssue(check.issues[0], check.palletLayoutMissing

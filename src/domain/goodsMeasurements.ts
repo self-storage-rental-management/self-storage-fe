@@ -10,4 +10,4 @@ export const totalGoodsVolumeM3 = (items: GoodsDimensions[]) =>
   items.reduce((total, item) => total + goodsVolumeM3(item), 0)
 
 export const formatGoodsVolume = (value: number) =>
-  value.toLocaleString('vi-VN', { maximumFractionDigits: 6 })
+  value > 0 && value < 0.0000005 ? '< 0,000001' : value.toLocaleString('vi-VN', { maximumFractionDigits: value > 0 && value < 0.001 ? 6 : 3 })

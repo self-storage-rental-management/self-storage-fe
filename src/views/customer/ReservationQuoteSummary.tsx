@@ -1,4 +1,5 @@
 import ReturnPolicyNotice from '../../components/ReturnPolicyNotice'
+import InventoryMismatchReturnNotice from '../../components/InventoryMismatchReturnNotice'
 import { useState } from 'react'
 import { getAuthenticatedActor, resendEmailVerificationWithApi } from '../../services/authApi'
 import { formatCustomerDateTime } from '../../i18n/customerDate'
@@ -16,7 +17,7 @@ function formatDisplayDate(value: string, endDate = false) {
   return displayMatch ? `${displayMatch[3]}/${displayMatch[2]}/${displayMatch[1]}` : displayEndDate.replace(/-/g, '/')
 }
 
-export default function ReservationQuoteSummary({ quote: q, needsReview, context = 'quote' }: { quote: ReservationQuote; needsReview: boolean; context?: 'quote' | 'reservation' }) {
+export default function ReservationQuoteSummary({ quote: q, needsReview, context = 'quote', hidePaymentNotices = false }: { quote: ReservationQuote; needsReview: boolean; context?: 'quote' | 'reservation'; hidePaymentNotices?: boolean }) {
   const actor = getAuthenticatedActor()
   const emailUnverified = actor?.status === 'PENDING_VERIFICATION'
   const [resending, setResending] = useState(false)
@@ -33,6 +34,9 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
     finally { setResending(false) }
   }
   const depositPercent = q.totalInitialObligation > 0 ? Math.round(q.reservationDepositAmount / q.totalInitialObligation * 100) : 0
+  const discountPercent = Math.round(q.discountRate * 100)
+  const depositRatePercent = Math.round((q.reservationDepositRate ?? depositPercent / 100) * 100)
+  const formulaClass = 'mt-1 text-xs font-normal leading-5 text-stone-500'
   const amountClass = 'min-w-[8.5rem] text-right font-semibold tabular-nums'
   const payableAmountClass = `${amountClass} text-base font-bold text-amber-700`
   const deductionAmountClass = `${amountClass} text-base font-bold text-emerald-700`
@@ -56,7 +60,7 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
           {q.rentalPeriodConfirmed ? 'Kỳ thuê đã chốt:' : 'Kỳ thuê dự kiến sau thời gian chuẩn bị:'} <b className="text-stone-900">{formatDisplayDate(q.startDate)} đến {formatDisplayDate(q.endDate, true)}</b> · {q.rentalMonths} tháng
         </p>
         <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-950">
-          <b>{q.freeSetupDays ?? 0} ngày chuẩn bị miễn phí</b> tính từ khi bạn xác nhận nhận kho trống. Sau khi nhân viên kiểm kê, bạn có thể xác nhận bắt đầu kỳ thuê ngay. Nếu chưa xác nhận sớm, kỳ thuê bắt đầu theo lịch hết miễn phí. Quyền lợi chuẩn bị áp dụng một lần cho đơn ban đầu.
+          <b>{q.freeSetupDays ?? 0} ngày chuẩn bị miễn phí</b> tính từ khi bạn xác nhận nhận kho trống. Kỳ thuê bắt đầu theo mốc đã chốt sau khi hết thời gian miễn phí; hoàn tất chuẩn bị hoặc kiểm kê sớm không làm đổi ngày tính tiền. Quyền lợi chuẩn bị áp dụng một lần cho đơn ban đầu.
         </div>
 
       </div>
@@ -71,6 +75,9 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
         <div className="ml-auto text-right">
           <span className={`${amountClass} block text-xl font-bold text-white`}>{formatVndAmount(q.totalInitialObligation)}</span>
         </div>
+        <p className="basis-full text-xs leading-5 text-stone-300">
+          Tiền thuê sau giảm {formatVndAmount(q.totalAfterDiscount)} + cọc đảm bảo {formatVndAmount(q.securityDepositAmount)} = tổng {formatVndAmount(q.totalInitialObligation)}.
+        </p>
       </div>
 
 
@@ -79,27 +86,27 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
         <p className="text-xs font-bold uppercase tracking-wider text-stone-700">1. Các khoản cộng và giảm trừ</p>
         <div className="space-y-2.5 rounded-xl border border-stone-200 bg-white p-4">
         <div className="flex justify-between gap-4 text-xs sm:text-sm">
-          <span className="text-stone-600">Đơn giá mỗi tháng</span>
+          <div><span className="text-stone-600">Đơn giá mỗi tháng</span><p className={formulaClass}>Giá niêm yết của loại kho đã chọn.</p></div>
           <span className={`${amountClass} text-sm text-stone-900`}>{formatVndAmount(q.monthlyPrice)}</span>
         </div>
         <div className="flex justify-between gap-4 text-xs sm:text-sm">
-          <span className="text-stone-600">Tiền thuê ({q.rentalMonths} tháng)</span>
+          <div><span className="text-stone-600">Tiền thuê ({q.rentalMonths} tháng)</span><p className={formulaClass}>{formatVndAmount(q.monthlyPrice)} × {q.rentalMonths} tháng = {formatVndAmount(q.subtotal)}.</p></div>
           <span className={`${amountClass} text-sm text-stone-900`}>{formatVndAmount(q.subtotal)}</span>
         </div>
 
         <div className="flex justify-between gap-4 text-xs sm:text-sm">
-          <span className="text-stone-600">Tiền cọc đảm bảo (hoàn lại khi trả kho)</span>
+          <div><span className="text-stone-600">Tiền cọc đảm bảo (hoàn lại khi trả kho)</span><p className={formulaClass}>1 × đơn giá tháng {formatVndAmount(q.monthlyPrice)} = {formatVndAmount(q.securityDepositAmount)}.</p></div>
           <span className={amountClass}>+ {formatVndAmount(q.securityDepositAmount)}</span>
         </div>
         <div className="flex justify-between gap-4 border-t border-stone-200 pt-2 font-bold">
-          <span>Tổng trước ưu đãi</span>
+          <div><span>Tổng trước ưu đãi</span><p className={formulaClass}>{formatVndAmount(q.subtotal)} + {formatVndAmount(q.securityDepositAmount)} = {formatVndAmount(q.subtotal + q.securityDepositAmount)}.</p></div>
           <span className={amountClass}>{formatVndAmount(q.subtotal + q.securityDepositAmount)}</span>
         </div>
 
         {/* Giảm giá kỳ hạn (nếu có hoặc hiển thị để đối chiếu) */}
         {(q.discountAmount > 0 || q.discountRate > 0) ? (
           <div className="flex items-center justify-between gap-4 rounded-lg bg-emerald-50 px-3 py-2.5 text-xs text-emerald-800 sm:text-sm">
-            <span className="font-semibold">Giảm giá kỳ hạn ({Math.round(q.discountRate * 100)}%)</span>
+            <div><span className="font-semibold">Giảm giá kỳ hạn ({discountPercent}%)</span><p className="mt-1 text-xs font-normal leading-5 text-emerald-700">{formatVndAmount(q.subtotal)} × {discountPercent}% = {formatVndAmount(q.discountAmount)}.</p></div>
             <span className={deductionAmountClass}>- {formatVndAmount(q.discountAmount)}</span>
           </div>
         ) : null}
@@ -113,7 +120,7 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
         )}
 
         <div className="flex items-center justify-between gap-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm">
-          <span className="font-bold text-stone-900">Tổng sau ưu đãi (đã gồm tiền cọc đảm bảo thuê)</span>
+          <div><span className="font-bold text-stone-900">Tổng sau ưu đãi (đã gồm tiền cọc đảm bảo thuê)</span><p className={formulaClass}>{formatVndAmount(q.subtotal)} − {formatVndAmount(q.discountAmount)}{(q.voucherDiscountAmount ?? 0) > 0 ? <> − {formatVndAmount(q.voucherDiscountAmount!)}</> : null} + {formatVndAmount(q.securityDepositAmount)} = {formatVndAmount(q.totalInitialObligation)}.</p></div>
           <span className={payableAmountClass}>{formatVndAmount(q.totalInitialObligation)}</span>
         </div>
         </div>
@@ -127,11 +134,11 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
 
         {/* CHẶNG 1: THANH TOÁN ONLINE NGAY (NỔI BẬT NHẤT) */}
         <div className="rounded-xl border border-stone-200 bg-white p-4">
-          <p className="border-b border-stone-200 pb-2 text-xs font-bold uppercase tracking-wider text-stone-700">Chặng 1 · Thanh toán trước {depositPercent}% (giữ chỗ)</p>
+          <p className="border-b border-stone-200 pb-2 text-xs font-bold uppercase tracking-wider text-stone-700">Chặng 1 · Đặt cọc giữ chỗ ({depositRatePercent}%)</p>
 
           <div className="mt-3 flex flex-wrap items-baseline justify-between gap-2">
             <div>
-              <p className="text-sm font-bold text-stone-900">Đặt cọc giữ chỗ ({depositPercent}%) · Thanh toán trước {depositPercent}% (giữ chỗ)</p><p className="mt-1 text-xs text-stone-600">{depositPercent}% × tổng tiền {formatVndAmount(q.totalInitialObligation)} (đã gồm tiền thuê và tiền cọc đảm bảo thuê).</p>
+              <p className="text-sm font-bold text-stone-900">Đặt cọc giữ chỗ ({depositRatePercent}%) · Thanh toán trước {depositRatePercent}% (giữ chỗ)</p><p className={formulaClass}>{depositRatePercent}% × tổng tiền {formatVndAmount(q.totalInitialObligation)} (đã gồm tiền thuê và tiền cọc đảm bảo thuê) = {formatVndAmount(q.reservationDepositAmount)}. Khoản này đã nằm trong tổng chi phí.</p>
             </div>
             <div className="ml-auto text-right">
               <span className={`${payableAmountClass} block`}>
@@ -145,7 +152,7 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
             <p>Vui lòng xác minh email trước khi tiếp tục. Chúng tôi sẽ gửi thông báo duyệt đơn và nhắc thanh toán qua email này.</p>
             <button type="button" className="font-semibold underline disabled:opacity-50" disabled={resending || verificationSent} onClick={() => void resend()}>{resending ? 'Đang gửi…' : verificationSent ? 'Đã yêu cầu gửi lại email xác minh' : 'Gửi lại email xác minh'}</button>
             {verificationMessage && <p role="status" className="text-xs">{verificationMessage}</p>}
-          </div> : needsReview ? <div className="mt-3 space-y-1 text-sm leading-6 text-stone-700"><p className="font-bold">Trường hợp 2: đơn cần nhân viên duyệt</p><p>Đơn của bạn cần nhân viên kiểm tra trước (<b>lý do: hàng cần kiểm tra thêm</b>). Khi đơn được duyệt, bạn sẽ nhận email và có <b>15 phút</b> để thanh toán <b>{formatVndAmount(q.reservationDepositAmount)}</b>. Quá hạn, chỗ giữ được nhả và đơn hết hiệu lực.</p></div>
+          </div> : needsReview || hidePaymentNotices ? null
             : <div className="mt-3 space-y-1 text-sm leading-6 text-stone-700"><p className="font-bold">Trường hợp 1: đơn được xử lý ngay</p><p>Sau khi bạn xác nhận báo giá, bạn có <b>15 phút</b> để thanh toán <b>{formatVndAmount(q.reservationDepositAmount)}</b>. Quá hạn, chỗ giữ được nhả và đơn hết hiệu lực.</p></div>}
 <p className="mt-3 border-t border-stone-100 pt-3 text-xs text-stone-600">Khoản thanh toán trước này <b>được trừ trực tiếp</b> vào tổng tiền cần thanh toán khi bàn giao kho.</p>
           <div className="mt-2.5 rounded-lg border border-rose-200 bg-rose-50/90 p-2.5 text-sm leading-6 text-rose-900">
@@ -158,12 +165,12 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
           <p className="border-b border-stone-200/60 pb-2 text-xs font-bold uppercase tracking-wider text-stone-700">Chặng 2 · Thanh toán khi nhận kho</p>
 
           <div className="space-y-2 text-sm">
-            <div className="flex justify-between gap-4"><span>Tổng chi phí phải thanh toán</span><span className={amountClass}>{formatVndAmount(q.totalInitialObligation)}</span></div>
-            <div className="flex justify-between gap-4 text-emerald-700"><span>Trừ khoản trả trước (chặng 1)</span><span className={amountClass}>- {formatVndAmount(q.reservationDepositAmount)}</span></div>
+            <div className="flex justify-between gap-4"><div><span>Tổng chi phí phải thanh toán</span><p className={formulaClass}>{formatVndAmount(q.totalAfterDiscount)} + {formatVndAmount(q.securityDepositAmount)} = {formatVndAmount(q.totalInitialObligation)}.</p></div><span className={amountClass}>{formatVndAmount(q.totalInitialObligation)}</span></div>
+            <div className="flex justify-between gap-4 text-emerald-700"><div><span>Trừ khoản trả trước (chặng 1)</span><p className="mt-1 text-xs font-normal leading-5 text-emerald-600">{formatVndAmount(q.totalInitialObligation)} × {depositRatePercent}% = {formatVndAmount(q.reservationDepositAmount)}.</p></div><span className={amountClass}>- {formatVndAmount(q.reservationDepositAmount)}</span></div>
           </div>
 
           <div className="mt-2 flex items-center justify-between border-t border-stone-200/60 pt-2 text-sm">
-            <span className="font-bold text-stone-900">Số tiền còn lại phải thanh toán khi bàn giao kho</span>
+            <div><span className="font-bold text-stone-900">Số tiền còn lại phải thanh toán khi bàn giao kho</span><p className={formulaClass}>{formatVndAmount(q.totalInitialObligation)} − {formatVndAmount(q.reservationDepositAmount)} = {formatVndAmount(q.dueAtCheckIn)}.</p></div>
             <span className={payableAmountClass}>{formatVndAmount(q.dueAtCheckIn)}</span>
           </div>
         </div>
@@ -171,7 +178,8 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
 
 
 
-      <ReturnPolicyNotice terms={q} />
+      {context === 'reservation' && !hidePaymentNotices && <InventoryMismatchReturnNotice />}
+      <ReturnPolicyNotice terms={q} showQuoteFees={context === 'reservation' && !hidePaymentNotices} />
 
       {/* ── FOOTER HIỆU LỰC & XÉT DUYỆT ── */}
       {context === 'reservation' && <p className="text-xs text-stone-500">Báo giá đã lưu khi tạo đơn. Các khoản thanh toán được đối chiếu theo số tiền đã chốt.</p>}

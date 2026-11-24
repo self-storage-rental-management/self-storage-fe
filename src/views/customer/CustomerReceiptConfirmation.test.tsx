@@ -8,6 +8,7 @@ const state = vi.hoisted(() => ({ confirm: vi.fn(), messages: [] as unknown[] })
 vi.mock('react', async original => ({
   ...await original<typeof import('react')>(),
   useEffect: () => {},
+  useLayoutEffect: () => {},
   useRef: (value: unknown) => ({ current: value }),
   useState: (value: unknown) => [typeof value === 'function' ? value() : value, (next: unknown) => state.messages.push(next)],
 }))
@@ -30,7 +31,7 @@ function command(refresh: () => Promise<void>) {
     if (Array.isArray(value)) { for (const child of value) { const result = find(child); if (result) return result } }
     if (!value || typeof value !== 'object') return undefined
     const props = (value as ReactElement<{ children?: unknown; onClick?: () => void }>).props
-    if (props?.children === 'Sẵn sàng bàn giao') return props.onClick
+    if (props?.children === 'Xác nhận đã nhận kho') return props.onClick
     return find(props?.children)
   }
   const click = find(tree); if (!click) throw new Error('Receipt command is missing'); return click

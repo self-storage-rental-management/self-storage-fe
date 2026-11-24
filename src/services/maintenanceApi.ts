@@ -25,7 +25,13 @@ export interface MaintenanceTaskApi {
   assignedStaffId: string | null
   assignedStaffName: string | null
   status: MaintenanceTaskStatus
+  recoveryRequired?: boolean
+  recoveryType?: 'NONE' | 'RETURN_NO_SHOW' | 'INVENTORY_OVERDUE' | 'SETUP_OVERDUE' | 'MISMATCH_REMOVAL' | 'EXCESS_ITEMS'
   dueAt: string | null
+  deadlineAt?: string | null
+  recoveryHandoverLocation?: string | null
+  recoveryWitnessStaffId?: string | null
+  recoveryWitnessStaffName?: string | null
   startedAt: string | null
   completedAt: string | null
   resultReport: string | null
@@ -70,10 +76,15 @@ function isMaintenanceTask(value: unknown): value is MaintenanceTaskApi {
     (value.taskType === undefined || value.taskType === 'maintenance' || value.taskType === 'inventory_check') &&
     ['low', 'medium', 'high'].includes(String(value.priority)) &&
     ['open', 'in_progress', 'completed', 'cancelled'].includes(String(value.status)) &&
+    (value.recoveryType === undefined || ['NONE', 'RETURN_NO_SHOW', 'INVENTORY_OVERDUE', 'SETUP_OVERDUE', 'MISMATCH_REMOVAL', 'EXCESS_ITEMS'].includes(String(value.recoveryType))) &&
     isNullableText(value.returnCaseId) && isNullableText(value.damageClassification) &&
     isNullableText(value.reportedById) && isNullableText(value.reportedByName) &&
     isNullableText(value.assignedStaffId) && isNullableText(value.assignedStaffName) &&
     (value.dueAt === null || typeof value.dueAt === 'string') &&
+    (value.deadlineAt === undefined || value.deadlineAt === null || isInstant(value.deadlineAt)) &&
+    (value.recoveryHandoverLocation === undefined || isNullableText(value.recoveryHandoverLocation)) &&
+    (value.recoveryWitnessStaffId === undefined || value.recoveryWitnessStaffId === null || isUuidLike(value.recoveryWitnessStaffId)) &&
+    (value.recoveryWitnessStaffName === undefined || isNullableText(value.recoveryWitnessStaffName)) &&
     (value.startedAt === null || isInstant(value.startedAt)) &&
     (value.completedAt === null || isInstant(value.completedAt)) &&
     isNullableText(value.resultReport) && Array.isArray(value.evidencePhotos) && value.evidencePhotos.every(isText) &&
@@ -178,6 +189,9 @@ export interface CompleteMaintenanceTaskRequest {
   resultReport: string
   evidencePhotos: string[]
   makeUnitAvailable: boolean
+  unitVacated?: boolean
+  recoveryHandoverLocation?: string
+  recoveryWitnessStaffId?: string
 }
 
 export interface MaintenanceEvidenceAsset {

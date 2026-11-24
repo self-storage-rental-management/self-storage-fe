@@ -122,12 +122,14 @@ export function operationBlockedReason(
   )
   if (missing.length)
     return `Chưa đủ thông tin: ${missing.map((ref) => sourceLabels[ref] || "Thông tin xử lý gia hạn").join(", ")}.`
-  const noShowPhase = action === "noShow" && ["SIGNING", "SIGNING_EXPIRY_PENDING"].includes(s.phase)
+  const noShowPhase = action === "noShow" && s.phase === "SIGNING"
+  const rescheduleAfterNoShow = role === "customer" && action === "reschedule" && s.phase === "NO_SHOW"
+    && !!s.effectiveSigningDeadline && Date.parse(s.effectiveSigningDeadline) > now
   if (
     ["appointment", "reschedule", "arrival", "noShow", "cash", "completion"].includes(
       action,
     ) &&
-    s.phase !== "SIGNING" && !selectingBeforePayment && !noShowPhase
+    s.phase !== "SIGNING" && !selectingBeforePayment && !noShowPhase && !rescheduleAfterNoShow
   )
     return "Chỉ thao tác trong bước ký đang hiệu lực."
   if (action === "appointment" && s.appointmentRef)

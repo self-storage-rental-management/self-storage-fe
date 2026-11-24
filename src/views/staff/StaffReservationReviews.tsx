@@ -36,6 +36,13 @@ const activeStatusLabels: Partial<Record<ReservationStatus, string>> = {
 
 const progressSteps = ["Duyệt hồ sơ", "Thanh toán cọc", "Phân kho", "Nhận kho", "Bàn giao"]
 
+function isOtherGoodsItem(item: ReservationReview["goodsItems"][number]) {
+  const category = String(item.category || "").trim().toUpperCase()
+  const categoryName = item.categoryName?.trim().toLocaleLowerCase("vi-VN") || ""
+
+  return category === "OTHER" || categoryName === "khác" || categoryName === "hàng hóa khác"
+}
+
 function progressIndex(status: ReservationStatus) {
   if (status === "AWAITING_REVIEW" || status === "AWAITING_EMAIL") return 0
   if (["AWAITING_PAYMENT", "PAYMENT_GRACE", "PAYMENT_REVIEW"].includes(status)) return 1
@@ -222,15 +229,25 @@ export default function StaffReservationReviews({
           Chưa có hồ sơ chờ duyệt tại cơ sở của bạn.
         </Card>
       )}
-      {rows.map((row) => (
+      {rows.map((row) => {
+        const hasOtherGoods = row.goodsItems.some(isOtherGoodsItem)
+
+        return (
         <Card
           key={row.reservationId}
-          className="space-y-4 border-l-4 border-l-amber-500 p-5"
+          className={`space-y-4 border-l-4 p-5 ${hasOtherGoods ? "border-l-violet-500 bg-violet-50/40" : "border-l-amber-500"}`}
         >
           <div>
-            <p className="text-xs font-bold text-amber-700">
-              {row.reservationCode}
-            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className={`text-xs font-bold ${hasOtherGoods ? "text-violet-700" : "text-amber-700"}`}>
+                {row.reservationCode}
+              </p>
+              {hasOtherGoods && (
+                <span className="inline-flex items-center rounded-full border border-violet-300 bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-800">
+                  Hàng hóa khác
+                </span>
+              )}
+            </div>
             <h3 className="mt-1 font-bold">{row.customerEmail}</h3>
             <p className="text-xs font-semibold text-stone-700">
               Cơ sở: {facilityNames[row.facilityId] || row.facilityId}
@@ -247,13 +264,13 @@ export default function StaffReservationReviews({
             </p>
           </div>
           <p className="text-sm">
-            <b>Tình trạng đóng gói:</b> {row.goodsCondition || "-"}
+            <b>Phương thức đóng gói:</b> {row.goodsCondition || "-"}
           </p>
           {row.reservationNotes && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm"><b>Ghi chú của khách hàng:</b> {row.reservationNotes}</p>}
           {row.goodsItems.map((item) => (
             <div
               key={item.id}
-              className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm"
+              className={`rounded-lg border p-3 text-sm ${hasOtherGoods ? "border-violet-200 bg-violet-50/70" : "border-stone-200 bg-stone-50"}`}
             >
               <p className="font-bold">
                 {item.customGoodsName || item.categoryName || staffGoodsCategoryLabel(item.category)}
@@ -317,7 +334,8 @@ export default function StaffReservationReviews({
             </Button>
           </div>
         </Card>
-      ))}
+        )
+      })}
       {totalPages > 1 && (
         <StaffPagination
           page={page + 1}

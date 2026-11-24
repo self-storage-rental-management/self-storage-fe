@@ -1,3 +1,5 @@
+import { VIETNAM_TIME_ZONE } from '../../utils/vietnamTime'
+
 export type Language = 'en' | 'vi'
 
 type BilingualLabel = { en: string; vi: string }
@@ -40,6 +42,7 @@ const statusLabels: Record<string, BilingualLabel> = {
   closing: labels('Closing', 'Đang tất toán'),
   requested: labels('Requested', 'Đã yêu cầu'),
   inspected: labels('Inspected', 'Đã nghiệm thu'),
+  awaiting_business_review: labels('Awaiting settlement approval', 'Chờ Manager duyệt quyết toán'),
   disputed: labels('Disputed - Needs BO Resolution', 'Đang khiếu nại - Cần bộ phận vận hành giải quyết'),
   refund_pending: labels('Refund pending', 'Chờ hoàn tiền'),
   payment_due: labels('Payment due', 'Chờ thanh toán'),
@@ -228,9 +231,11 @@ export const managerDateLabel = (value: string | undefined, lang: Language, incl
     ? parsed.toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-GB', {
       day: '2-digit', month: '2-digit', year: 'numeric',
       hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+      timeZone: VIETNAM_TIME_ZONE,
     })
     : parsed.toLocaleDateString(lang === 'vi' ? 'vi-VN' : 'en-GB', {
       day: '2-digit', month: '2-digit', year: 'numeric',
+      timeZone: VIETNAM_TIME_ZONE,
     })
 }
 

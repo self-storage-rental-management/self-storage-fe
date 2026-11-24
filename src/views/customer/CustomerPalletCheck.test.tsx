@@ -27,6 +27,19 @@ it('explains the actual plan returned by the backend', () => {
   }
   expect(html).not.toContain('80%')
 })
+
+it('keeps the existing result visible during a background refresh', () => {
+  const html = renderToStaticMarkup(<CustomerPalletCheck check={check} loading />)
+  expect(html).toContain('Hàng của bạn vừa kho!')
+  expect(html).toContain('aria-busy="true"')
+  expect(html).not.toContain('Đang tính theo cấu hình kệ')
+})
+
+it('still shows initial loading when no matching result exists', () => {
+  const html = renderToStaticMarkup(<CustomerPalletCheck loading />)
+  expect(html).toContain('Đang tính theo cấu hình kệ')
+  expect(html).not.toContain('Hàng của bạn vừa kho!')
+})
 it('does not count a shared pallet twice when two goods lines use one compartment', () => {
   const capacity = {
     maxLoadedKg: 100, cargoWeightLimitKg: 60, piecesPerLayer: 4, usableLayers: 1,
