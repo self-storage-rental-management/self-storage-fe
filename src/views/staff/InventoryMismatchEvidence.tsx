@@ -102,7 +102,6 @@ export default function InventoryMismatchEvidence({ item, onPreview, showEvidenc
     </div>}
     <footer className={`space-y-2 rounded-lg border p-3 ${item.inventoryFullFit === false ? 'border-red-200 bg-red-50 text-red-950' : item.inventoryMismatchJson ? 'border-amber-200 bg-amber-50 text-amber-950' : 'border-stone-200 bg-stone-50'}`}>
       <p className="font-semibold">Kết luận: {conclusion}</p>
-      {item.inventoryMismatchSummary && <p className="text-xs">{item.inventoryMismatchSummary}</p>}
       <p className="whitespace-pre-wrap break-words text-xs"><b>Lý do chênh lệch:</b> {report.varianceReason || (item.inventoryFullFit && !item.inventoryMismatchJson ? 'Không có chênh lệch được ghi nhận.' : 'Chưa có lý do được ghi nhận.')}</p>
     </footer>
   </section>

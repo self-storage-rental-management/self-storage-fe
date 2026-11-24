@@ -117,16 +117,13 @@ export function ReturnSummary({ record, hideTerminationFee = false, hideHeader =
         </>
       )}
       {['requested', 'scheduled'].includes(record.status) && record.recoveryEligibleAt && <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">Nếu khách chưa đến và chưa hoàn tất trả kho, hồ sơ sẽ chuyển sang nhiệm vụ xử lý sau <strong>{returnRecoveryCountdown(record.recoveryEligibleAt, now) || returnRecoveryCutoff(record.recoveryEligibleAt)}</strong>. Hàng chưa được tự động di chuyển.</p>}
-      {record.returnType === 'INVENTORY_MISMATCH' && <p className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-950">Yêu cầu trả kho này liên quan đến hàng hóa không khớp khai báo. Phí và thời gian được tính theo kết quả kiểm kê.{record.returnWindowDays != null ? ` Hạn trả hàng áp dụng: ${record.returnWindowDays} ngày lịch.` : ''}</p>}
+      {inventoryMismatch && <div className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-950">
+        <p className="font-bold">Đơn trả kho do kiểm kê sai lệch</p>
+        <p className="mt-1">Tính tiền theo số ngày sử dụng thực tế (Đơn giá tháng × Số ngày / 30).</p>
+        <p className="mt-1 text-xs font-medium">Khách buộc chọn ngày trả kho trước hạn cuối 1 ngày để đảm bảo quản lý quyết toán và giải quyết yêu cầu nếu khách muốn quyết toán lại.</p>
+      </div>}
       {record.status === 'recovery_required' && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-950">Khách chưa đến theo lịch và đã hết thời gian ân hạn. Hàng chưa được tự động di chuyển. Cơ sở cần lập biên bản, kiểm kê và bàn giao hai người trước khi thu hồi.</p>}
       {record.status === 'recovery_required' && record.recoveryTaskDeadlineAt && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-950">Hạn xử lý nhiệm vụ thu hồi: {returnRecoveryCutoff(record.recoveryTaskDeadlineAt)}</p>}
-      {inventoryMismatch && record.earlyTerminationPolicy && <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-950">
-        <p className="font-semibold">Trả kho do hàng hóa sai khai báo</p>
-        <ul className="mt-1 list-disc space-y-1 pl-5">
-          <li>Tính tiền từ ngày xác nhận nhận kho đến ngày hẹn trả kho dự kiến.</li>
-          <li>Quản lý cơ sở lập quyết toán, khách xác nhận trước khi hoàn tiền hoặc thu thêm.</li>
-        </ul>
-      </div>}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {([
           ['Cọc theo hợp đồng', record.depositAmount], ['Phí đã ghi nhận', record.totalDeductions],
@@ -135,9 +132,7 @@ export function ReturnSummary({ record, hideTerminationFee = false, hideHeader =
           ['Khoản hoàn tiền', record.netRefundAmount], ['Khách cần đóng thêm', record.amountDueFromCustomer],
         ] as const).map(([label, amount]) => <div key={label} className="rounded-lg bg-stone-50 p-3"><p className="text-xs text-stone-500">{label}</p><p className="mt-1 text-sm font-bold text-stone-900">{amount == null ? 'Chưa xác định' : rentalMoney(amount, 'VND')}</p></div>)}
       </div>
-      {record.setupExitRequested && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{inventoryMismatch
-        ? 'Chỉ tính thời gian sử dụng thực tế và các khoản có bằng chứng, không áp dụng phí chấm dứt sớm cố định.'
-        : record.setupEarlyExit
+      {record.setupExitRequested && !inventoryMismatch && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{record.setupEarlyExit
           ? hideTerminationFee ? 'Trả trong thời gian chuẩn bị: hoàn 80% tiền thuê sau ưu đãi, giữ lại 20%; tiền cọc đảm bảo quyết toán riêng sau khi trừ hư hỏng theo bảng giá.' : 'Trả trong thời gian chuẩn bị: hệ thống giữ lại 20% tiền thuê sau ưu đãi và hoàn 80%. Hư hỏng trừ vào cọc một tháng; phần vượt cọc được bù vào tiền thuê chưa sử dụng trước khi yêu cầu khách trả thêm.'
         : record.setupReturnedAt ? 'Kho được nghiệm thu sau hạn chuẩn bị, áp dụng quyết toán của kỳ thuê đã bắt đầu.' : 'Nhân viên cần xác nhận đã dọn hết hàng và bàn giao kho trống. Điều khoản thời gian chuẩn bị áp dụng theo thời điểm nghiệm thu thực tế.'}</p>}
       {record.settlementBlocker && (
@@ -150,14 +145,17 @@ export function ReturnSummary({ record, hideTerminationFee = false, hideHeader =
 }
 
 function SettlementCalculationBreakdown({ record }: { record: ApiReturn }) {
+  const isMismatch = record.returnType === 'INVENTORY_MISMATCH'
+  const mismatchUsedDays = record.earlyTerminationPolicy?.billableSetupDays ?? null
   const deposit = record.depositAmount ?? 0
   const feeValues = [record.damageFee, record.cleaningFee, record.lostItemFee, record.overdueFee, record.outstandingFee]
   const totalFees = record.totalDeductions ?? feeValues.reduce((sum, value) => sum + (value || 0), 0)
   const setupExit = !!record.setupEarlyExit
-  const rentalCredit = setupExit
-    ? (record.rentalRefundCredit ?? record.earlyTerminationPolicy?.rentalRefundAmount ?? 0)
+  const useEarlyPolicy = setupExit || isMismatch
+  const rentalCredit = useEarlyPolicy
+    ? (record.earlyTerminationPolicy?.rentalRefundAmount ?? record.rentalRefundCredit ?? 0)
     : (record.activeReturnPolicy?.rentalRefundAmount ?? record.earlyTerminationPolicy?.rentalRefundAmount ?? 0)
-  const usedRental = setupExit
+  const usedRental = useEarlyPolicy
     ? (record.earlyTerminationPolicy?.totalRentalCharge ?? record.earlyTerminationFee ?? 0)
     : (record.activeReturnPolicy?.totalRentalCharge ?? record.earlyTerminationPolicy?.totalRentalCharge ?? 0)
   const totalRental = usedRental + rentalCredit
@@ -168,7 +166,7 @@ function SettlementCalculationBreakdown({ record }: { record: ApiReturn }) {
   // The current API may come from an older BE that does not yet include
   // monthlyPrice/rentalMonths. In that case, the active-return rule charges
   // the first started month in full, so the used month count is authoritative.
-  const usedMonthsFromPolicy = !setupExit && activePolicy
+  const usedMonthsFromPolicy = !isMismatch && !setupExit && activePolicy
     ? Math.max(1, activePolicy.completedRentalMonths + 1)
     : null
   // The security deposit is one effective monthly rent in the contract.
@@ -180,11 +178,11 @@ function SettlementCalculationBreakdown({ record }: { record: ApiReturn }) {
       : rentalMonths && rentalMonths > 0
         ? totalRental / rentalMonths
         : null)
-  const usedMonths = usedMonthsFromPolicy
+  const usedMonths = isMismatch ? null : (usedMonthsFromPolicy
     ?? (monthlyPrice && monthlyPrice > 0 && usedRental > 0
       ? Math.max(1, Math.round(usedRental / monthlyPrice))
-      : null)
-  const remainingMonths = !setupExit && monthlyPrice && monthlyPrice > 0 && rentalCredit > 0
+      : null))
+  const remainingMonths = !isMismatch && !setupExit && monthlyPrice && monthlyPrice > 0 && rentalCredit > 0
     ? Math.max(0, Math.round(rentalCredit / monthlyPrice))
     : null
   const displayRentalMonths = rentalMonths && rentalMonths > 0
@@ -197,7 +195,7 @@ function SettlementCalculationBreakdown({ record }: { record: ApiReturn }) {
   const calculatedRefund = refundableDeposit + rentalRefundAfterOffset
   const calculatedDue = Math.max(0, depositShortfall - rentalCredit)
   const storedAmount = record.netRefundAmount ?? null
-  const hasDifference = storedAmount != null && Math.abs(storedAmount - calculatedRefund) >= 0.01
+  const hasDifference = record.status !== 'requested' && storedAmount != null && Math.abs(storedAmount - calculatedRefund) >= 0.01
   const formulaClass = 'mt-1 text-xs font-normal leading-5 text-stone-500'
 
   return (
@@ -248,51 +246,93 @@ function SettlementCalculationBreakdown({ record }: { record: ApiReturn }) {
           <span className="shrink-0 font-mono font-bold">{depositAfterFees >= 0 ? `+ ${rentalMoney(refundableDeposit, 'VND')}` : rentalMoney(depositAfterFees, 'VND')}</span>
         </div>
 
-        <div className="flex justify-between gap-4 text-xs sm:text-sm">
-          <div>
-            <span className="font-semibold text-stone-800">Đơn giá mỗi tháng sau giảm giá</span>
-            <p className={formulaClass}>
-              {monthlyPrice != null && usedMonths != null
-                ? `${rentalMoney(usedRental, 'VND')} ÷ ${usedMonths} tháng đã sử dụng = ${rentalMoney(monthlyPrice, 'VND')}.`
-                : 'Theo đơn giá sau giảm giá trong báo giá đã chốt.'}
-            </p>
-          </div>
-          <span className="shrink-0 font-mono text-sm text-stone-900">
-            {monthlyPrice == null ? 'Chưa xác định' : rentalMoney(monthlyPrice, 'VND')}
-          </span>
-        </div>
+        {isMismatch ? (
+          <>
+            <div className="flex justify-between gap-4 rounded-lg bg-amber-50 px-3 py-2 text-xs sm:text-sm">
+              <div>
+                <span className="font-semibold text-amber-900">Thời gian sử dụng thực tế</span>
+                <p className="mt-0 text-xs leading-4 text-amber-800">Tính theo ngày lịch từ ngày đưa hàng vào kho đến ngày bàn giao kho trống, tính cả hai ngày (không cộng ngày chậm thu hồi sau hạn).</p>
+              </div>
+              <span className="shrink-0 text-right font-mono text-amber-900">{mismatchUsedDays != null ? `${mismatchUsedDays} ngày` : 'Chờ xác nhận'}</span>
+            </div>
 
-        <div className="flex justify-between gap-4 text-xs sm:text-sm">
-          <div>
-            <span className="font-semibold text-stone-800">Tiền thuê theo kỳ đã chốt</span>
-            <p className={formulaClass}>
-              {monthlyPrice != null && displayRentalMonths
-                ? `${rentalMoney(monthlyPrice, 'VND')} × ${displayRentalMonths} tháng = ${rentalMoney(totalRental, 'VND')}.`
-                : `Tiền đã sử dụng/giữ lại ${rentalMoney(usedRental, 'VND')} + tiền thuê các tháng còn lại chưa sử dụng ${rentalMoney(rentalCredit, 'VND')} = ${rentalMoney(totalRental, 'VND')}.`}
-            </p>
-          </div>
-          <span className="shrink-0 font-mono text-sm text-stone-900">{rentalMoney(totalRental, 'VND')}</span>
-        </div>
+            <div className="flex justify-between gap-4 text-xs sm:text-sm">
+              <div>
+                <span className="font-semibold text-stone-800">Tiền thuê theo kỳ đã chốt</span>
+                <p className={formulaClass}>Tổng tiền thuê đã thanh toán theo báo giá.</p>
+              </div>
+              <span className="shrink-0 font-mono text-sm text-stone-900">{rentalMoney(totalRental, 'VND')}</span>
+            </div>
 
-        <div className="flex justify-between gap-4 text-xs sm:text-sm">
-          <div>
-            <span className="font-semibold text-stone-800">Tiền thuê số tháng đã sử dụng</span>
-            <p className={formulaClass}>{monthlyPrice != null && usedMonths != null ? `${rentalMoney(monthlyPrice, 'VND')} × ${usedMonths} tháng = ${rentalMoney(usedRental, 'VND')}.` : 'Theo số tiền thuê đã ghi nhận.'}</p>
-          </div>
-          <span className="shrink-0 font-mono text-sm text-stone-900">{rentalMoney(usedRental, 'VND')}</span>
-        </div>
+            <div className="flex justify-between gap-4 text-xs sm:text-sm">
+              <div>
+                <span className="font-semibold text-stone-800">Tiền sử dụng theo ngày</span>
+                <p className={formulaClass}>
+                  {monthlyPrice != null && mismatchUsedDays != null
+                    ? `${rentalMoney(monthlyPrice, 'VND')} × ${mismatchUsedDays} ngày / 30 = ${rentalMoney(usedRental, 'VND')}.`
+                    : 'Đơn giá tháng × số ngày sử dụng / 30.'}
+                </p>
+              </div>
+              <span className="shrink-0 font-mono text-sm text-rose-700">− {rentalMoney(usedRental, 'VND')}</span>
+            </div>
 
-        <div className="flex justify-between gap-4 rounded-lg bg-emerald-50 px-3 py-2.5 text-xs text-emerald-800 sm:text-sm">
-          <div>
-            <span className="font-semibold">Tiền thuê số tháng còn lại được hoàn</span>
-            <p className="mt-0 text-xs font-normal leading-4 text-emerald-700">
-              {remainingMonths != null && monthlyPrice != null
-                ? `${rentalMoney(totalRental, 'VND')} − ${rentalMoney(usedRental, 'VND')} = ${remainingMonths} tháng × ${rentalMoney(monthlyPrice, 'VND')} = ${rentalMoney(rentalCredit, 'VND')}.`
-                : `${rentalMoney(totalRental, 'VND')} − ${rentalMoney(usedRental, 'VND')} = ${rentalMoney(rentalCredit, 'VND')}.`}
-            </p>
-          </div>
-          <span className="shrink-0 font-mono font-bold">+ {rentalMoney(rentalCredit, 'VND')}</span>
-        </div>
+            <div className="flex justify-between gap-4 rounded-lg bg-emerald-50 px-3 py-2.5 text-xs text-emerald-800 sm:text-sm">
+              <div>
+                <span className="font-semibold">Tiền thuê còn lại được hoàn</span>
+                <p className="mt-0 text-xs font-normal leading-4 text-emerald-700">{rentalMoney(totalRental, 'VND')} − {rentalMoney(usedRental, 'VND')} = {rentalMoney(rentalCredit, 'VND')}.</p>
+              </div>
+              <span className="shrink-0 font-mono font-bold">+ {rentalMoney(rentalCredit, 'VND')}</span>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex justify-between gap-4 text-xs sm:text-sm">
+              <div>
+                <span className="font-semibold text-stone-800">Đơn giá mỗi tháng sau giảm giá</span>
+                <p className={formulaClass}>
+                  {monthlyPrice != null && usedMonths != null
+                    ? `${rentalMoney(usedRental, 'VND')} ÷ ${usedMonths} tháng đã sử dụng = ${rentalMoney(monthlyPrice, 'VND')}.`
+                    : 'Theo đơn giá sau giảm giá trong báo giá đã chốt.'}
+                </p>
+              </div>
+              <span className="shrink-0 font-mono text-sm text-stone-900">
+                {monthlyPrice == null ? 'Chưa xác định' : rentalMoney(monthlyPrice, 'VND')}
+              </span>
+            </div>
+
+            <div className="flex justify-between gap-4 text-xs sm:text-sm">
+              <div>
+                <span className="font-semibold text-stone-800">Tiền thuê theo kỳ đã chốt</span>
+                <p className={formulaClass}>
+                  {monthlyPrice != null && displayRentalMonths
+                    ? `${rentalMoney(monthlyPrice, 'VND')} × ${displayRentalMonths} tháng = ${rentalMoney(totalRental, 'VND')}.`
+                    : `Tiền đã sử dụng/giữ lại ${rentalMoney(usedRental, 'VND')} + tiền thuê các tháng còn lại chưa sử dụng ${rentalMoney(rentalCredit, 'VND')} = ${rentalMoney(totalRental, 'VND')}.`}
+                </p>
+              </div>
+              <span className="shrink-0 font-mono text-sm text-stone-900">{rentalMoney(totalRental, 'VND')}</span>
+            </div>
+
+            <div className="flex justify-between gap-4 text-xs sm:text-sm">
+              <div>
+                <span className="font-semibold text-stone-800">Tiền thuê số tháng đã sử dụng</span>
+                <p className={formulaClass}>{monthlyPrice != null && usedMonths != null ? `${rentalMoney(monthlyPrice, 'VND')} × ${usedMonths} tháng = ${rentalMoney(usedRental, 'VND')}.` : 'Theo số tiền thuê đã ghi nhận.'}</p>
+              </div>
+              <span className="shrink-0 font-mono text-sm text-stone-900">{rentalMoney(usedRental, 'VND')}</span>
+            </div>
+
+            <div className="flex justify-between gap-4 rounded-lg bg-emerald-50 px-3 py-2.5 text-xs text-emerald-800 sm:text-sm">
+              <div>
+                <span className="font-semibold">Tiền thuê số tháng còn lại được hoàn</span>
+                <p className="mt-0 text-xs font-normal leading-4 text-emerald-700">
+                  {remainingMonths != null && monthlyPrice != null
+                    ? `${rentalMoney(totalRental, 'VND')} − ${rentalMoney(usedRental, 'VND')} = ${remainingMonths} tháng × ${rentalMoney(monthlyPrice, 'VND')} = ${rentalMoney(rentalCredit, 'VND')}.`
+                    : `${rentalMoney(totalRental, 'VND')} − ${rentalMoney(usedRental, 'VND')} = ${rentalMoney(rentalCredit, 'VND')}.`}
+                </p>
+              </div>
+              <span className="shrink-0 font-mono font-bold">+ {rentalMoney(rentalCredit, 'VND')}</span>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="rounded-xl bg-stone-900 p-4 text-white">
@@ -606,22 +646,65 @@ function ReturnWorkspace({
             }}
           />
 
-          {role === 'customer' && selectedRecord.status === 'requested' && editing !== selectedRecord.id && (
+          {role === 'customer' && (selectedRecord.status === 'requested' || (selectedRecord.returnType === 'INVENTORY_MISMATCH' && selectedRecord.status === 'scheduled')) && editing !== selectedRecord.id && (
             <div className="mt-3 flex justify-end border-t border-stone-100 pt-3">
               <Button
                 type="button"
-                variant="outline"
+                variant={selectedRecord.returnType === 'INVENTORY_MISMATCH' ? 'primary' : 'outline'}
                 disabled={busy || read.loading}
                 onClick={() => {
+                  const minNext = vietnamDateInput(Date.now() + 86_400_000)
                   setEditing(selectedRecord.id)
-                  setDate(selectedRecord.scheduledDate)
-                  setNotes(selectedRecord.customerNotes || '')
+                  setDate(selectedRecord.scheduledDate && selectedRecord.scheduledDate >= minNext ? selectedRecord.scheduledDate : minNext)
+                  setNotes(selectedRecord.customerNotes || 'Khách hẹn ngày trả kho.')
                 }}
               >
-                Chỉnh sửa yêu cầu
+                {selectedRecord.returnType === 'INVENTORY_MISMATCH' ? 'Chọn / đổi lịch hẹn trả kho' : 'Chỉnh sửa yêu cầu'}
               </Button>
             </div>
           )}
+
+          {role === 'customer' && editing === selectedRecord.id && (() => {
+            const minReturnDate = vietnamDateInput(Date.now() + 86_400_000)
+            const deadlineMs = selectedRecord.returnType === 'INVENTORY_MISMATCH' && selectedRecord.inventoryRemovalDeadlineAt
+              ? Date.parse(selectedRecord.inventoryRemovalDeadlineAt) : null
+            const maxMismatchDate = deadlineMs != null
+              ? (() => {
+                  const oneDayBefore = vietnamDateInput(deadlineMs - 86_400_000 - 1)
+                  return oneDayBefore >= minReturnDate ? oneDayBefore : vietnamDateInput(deadlineMs - 1)
+                })()
+              : undefined
+            const tooEarly = Boolean(date && date < minReturnDate)
+            const tooLate = Boolean(date && maxMismatchDate && date > maxMismatchDate)
+            return (
+              <form onSubmit={(event) => {
+                event.preventDefault()
+                if (!date || tooEarly) {
+                  setFeedback('Ngày hẹn trả kho phải sau ngày tạo đơn trả kho ít nhất 1 ngày.')
+                  return
+                }
+                if (tooLate) {
+                  setFeedback('Khách buộc chọn ngày trả kho trước hạn cuối 1 ngày.')
+                  return
+                }
+                void run(() => updateReturnRequest(selectedRecord.id, date, notes))
+              }} className="mt-3 space-y-3 rounded-xl border border-amber-200 bg-amber-50/60 p-4">
+                <p className="text-sm font-bold text-stone-900">Chọn lịch hẹn trả kho dự kiến</p>
+                <div>
+                  <VietnameseDateInput label="Ngày hẹn trả kho dự kiến" value={date} min={minReturnDate} max={maxMismatchDate} onChange={setDate} />
+                  {tooEarly && <p className="mt-1 text-xs font-semibold text-rose-600">Ngày hẹn trả kho phải sau ngày tạo đơn trả kho ít nhất 1 ngày.</p>}
+                  {tooLate && <p className="mt-1 text-xs font-semibold text-rose-600">Khách buộc chọn ngày trả kho trước hạn cuối 1 ngày.</p>}
+                </div>
+                <label className="block text-sm font-medium text-stone-700">Lý do / ghi chú
+                  <textarea required rows={2} value={notes} maxLength={2000} disabled={busy} onChange={(event) => setNotes(event.target.value)} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white p-2.5 text-sm font-normal" />
+                </label>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button type="button" variant="outline" disabled={busy} onClick={() => setEditing(null)}>Hủy</Button>
+                  <Button type="submit" disabled={busy || !date || tooEarly || tooLate || !notes.trim()}>Lưu lịch hẹn trả kho</Button>
+                </div>
+              </form>
+            )
+          })()}
 
           {/* Emergency contacts modal */}
           {emergencyModalOpen && selectedRecord.rentalId && (
@@ -700,29 +783,32 @@ function ReturnWorkspace({
           </div>
 
           {/* Customer request return form (if applicable) */}
-          {role === 'customer' && rentalId && read.data && ((rentalActive && !rows.some(record => record.status !== 'completed' || (record.sourceType === 'RECOVERY' && record.recoveryTaskStatus !== 'CLOSED'))) || editing) && (
+          {role === 'customer' && rentalId && read.data && ((rentalActive && !rows.some(record => record.status !== 'completed' || (record.sourceType === 'RECOVERY' && record.recoveryTaskStatus !== 'CLOSED'))) || editing) && (() => {
+            const minReturnDate = vietnamDateInput(new Date(Date.now() + 86_400_000))
+            return (
             <form onSubmit={(event) => {
               event.preventDefault()
-              if (date && date < today) {
-                setFeedback('Ngày trả kho không được ở quá khứ.')
+              if (date && date < minReturnDate) {
+                setFeedback('Ngày hẹn trả kho phải sau ngày tạo đơn trả kho ít nhất 1 ngày.')
                 return
               }
               void run(() => editing ? updateReturnRequest(editing, date, notes) : requestReturn(rentalId, date, notes))
             }} className="space-y-4 rounded-xl border border-stone-200 bg-stone-50 p-4">
               <ReturnPolicyNotice />
               <div>
-                <VietnameseDateInput label="Ngày trả kho" value={date} min={today} onChange={setDate} />
-                {date && date < today && (
-                  <p className="mt-1 text-xs font-semibold text-rose-600">Ngày trả kho không được ở quá khứ.</p>
+                <VietnameseDateInput label="Ngày hẹn trả kho" value={date} min={minReturnDate} onChange={setDate} />
+                {date && date < minReturnDate && (
+                  <p className="mt-1 text-xs font-semibold text-rose-600">Ngày hẹn trả kho phải sau ngày tạo đơn trả kho ít nhất 1 ngày.</p>
                 )}
               </div>
               <label className="block text-sm font-medium text-stone-700">Lý do<textarea required rows={3} placeholder="Nhập lý do trả kho…" value={notes} maxLength={2000} disabled={busy} onChange={(event) => setNotes(event.target.value)} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white p-3 font-normal" /></label>
               <div className="flex flex-wrap gap-3">
-                <Button type="submit" disabled={busy || !date || date < today || !notes.trim() || read.loading}>{editing ? 'Lưu chỉnh sửa' : 'Gửi yêu cầu trả kho'}</Button>
+                <Button type="submit" disabled={busy || !date || date < minReturnDate || !notes.trim() || read.loading}>{editing ? 'Lưu chỉnh sửa' : 'Gửi yêu cầu trả kho'}</Button>
                 {editing && <Button type="button" variant="outline" disabled={busy} onClick={() => setEditing(null)}>Hủy chỉnh sửa</Button>}
               </div>
             </form>
-          )}
+            )
+          })()}
 
           {read.loading && !read.data && <p role="status">Đang tải hồ sơ trả kho...</p>}
           {!!read.error && <p role="alert">{returnError(read.error)}</p>}
