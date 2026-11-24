@@ -10,10 +10,10 @@ type Terms = {
   reservationDepositAmount?: number | null
   earlyTerminationFeeCoefficient?: number | null
 }
-export default function ReturnPolicyNotice({ terms, business = false }: { terms?: Terms; business?: boolean }) {
+export default function ReturnPolicyNotice({ terms, business = false, showQuoteFees = true }: { terms?: Terms; business?: boolean; showQuoteFees?: boolean }) {
   const setupFee = terms?.setupEarlyExitFee ?? null
   return <div className="space-y-2">
-    {setupFee != null && <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-950">
+    {showQuoteFees && setupFee != null && <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-950">
       <b>Các khoản phí trong báo giá</b>
       <div className="mt-1 grid gap-1 sm:grid-cols-2">
         {setupFee != null && <span>Trả trong thời gian chuẩn bị: <b>{formatVndAmount(setupFee)}</b></span>}

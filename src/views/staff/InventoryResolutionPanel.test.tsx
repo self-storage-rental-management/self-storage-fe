@@ -34,3 +34,13 @@ it('offers acceptance and rejection of declared OTHER goods even when the goods 
   expect(html).toContain('tiền hoàn hoặc thu thêm')
   expect(render({ inventoryFullFit: true })).not.toContain('Từ chối hàng hóa loại Khác')
 })
+
+it('captures the signed paper record as uploaded photos instead of asking for a file code', () => {
+  const html = render({ inventoryFullFit: true })
+  expect(html).toContain('Ảnh biên bản có chữ ký khách')
+  expect(html).toContain('type="file"')
+  expect(html).toContain('multiple=""')
+  expect(html).not.toContain('Mã ảnh biên bản')
+  expect(html).not.toContain('Mã tệp ảnh biên bản')
+})
+
