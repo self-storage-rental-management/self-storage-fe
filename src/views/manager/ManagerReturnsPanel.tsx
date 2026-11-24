@@ -1,3 +1,4 @@
+import { displayStatusLabel } from '../../presentation/statusLabels'
 import { isApiAuthenticated } from '../../services/authApi'
 import { useReturnRecords } from '../../hooks/useReturnRecords'
 import { returnScreenRecord } from '../../services/returnScreenAdapter'
@@ -333,7 +334,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
           })
           showToast(`Đã duyệt bỏ qua khiếu nại và cho trả kho ngay hồ sơ ${completeTarget.id}!`)
         } else {
-          showToast(`Hồ sơ đang ở trạng thái ${completeTarget.status}, vui lòng xử lý theo đúng quy trình.`)
+          showToast(`Hồ sơ đang ở trạng thái ${displayStatusLabel(completeTarget.status)}, vui lòng xử lý theo đúng quy trình.`)
           return
         }
         apiRead.refresh()

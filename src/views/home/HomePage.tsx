@@ -1208,7 +1208,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                           </div>
                         </div>
                         <div className="text-right shrink-0">
-                          <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold ${color.badge}`}>Size {color.tag}</span>
+                          <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold ${color.badge}`}>Cỡ {color.tag}</span>
                           <p className="mt-0.5 text-xs sm:text-sm font-bold text-stone-900">{spec.priceFormatted}<span className="text-[10px] font-normal text-stone-500">/tháng</span></p>
                         </div>
                       </div>

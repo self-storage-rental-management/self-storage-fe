@@ -1,3 +1,4 @@
+import { displayStatusLabel } from '../../presentation/statusLabels'
 import { getRentalRenewalEligibility } from '../rental-api/RentalDeadlineNotice'
 import { PACKAGING_METHOD_OPTIONS } from '../../domain/packagingMethods'
 import BookingArrivalDetails from './BookingArrivalDetails'
@@ -1180,7 +1181,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       DEPOSIT_PAID: 'bg-blue-700 text-white', UNIT_RESERVED: 'bg-blue-700 text-white', READY_FOR_CHECKIN: 'bg-blue-700 text-white',
       overdue: 'bg-red-700 text-white', rejected: 'bg-red-700 text-white', cancelled: 'bg-stone-200 text-stone-700', expired: 'bg-red-700 text-white', CANCELLED: 'bg-red-700 text-white', EXPIRED: 'bg-red-700 text-white', high: 'bg-red-700 text-white'
     }
-    const label = statusLabelMap[status] || (status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' '))
+    const label = statusLabelMap[status] || displayStatusLabel(status)
     return <span className={`inline-flex rounded px-2.5 py-1 text-xs font-bold ${statusClass[status] ?? 'bg-stone-700 text-white'}`}>{label}</span>
   }
 
@@ -3533,10 +3534,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       )}
 
       {page === 'contracts' && isApiAuthenticated() && <div className="fade-in space-y-4">
-        <SectionHeader title="Hợp đồng của tôi" subtitle="Hồ sơ hợp đồng và văn bản bàn giao được lưu theo reservation trên hệ thống." />
+        <SectionHeader title="Hợp đồng của tôi" subtitle="Hồ sơ hợp đồng và văn bản bàn giao được lưu theo đơn đặt kho trên hệ thống." />
         <Card className="space-y-4 p-5 text-sm text-stone-700">
           <p>Mở hồ sơ đặt kho để xem hoặc tải phiếu xác nhận, văn bản bàn giao và bằng chứng.</p>
-          {backendReservations.length > 0 ? <div className="space-y-2">{backendReservations.map(reservation => <div key={reservation.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3"><div><p className="font-bold text-stone-900">{reservation.reservationCode}</p><p className="text-xs text-stone-600">{displayDateValue(reservation.startDate)} → {displayDateValue(reservation.endDate)} · {reservation.status}</p></div><Button size="sm" variant="outline" onClick={() => { setPage('reservations'); window.setTimeout(() => revealNotificationTarget(reservation.id), 0) }}>Mở hồ sơ</Button></div>)}</div> : <p className="rounded-lg border border-dashed border-stone-300 p-4 text-stone-500">Chưa có hồ sơ đặt kho.</p>}
+          {backendReservations.length > 0 ? <div className="space-y-2">{backendReservations.map(reservation => <div key={reservation.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3"><div><p className="font-bold text-stone-900">{reservation.reservationCode}</p><p className="text-xs text-stone-600">{displayDateValue(reservation.startDate)} → {displayDateValue(reservation.endDate)} · {displayStatusLabel(reservation.status)}</p></div><Button size="sm" variant="outline" onClick={() => { setPage('reservations'); window.setTimeout(() => revealNotificationTarget(reservation.id), 0) }}>Mở hồ sơ</Button></div>)}</div> : <p className="rounded-lg border border-dashed border-stone-300 p-4 text-stone-500">Chưa có hồ sơ đặt kho.</p>}
         </Card>
       </div>}
       {page === 'contracts' && !isApiAuthenticated() && <div className="fade-in space-y-4">
@@ -3559,7 +3560,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             </div>
           </div>
           <div className="space-y-2 p-4 text-black">
-            <div className="flex items-center justify-between gap-3"><div><p className="font-bold">{c.contractNumber}</p>{c.contractType === 'RENEWAL' && <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">{'Hợp đồng gia hạn'}</p>}</div><span className="rounded border border-black px-2 py-0.5 text-xs font-semibold">{c.status}</span></div>
+            <div className="flex items-center justify-between gap-3"><div><p className="font-bold">{c.contractNumber}</p>{c.contractType === 'RENEWAL' && <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">{'Hợp đồng gia hạn'}</p>}</div><span className="rounded border border-black px-2 py-0.5 text-xs font-semibold">{displayStatusLabel(c.status)}</span></div>
             <p>{'Ngày ký'}: {displayDateValue(c.signedAt)}</p><p>{'Hiệu lực'}: {displayDateValue(c.startDate)} – {displayDateValue(c.endDate)}</p>
             <p className="truncate text-stone-600">{c.scannedFileName}</p>
             <div className="flex flex-wrap items-center gap-3 border-t border-stone-200 pt-3"><a href={c.scannedFileUrl} target="_blank" rel="noopener noreferrer" className="font-bold underline text-black">{'Xem bản scan'}</a><a href={c.scannedFileUrl} download={c.scannedFileName} className="font-bold underline text-black">{'Tải xuống'}</a>{contractInactive && <Button variant="outline" size="sm" onClick={() => requestConfirmation({ title: 'Xóa lịch sử hợp đồng', message: 'Xóa hợp đồng hết hiệu lực này khỏi danh sách của bạn? Bản lưu đối soát vẫn được giữ.', confirmLabel: 'Xóa lịch sử', tone: 'danger', onConfirm: () => { try { archiveContractHistory(c.id, user); showToast('Đã xóa hợp đồng khỏi danh sách.') } catch (error) { showToast(userFacingError(error, 'Không thể xóa lịch sử hợp đồng.')) } } })}> {'Xóa lịch sử'}</Button>}</div>

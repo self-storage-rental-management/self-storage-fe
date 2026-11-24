@@ -234,7 +234,7 @@ export function staffErrorMessage(error: unknown, fallback: string) {
     if (message.includes("Customer identity"))
       return "CCCD/CMND không khớp với thông tin đã khai báo trong đơn."
     if (message.includes("Khoản trả trước khi đặt kho") || message.includes("chưa được xác minh đã thanh toán"))
-      return "Khoản trả trước khi đặt kho chưa được xác minh đã thanh toán hoặc cần đối soát; chưa thể check-in."
+      return "Khoản trả trước khi đặt kho chưa được xác minh đã thanh toán hoặc cần đối soát; chưa thể nhận kho."
     if (message.includes("not ready to record the remaining payment"))
       return "Hồ sơ chưa sẵn sàng ghi nhận khoản thu còn lại. Vui lòng tải lại và kiểm tra bước ký hợp đồng."
     if (message.includes("Credentials can only be activated"))
