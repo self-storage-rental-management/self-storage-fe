@@ -127,11 +127,12 @@ function inventoryComparison(value: string | null | undefined) {
   }
 }
 
-export function InventoryResolutionNotice({ detail, now, submitting, onResolve, onOpenReturns }: {
+export function InventoryResolutionNotice({ detail, now, submitting, onResolve, onExtendReturnWindow, onOpenReturns }: {
   detail: CustomerReservationDetail
   now: number
   submitting: boolean
   onOpenReturns?: () => void
+  onExtendReturnWindow?: () => void
   onResolve: (decision: 'ACCEPT_FULL' | 'CANCEL_AND_RETURN', scheduledDate?: string) => void
 }) {
   const resultConfirmationDeadline = detail.inventoryResultPublishedAt
@@ -207,17 +208,29 @@ export function InventoryResolutionNotice({ detail, now, submitting, onResolve, 
         {detail.reservation.monthlyPrice != null && <p className="mt-1 font-semibold">Đơn giá tham chiếu: {formatVnd(detail.reservation.monthlyPrice)} / tháng.</p>}
       </div>}
       {activeDeadline && <p className="mt-1 font-bold">{activeCountdown || 'Hạn xử lý'} · {formatCustomerDateTime(new Date(activeDeadline))}</p>}
+      {(detail.inventoryReturnExtensionCount ?? 0) > 0 && <p className="mt-1 font-semibold">Đã kéo dài thời gian trả kho: {detail.inventoryReturnExtensionCount} lần.</p>}
       {!partialAccepted && !returnRequested && !returnPlannerOpen && <div className="mt-3 flex flex-wrap justify-end gap-2">
         {detail.inventoryFullFit && <Button size="sm" disabled={submitting} onClick={() => onResolve('ACCEPT_FULL')}>Nhận toàn bộ hàng</Button>}
+        {!detail.inventoryFullFit && detail.inventoryReturnCanExtend && onExtendReturnWindow && (
+          <Button size="sm" variant="outline" disabled={submitting} onClick={onExtendReturnWindow}>Yêu cầu kéo dài thời gian</Button>
+        )}
         {!detail.inventoryFullFit && <Button size="sm" variant="danger" disabled={submitting || !canPlanReturn} onClick={() => { setReturnPlannerOpen(true) }}>Tạo yêu cầu trả kho ngay</Button>}
       </div>}
+      {returnRequested && detail.inventoryReturnCanExtend && onExtendReturnWindow && (
+        <div className="mt-3 flex flex-wrap justify-end gap-2">
+          <Button size="sm" variant="outline" disabled={submitting} onClick={onExtendReturnWindow}>Yêu cầu kéo dài thời gian</Button>
+        </div>
+      )}
       {!partialAccepted && !returnRequested && returnPlannerOpen && <div className="mt-3 space-y-3 rounded-lg border border-red-300 bg-white p-3">
         <p className="font-bold text-red-950">Chọn ngày trả kho dự kiến</p>
         <VietnameseDateInput label="Ngày hẹn trả kho" value={returnDate} min={minReturnDate} max={removalLast} onChange={(value) => { setReturnDate(value); setReturnDateError('') }} />
-        {removalLast && <p className="font-semibold">Hạn cuối trả hàng: {formatDisplayDate(removalLast)}. Đổi lịch không kéo dài hạn này.</p>}
+        {removalLast && <p className="font-semibold">Hạn cuối trả hàng hiện tại: {formatDisplayDate(removalLast)}. Đổi lịch không tự kéo dài hạn này.</p>}
         {returnDateError && <p role="alert" className="font-semibold text-red-700">{returnDateError}</p>}
         <p className="text-red-950">Ngày chọn là lịch hẹn bàn giao. Tiền dự kiến có thể thay đổi theo ngày bàn giao thực tế nhưng không cộng ngày cơ sở chậm thu hồi sau hạn. Bạn được xem và xác nhận bảng kê trước khi hoàn tiền hoặc thu thêm.</p>
         <div className="flex flex-wrap justify-end gap-2">
+          {detail.inventoryReturnCanExtend && onExtendReturnWindow && (
+            <Button size="sm" variant="outline" disabled={submitting} onClick={onExtendReturnWindow}>Yêu cầu kéo dài thời gian</Button>
+          )}
           <Button size="sm" variant="outline" disabled={submitting} onClick={() => setReturnPlannerOpen(false)}>Hủy</Button>
           <Button size="sm" variant="danger" disabled={submitting || !returnDate || !canPlanReturn} onClick={confirmInventoryReturn}>{submitting ? 'Đang gửi…' : 'Xác nhận yêu cầu trả kho'}</Button>
         </div>
@@ -703,7 +716,6 @@ export default function CustomerReservationCard({ user, reservation: r, facility
             {receiptCountdown.expired && <p className="mt-1 font-semibold">Hồ sơ đang chờ cơ sở xử lý tiếp. Bạn vẫn có thể xác nhận nhận kho hoặc liên hệ cơ sở để được hỗ trợ.</p>}
             <Button type="button" className="mt-2" size="sm" disabled={confirmingReceipt} onClick={() => void confirmReceipt()}>{confirmingReceipt ? 'Đang xác nhận…' : 'Xác nhận đã nhận kho'}</Button>
           </div>}
-          {r.status === 'PREPARING' && <p className="rounded-lg border border-violet-200 bg-violet-50 p-3 text-left text-xs text-violet-950">Đơn đã bàn giao sang <b>Hồ sơ thuê</b>. Vui lòng thực hiện xác nhận setup, chọn lịch kiểm kê và cập nhật hồ sơ sau kiểm kê tại mục <b>Hồ sơ thuê</b>.</p>}
           {documentAvailable && <Button variant="outline" size="sm" className="reservation-action reservation-action-document min-h-10 w-full justify-center" disabled={busy} onClick={() => void prepareBookingDocument()}>{busy ? 'Đang chuẩn bị…' : 'Xem phiếu giữ kho'}</Button>}
           {handoverDocumentsAvailable && <Button variant="outline" size="sm" className="min-h-10 w-full justify-center" disabled={busy} onClick={() => void loadHandoverDocuments()}>{busy ? 'Đang tải…' : 'Xem hợp đồng đã ký'}</Button>}
           {(remainingPayment || (detail?.payments && detail.payments.some(p => p.paymentStatus === 'PAID'))) && <Button variant="outline" size="sm" className="min-h-10 w-full justify-center" onClick={() => { const p = remainingPayment || detail?.payments?.find(item => item.paymentStatus === 'PAID'); if (p) setPaymentReceipt(p) }}>Xem biên lai thanh toán</Button>}

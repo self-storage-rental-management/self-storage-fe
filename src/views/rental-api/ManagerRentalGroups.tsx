@@ -29,8 +29,11 @@ export default function ManagerRentalGroups(props: ({ kind: 'rental'; rows: Rent
   const [contractId, setContractId] = useState<string | null>(null)
 
   if (kind === 'rental') {
+    const returningStatuses = ['return_requested', 'return_inspection', 'closing']
+    const returningRows = rows.filter(row => returningStatuses.includes(row.status))
     const groups = [
-      { id: 'ongoing', title: 'Đang diễn ra', subtitle: 'Hồ sơ đang thuê, trong thời gian chuẩn bị hoặc đang trả kho.', active: true, rows: rows.filter(row => !managerRecordIsHistory(row, kind)) },
+      { id: 'ongoing', title: 'Đang diễn ra', subtitle: 'Hồ sơ đang thuê hoặc trong thời gian chuẩn bị.', active: true, rows: rows.filter(row => !managerRecordIsHistory(row, kind) && !returningStatuses.includes(row.status)) },
+      ...(returningRows.length > 0 ? [{ id: 'returning', title: 'Đang trả kho', subtitle: 'Hồ sơ đã chuyển sang quy trình trả kho, nghiệm thu và quyết toán.', active: true, rows: returningRows }] : []),
       { id: 'history', title: 'Hồ sơ đã kết thúc', subtitle: 'Hồ sơ thuê đã hoàn tất xử lý.', active: false, rows: rows.filter(row => managerRecordIsHistory(row, kind)) },
     ]
     return <div className="space-y-5">
