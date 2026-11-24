@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { ApiClientError } from '../../services/apiClient'
 import { getAuthenticatedActor, type ApiActor } from '../../services/authApi'
 import { useRentalApiResource } from '../../hooks/useRentalApiResource'
@@ -125,6 +125,19 @@ function ManagerReportsSession({ actor, facilityId, overview }: { actor: ApiActo
   const summary = !summaryRead.loading && !summaryRead.error ? summaryRead.data : undefined
   const activities = !activityRead.loading && !activityRead.error ? activityRead.data : undefined
 
+  const chartMonthlyData = summary?.monthlyRevenue && summary.monthlyRevenue.length > 0
+    ? summary.monthlyRevenue.map((m) => {
+        const [year, month] = m.month.split('-')
+        const label = month ? `Th${month}/${year.slice(2)}` : m.month
+        return {
+          month: label,
+          fullMonth: m.month,
+          revenue: Number(m.revenue),
+          transactions: m.transactionsCount,
+        }
+      })
+    : []
+
   function submitSearch(event: FormEvent) {
     event.preventDefault()
     setPage(1)
@@ -178,11 +191,90 @@ function ManagerReportsSession({ actor, facilityId, overview }: { actor: ApiActo
       <div className="grid min-w-0 grid-cols-2 gap-3 xl:grid-cols-3 2xl:grid-cols-6">
         <ReportMetric title="Tỷ lệ lấp đầy" value={`${summary.occupancyRate}%`} detail="Tỷ lệ gian kho đang được sử dụng" />
         <ReportMetric title="Tiền thuê dự kiến/tháng" value={formatVndAmount(summary.monthlyRecurringRevenue)} detail="Theo các hợp đồng đang hiệu lực" />
-        <ReportMetric title="Tiền đã thu" value={summary.collectedRevenue === null ? 'Chưa xác minh' : formatVndAmount(summary.collectedRevenue)} detail="Chỉ tính khoản thu đã được đối soát" />
+        <ReportMetric
+          title="Tiền đã thu"
+          value={summary.collectedRevenue === null ? 'Chưa xác minh' : formatVndAmount(summary.collectedRevenue)}
+          detail={
+            summary.totalRefunds && summary.totalRefunds > 0
+              ? `Đã trừ ${formatVndAmount(summary.totalRefunds)} hoàn tiền`
+              : 'Chỉ tính khoản thu đã được đối soát'
+          }
+        />
         <ReportMetric title="Hợp đồng quá hạn" value={summary.overdueRentalsCount} detail="Hồ sơ đã qua ngày hết hạn thuê" />
         <ReportMetric title="Nhận kho trong tháng" value={summary.monthCheckinsCount} detail="Số lượt nhận kho trong tháng này" />
         <ReportMetric title="Yêu cầu trả kho" value={summary.openReturnsCount} detail="Các yêu cầu đang chờ hoàn tất" />
       </div>
+
+      <Card className="p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-base font-bold text-stone-900">Biến động doanh thu thực thu theo tháng</h3>
+            <p className="mt-0.5 text-xs text-stone-500">
+              Doanh thu thực thu (đã khấu trừ tiền hoàn) trong 6 tháng gần nhất tại cơ sở
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-4 text-xs">
+            <div className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+              <span className="text-stone-600">
+                Tổng thực thu:{' '}
+                <b className="font-semibold text-stone-900">
+                  {summary.collectedRevenue === null ? 'Chưa xác minh' : formatVndAmount(summary.collectedRevenue)}
+                </b>
+              </span>
+            </div>
+            {summary.totalRefunds && summary.totalRefunds > 0 ? (
+              <div className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
+                <span className="text-stone-600">
+                  Đã hoàn tiền:{' '}
+                  <b className="font-semibold text-rose-600">{formatVndAmount(summary.totalRefunds)}</b>
+                </span>
+              </div>
+            ) : null}
+          </div>
+        </div>
+        {chartMonthlyData.length > 0 ? (
+          <ResponsiveContainer width="100%" height={260}>
+            <AreaChart data={chartMonthlyData} margin={{ top: 10, right: 15, left: 10, bottom: 0 }}>
+              <defs>
+                <linearGradient id="managerRevGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.35} />
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis dataKey="month" tickLine={false} axisLine={{ stroke: '#e2e8f0' }} tick={{ fontSize: 11, fill: '#64748b' }} />
+              <YAxis
+                tickLine={false}
+                axisLine={false}
+                tick={{ fontSize: 11, fill: '#64748b' }}
+                tickFormatter={(val) => {
+                  if (val >= 1000000) return `${Math.round(val / 1000000)}tr`
+                  if (val >= 1000) return `${Math.round(val / 1000)}k`
+                  return String(val)
+                }}
+              />
+              <Tooltip
+                formatter={(value) => [`${formatVndAmount(Number(value))}`, 'Doanh thu thực thu']}
+                labelFormatter={(label) => `Thời gian: ${label}`}
+                contentStyle={{
+                  backgroundColor: '#ffffff',
+                  borderRadius: '0.75rem',
+                  border: '1px solid #e2e8f0',
+                  boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                  fontSize: '12px',
+                }}
+              />
+              <Area type="monotone" dataKey="revenue" stroke="#059669" strokeWidth={2.5} fillOpacity={1} fill="url(#managerRevGrad)" />
+            </AreaChart>
+          </ResponsiveContainer>
+        ) : (
+          <p className="flex h-[240px] items-center justify-center text-sm text-stone-500">
+            Chưa có dữ liệu biến động doanh thu.
+          </p>
+        )}
+      </Card>
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="p-5">
           <h3 className="mb-4 font-bold">Phân bổ trạng thái gian kho</h3>

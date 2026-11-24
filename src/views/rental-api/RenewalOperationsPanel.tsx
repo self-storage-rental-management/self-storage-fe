@@ -129,7 +129,6 @@ export function OperationEventCard({
         </div>
         <dl className="grid gap-3 sm:grid-cols-2">
           <div className="min-w-0"><dt className="text-xs text-stone-500">Nội dung thu</dt><dd className="mt-1 font-medium text-stone-800">Thanh toán gia hạn theo bảng kê</dd></div>
-          <div className="min-w-0"><dt className="text-xs text-stone-500">Mã biên lai</dt><dd className="mt-1 break-words font-medium text-stone-800 [overflow-wrap:anywhere]">{field("transactionReference") || field("reference") || "Chưa ghi nhận"}</dd></div>
         </dl>
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-100 pt-3">
           <span className="text-xs font-medium text-stone-500">Chứng từ đính kèm</span>
@@ -211,7 +210,7 @@ export function OperationEventCard({
             : "Không có tệp đính kèm"}
         </p>
       )}
-      {Array.isArray(d.evidenceFileIds) && d.evidenceFileIds.filter(isUuid).map((id, index) => <EvidenceDownload key={id} id={id} index={index + 1} />)}
+      {Array.isArray(d.evidenceFileIds) && d.evidenceFileIds.filter(isUuid).map((id, index) => <EvidenceDownload key={id} id={id} index={index + 1} label="Tải" previewLabel="Xem" />)}
       {reservation && (
         <div className="space-y-1">
           <p>
@@ -375,7 +374,7 @@ function EventTimeline({
             {e.kind === "ARRIVAL" && (() => {
               const data = e.data && typeof e.data === "object" ? e.data as Record<string, unknown> : {}
               const ids = Array.isArray(data.evidenceFileIds) ? data.evidenceFileIds.filter((value): value is string => typeof value === "string" && isUuid(value)) : []
-              return ids.length ? ids.map((fileId, index) => <EvidenceDownload key={fileId} id={fileId} index={index + 1} label="Tải" previewLabel="Xem trước" />) : <span className="text-stone-500">Không có tệp đính kèm</span>
+              return ids.length ? ids.map((fileId, index) => <EvidenceDownload key={fileId} id={fileId} index={index + 1} label="Tải" previewLabel="Xem" />) : <span className="text-stone-500">Không có tệp đính kèm</span>
             })()}
             {e.kind === "COMPLETION" && (() => {
               const data = e.data && typeof e.data === "object" ? e.data as Record<string, unknown> : {}
@@ -509,8 +508,7 @@ export default function RenewalOperationsPanel({
           setLastEvent(e)
           if (selected.action === "incident") setSuccessMessage("Đã gửi báo cáo sự cố tại cơ sở.")
           if (selected.action === "cash") {
-            const reference = e.data && typeof e.data === "object" && "transactionReference" in e.data ? e.data.transactionReference : undefined
-            setSuccessMessage(typeof reference === "string" ? `Đã ghi nhận thanh toán. Mã biên lai: ${reference}` : "Đã ghi nhận thanh toán.")
+            setSuccessMessage("Đã ghi nhận thanh toán.")
           }
           if (selected.action === "completion") setSuccessMessage("Gia hạn đã hoàn tất. Hệ thống đã đối chiếu các khoản thu và biên lai đã lưu.")
           if (selected.action === "noShow") setSuccessMessage("Đã ghi nhận khách không đến. Gian kho đang thuê và khoản đã thu được giữ nguyên để đối soát.")
@@ -1453,22 +1451,13 @@ function OperationForm({
           <>
             <ApiReadState {...cash} retry={cash.refresh} />
             {cash.data && (
-              <div className="space-y-3">
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
-                  <p className="text-sm font-medium text-amber-900">Còn phải thanh toán</p>
-                  <p className="mt-1 text-2xl font-bold tabular-nums text-stone-900 sm:text-3xl">{rentalMoney(cash.data.amount, cash.data.currency)}</p>
-                  <dl className="mt-4 space-y-2 border-t border-amber-200/70 pt-3 text-sm">
-                    {cash.data.remainingRentalAmount !== undefined && <div className="flex items-baseline justify-between gap-4"><dt className="text-stone-600">Tiền thuê còn lại</dt><dd className="text-right font-medium tabular-nums text-stone-900">{rentalMoney(cash.data.remainingRentalAmount,cash.data.currency)}</dd></div>}
-                    {cash.data.overdueFee !== undefined && <div className="flex items-baseline justify-between gap-4"><dt className="text-stone-600">Phí quá hạn</dt><dd className="text-right font-medium tabular-nums text-stone-900">{rentalMoney(cash.data.overdueFee,cash.data.currency)}</dd></div>}
-                  </dl>
-                </div>
-                <details className="rounded-lg border border-stone-200 px-3 py-2 text-xs text-stone-500">
-                  <summary className="cursor-pointer font-medium text-stone-600">Thông tin đối soát</summary>
-                  <dl className="mt-3 grid gap-3 sm:grid-cols-2">
-                    <div className="min-w-0"><dt>Mã bảng kê</dt><dd className="mt-1 break-all font-mono text-stone-700">{cash.data.reference}</dd></div>
-                    <div className="min-w-0"><dt>Mã khoản phải thanh toán</dt><dd className="mt-1 break-all font-mono text-stone-700">{cash.data.requiredObligations.join(", ")}</dd></div>
-                  </dl>
-                </details>
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
+                <p className="text-sm font-medium text-amber-900">Còn phải thanh toán</p>
+                <p className="mt-1 text-2xl font-bold tabular-nums text-stone-900 sm:text-3xl">{rentalMoney(cash.data.amount, cash.data.currency)}</p>
+                <dl className="mt-4 space-y-2 border-t border-amber-200/70 pt-3 text-sm">
+                  {cash.data.remainingRentalAmount !== undefined && <div className="flex items-baseline justify-between gap-4"><dt className="text-stone-600">Tiền thuê còn lại</dt><dd className="text-right font-medium tabular-nums text-stone-900">{rentalMoney(cash.data.remainingRentalAmount,cash.data.currency)}</dd></div>}
+                  {cash.data.overdueFee !== undefined && <div className="flex items-baseline justify-between gap-4"><dt className="text-stone-600">Phí quá hạn</dt><dd className="text-right font-medium tabular-nums text-stone-900">{rentalMoney(cash.data.overdueFee,cash.data.currency)}</dd></div>}
+                </dl>
               </div>
             )}
             <label className="block text-sm font-medium text-stone-700">
@@ -1479,7 +1468,11 @@ function OperationForm({
                 <option value="BANK_TRANSFER">Chuyển khoản</option>
               </select>
             </label>
-            {balanceMethod === "BANK_TRANSFER" && <p className="text-sm text-stone-600">Tải ảnh chụp màn hình chuyển khoản làm minh chứng.</p>}
+            <p className="text-sm text-stone-600">
+              {balanceMethod === "BANK_TRANSFER"
+                ? "Tải ảnh chụp màn hình chuyển khoản làm minh chứng."
+                : "Tải ảnh chụp biên nhận thu tiền mặt làm minh chứng."}
+            </p>
             <EvidenceUpload entityType="DUONG_RENEWAL_CASH_RECEIPT" entityId={s.renewalId}
               disabled={locked} value={receiptFile ? [receiptFile] : []} limit={1}
               onChange={ids => setReceiptFile(ids[0] || "")} onBusy={uploadBusy} />
