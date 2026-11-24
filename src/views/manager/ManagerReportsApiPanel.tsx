@@ -7,6 +7,7 @@ import { useRentalApiResource } from '../../hooks/useRentalApiResource'
 import { getManagerReportSummary, listManagerReportActivities, type ManagerReportActivity } from '../../services/managerReportingApi'
 import { formatVndAmount } from '../../i18n/currency'
 import { exportManagerFacilityExcel } from '../../utils/excelExport'
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import { Badge, Button, Card, Input, Modal, SectionHeader, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import ManagerPagination from './ManagerPagination'
 import ManagerCashflowPanel from './ManagerCashflowPanel'
@@ -229,7 +230,7 @@ function ManagerReportsSession({ actor, facilityId, overview }: { actor: ApiActo
             <Td>
               <Badge variant={activityVariant(row.action)}>{activityTitle(row)}</Badge>
             </Td>
-            <Td><p className="text-sm text-stone-800">{entityLabels[row.entityType.toLowerCase()] || 'Thông tin cơ sở'}</p><p className="mt-1 break-all text-xs text-stone-500" title={row.entityId}>{row.entityId || 'Chưa có mã'}</p></Td>
+            <Td><p className="text-sm text-stone-800">{entityLabels[row.entityType.toLowerCase()] || 'Thông tin cơ sở'}</p><p className="mt-1 break-all text-xs text-stone-500" title={recordDisplayCode(row.entityId)}>{recordDisplayCode(row.entityId)}</p></Td>
             <Td><p className="break-words text-sm font-medium text-stone-800">{actorLabel(row.actorName)}</p><p className="mt-1 break-all text-xs text-stone-400">{actorLabel(row.actorRole)}</p></Td>
             <Td><p className="line-clamp-2 break-words text-xs leading-relaxed text-stone-600">{row.notes ? managerDisplayExplanation(row.notes) : '-'}</p></Td>
             <Td className="text-right"><Button size="sm" variant="outline" onClick={() => setSelectedActivity(row)} aria-label={`Chi tiết: ${activityTitle(row)}`}>Xem</Button></Td>

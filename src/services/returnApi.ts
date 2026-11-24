@@ -81,6 +81,8 @@ export interface ApiReturn {
   damageClassification?: 'no_damage' | 'minor_damage' | 'major_damage' | 'abandoned_goods' | null
   status: typeof returnStatuses[number]; scheduledDate: string
   inventoryRemovalDeadlineAt?: string | null
+  returnWindowDays?: number | null
+  returnPolicyVersion?: string | null
   returnType?: 'CANCELLED_IN_SETUP' | 'RETURN_IN_SETUP' | 'INVENTORY_MISMATCH' | 'EARLY_RETURN' | 'NORMAL'
   settlementMode?: 'AUTO' | 'MANUAL_REVIEW'
   inspectionNotes: string | null; managerResolutionNote: string | null

@@ -6,6 +6,7 @@ import { useState } from "react"
 import ApiPager from "../rental-api/ApiPager"
 import SupportReadState from "./SupportReadState"
 import { supportInputClass } from "./presentation"
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 
 export default function SupportStaffPicker({
   facilityId,
@@ -43,7 +44,7 @@ export default function SupportStaffPicker({
           )}
           {read.data?.data.map((s) => (
             <option key={s.id} value={s.id}>
-              {s.fullName}, {s.id}
+              {s.fullName}, {recordDisplayCode(s.id)}
             </option>
           ))}
         </select>

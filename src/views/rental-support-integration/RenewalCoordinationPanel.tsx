@@ -12,6 +12,7 @@ import {
   isUuid,
 } from "../../services/renewalOperationsApi"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import {
   useRenewalCommand,
   isUncertainRenewalOutcome,
@@ -163,7 +164,7 @@ export default function RenewalCoordinationPanel({
                     .filter((e) => e.kind === "INCIDENT")
                     .map((e) => (
                       <option key={e.id} value={e.id}>
-                        {e.occurredAt}, {e.id}
+                        {e.occurredAt}, {recordDisplayCode(e.id)}
                       </option>
                     ))}
                 </select>
