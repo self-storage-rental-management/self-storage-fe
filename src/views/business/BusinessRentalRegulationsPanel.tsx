@@ -86,7 +86,7 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
                 {lang === "vi" ? "Quy định pháp lý & Vận hành chuẩn hóa" : "Legal & Operations"}
               </span>
               <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
-                {lang === "vi" ? "Hiển thị bên Customer" : "Hiển thị bên Customer"}
+                {lang === "vi" ? "Hiển thị bên Khách hàng" : "Hiển thị bên Khách hàng"}
               </span>
             </div>
             <h3 className="font-bold text-slate-900 text-base">
@@ -94,7 +94,7 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
             </h3>
             <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
               {lang === "vi"
-                ? "Các thông số này được công bố trực tiếp cho khách hàng khi xem chi tiết loại kho, đặt giữ chỗ và thanh lý hợp đồng trên Customer Portal."
+                ? "Các thông số này được công bố trực tiếp cho khách hàng khi xem chi tiết loại kho, đặt giữ chỗ và thanh lý hợp đồng trên cổng khách hàng."
                 : "These parameters are published directly to customers when viewing units, reserving, and settling agreements on the Customer Portal."}
             </p>
           </div>
@@ -158,7 +158,7 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
           <div className="flex items-center justify-between">
             <h4 className="font-bold text-rose-900 text-sm">Quy định trả kho và gia hạn (Công bố khách hàng)</h4>
             <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-200">
-              Hiển thị tại Customer Portal
+              Hiển thị tại cổng khách hàng
             </span>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 text-xs">

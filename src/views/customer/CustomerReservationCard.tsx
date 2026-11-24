@@ -90,7 +90,7 @@ export function ReservationPreparationNotice({ checkInStatus, submitting, onRead
             <>
               <p className="mt-1">Sau khi sắp xếp hàng hóa xong, nhấn nút để báo nhân viên có thể kiểm kê.</p>
               <Button type="button" className="mt-2" size="sm" disabled={submitting} onClick={onReady}>
-                {submitting ? 'Đang gửi…' : 'Đã setup xong'}
+                {submitting ? 'Đang gửi…' : 'Đã chuẩn bị xong'}
               </Button>
             </>
           )}
@@ -776,7 +776,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
                   ? ` · ${displayedUnitType.rackLengthM.toLocaleString('vi-VN', { maximumFractionDigits: 3 })} × ${displayedUnitType.rackWidthM.toLocaleString('vi-VN', { maximumFractionDigits: 3 })} × ${displayedUnitType.rackHeightM.toLocaleString('vi-VN', { maximumFractionDigits: 3 })} m/khung` : ''}</p>}
                 {displayedUnitType.maxLoadKg != null && <p><b>Tải trọng:</b> {displayedUnitType.maxLoadKg.toLocaleString('vi-VN')} kg</p>}
               </>}
-              {r.assignedUnitCode && <p><b>Gian kho đã phân:</b> {r.assignedUnitCode}{r.assignedUnitStatus ? ` (${r.assignedUnitStatus})` : ''}</p>}
+              {r.assignedUnitCode && <p><b>Gian kho đã phân:</b> {r.assignedUnitCode}</p>}
               {detail?.lockReference && (
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-left">
                   <span className="font-semibold text-amber-950">Mã ổ khóa đã bàn giao</span>

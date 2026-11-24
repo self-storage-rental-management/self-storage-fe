@@ -53,7 +53,7 @@ function extractRefundList(response: unknown): unknown[] | null {
 
 export async function listRefundRequests(status?: RefundRequestStatus): Promise<RefundRequestView[]> {
   actor()
-  if (status !== undefined && !statuses.includes(status)) throw new Error('Trạng thái refund không hợp lệ.')
+  if (status !== undefined && !statuses.includes(status)) throw new Error('Trạng thái hoàn tiền không hợp lệ.')
   const suffix = status ? `?status=${encodeURIComponent(status)}` : ''
   const response = await apiRequest<unknown>(`/api/business/refund-requests${suffix}`)
   const rawList = extractRefundList(response)
