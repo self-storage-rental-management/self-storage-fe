@@ -42,6 +42,13 @@ export default function ReturnSettlementModal({
   const palletLossFee = apiRecord?.palletLossFee || 0
   const lockLossFee = Math.max(0, lostItemFee - palletLossFee)
   const totalDeductions = apiRecord ? apiRecord.totalDeductions : damageFee + cleaningFee + overdueFee + lostItemFee + outstandingFee
+  const unusedRentCredit = apiRecord?.setupEarlyExit
+    ? (apiRecord.rentalRefundCredit ?? 0)
+    : (apiRecord?.activeReturnPolicy?.rentalRefundAmount ?? apiRecord?.rentalRefundCredit ?? 0)
+  const safeDeposit = Number.isFinite(deposit) ? deposit : 0
+  const depositRemaining = Math.max(0, safeDeposit - totalDeductions)
+  const excessDeduction = Math.max(0, totalDeductions - safeDeposit)
+  const netRentRefund = Math.max(0, unusedRentCredit - excessDeduction)
 
   // Lọc các giao dịch liên quan đến hồ sơ thuê này
   const relatedPayments = apiRecord ? [] : payments.filter(p => p.rentalId === returnCase.rentalId)
@@ -288,36 +295,43 @@ export default function ReturnSettlementModal({
                 </Table>
               </div>
 
-              {/* Tổng kết dòng tiền minh bạch */}
+              {/* Tổng kết dòng tiền minh bạch theo từng bước */}
               <div className="mt-4 rounded-xl border border-stone-200 bg-stone-50 p-4">
                 <div className="grid gap-4 sm:grid-cols-2 items-center">
                   <div className="space-y-1.5 text-xs text-stone-600">
                     <p className="font-bold uppercase tracking-wider text-stone-500 text-[11px] border-b border-stone-200 pb-1">
-                      Chiết tính dòng tiền
+                      Diễn giải tính tiền hoàn quyết toán
                     </p>
-                    <div className="flex justify-between">
-                      <span className="flex items-center gap-1 font-medium text-stone-700">
-                        <span className="text-emerald-700 font-bold">(+)</span> Tiền cọc an ninh ban đầu:
-                      </span>
-                      <strong className="font-mono text-emerald-800">{formatVnd(deposit)}</strong>
+                    <div className="space-y-1">
+                      <p className="font-semibold text-stone-700">1. Quyết toán tiền cọc an ninh:</p>
+                      <div className="flex justify-between pl-2">
+                        <span>· Tiền cọc ban đầu:</span>
+                        <strong className="font-mono text-stone-800">{formatVnd(deposit)}</strong>
+                      </div>
+                      <div className="flex justify-between pl-2 text-rose-700">
+                        <span>· Trừ chi phí khấu trừ biên bản:</span>
+                        <strong className="font-mono">-{formatVnd(totalDeductions)}</strong>
+                      </div>
+                      <div className="flex justify-between pl-2 border-t border-dashed border-stone-200 pt-0.5 font-semibold text-stone-800">
+                        <span>=&gt; Tiền cọc còn lại hoàn trả:</span>
+                        <span className="font-mono text-emerald-700">{formatVnd(depositRemaining)}</span>
+                      </div>
                     </div>
-                    {apiRecord?.rentalRefundCredit != null && apiRecord.rentalRefundCredit > 0 && (
-                      <div className="flex justify-between">
-                        <span className="flex items-center gap-1 font-medium text-stone-700">
-                          <span className="text-emerald-700 font-bold">(+)</span> Tiền cước thuê chưa sử dụng:
-                        </span>
-                        <strong className="font-mono text-emerald-800">+{formatVnd(apiRecord.rentalRefundCredit)}</strong>
+                    {unusedRentCredit > 0 && (
+                      <div className="space-y-1 border-t border-stone-200 pt-1">
+                        <p className="font-semibold text-stone-700">2. Hoàn tiền thuê chưa sử dụng:</p>
+                        <div className="flex justify-between pl-2">
+                          <span>· Tiền cước các kỳ chưa dùng:</span>
+                          <strong className="font-mono text-emerald-700">+{formatVnd(unusedRentCredit)}</strong>
+                        </div>
+                        {excessDeduction > 0 && (
+                          <div className="flex justify-between pl-2 text-rose-700 text-[11px]">
+                            <span>· Cấn trừ phần chi phí vượt cọc:</span>
+                            <span className="font-mono">-{formatVnd(Math.min(unusedRentCredit, excessDeduction))}</span>
+                          </div>
+                        )}
                       </div>
                     )}
-                    <div className="flex justify-between text-rose-700">
-                      <span className="flex items-center gap-1 font-medium">
-                        <span className="font-bold">(-)</span> Tổng chi phí khấu trừ biên bản:
-                      </span>
-                      <strong className="font-mono">-{formatVnd(totalDeductions)}</strong>
-                    </div>
-                    <p className="text-[10px] text-stone-400 italic pt-1 border-t border-stone-200">
-                      Công thức: [Tổng tiền quỹ khách đóng] − [Tổng chi phí phát sinh]
-                    </p>
                   </div>
                   <div className="text-right sm:border-l sm:border-stone-200 sm:pl-4">
                     {netRefund > 0 ? (
@@ -326,7 +340,12 @@ export default function ReturnSettlementModal({
                           SỐ TIỀN HOÀN TRẢ KHÁCH HÀNG:
                         </p>
                         <p className="text-2xl font-black text-emerald-700 font-mono">{formatVnd(netRefund)}</p>
-                        <p className="mt-1 text-[11px] text-stone-500">Tiền sẽ chuyển hoàn về tài khoản của khách sau khi duyệt</p>
+                        <p className="mt-1 text-[11px] text-emerald-800 font-medium">
+                          {unusedRentCredit > 0
+                            ? `= Cọc còn (${formatVnd(depositRemaining)}) + Cước hoàn (${formatVnd(netRentRefund)})`
+                            : `= Tiền cọc (${formatVnd(deposit)}) − Chi phí (${formatVnd(totalDeductions)})`}
+                        </p>
+                        <p className="mt-0.5 text-[11px] text-stone-500">Tiền sẽ chuyển hoàn về tài khoản của khách sau khi duyệt</p>
                       </>
                     ) : amountDue > 0 ? (
                       <>
