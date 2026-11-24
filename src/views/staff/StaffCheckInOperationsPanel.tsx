@@ -63,6 +63,7 @@ import {
 } from "../../components/ui"
 
 import {
+  compareCheckInSchedule,
   extractStaffFieldErrors,
   formatStaffDateTime,
   parseEmptyStorageHandover,

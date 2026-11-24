@@ -530,6 +530,17 @@ export async function rejectCheckIn(
   ))
 }
 
+export async function confirmPartialInventoryRemoval(checkInId: string, request: {
+  remainderRemoved: boolean
+  evidenceReferences: string[]
+  notes: string
+}) {
+  return assertEnvelope(await apiRequest<unknown>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/inventory-partial-removal`,
+    { method: 'POST', body: JSON.stringify(request) },
+  ))
+}
+
 export async function recordInventoryArrival(checkInId: string) {
   return assertEnvelope(await apiRequest<unknown>(
     `/api/staff/check-ins/${encodeURIComponent(checkInId)}/inventory-arrival`,
