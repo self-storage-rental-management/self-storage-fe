@@ -380,6 +380,7 @@ function SettlementCalculationBreakdown({ record }: { record: ApiReturn }) {
 }
 
 function RecoveryReturnSummary({ record, hideTerminationFee, hideHeader = false }: { record: ApiReturn; hideTerminationFee: boolean; hideHeader?: boolean }) {
+  const awaitingInspection = !record.inspectedAt && ['requested', 'scheduled'].includes(record.status)
   const badgeClass =
     record.status === 'disputed'
       ? 'bg-rose-100 text-rose-800 border border-rose-300 font-bold'
@@ -400,11 +401,11 @@ function RecoveryReturnSummary({ record, hideTerminationFee, hideHeader = false 
       )}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {([
-          ['Tiền cọc đảm bảo thuê thực thu', record.depositAmount], ['Phí đã ghi nhận', record.totalDeductions],
-          ...(record.setupEarlyExit ? [['Tiền thuê được hoàn (80%)', record.rentalRefundCredit], ...(!hideTerminationFee ? [['Khoản giữ lại theo chính sách chuẩn bị (Phí chấm dứt sớm một lần)', record.earlyTerminationFee]] as const : [])] as const : []),
-          ...(!record.setupEarlyExit && record.activeReturnPolicy ? [['Tiền thuê các tháng còn lại chưa sử dụng', record.activeReturnPolicy.rentalRefundAmount]] as const : []),
-          ['Khoản hoàn tiền', record.netRefundAmount], ['Khách cần đóng thêm', record.amountDueFromCustomer],
-        ] as const).map(([label, amount]) => <div key={label} className="rounded-lg bg-stone-50 p-3"><p className="text-xs text-stone-500">{label}</p><p className="mt-1 text-sm font-bold text-stone-900">{amount == null ? 'Chưa xác định' : rentalMoney(amount, 'VND')}</p></div>)}
+          ['Tiền cọc đảm bảo thuê thực thu', record.depositAmount, false], ['Phí đã ghi nhận', record.totalDeductions, awaitingInspection],
+          ...(record.setupEarlyExit ? [['Tiền thuê được hoàn (80%)', record.rentalRefundCredit, false], ...(!hideTerminationFee ? [['Khoản giữ lại theo chính sách chuẩn bị (Phí chấm dứt sớm một lần)', record.earlyTerminationFee, false]] as const : [])] as const : []),
+          ...(!record.setupEarlyExit && record.activeReturnPolicy ? [['Tiền thuê các tháng còn lại chưa sử dụng', record.activeReturnPolicy.rentalRefundAmount, false]] as const : []),
+          ['Khoản hoàn tiền', record.netRefundAmount, awaitingInspection], ['Khách cần đóng thêm', record.amountDueFromCustomer, awaitingInspection],
+        ] as const).map(([label, amount, pendingInspection]) => <div key={label} className="rounded-lg bg-stone-50 p-3"><p className="text-xs text-stone-500">{label}</p><p className="mt-1 text-sm font-bold text-stone-900">{amount == null ? 'Chưa xác định' : pendingInspection ? 'Chờ nghiệm thu' : rentalMoney(amount, 'VND')}</p></div>)}
       </div>
       {record.setupExitRequested && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{record.setupEarlyExit
           ? hideTerminationFee ? 'Trả trong thời gian chuẩn bị: hoàn 80% tiền thuê sau ưu đãi, giữ lại 20%; tiền cọc đảm bảo quyết toán riêng sau khi trừ hư hỏng theo bảng giá.' : 'Trả trong thời gian chuẩn bị: hệ thống giữ lại 20% tiền thuê sau ưu đãi và hoàn 80%. Hư hỏng trừ vào cọc một tháng; phần vượt cọc được bù vào tiền thuê chưa sử dụng trước khi yêu cầu khách trả thêm.'
@@ -650,16 +651,16 @@ function ReturnWorkspace({
             <div className="mt-3 flex justify-end border-t border-stone-100 pt-3">
               <Button
                 type="button"
-                variant={selectedRecord.returnType === 'INVENTORY_MISMATCH' ? 'primary' : 'outline'}
+                variant="outline"
                 disabled={busy || read.loading}
                 onClick={() => {
                   const minNext = vietnamDateInput(Date.now() + 86_400_000)
                   setEditing(selectedRecord.id)
-                  setDate(selectedRecord.scheduledDate && selectedRecord.scheduledDate >= minNext ? selectedRecord.scheduledDate : minNext)
-                  setNotes(selectedRecord.customerNotes || 'Khách hẹn ngày trả kho.')
+                  setDate(selectedRecord.scheduledDate && selectedRecord.scheduledDate >= minNext ? selectedRecord.scheduledDate : '')
+                  setNotes(selectedRecord.customerNotes || '')
                 }}
               >
-                {selectedRecord.returnType === 'INVENTORY_MISMATCH' ? 'Chọn / đổi lịch hẹn trả kho' : 'Chỉnh sửa yêu cầu'}
+                Chỉnh sửa yêu cầu
               </Button>
             </div>
           )}

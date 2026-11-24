@@ -186,7 +186,7 @@ export function InventoryResolutionNotice({ detail, now, submitting, onResolve, 
     return (
       <div className="space-y-3">
         <InventoryDecisionSummary decision={detail.inventoryDecision} onOpenReturns={onOpenReturns} />
-        {canScheduleDecisionReturn && decisionReturnCaseId && (
+        {canScheduleDecisionReturn && decisionReturnCaseId && !onOpenReturns && (
           <div className="space-y-3 rounded-lg border border-red-300 bg-white p-3 text-left text-xs">
             <p className="font-bold text-red-950">Chọn / đổi ngày hẹn trả kho dự kiến</p>
             {activeDeadline && <p className="font-semibold text-red-900">{activeCountdown || 'Hạn xử lý'} · {formatCustomerDateTime(new Date(activeDeadline))}</p>}
