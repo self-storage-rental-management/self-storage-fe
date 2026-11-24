@@ -1,5 +1,4 @@
 import ReturnPolicyNotice from '../../components/ReturnPolicyNotice'
-import InventoryMismatchReturnNotice from '../../components/InventoryMismatchReturnNotice'
 import { useState } from 'react'
 import { getAuthenticatedActor, resendEmailVerificationWithApi } from '../../services/authApi'
 import { formatCustomerDateTime } from '../../i18n/customerDate'
@@ -178,7 +177,6 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
 
 
 
-      {context === 'reservation' && !hidePaymentNotices && <InventoryMismatchReturnNotice />}
       <ReturnPolicyNotice terms={q} showQuoteFees={context === 'reservation' && !hidePaymentNotices} />
 
       {/* ── FOOTER HIỆU LỰC & XÉT DUYỆT ── */}

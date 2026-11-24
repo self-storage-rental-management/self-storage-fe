@@ -670,9 +670,14 @@ export default function CustomerReservationCard({ user, reservation: r, facility
           <p className="font-bold">Nhân viên đã hoàn tất bàn giao kho trống</p>
           <p className="mt-1">Vui lòng kiểm tra kho và mã ra vào, sau đó xác nhận đã nhận kho để bắt đầu thời gian chuẩn bị.</p>
           {detail?.handoverCompletedAt && <p className="mt-1">Bàn giao lúc: <b>{formatCustomerDateTime(new Date(detail.handoverCompletedAt))}</b></p>}
+          {detail?.lockReference && <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-white px-3 py-2 text-left"><span className="font-semibold text-amber-950">Mã ổ khóa đã bàn giao</span><b className="font-mono text-base tracking-wider text-amber-800">{detail.lockReference}</b></div>}
           {detail?.receiptConfirmationDueAt && <p className="mt-1 font-bold">{receiptCountdown.text} · Hạn xác nhận: {formatCustomerDateTime(new Date(detail.receiptConfirmationDueAt))}</p>}
           {receiptCountdown.expired && <p className="mt-1 font-semibold">Hồ sơ đang chờ cơ sở xử lý tiếp. Bạn vẫn có thể xác nhận nhận kho hoặc liên hệ cơ sở để được hỗ trợ.</p>}
           <Button type="button" className="mt-2" size="sm" disabled={confirmingReceipt} onClick={() => void confirmReceipt()}>{confirmingReceipt ? 'Đang xác nhận…' : 'Xác nhận đã nhận kho'}</Button>
+        </div>}
+        {detail?.lockReference && r.status !== 'AWAITING_CUSTOMER_RECEIPT' && <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs text-amber-950">
+          <span className="font-semibold">Mã ổ khóa đã bàn giao</span>
+          <b className="font-mono text-base tracking-wider">{detail.lockReference}</b>
         </div>}
         {r.status === 'PREPARING' && checkInStatus !== 'setup_completed' && !detail?.inventoryEscalatedAt && <ReservationPreparationNotice checkInStatus={checkInStatus} submitting={confirmingPreparation} onReady={() => void confirmPreparation()} />}
         {checkInStatus === 'setup_completed' && !detail?.inventoryMismatchJson && detail?.inventoryFinalDeadlineAt && (

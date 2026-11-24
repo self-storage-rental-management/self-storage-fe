@@ -16,6 +16,15 @@ function render(inventoryVisit: InventoryVisit | null, now = Date.parse('2026-11
 }
 
 describe('staff inventory visit', () => {
+  it('shows the identity document declared on the reservation for comparison', () => {
+    const item = { checkInId: 'checkin-1', checkInStatus: 'setup_completed', inventoryResolutionStatus: 'NOT_STARTED',
+      inventoryFinalDeadlineAt: deadline, identityDocumentNumber: '079203009988', inventoryVisit: visit } as CheckInCase
+    const html = renderToStaticMarkup(<StaffInventoryVisitPanel item={item} now={Date.parse('2026-11-03T02:45:00Z')} busy={false}
+      onBusyChange={vi.fn()} onSaved={vi.fn()} onPreview={vi.fn()} />)
+    expect(html).toContain('CCCD hoặc hộ chiếu khách đã khai báo')
+    expect(html).toContain('079203009988')
+  })
+
   it('offers the arrival action only with an appointment inside the deadline', () => {
     expect(render(null)).not.toContain('Ghi nhận khách đã đến')
     expect(render(visit)).toContain('Số CCCD hoặc hộ chiếu trên giấy tờ gốc')

@@ -14,7 +14,6 @@ it('records full intake onsite without suggesting another warehouse when changed
   expect(html).not.toContain('Gợi ý chuyển sang kho phù hợp')
   expect(html).not.toContain('Xác nhận phần dư đã đưa ra')
 })
-
 it('offers the physical removal confirmation only after the customer accepts partial intake', () => {
   expect(render({ inventoryResolutionStatus: 'PARTIAL_ACCEPTED', inventoryFullFit: false })).toContain('Xác nhận phần dư đã đưa ra')
   expect(render({ inventoryFullFit: false })).not.toContain('Xác nhận phần dư đã đưa ra')
@@ -43,4 +42,3 @@ it('captures the signed paper record as uploaded photos instead of asking for a 
   expect(html).not.toContain('Mã ảnh biên bản')
   expect(html).not.toContain('Mã tệp ảnh biên bản')
 })
-
