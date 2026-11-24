@@ -322,7 +322,12 @@ export function extractStaffFieldErrors(error: unknown): Record<string, string> 
   if (msg.includes("initialUnitCondition") || msg.includes("hiện trạng kho trống")) {
     fieldErrors.initialCondition = "Cần ghi nhận hiện trạng kho trống trước khi bàn giao"
   }
-  if (msg.includes("lockReference") || msg.includes("mã ổ khóa")) {
+  const normalizedMessage = msg.toLocaleLowerCase("vi-VN")
+  if (normalizedMessage.includes("mã ổ khóa đang được sử dụng")
+    || normalizedMessage.includes("chưa đủ điều kiện cấp lại")
+    || normalizedMessage.includes("active credential of this type already exists")) {
+    fieldErrors.keyLockReference = "Mã ổ khóa đang được sử dụng tại cơ sở này. Vui lòng chọn mã khác."
+  } else if (msg.includes("lockReference") || normalizedMessage.includes("mã ổ khóa")) {
     fieldErrors.keyLockReference = "Vui lòng kiểm tra lại mã ổ khóa bàn giao"
   }
 

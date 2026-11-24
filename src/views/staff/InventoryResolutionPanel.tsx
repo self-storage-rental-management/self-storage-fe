@@ -5,8 +5,8 @@ import type { AtSiteInventoryDecision } from '../../services/checkInApi'
 import { uploadCheckInEvidence } from '../../services/checkInApi'
 import { Button } from '../../components/ui'
 import type { CheckInCase } from '../../services/checkInApi'
-import InventoryResultNotice from './InventoryResultNotice'
-import { InventoryLineInspectionResult, PackagingInspectionResult } from '../customer/CustomerReservationCard'
+import { InventoryAlternatives } from './InventoryResultNotice'
+import InventoryMismatchEvidence from './InventoryMismatchEvidence'
 import { vietnamDateInput } from '../../utils/vietnamTime'
 import { inventoryResult } from '../../domain/inventoryResult'
 
@@ -68,27 +68,31 @@ export default function InventoryResolutionPanel({ item, busy, onRefresh, onOpen
   const transferring = status === 'TRANSFER_REQUESTED'
   const returning = status === 'RETURN_REQUESTED'
   const done = status === 'ACCEPTED' || item.checkInStatus === 'completed'
+  const result = inventoryResult(item.inventoryFullFit, Boolean(item.inventoryMismatchJson))
+  const report = item.handover
+  const formatNumber = (value: number, digits = 0) => value.toLocaleString('vi-VN', { maximumFractionDigits: digits })
   return <div className="flex flex-col gap-4">
     <h3 className="text-lg font-bold">Kết quả tiếp nhận hàng hóa</h3>
-    <InventoryResultNotice result={inventoryResult(item.inventoryFullFit, Boolean(item.inventoryMismatchJson))} published
-      showAlternatives={!returning && !done && !transferring} checkInId={item.checkInId}
-      packages={item.handover?.packageCount ?? 0} weight={item.handover?.actualMeasurements.weightKg ?? 0}
-      volume={item.handover?.actualMeasurements.actualVolumeM3 ?? 0}>
-      <InventoryDecisionSummary decision={item.inventoryDecision} onPreview={onPreview} onOpenReturns={onOpenReturns} />
-      {!item.inventoryDecision && <p role="status" className="rounded-lg border bg-white p-4 text-sm font-semibold text-stone-900">
+    <div className="space-y-5 text-stone-900">
+      {transferring && <div role="status" className="space-y-1 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+        <h4 className="font-bold">Chờ xử lý yêu cầu chuyển hàng</h4>
+        <p>Chuyển toàn bộ <b>{formatNumber(report?.packageCount ?? 0)} kiện</b> sang kho phù hợp · Đã tiếp nhận tại kho hiện tại: <b>0 kiện</b></p>
+        <p className="text-xs">Theo dõi yêu cầu tại mục Hỗ trợ khách hàng.</p>
+      </div>}
+      {!item.inventoryDecision && !transferring && <p role="status" className="rounded-lg border bg-white p-4 text-sm font-semibold text-stone-900">
         {transferring ? 'Đã tạo yêu cầu thu xếp chuyển hàng. Cơ sở theo dõi yêu cầu tại mục Hỗ trợ khách hàng.' : done ? 'Đã ghi nhận kết quả kiểm kê vào hồ sơ thuê.' : returning ? 'Khách đã chọn trả lại kho. Tiếp tục nghiệm thu và quyết toán ở hồ sơ trả kho.'
           : partial ? 'Hồ sơ đang dùng phương án cũ đã ngừng áp dụng. Vui lòng ghi nhận lại phương án chuyển hàng hoặc trả kho.'
           : item.inventoryFullFit ? 'Hàng thực tế vẫn vừa kho. Staff ghi nhận phương án tiếp nhận trực tiếp với khách.'
           : 'Chọn chuyển hàng hoặc trả kho tại cơ sở.'}
       </p>}
-      {item.inventoryActualJson && <div className="space-y-3 rounded-lg bg-white p-3 text-stone-900">
-        <InventoryLineInspectionResult detail={{ inventoryActualJson: item.inventoryActualJson, acceptedQuantitiesJson: item.inventoryAcceptedQuantitiesJson, suggestedQuantitiesJson: item.inventoryFullFit === false ? item.inventorySuggestedQuantitiesJson : null, goodsItems: item.declaredGoodsLines }} />
-        <PackagingInspectionResult detail={{ inventoryActualJson: item.inventoryActualJson, goodsCondition: item.declaredPackagingMethod }} />
-        {item.handover?.varianceReason && <p className="whitespace-pre-wrap text-sm"><b>Lý do chênh lệch:</b> {item.handover.varianceReason}</p>}
-        {!!item.handover?.evidenceReferences?.length && onPreview && <div className="flex flex-wrap gap-2">
-          {Array.from(new Set(item.handover.evidenceReferences)).map((id, index) => <Button key={id} size="sm" variant="outline" onClick={() => onPreview(id)}>Xem bằng chứng kiểm kê {index + 1}</Button>)}
-        </div>}
-      </div>}
+      {report && <section className="space-y-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h4 className="font-semibold">Bảng đối chiếu kiểm kê</h4>
+          <p className="text-sm font-medium tabular-nums">{formatNumber(report.packageCount)} kiện · {formatNumber(report.actualMeasurements.weightKg, 2)} kg · {formatNumber(report.actualMeasurements.actualVolumeM3, 6)} m³</p>
+        </div>
+        <InventoryMismatchEvidence item={item} showEvidence={false} />
+      </section>}
+      <InventoryAlternatives result={result} published checkInId={item.checkInId} packages={report?.packageCount ?? 0} weight={report?.actualMeasurements.weightKg ?? 0} volume={report?.actualMeasurements.actualVolumeM3 ?? 0} showAlternatives={!returning && !done && !transferring} />
       {!done && !returning && !transferring && <fieldset className="space-y-4 rounded-xl border border-amber-200 bg-white p-4 text-sm text-stone-900" disabled={disabled}>
         <legend className="px-1 font-bold">Phương án xử lý tại cơ sở</legend>
         {otherGoods && <p className="rounded-lg bg-amber-50 p-3">Khách khai báo hàng hóa loại Khác. Staff có thể chấp nhận nếu đủ điều kiện hoặc từ chối kèm lý do. Từ chối sẽ mở hồ sơ trả kho, nghiệm thu và quyết toán để xác định tiền hoàn hoặc thu thêm.</p>}
@@ -117,10 +121,12 @@ export default function InventoryResolutionPanel({ item, busy, onRefresh, onOpen
         {error && <p role="alert" className="text-red-700">{error}</p>}
         <Button disabled={!onResolve || !decision || !present || evidence.length !== MAX_EVIDENCE_FILES || invalidDate || (rejectionReasonRequired && !note.trim()) || disabled} onClick={() => void submit()}>{saving ? 'Đang lưu…' : decision === 'REQUEST_TRANSFER' ? 'Gửi yêu cầu chuyển hàng' : decision === 'ACCEPT_FULL' ? 'Ghi nhận vào hồ sơ thuê' : 'Xác nhận từ chối và tạo hồ sơ trả kho'}</Button>
       </fieldset>}
-      <div className="flex flex-wrap gap-2">
+      <InventoryDecisionSummary decision={item.inventoryDecision} compact={transferring} onPreview={onPreview} onOpenReturns={onOpenReturns} />
+      <div className="flex flex-wrap gap-2 border-t border-stone-200 pt-3">
+        {onPreview && Array.from(new Set(report?.evidenceReferences || [])).map(id => <Button key={id} size="sm" variant="outline" onClick={() => onPreview(id)}>Xem bằng chứng kiểm kê</Button>)}
         <Button variant="outline" disabled={busy} onClick={onRefresh}>Làm mới kết quả</Button>
         {returning && onOpenReturns && <Button disabled={busy} onClick={onOpenReturns}>Mở Trả kho & nghiệm thu</Button>}
       </div>
-    </InventoryResultNotice>
+    </div>
   </div>
 }
