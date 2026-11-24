@@ -81,7 +81,7 @@ const credentialTask = (alert: CredentialAlert): StaffDailyOperation => ({
   page: alert.action === "ISSUE" ? "checkin" : "return",
 })
 
-const checkInTask = (item: CheckInCase): StaffDailyOperation => {
+export const checkInTask = (item: CheckInCase): StaffDailyOperation => {
   const receiptWaiting = item.checkInStatus === "handover_pending_receipt"
   const dueAt = receiptWaiting
     ? item.receiptConfirmationDueAt || item.checkedInAt || item.appointmentAt || item.scheduledAt || item.startDate
@@ -89,7 +89,7 @@ const checkInTask = (item: CheckInCase): StaffDailyOperation => {
   const overdue = Boolean(dueAt && new Date(dueAt).getTime() <= Date.now())
   return {
     id: `checkin-${item.checkInId || item.reservationId}`,
-    title: receiptWaiting ? `Chờ xác nhận nhận kho ${item.storageUnitCode}` : `Nhận kho & bàn giao ${item.storageUnitCode}`,
+    title: receiptWaiting ? `Chờ xác nhận nhận kho ${item.reservationCode || item.storageUnitCode}` : `Nhận kho & bàn giao ${item.reservationCode || item.storageUnitCode}`,
     customer: item.customerName,
     time: dueAt || "",
     dueAt: dueAt || new Date().toISOString(),

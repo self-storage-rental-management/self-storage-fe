@@ -123,6 +123,10 @@ export interface RentalBookingEvidence {
     widthCm: number
     heightCm: number
     weightPerItemKg: number
+    customMaterial?: string | null
+    stackable?: boolean
+    maxStackLayers?: number
+    allowHorizontalPlacement?: boolean
     fragile: boolean
     customerNote: string | null
     images: { id: string; originalName: string; contentType: string; sizeBytes: number }[]

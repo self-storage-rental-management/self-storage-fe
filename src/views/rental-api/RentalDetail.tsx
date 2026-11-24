@@ -10,6 +10,7 @@ import { bookingPaymentPurposes, bookingPaymentStatuses } from "../../services/r
 import { rentalRecordLabel, rentalStatusLabel, rentalMoney, unknown, rentalDataWarning, rentalPeriodText, rentalDate, accessStatusLabels } from "./presentation"
 import { downloadCheckInEvidence } from "../../services/checkInApi"
 import { confirmCustomerRentalStart, getCustomerReservation, previewCustomerRentalStart, type CustomerReservationDetail, type RentalStartConfirmation } from "../../services/customerReservationApi"
+import { InventoryLineInspectionResult, PackagingInspectionResult } from "../customer/CustomerReservationCard"
 import InventoryAppointmentPanel from "../customer/InventoryAppointmentPanel"
 import { userFacingError } from "../../presentation/userFacingError"
 import FilePreviewDialog from "../../components/FilePreviewDialog"
@@ -73,7 +74,7 @@ export default function RentalDetail({
   const [inventoryDetail, setInventoryDetail] = useState<CustomerReservationDetail>()
   const [inventoryReadError, setInventoryReadError] = useState('')
   const [inventoryReload, setInventoryReload] = useState(0)
-  const inventoryReservationId = role === 'customer' && rental.inventoryPending && rental.moveInCompletedAt
+  const inventoryReservationId = role === 'customer' && (rental.moveInCompletedAt || rental.inventoryVerifiedAt)
     ? rental.reservationId : null
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
@@ -227,13 +228,55 @@ export default function RentalDetail({
       </Card>}
       {evidence && <Card className="rounded-xl p-5">
         <h3 className="mb-4 border-b border-stone-200 pb-3 text-base font-bold">Hàng hóa khai báo</h3>
-        {!(evidence.goodsItems ?? []).length ? <p className="text-sm text-stone-500">Chưa có hàng hóa được khai báo.</p> : <div className="space-y-3">{(evidence.goodsItems ?? []).map(item => <article key={item.id} className="rounded-xl border border-stone-200 bg-stone-50 p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-bold text-stone-900">{item.customGoodsName || item.categoryName || item.goodsCode}</p><p className="mt-1 text-sm text-stone-600">Vật liệu: {item.materialName || 'Chưa xác định'} · Số lượng: {item.quantity}</p></div><Badge variant={item.fragile ? 'warning' : 'muted'}>{item.fragile ? 'Dễ vỡ' : 'Không dễ vỡ'}</Badge></div>
-          <p className="mt-2 text-sm text-stone-700">Kích thước mỗi kiện: {item.lengthCm} × {item.widthCm} × {item.heightCm} cm · {item.weightPerItemKg} kg</p>
-          {item.description && <p className="mt-2 text-sm text-stone-600">{item.description}</p>}
-          {item.customerNote && <p className="mt-2 text-sm text-stone-600">Ghi chú: {item.customerNote}</p>}
-        </article>)}</div>}
+        {!evidence.goodsItems?.length ? (
+          <p className="text-sm text-stone-500">Chưa có hàng hóa được khai báo.</p>
+        ) : (
+          <div className="space-y-4">
+            {evidence.goodsItems.map(item => {
+              const fields = [
+                ['Tên hàng', item.customGoodsName || item.categoryName || item.goodsCode],
+                ['Loại hàng', item.categoryName],
+                ['Chất liệu chính', item.customMaterial || item.materialName],
+                ['Số lượng', item.quantity],
+                ['Chiều dài mỗi kiện', item.lengthCm == null ? null : item.lengthCm + ' cm'],
+                ['Chiều rộng mỗi kiện', item.widthCm == null ? null : item.widthCm + ' cm'],
+                ['Chiều cao mỗi kiện', item.heightCm == null ? null : item.heightCm + ' cm'],
+                ['Khối lượng mỗi kiện', item.weightPerItemKg == null ? null : item.weightPerItemKg + ' kg'],
+                ['Dễ vỡ', item.fragile ? 'Có' : 'Không'],
+                ['Được xếp chồng', item.stackable ? 'Có' : 'Không'],
+                ...(item.stackable ? [['Số lớp xếp tối đa', item.maxStackLayers]] : []),
+                ['Được xoay và đặt nằm ngang', item.allowHorizontalPlacement ? 'Có' : 'Không'],
+                ['Ghi chú của khách', item.customerNote || 'Không có ghi chú'],
+              ]
+              return (
+                <article key={item.id} className="overflow-hidden rounded-xl border border-stone-200">
+                  <h4 className="break-words bg-stone-50 px-4 py-3 font-semibold text-stone-900">
+                    {item.customGoodsName || item.categoryName || item.goodsCode}
+                  </h4>
+                  <dl className="grid px-4 text-sm md:grid-cols-2 md:gap-x-8">
+                    {fields.map(([label, value]) => (
+                      <div key={label} className="grid gap-1 border-b border-stone-100 py-3 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)] sm:gap-4">
+                        <dt className="font-medium text-stone-600">{label}</dt>
+                        <dd className="whitespace-pre-wrap break-words font-medium text-stone-900">{value || (value === 0 ? 0 : 'Không có dữ liệu')}</dd>
+                      </div>
+                    ))}
+                    <div className="grid gap-1 border-b border-stone-100 py-3 md:col-span-2 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)] sm:gap-4">
+                      <dt className="font-medium text-stone-600">Mô tả hàng hóa</dt>
+                      <dd className="whitespace-pre-wrap break-words font-medium text-stone-900">{item.description || 'Không có mô tả'}</dd>
+                    </div>
+                  </dl>
+                </article>
+              )
+            })}
+          </div>
+        )}
       </Card>}
+      {inventoryDetail?.reservation.id === rental.reservationId && inventoryDetail.inventoryResultPublishedAt && (
+        <Card className="space-y-3 rounded-xl p-5">
+          <InventoryLineInspectionResult detail={inventoryDetail} />
+          <PackagingInspectionResult detail={inventoryDetail} />
+        </Card>
+      )}
       {evidence?.goodsItems?.some(item => item.images.length > 0) && <Card className="rounded-xl p-5">
         <h3 className="mb-4 border-b border-stone-200 pb-3 text-base font-bold">Hình ảnh hàng hóa</h3>
         <div className="space-y-5">{evidence.goodsItems.filter(item => item.images.length > 0).map(item => <div key={item.id}>
