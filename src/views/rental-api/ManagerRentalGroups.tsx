@@ -89,7 +89,7 @@ export default function ManagerRentalGroups(props: ({ kind: 'rental'; rows: Rent
               const statusLabel = renewal.statusSummary ? renewalWorkflowLabel(renewal) : renewalLabels[renewal.status]
               return <tr key={renewal.id} className="hover:bg-stone-50/70">
                 <td className="px-4 py-3"><span className="block truncate font-medium text-stone-900" title={dossierLabel}>{dossierLabel}</span></td>
-                <td className="whitespace-nowrap px-4 py-3 text-center font-semibold text-stone-700">{renewal.renewalSequence ? `Lần ${renewal.renewalSequence}` : '—'}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-center font-semibold text-stone-700">{renewal.renewalSequence ? `Lần ${renewal.renewalSequence}` : '-'}</td>
                 <td className="px-4 py-3"><span className="block truncate font-medium text-stone-900" title={renewal.storageUnit.code}>{renewal.storageUnit.code}</span><span className="block truncate text-xs text-stone-500" title={renewal.facility.name}>{renewal.facility.name}</span></td>
                 <td className="px-4 py-3"><span className={`${renewalBadgeClass} ${renewalStatusTone(renewal)}`}>{statusLabel || renewal.status}</span></td>
                 <td className="whitespace-nowrap px-4 py-3 tabular-nums text-stone-700">{endDate ? rentalDate(endDate) : 'Chưa xác định'}</td>

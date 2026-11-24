@@ -1,3 +1,4 @@
+import { ApiClientError } from '../services/apiClient'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import type { User } from '../types'
 import BrandLogo from '../components/BrandLogo'
@@ -59,7 +60,7 @@ function formatAuthError(error: unknown, fallback: string): string {
   if (error && typeof error === 'object' && 'details' in error) {
     const details = (error as { details?: unknown }).details
     if (typeof details === 'string' && details.trim()) {
-      return details
+      return fallback
     }
     if (details && typeof details === 'object') {
       const fieldTranslations: Record<string, string> = {
@@ -73,8 +74,8 @@ function formatAuthError(error: unknown, fallback: string): string {
       }
       const entries = Object.entries(details as Record<string, string>)
       if (entries.length > 0) {
-        const [field, msg] = entries[0]
-        return fieldTranslations[field] || msg || fallback
+        const [field] = entries[0]
+        return fieldTranslations[field] || fallback
       }
     }
   }
@@ -88,7 +89,7 @@ function formatAuthError(error: unknown, fallback: string): string {
     'Account is disabled': 'Tài khoản của bạn tạm thời bị khóa. Vui lòng liên hệ hỗ trợ.',
     'Request validation failed': 'Thông tin đăng ký chưa hợp lệ. Vui lòng kiểm tra lại các trường thông tin.',
   }
-  return translations[message] || (message.length > 0 && !message.includes('http') && !message.includes('Error:') ? message : fallback)
+  return translations[error instanceof ApiClientError ? error.diagnosticMessage : message] || (message.length > 0 && !message.includes('http') && !message.includes('Error:') ? message : fallback)
 }
 
 // ── Validation Helpers ───────────────────────────────────────────

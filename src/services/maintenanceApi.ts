@@ -205,7 +205,7 @@ function readMaintenanceEvidenceAsset(value: unknown): MaintenanceEvidenceAsset 
   if (!isRecord(value) || !isRecord(value.data) || !isUuidLike(value.data.id) ||
     !isText(value.data.originalName) || !isText(value.data.contentType) ||
     typeof value.data.sizeBytes !== 'number' || !Number.isFinite(value.data.sizeBytes)) {
-    throw new Error('Backend trả về tệp bằng chứng bảo trì không hợp lệ.')
+    throw new Error('Chưa tải được thông tin. Vui lòng thử lại.')
   }
   return {
     id: value.data.id,

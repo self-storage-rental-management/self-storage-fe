@@ -54,22 +54,21 @@ export function getRentalRenewalEligibility<
   }).format(now)
   const last = rental.dateSemantics?.lastPermittedDate || rental.contractEndDate
   const remainingDays = last ? Math.round((Date.parse(last) - Date.parse(today)) / 86400000) : NaN
-  const isWithin7Days = Number.isFinite(remainingDays) && remainingDays <= 7
+  const hasDeadline = Number.isFinite(remainingDays)
 
-  const canRenew = isRentalActive && isWithin7Days && !hasOpenRenewal
+  const canRenew = isRentalActive && hasDeadline && !hasOpenRenewal
 
   let reason: string | undefined
   if (!isRentalActive) {
     reason = 'Chỉ có thể gia hạn khi hợp đồng đang hoạt động.'
   } else if (hasOpenRenewal) {
     reason = 'Hợp đồng này đã có yêu cầu gia hạn đang được xử lý.'
-  } else if (!isWithin7Days) {
-    reason = 'Chỉ có thể gia hạn khi hợp đồng còn 7 ngày trước ngày hết hạn.'
+  } else if (!hasDeadline) {
+    reason = 'Chưa xác định được ngày hết hạn hợp đồng.'
   }
 
   return {
     canRenew,
-    isWithin7Days,
     hasOpenRenewal,
     openRenewal,
     remainingDays,

@@ -3,13 +3,15 @@ export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localh
 export class ApiClientError extends Error {
   readonly status: number | null
   readonly code: string
+  readonly diagnosticMessage: string
   readonly details: unknown
 
-  constructor(message: string, options: { status?: number | null; code?: string; details?: unknown } = {}) {
+  constructor(message: string, options: { status?: number | null; code?: string; details?: unknown; diagnosticMessage?: string } = {}) {
     super(message)
     this.name = 'ApiClientError'
     this.status = options.status ?? null
     this.code = options.code ?? 'API_ERROR'
+    this.diagnosticMessage = options.diagnosticMessage ?? message
     this.details = options.details
   }
 }
@@ -97,6 +99,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object')
 }
 
+function responseError(status: number, payload: unknown): ApiClientError {
+  const error = isRecord(payload) && isRecord(payload.error) ? payload.error : {}
+  const messages: Record<number, string> = {
+    400: 'Thông tin chưa hợp lệ. Vui lòng kiểm tra lại.',
+    401: 'Vui lòng kiểm tra thông tin đăng nhập hoặc đăng nhập lại.',
+    403: 'Bạn không có quyền thực hiện thao tác này.',
+    404: 'Không tìm thấy thông tin yêu cầu.',
+    409: 'Hồ sơ đã thay đổi hoặc chưa đủ điều kiện. Vui lòng kiểm tra lại.',
+    422: 'Vui lòng kiểm tra lại các mục đã nhập.',
+  }
+  return new ApiClientError(messages[status] ?? 'Chưa thể thực hiện yêu cầu. Vui lòng thử lại sau.', {
+    status, code: typeof error.code === 'string' ? error.code : 'API_ERROR', details: error.details,
+    diagnosticMessage: typeof error.message === 'string' ? error.message : undefined,
+  })
+}
+
 async function readPayload(response: Response): Promise<unknown> {
   const contentType = response.headers.get('content-type') || ''
   if (!contentType.includes('application/json')) return null
@@ -162,9 +180,9 @@ export async function apiRequest<T>(path: string, options: RequestInit & { skipA
     response = await fetch(`${API_BASE_URL}${path}`, { ...requestOptions, headers, signal: controller.signal })
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new ApiClientError('Backend phản hồi quá lâu. Vui lòng kiểm tra backend StorageHub.', { code: 'TIMEOUT' })
+      throw new ApiClientError('Yêu cầu mất nhiều thời gian hơn dự kiến. Vui lòng thử lại.', { code: 'TIMEOUT' })
     }
-    throw new ApiClientError('Không thể kết nối tới backend StorageHub.', { code: 'NETWORK_ERROR' })
+    throw new ApiClientError('Chưa kết nối được hệ thống. Vui lòng thử lại.', { code: 'NETWORK_ERROR' })
   } finally {
     clearTimeout(timeoutId)
   }
@@ -176,15 +194,7 @@ export async function apiRequest<T>(path: string, options: RequestInit & { skipA
     }
     notifyAuthExpired()
   }
-  if (!response.ok) {
-    const error = isRecord(payload) && isRecord(payload.error) ? payload.error : {}
-    const message = typeof error.message === 'string' ? error.message : `API request failed (${response.status})`
-    throw new ApiClientError(message, {
-      status: response.status,
-      code: typeof error.code === 'string' ? error.code : 'API_ERROR',
-      details: error.details,
-    })
-  }
+  if (!response.ok) throw responseError(response.status, payload)
 
   return payload as T
 }
@@ -217,9 +227,9 @@ export async function apiDownload(path: string, timeoutMs = DEFAULT_REQUEST_TIME
     response = await fetch(`${API_BASE_URL}${path}`, { method, headers, signal: controller.signal })
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new ApiClientError('Backend phản hồi quá lâu. Vui lòng kiểm tra backend StorageHub.', { code: 'TIMEOUT' })
+      throw new ApiClientError('Yêu cầu mất nhiều thời gian hơn dự kiến. Vui lòng thử lại.', { code: 'TIMEOUT' })
     }
-    throw new ApiClientError('Không thể kết nối tới backend StorageHub.', { code: 'NETWORK_ERROR' })
+    throw new ApiClientError('Chưa kết nối được hệ thống. Vui lòng thử lại.', { code: 'NETWORK_ERROR' })
   } finally {
     globalThis.clearTimeout(timeoutId)
   }
@@ -228,14 +238,7 @@ export async function apiDownload(path: string, timeoutMs = DEFAULT_REQUEST_TIME
     if (await refreshAccessToken()) return apiDownload(path, timeoutMs, method)
     notifyAuthExpired()
   }
-  if (!response.ok) {
-    const payload = await readPayload(response)
-    const error = isRecord(payload) && isRecord(payload.error) ? payload.error : {}
-    throw new ApiClientError(
-      typeof error.message === 'string' ? error.message : `API request failed (${response.status})`,
-      { status: response.status, code: typeof error.code === 'string' ? error.code : 'API_ERROR', details: error.details },
-    )
-  }
+  if (!response.ok) throw responseError(response.status, await readPayload(response))
   return {
     blob: await response.blob(),
     contentType: response.headers.get('content-type') || 'application/octet-stream',

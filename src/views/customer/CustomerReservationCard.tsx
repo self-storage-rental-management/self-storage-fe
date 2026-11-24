@@ -3,7 +3,7 @@ import type { CheckInInventoryLine } from '../../services/checkInApi'
 import { formatCustomerDate, formatCustomerDateTime } from '../../i18n/customerDate'
 import { userFacingError } from '../../presentation/userFacingError'
 import { savedReservationQuote, MISSING_RESERVATION_SNAPSHOT } from '../../services/reservationSnapshot'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Button, Card, Modal } from '../../components/ui'
 import VietnameseDateInput from '../../components/VietnameseDateInput'
 import { formatVndAmount as formatVnd } from '../../i18n/currency'
@@ -165,6 +165,7 @@ function InventoryResolutionNotice({ detail, now, submitting, onResolve }: {
   const [returnPlannerOpen, setReturnPlannerOpen] = useState(false)
   const [partialConfirmOpen, setPartialConfirmOpen] = useState(false)
   const [returnDateError, setReturnDateError] = useState('')
+  if (detail.inventoryResolutionStatus === 'TRANSFER_REQUESTED') return <p role="status" className="rounded-lg bg-blue-50 p-3 text-sm text-blue-950">Cơ sở đã nhận yêu cầu thu xếp chuyển hàng. Bạn có thể theo dõi tại mục hỗ trợ.</p>
   if (!['PENDING_CUSTOMER', 'PARTIAL_ACCEPTED', 'RETURN_REQUESTED'].includes(detail.inventoryResolutionStatus || '')) return null
   const confirmInventoryReturn = () => {
     if (!canPlanReturn || !returnDate || returnDate < minReturnDate || (removalLast && returnDate > removalLast)) {
@@ -226,7 +227,12 @@ function InventoryResolutionNotice({ detail, now, submitting, onResolve }: {
   )
 }
 
-export function InventoryLineInspectionResult({ detail }: { detail: CustomerReservationDetail }) {
+type InspectionDetail = {
+  inventoryActualJson?: string | null
+  acceptedQuantitiesJson?: string | null
+  goodsItems?: { id: string; categoryName?: string | null; materialName?: string | null; description?: string | null; customMaterial?: string | null; catalogCategoryId?: string | null; catalogMaterialId?: string | null; quantity: number }[]
+}
+export function InventoryLineInspectionResult({ detail }: { detail: InspectionDetail }) {
   let lines: CheckInInventoryLine[] = []
   try {
     const value: unknown = detail.inventoryActualJson ? JSON.parse(detail.inventoryActualJson) : null
@@ -234,26 +240,48 @@ export function InventoryLineInspectionResult({ detail }: { detail: CustomerRese
       lines = value.lines.filter((line): line is CheckInInventoryLine => Boolean(line && typeof line === 'object' && typeof line.goodsItemId === 'string' && typeof line.actualQuantity === 'number'))
   } catch { return null }
   if (!lines.length) return null
+  let retained: Record<string, number> | null = null
+  try { retained = JSON.parse(detail.acceptedQuantitiesJson || 'null') } catch { /* Older records may lack per-line quantities. */ }
   return <section className="space-y-2 rounded-lg border border-stone-300 p-3 text-left text-sm">
     <h4 className="font-bold">Đối chiếu kiểm kê từng dòng hàng</h4>
     {lines.map((line, index) => {
       const declared = detail.goodsItems?.find(item => item.id === line.goodsItemId)
       const actual = line.actualGoods
-      const matches = declared && actual && declared.catalogCategoryId === actual.catalogCategoryId && declared.catalogMaterialId === actual.catalogMaterialId && declared.quantity === line.actualQuantity
+      const matches = declared?.catalogCategoryId && actual && declared.catalogCategoryId === actual.catalogCategoryId && declared.catalogMaterialId === actual.catalogMaterialId && declared.quantity === line.actualQuantity
       return <div key={line.goodsItemId} className="space-y-1 border-t border-stone-200 pt-2">
         <p className="font-semibold">Dòng {index + 1} · {matches ? 'Khớp loại hàng, chất liệu và số kiện' : 'Xem kết quả đối chiếu thực tế'}</p>
         <p>Đã khai: {declared?.categoryName || declared?.description || 'Chưa ghi nhận'} · {declared?.materialName || declared?.customMaterial || 'Chưa ghi nhận'} · {declared?.quantity ?? 'Chưa ghi nhận'} kiện</p>
-        <p>Thực tế: {line.actualQuantity === 0 ? 'Không có hàng' : `${actual?.categoryName || actual?.customGoodsName || 'Chưa ghi nhận loại hàng'} · ${actual?.materialName || actual?.customMaterial || 'Không áp dụng hoặc chưa ghi nhận chất liệu'}`} · {line.actualQuantity} kiện</p>
-        {line.measurements && <p>Kích thước mỗi kiện: {line.measurements.lengthCm} × {line.measurements.widthCm} × {line.measurements.heightCm} cm · Khối lượng cả dòng: {line.measurements.weightKg} kg</p>}
-        {actual && <p>Điều kiện thực tế: {actual.fragile ? 'Dễ vỡ' : 'Không dễ vỡ'} · {actual.stackable ? `Xếp chồng tối đa ${actual.maxStackLayers || 1} lớp` : 'Không xếp chồng'} · {actual.allowHorizontalPlacement ? 'Được đặt nằm ngang' : 'Giữ chiều đứng'}</p>}
-        <p>Tình trạng: {line.condition === 'INTACT' ? 'Nguyên vẹn' : line.condition === 'DAMAGED' ? 'Có hư hỏng' : 'Không có kiện nào'}</p>
-        {line.note && <p>Ghi nhận: {line.note}</p>}
+        <dl className="divide-y divide-stone-100">
+          {[
+            ['Loại hàng thực tế', line.actualQuantity === 0 ? 'Không có hàng' : actual?.categoryName || actual?.customGoodsName],
+            ['Chất liệu chính', actual?.customMaterial || actual?.materialName],
+            ['Mô tả hàng hóa', actual?.description],
+            ['Số lượng thực tế', line.actualQuantity],
+            ...(retained ? [['Số kiện giữ lại', retained[line.goodsItemId] ?? 0], ['Số kiện đưa ra', Math.max(0, line.actualQuantity - (retained[line.goodsItemId] ?? 0))]] : []),
+            ['Chiều dài mỗi kiện', line.measurements && line.measurements.lengthCm + ' cm'],
+            ['Chiều rộng mỗi kiện', line.measurements && line.measurements.widthCm + ' cm'],
+            ['Chiều cao mỗi kiện', line.measurements && line.measurements.heightCm + ' cm'],
+            ['Khối lượng mỗi kiện', actual && actual.weightPerItemKg != null ? actual.weightPerItemKg + ' kg' : null],
+            ['Khối lượng cả dòng', line.measurements && line.measurements.weightKg + ' kg'],
+            ['Dễ vỡ', actual ? (actual.fragile ? 'Có' : 'Không') : null],
+            ['Được xếp chồng', actual?.stackable == null ? null : actual.stackable ? 'Có' : 'Không'],
+            ...(actual?.stackable ? [['Số lớp xếp tối đa', actual.maxStackLayers]] : []),
+            ['Được xoay và đặt nằm ngang', actual?.allowHorizontalPlacement == null ? null : actual.allowHorizontalPlacement ? 'Có' : 'Không'],
+            ['Tình trạng hàng hóa', line.condition === 'INTACT' ? 'Nguyên vẹn' : line.condition === 'DAMAGED' ? 'Có hư hỏng' : line.condition === 'NOT_PRESENT' ? 'Không có kiện nào' : null],
+            ['Ghi chú kiểm kê', line.note],
+          ].map(([label, value]) => (
+            <div key={label} className="grid gap-1 py-2 sm:grid-cols-[minmax(0,12rem)_minmax(0,1fr)] sm:gap-4">
+              <dt className="font-medium text-stone-600">{label}</dt>
+              <dd className="whitespace-pre-wrap break-words">{value || (value === 0 ? 0 : 'Chưa ghi nhận')}</dd>
+            </div>
+          ))}
+        </dl>
       </div>
     })}
   </section>
 }
 
-export function PackagingInspectionResult({ detail }: { detail: CustomerReservationDetail }) {
+export function PackagingInspectionResult({ detail }: { detail: { inventoryActualJson?: string | null; goodsCondition?: string | null } }) {
   let actual: { packagingMethod?: string; packagingCondition?: string } | null = null
   try { actual = detail.inventoryActualJson ? JSON.parse(detail.inventoryActualJson) : null } catch { return null }
   if (!actual?.packagingMethod && !actual?.packagingCondition) return null
@@ -294,7 +322,32 @@ export default function CustomerReservationCard({ user, reservation: r, facility
   const [setupGoodsDraft, setSetupGoodsDraft] = useState<GoodsItemInput[]>([])
   const [moreMenuOpen, setMoreMenuOpen] = useState(false)
   const moreMenuRef = useRef<HTMLDivElement>(null)
+  const moreButtonRef = useRef<HTMLButtonElement>(null)
   const [now, setNow] = useState(Date.now())
+
+  useLayoutEffect(() => {
+    const menu = moreMenuRef.current
+    const button = moreButtonRef.current
+    if (!moreMenuOpen || !menu || !button) return
+    menu.showPopover()
+    const positionMenu = () => {
+      const rect = button.getBoundingClientRect()
+      const below = window.innerHeight - rect.bottom - 8
+      const above = rect.top - 8
+      const opensUp = menu.scrollHeight + 2 > below && above > below
+      menu.style.maxHeight = `${Math.max(0, opensUp ? above : below)}px`
+      menu.style.top = `${opensUp ? rect.top - menu.offsetHeight - 4 : rect.bottom + 4}px`
+      menu.style.left = `${Math.max(4, rect.right - menu.offsetWidth)}px`
+    }
+    positionMenu()
+    window.addEventListener('resize', positionMenu)
+    window.addEventListener('scroll', positionMenu, true)
+    return () => {
+      window.removeEventListener('resize', positionMenu)
+      window.removeEventListener('scroll', positionMenu, true)
+      menu.hidePopover()
+    }
+  }, [moreMenuOpen])
 
   useEffect(() => {
     if (!moreMenuOpen) return
@@ -605,7 +658,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-bold text-amber-700">{r.reservationCode}</span>
-          <span className={`rounded px-2.5 py-1 text-xs font-bold ${inventoryMismatchPending ? 'bg-red-700 text-white' : awaitingInventory ? (partialInventoryPending ? 'bg-amber-100 text-amber-900' : checkInStatus === 'completed' ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900') : visualTone === 'completed' ? 'bg-emerald-700 text-white' : visualTone === 'expired' ? 'bg-red-100 text-red-900' : progress !== null && progress >= 3 ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{inventoryReturnRequested ? 'Buộc trả kho do kiểm kê sai lệch' : inventoryMismatchPending ? 'Cần xử lý sai lệch kiểm kê' : awaitingInventory ? (partialInventoryPending ? 'Chờ xử lý phần hàng dư' : checkInStatus === 'completed' ? 'Đã kiểm kê' : 'Chờ kiểm kê') : reservationStatusLabels[r.status]}</span>
+          <span className={`rounded px-2.5 py-1 text-xs font-bold ${inventoryMismatchPending ? 'bg-red-700 text-white' : awaitingInventory ? (partialInventoryPending ? 'bg-amber-100 text-amber-900' : checkInStatus === 'completed' ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900') : visualTone === 'completed' ? 'bg-emerald-700 text-white' : visualTone === 'expired' ? 'bg-red-100 text-red-900' : progress !== null && progress >= 3 ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{detail?.inventoryResolutionStatus === 'TRANSFER_REQUESTED' ? 'Chờ thu xếp chuyển hàng' : inventoryReturnRequested ? 'Buộc trả kho do kiểm kê sai lệch' : inventoryMismatchPending ? 'Cần xử lý sai lệch kiểm kê' : awaitingInventory ? (partialInventoryPending ? 'Chờ xử lý phần hàng dư' : checkInStatus === 'completed' ? 'Đã kiểm kê' : 'Chờ kiểm kê') : reservationStatusLabels[r.status]}</span>
         </div>
         <h2 className="mt-1 text-lg font-bold text-stone-900">{displayedUnitTypeName} · {displayedFacilityName}</h2>
         <div className="mt-3 space-y-2">
@@ -770,81 +823,39 @@ export default function CustomerReservationCard({ user, reservation: r, facility
             Cọc giữ chỗ: {(r.reservationDepositAmount == null ? "Chưa xác định" : formatVnd(r.reservationDepositAmount))}
           </p>
         </div>
-
-        {/* ── CỘT PHẢI (HÀNH ĐỘNG - ~25%, CĂN PHẢI) ───────────── */}
-        <div className="md:col-span-3 flex flex-wrap items-center justify-start md:justify-end gap-2 border-t border-stone-100 pt-3 md:border-t-0 md:pt-0 md:border-l md:border-stone-100 md:pl-4">
-          {/* Primary CTA */}
-          {r.status === 'AWAITING_CUSTOMER_RECEIPT' && (
-            <>
-              <Button
-                type="button"
-                size="sm"
-                className="bg-amber-600 hover:bg-amber-700 text-white font-bold shadow-xs whitespace-nowrap"
-                disabled={confirmingReceipt}
-                onClick={() => void confirmReceipt()}
-                title="Xác nhận nhận kho (Sẵn sàng bàn giao)"
-              >
-                {confirmingReceipt ? 'Đang xác nhận…' : 'Xác nhận nhận kho'}
-              </Button>
-              <button
-                type="button"
-                className="sr-only"
-                aria-hidden="true"
-                tabIndex={-1}
-                disabled={confirmingReceipt}
-                onClick={() => void confirmReceipt()}
-              >
-                Sẵn sàng bàn giao
-              </button>
-            </>
-          )}
-
-          {r.status === 'COMPLETED' && (
-            <Button
-              type="button"
-              size="sm"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-xs whitespace-nowrap"
-              onClick={() => onReceiptConfirmed?.(r.assignedUnitId || '')}
-            >
-              Xem hồ sơ thuê
-            </Button>
-          )}
-
-          {r.status === 'PREPARING' && !preparationConfirmed && (
-            <Button
-              type="button"
-              size="sm"
-              className="bg-violet-600 hover:bg-violet-700 text-white font-bold shadow-xs whitespace-nowrap"
-              disabled={confirmingPreparation}
-              onClick={() => void confirmPreparation()}
-            >
-              {confirmingPreparation ? 'Đang gửi…' : 'Sẵn sàng để kiểm kê'}
-            </Button>
-          )}
-
-          {r.status === 'AWAITING_PAYMENT' && (
-            <CustomerReservationPayment user={user} reservation={r} facilityName={displayedFacilityName} unitTypeName={displayedUnitTypeName} paymentStartedAt={detail?.paymentStartedAt} paymentExpiresAt={detail?.paymentExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />
-          )}
-
-          {/* Secondary Action: Toggle Details */}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="gap-1 text-xs font-semibold text-stone-700 hover:bg-stone-50 border-stone-300 whitespace-nowrap"
-            aria-expanded={detailsOpen}
-            aria-controls={`reservation-details-${r.id}`}
-            onClick={() => setDetailsOpen(!detailsOpen)}
-          >
-            <span>{detailsOpen ? 'Thu gọn' : 'Chi tiết & Báo giá'}</span>
-            <span className={`text-[10px] transition-transform ${detailsOpen ? 'rotate-180' : ''}`}>▼</span>
-          </Button>
-
+      </div>
+        <div className="reservation-card-actions flex w-full min-w-0 flex-col items-end gap-2 md:w-64 md:shrink-0">
+        <div className="text-right"><p className="text-xs text-stone-500">Tổng thu cả kỳ (gồm tiền cọc đảm bảo kho)</p><p className="text-xl font-bold text-stone-900">{(r.totalInitialObligation == null ? "Chưa xác định" : formatVnd(r.totalInitialObligation))}</p><p className="text-xs text-amber-800">Trả lúc giữ chỗ: {(r.reservationDepositAmount == null ? "Chưa xác định" : formatVnd(r.reservationDepositAmount))}</p></div>
+        {r.status === 'AWAITING_REVIEW' && <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950">
+          <p className="font-bold">Đang chờ nhân viên cơ sở duyệt hàng hóa</p>
+          <p className="mt-1">Thời gian duyệt còn lại (không phải hạn thanh toán)</p>
+          <p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{countdown.text}</p>
+          <p className="mt-1">Nhân viên duyệt trong tối đa {STAFF_REVIEW_HOURS} giờ từ khi gửi đơn. Sau khi được duyệt, bạn có thể thanh toán cọc.</p>
+        </div>}
+        <CustomerReservationPayment reservation={r} facilityName={displayedFacilityName} unitTypeName={displayedUnitTypeName} paymentStartedAt={detail?.paymentStartedAt} paymentExpiresAt={detail?.paymentExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />
+        {r.status === 'AWAITING_CUSTOMER_RECEIPT' && <div className={`rounded-lg border p-3 text-right text-xs ${receiptCountdown.expired ? 'border-red-400 bg-red-50 text-red-950' : receiptCountdown.urgent ? 'border-red-300 bg-red-50/70 text-red-950' : 'border-amber-300 bg-amber-50 text-amber-950'}`}>
+          <p className="font-bold">Nhân viên đã hoàn tất bàn giao kho trống</p>
+          <p className="mt-1">Vui lòng kiểm tra kho và mã ra vào, sau đó xác nhận đã nhận kho để bắt đầu thời gian chuẩn bị.</p>
+          {detail?.handoverCompletedAt && <p className="mt-1">Bàn giao lúc: <b>{formatCustomerDateTime(new Date(detail.handoverCompletedAt))}</b></p>}
+          {detail?.lockReference && <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-white px-3 py-2 text-left"><span className="font-semibold text-amber-950">Mã ổ khóa đã bàn giao</span><b className="font-mono text-base tracking-wider text-amber-800">{detail.lockReference}</b></div>}
+          {detail?.receiptConfirmationDueAt && <p className="mt-1 font-bold">{receiptCountdown.text} · Hạn xác nhận: {formatCustomerDateTime(new Date(detail.receiptConfirmationDueAt))}</p>}
+          {receiptCountdown.expired && <p className="mt-1 font-semibold">Hồ sơ đang chờ cơ sở xử lý tiếp. Bạn vẫn có thể xác nhận nhận kho hoặc liên hệ cơ sở để được hỗ trợ.</p>}
+          <Button type="button" className="mt-2" size="sm" disabled={confirmingReceipt} onClick={() => void confirmReceipt()}>{confirmingReceipt ? 'Đang xác nhận…' : 'Xác nhận đã nhận kho'}</Button>
+        </div>}
+        {r.status === 'PREPARING' && checkInStatus !== 'setup_completed' && !detail?.inventoryEscalatedAt && <ReservationPreparationNotice checkInStatus={checkInStatus} submitting={confirmingPreparation} onReady={() => void confirmPreparation()} />}
+        {checkInStatus === 'setup_completed' && !detail?.inventoryMismatchJson && detail?.inventoryFinalDeadlineAt && (
+          <InventoryAppointmentPanel detail={detail} now={now} onSaved={setDetail} />
+        )}
+        {detail && <PackagingInspectionResult detail={detail} />}
+        {detail && <InventoryLineInspectionResult detail={detail} />}
+        {detail && <InventoryResolutionNotice detail={detail} now={now} submitting={resolvingInventory} onResolve={(decision, scheduledDate) => void resolveInventoryDecision(decision, scheduledDate)} />}
+        {['PAYMENT_GRACE', 'PAYMENT_REVIEW'].includes(r.status) && <CustomerPaymentComplaint reservation={r} complaintExpiresAt={detail?.complaintExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />}
           {/* Menu ⋮ (More actions) */}
           <div className="relative inline-block">
             <button
               type="button"
               aria-label="Thao tác khác"
+              ref={moreButtonRef}
               title="Thao tác khác (Xem biên lai, hợp đồng, hủy đơn...)"
               aria-haspopup="menu"
               aria-expanded={moreMenuOpen}
@@ -860,7 +871,8 @@ export default function CustomerReservationCard({ user, reservation: r, facility
               ref={moreMenuRef}
               role="menu"
               aria-orientation="vertical"
-              className="absolute right-0 top-full z-30 mt-1 min-w-[210px] rounded-xl border border-stone-200 bg-white py-1.5 shadow-xl text-xs"
+              popover="manual"
+              className="fixed inset-auto m-0 w-[210px] max-w-[calc(100vw-8px)] overflow-y-auto rounded-xl border border-stone-200 bg-white py-1.5 shadow-xl text-xs"
               hidden={!moreMenuOpen}
             >
               {documentAvailable && (
@@ -1150,7 +1162,6 @@ export default function CustomerReservationCard({ user, reservation: r, facility
         <div className="flex justify-end gap-2 border-t border-stone-100 pt-4"><Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>Quay lại</Button><Button variant="danger" onClick={() => { setDeleteConfirmOpen(false); onDelete?.() }}>Xóa đơn đặt giữ kho</Button></div>
       </div>
     </Modal>
-    </div>
  </Card>
   )
 }

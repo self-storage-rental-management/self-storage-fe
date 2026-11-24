@@ -529,6 +529,7 @@ const workflowStepLabels = [
 type CheckInFilters = Pick<NonNullable<Parameters<typeof listCheckIns>[0]>, "q" | "status" | "scheduledFrom" | "scheduledTo">
 
 const checkInTableColumnWidths = ["18%", "13%", "15%", "19%", "35%"] as const
+const checkInActionButtonBaseClass = "h-9 shrink-0 whitespace-nowrap !px-2 !py-0 !text-xs font-medium"
 
 function CheckInTableColumns() {
   return (
@@ -618,7 +619,7 @@ function CheckInWorkList({ group, filters, refreshKey, now, renderRow }: {
                     </span>
                   </Th>
                   <Th>Trạng thái</Th>
-                  <Th className="text-right">Thao tác</Th>
+                  <Th className="text-center">Thao tác</Th>
                 </Tr>
               </Thead>
               <Tbody>
@@ -792,6 +793,9 @@ export default function StaffCheckInOperationsPanel({
   const [handoverNotes, setHandoverNotes] = useState("")
 
   const [keyLockReference, setKeyLockReference] = useState("")
+  const lockHelpId = useId()
+  const [lockChecked, setLockChecked] = useState(false)
+  const standardLock = /^LOCK-(?!000$)[0-9]{3}$/i.test(keyLockReference.trim())
 
   const [paymentMethod, setPaymentMethod] = useState<CheckInPaymentMethod>("CASH")
 
@@ -1446,7 +1450,7 @@ export default function StaffCheckInOperationsPanel({
 
       setPaymentEvidenceFile(null)
 
-      showToast("Đã lưu hàng hóa kiểm kê. Bạn có thể đóng và mở lại hồ sơ hoặc chỉnh sửa trước khi xử lý sai lệch.")
+      showToast("Đã lưu hàng hóa kiểm kê. Bạn có thể đóng và mở lại hồ sơ hoặc chỉnh sửa trước khi chốt kết quả tiếp nhận.")
       setInventoryDraftRevision(savedDraft.revision)
       setInventorySavedAt(savedDraft.savedAt)
       setInventoryEditing(false)
@@ -1472,7 +1476,7 @@ export default function StaffCheckInOperationsPanel({
       setInventoryStage(4)
       showToast('Đã kiểm tra sức chứa. Ghi nhận phương án xử lý trực tiếp tại cơ sở.')
       refresh()
-    } catch (reason) { fail(reason, 'Không thể mở bước xử lý sai lệch.') }
+    } catch (reason) { fail(reason, 'Không thể mở bước kết quả tiếp nhận.') }
     finally { inventoryCommandLock.current = false; setSubmitting(false) }
   }
 
@@ -1528,8 +1532,12 @@ export default function StaffCheckInOperationsPanel({
         }
         setChecklist((current) => ({ ...current, paymentVerified: true }))
       } else if (handoverStep === 4) {
+        if (!standardLock) {
+          setLockChecked(true)
+          throw new Error("Mã bộ khóa phải có đủ 3 chữ số từ 001 đến 999.")
+        }
         if (/\b(pin|password|mật khẩu|mat khau)\b/i.test(keyLockReference)) {
-          throw new Error("Không nhập mật khẩu hoặc mã PIN vào ô Mã ổ khóa / Chìa khóa.")
+          throw new Error("Không nhập mật khẩu hoặc mã PIN vào ô Mã bộ khóa.")
         }
         if (!emptyStorageHandoverReady) {
           throw new Error("Cần nhập mã ổ khóa, ghi nhận hiện trạng và chọn ít nhất một ảnh hoặc PDF bằng chứng kho trống.")
@@ -1772,6 +1780,7 @@ export default function StaffCheckInOperationsPanel({
       ...(savedReport?.evidenceReferences ?? []),
     ])))
 
+    setLockChecked(false)
     setKeyLockReference(item.lockReference || "")
 
     setPaymentMethod("CASH")
@@ -1875,6 +1884,20 @@ export default function StaffCheckInOperationsPanel({
     const actions = staffCheckInActions(item, now)
     const receiptState = receiptConfirmationState(item, now)
     const receiptRelease = receiptReleaseState(item, now)
+    const showsOngoingActions = group === "ONGOING" && item.checkInStatus !== "completed"
+    const showsDetailAction = ["handover_pending_receipt", "setup_in_progress", "setup_completed"].includes(item.checkInStatus || "")
+    const actionButtonCount = 1
+      + (showsOngoingActions ? 2 : 0)
+      + (showsOngoingActions && item.inventoryResolutionStatus === "PARTIAL_ACCEPTED" ? 1 : 0)
+      + (showsOngoingActions && actions.canReject ? 1 : 0)
+      + (showsDetailAction ? 1 : 0)
+      + (item.checkInStatus === "completed" ? 3 : 0)
+    const actionLayoutClass = actionButtonCount === 1
+      ? "flex max-w-md flex-wrap items-center justify-center"
+      : actionButtonCount === 3
+        ? "grid max-w-[31rem] grid-cols-3"
+        : "grid max-w-[25rem] grid-cols-2"
+    const actionButtonClass = `${checkInActionButtonBaseClass} ${actionButtonCount === 1 ? "w-48" : "w-full"}`
     return (
     <Tr key={item.reservationId} title={item.customerName ? `Khách hàng: ${item.customerName}` : undefined}>
       <Td>
@@ -1932,13 +1955,13 @@ export default function StaffCheckInOperationsPanel({
             : staffCheckInStatusLabel(item.checkInStatus, item.reservationStatus)}
         </Badge>
       </Td>
-      <Td className="whitespace-nowrap text-right">
-        <div className="flex flex-nowrap items-center justify-end gap-1.5 whitespace-nowrap">
-          <Button size="sm" variant="outline" className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]" disabled={submitting || !canOpenInventory(item.checkInStatus, item.inventoryVisit?.appointmentAt)} title={!canOpenInventory(item.checkInStatus, item.inventoryVisit?.appointmentAt) ? "Chờ khách xác nhận lịch kiểm kê" : "Mở form kiểm kê riêng"} onClick={() => openHandover(item, true)}>Xem tiến trình kiểm kê</Button>
-          {group === "ONGOING" && item.checkInStatus !== "completed" && (
+      <Td className="whitespace-normal text-center">
+        <div className={`mx-auto w-full gap-1.5 ${actionLayoutClass}`}>
+          <Button size="sm" variant="outline" className={actionButtonClass} disabled={submitting || !canOpenInventory(item.checkInStatus, item.inventoryVisit?.appointmentAt)} title={!canOpenInventory(item.checkInStatus, item.inventoryVisit?.appointmentAt) ? "Chờ khách xác nhận lịch kiểm kê" : "Mở form kiểm kê riêng"} onClick={() => openHandover(item, true)}>Xem tiến trình kiểm kê</Button>
+          {showsOngoingActions && (
             <>
               {item.inventoryResolutionStatus === "PARTIAL_ACCEPTED" && <Button
-                className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
+                className={actionButtonClass}
                 size="sm"
                 variant="danger"
                 disabled={submitting}
@@ -1947,7 +1970,7 @@ export default function StaffCheckInOperationsPanel({
                 Xác nhận đã đưa phần dư ra
               </Button>}
               <Button
-                className="shrink-0 whitespace-nowrap !px-2.5 !py-1 !text-xs font-medium"
+                className={actionButtonClass}
                 size="sm"
                 disabled={submitting || !actions.canOpen}
                 onClick={() => beginHandover(item)}
@@ -1955,7 +1978,7 @@ export default function StaffCheckInOperationsPanel({
                 {stepForCheckIn(item) === 6 ? "Xem tiến trình bàn giao" : actions.label}
               </Button>
               {actions.canReject && <Button
-                className="shrink-0 whitespace-nowrap !px-2 !py-1 !text-[11px]"
+                className={actionButtonClass}
                 size="sm"
                 variant="danger"
                 disabled={submitting}
@@ -1964,7 +1987,7 @@ export default function StaffCheckInOperationsPanel({
                 Từ chối nhận kho
               </Button>}
               <Button
-                className="shrink-0 whitespace-nowrap !px-2.5 !py-1 !text-xs font-medium"
+                className={actionButtonClass}
                 size="sm"
                 variant="danger"
                 disabled={submitting || !actions.canMarkAbsent}
@@ -1977,9 +2000,9 @@ export default function StaffCheckInOperationsPanel({
               </Button>
             </>
           )}
-          {["handover_pending_receipt", "setup_in_progress", "setup_completed"].includes(item.checkInStatus || "") && (
+          {showsDetailAction && (
             <Button
-              className="shrink-0 whitespace-nowrap !px-2.5 !py-1 !text-xs font-medium"
+              className={actionButtonClass}
               size="sm"
               variant="outline"
               onClick={() => setDetailTarget(item)}
@@ -1990,7 +2013,7 @@ export default function StaffCheckInOperationsPanel({
           {item.checkInStatus === "completed" && (
             <>
               <Button
-                className="shrink-0 whitespace-nowrap !px-2.5 !py-1 !text-xs font-medium"
+                className={actionButtonClass}
                 size="sm"
                 variant="outline"
                 onClick={() => openHandover(item)}
@@ -1998,7 +2021,7 @@ export default function StaffCheckInOperationsPanel({
                 Xem tiến trình bàn giao
               </Button>
               <Button
-                className="shrink-0 whitespace-nowrap !px-2.5 !py-1 !text-xs font-medium"
+                className={actionButtonClass}
                 size="sm"
                 variant="outline"
                 onClick={() => setDetailTarget(item)}
@@ -2006,7 +2029,7 @@ export default function StaffCheckInOperationsPanel({
                 Xem biên bản
               </Button>
               <Button
-                className="shrink-0 whitespace-nowrap !px-2.5 !py-1 !text-xs font-medium"
+                className={actionButtonClass}
                 size="sm"
                 variant="danger"
                 onClick={() => setDeleteTarget(item)}
@@ -2238,18 +2261,39 @@ export default function StaffCheckInOperationsPanel({
                   <div className="space-y-3">
                     <p className="text-xs font-bold uppercase tracking-wider text-stone-700">1. Thông tin khóa & Hiện trạng ban đầu</p>
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <Input
-                        label="Mã ổ khóa / Chìa khóa *"
-                        error={fieldErrors.keyLockReference || fieldErrors.lockReference}
-                        value={keyLockReference}
-                        disabled={isReviewingCompletedStep}
-                        onChange={(event) => {
-                          clearFieldError("keyLockReference")
-                          clearFieldError("lockReference")
-                          setKeyLockReference(event.target.value)
-                        }}
-                        placeholder="Ví dụ: LOCK-018 hoặc KEY-A04"
-                      />
+                      <div className="space-y-1">
+                        <label htmlFor={lockHelpId + "-input"} className="text-sm font-medium text-stone-700">Mã bộ khóa *</label>
+                        <div className="flex items-center overflow-hidden rounded-lg border border-stone-300 bg-white focus-within:ring-2 focus-within:ring-amber-500">
+                          {<span aria-hidden="true" className="self-stretch border-r border-stone-200 bg-stone-50 px-3 py-2 font-semibold text-stone-700">LOCK-</span>}
+                          <input
+                            id={lockHelpId + "-input"}
+                            aria-describedby={lockHelpId}
+                            aria-invalid={Boolean(fieldErrors.lockReference || fieldErrors.keyLockReference || (lockChecked && !standardLock))}
+                            className="min-w-0 flex-1 bg-transparent px-3 py-2 outline-none"
+                            inputMode="numeric"
+                            spellCheck={false}
+                            autoComplete="off"
+                            placeholder="018"
+                            value={keyLockReference.replace(/^LOCK-/i, "")}
+                            disabled={isReviewingCompletedStep}
+                            onBlur={() => setLockChecked(true)}
+                            onChange={(event) => {
+                              const input = event.target.value
+                              const digits = input.trim().replace(/^LOCK-/i, "")
+                              if (!/^[0-9]{0,3}$/.test(digits)) return
+                              clearFieldError("lockReference")
+                              clearFieldError("keyLockReference")
+                              setLockChecked(false)
+                              setKeyLockReference(digits ? "LOCK-" + digits : "")
+                            }}
+                          />
+                        </div>
+                        <p id={lockHelpId} aria-live="polite" className="text-xs text-stone-600">
+                          {fieldErrors.lockReference || fieldErrors.keyLockReference || (lockChecked && !standardLock
+                              ? "Cần nhập đủ 3 chữ số từ 001 đến 999."
+                              : "Nhập 3 số sau LOCK- trên tem ổ khóa, ví dụ 018. Không nhập PIN.")}
+                        </p>
+                      </div>
                       <Input
                         label="Hiện trạng kho trống bàn giao *"
                         error={fieldErrors.initialCondition || fieldErrors.initialUnitCondition}
@@ -2820,7 +2864,7 @@ export default function StaffCheckInOperationsPanel({
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
                             <p className="font-bold text-stone-900">Kết quả kiểm tra sức chứa</p>
-                            <p className="mt-1 text-xs text-stone-600">Đối chiếu sơ bộ số kiện, thể tích, tải trọng và kích thước. Hệ thống xác nhận phương án xếp hàng chính thức khi chuyển sang xử lý sai lệch.</p>
+                            <p className="mt-1 text-xs text-stone-600">Đối chiếu sơ bộ số kiện, thể tích, tải trọng và kích thước. Hệ thống xác nhận phương án xếp hàng chính thức khi chuyển sang kết quả tiếp nhận.</p>
                           </div>
                         </div>
                         <div className="mt-4 grid gap-2 sm:grid-cols-3" aria-label="Các kết quả kiểm tra sức chứa">
@@ -2831,14 +2875,14 @@ export default function StaffCheckInOperationsPanel({
                           ] as const).map(([label, active]) => <div key={label} className={`rounded-lg border p-3 text-sm ${active ? "border-amber-500 bg-white font-semibold text-stone-950 ring-1 ring-amber-400" : "border-stone-200 bg-white/60 text-stone-500"}`}><span aria-hidden="true">{active ? "● " : "○ "}</span>{label}</div>)}
                         </div>
                         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-xs">
-                          <div className="rounded-lg border border-white/80 bg-white/80 p-3"><span className="text-stone-500">Số kiện thực tế / khai báo</span><p className="mt-1 font-bold text-stone-900">{inventoryCapacity.totalPackages} / {handoverTarget?.declaredPackageCount ?? "—"}</p></div>
-                          <div className="rounded-lg border border-white/80 bg-white/80 p-3"><span className="text-stone-500">Thể tích thực tế / sức chứa</span><p className="mt-1 font-bold text-stone-900">{inventoryCapacity.totalVolume.toFixed(4)} / {handoverTarget?.storageCapacity?.volumeM3 == null ? "—" : handoverTarget.storageCapacity.volumeM3.toFixed(4)} m³</p></div>
-                          <div className="rounded-lg border border-white/80 bg-white/80 p-3"><span className="text-stone-500">Khối lượng thực tế / giới hạn</span><p className="mt-1 font-bold text-stone-900">{inventoryCapacity.totalWeight.toFixed(2)} / {handoverTarget?.storageCapacity?.maxLoadKg == null ? "—" : handoverTarget.storageCapacity.maxLoadKg.toFixed(2)} kg</p></div>
-                          <div className="rounded-lg border border-white/80 bg-white/80 p-3"><span className="text-stone-500">Kích thước lớn nhất</span><p className="mt-1 font-bold text-stone-900">{inventoryCapacity.dimensions.every(value => value > 0) ? `${inventoryCapacity.dimensions.join(" × ")} cm` : "—"}</p></div>
+                          <div className="rounded-lg border border-white/80 bg-white/80 p-3"><span className="text-stone-500">Số kiện thực tế / khai báo</span><p className="mt-1 font-bold text-stone-900">{inventoryCapacity.totalPackages} / {handoverTarget?.declaredPackageCount ?? "-"}</p></div>
+                          <div className="rounded-lg border border-white/80 bg-white/80 p-3"><span className="text-stone-500">Thể tích thực tế / sức chứa</span><p className="mt-1 font-bold text-stone-900">{inventoryCapacity.totalVolume.toFixed(4)} / {handoverTarget?.storageCapacity?.volumeM3 == null ? "-" : handoverTarget.storageCapacity.volumeM3.toFixed(4)} m³</p></div>
+                          <div className="rounded-lg border border-white/80 bg-white/80 p-3"><span className="text-stone-500">Khối lượng thực tế / giới hạn</span><p className="mt-1 font-bold text-stone-900">{inventoryCapacity.totalWeight.toFixed(2)} / {handoverTarget?.storageCapacity?.maxLoadKg == null ? "-" : handoverTarget.storageCapacity.maxLoadKg.toFixed(2)} kg</p></div>
+                          <div className="rounded-lg border border-white/80 bg-white/80 p-3"><span className="text-stone-500">Kích thước lớn nhất</span><p className="mt-1 font-bold text-stone-900">{inventoryCapacity.dimensions.every(value => value > 0) ? `${inventoryCapacity.dimensions.join(" × ")} cm` : "-"}</p></div>
                         </div>
                         {inventoryCapacity.state === "PENDING" && <p className="mt-3 text-sm text-stone-600">Nhập đầy đủ số liệu và xác nhận từng dòng hàng để xem kết quả sức chứa.</p>}
                         {inventoryCapacity.reasons.length > 0 && <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-red-800">{inventoryCapacity.reasons.map(reason => <li key={reason}>{reason}</li>)}</ul>}
-                        {inventoryCapacity.state === "UNKNOWN" && <p className="mt-3 text-xs text-amber-800">Chưa nhận được cấu hình sức chứa của gian kho. Kết quả chính thức sẽ được backend đối chiếu bằng phương án xếp pallet khi gửi kiểm kê.</p>}
+                        {inventoryCapacity.state === "UNKNOWN" && <p className="mt-3 text-xs text-amber-800">Chưa nhận được cấu hình sức chứa của gian kho. Kết quả xếp hàng sẽ có sau khi gửi kiểm kê.</p>}
                         {handoverTarget?.inventoryMismatchSummary && handoverTarget.inventoryResolutionStatus && handoverTarget.inventoryResolutionStatus !== "NOT_STARTED" && <p className="mt-3 border-t border-black/10 pt-3 text-xs text-stone-700"><b>Kết quả lần kiểm kê gần nhất:</b> {handoverTarget.inventoryMismatchSummary}</p>}
                       </section>
                     )}
@@ -2879,7 +2923,7 @@ export default function StaffCheckInOperationsPanel({
             )}
 
             {inventoryMode && inventoryStage === 3 && <div>
-              {inventorySavedAt && !inventoryPublished && <p role="status" className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">Đã lưu bản kiểm kê lúc {formatStaffDateTime(inventorySavedAt)}. Có thể chỉnh sửa trước khi chuyển sang xử lý sai lệch.</p>}
+              {inventorySavedAt && !inventoryPublished && <p role="status" className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">Đã lưu bản kiểm kê lúc {formatStaffDateTime(inventorySavedAt)}. Có thể chỉnh sửa trước khi chuyển sang kết quả tiếp nhận.</p>}
               {(() => {
                 const fit = inventoryPublished ? handoverTarget.inventoryFullFit : !inventoryCapacity || ["UNKNOWN", "PENDING"].includes(inventoryCapacity.state) ? null : inventoryCapacity.state !== "NOT_FIT"
                 const result = inventoryResult(fit, inventoryPublished ? Boolean(handoverTarget.inventoryMismatchJson) : measurementVariance)
@@ -2933,8 +2977,8 @@ export default function StaffCheckInOperationsPanel({
                   {inventoryStage === 1 && <Button disabled={submitting || handoverTarget.checkInStatus === 'setup_in_progress' || !handoverTarget.inventoryVisit?.identityVerifiedAt} onClick={() => setInventoryStage(2)}>Tiếp tục kiểm kê hàng hóa</Button>}
                   {inventoryStage === 2 && inventoryStageReadOnly && <Button onClick={() => setInventoryStage(4)}>Xem lại kết quả kiểm kê</Button>}
                   {inventoryStage === 2 && !inventoryStageReadOnly && <Button disabled={submitting || !inventoryLinesComplete || (lineInventory && !inventoryReviewConfirmed) || !actualPackagingMethod.trim() || !packagingCondition || (packagingNoteRequired && !handoverNotes.trim()) || (!evidenceFiles.length && !evidenceReferences.length) || (measurementVariance && !effectiveVarianceReason.trim())} onClick={() => void submitHandover()}>{submitting ? "Đang lưu kiểm kê…" : "Xác nhận hàng hóa kiểm kê"}</Button>}
-                  {inventoryStage === 3 && !inventoryPublished && <Button disabled={submitting || (lineInventory && !inventoryReviewConfirmed) || Boolean(handoverTarget.inventoryFinalDeadlineAt && Date.parse(handoverTarget.inventoryFinalDeadlineAt) <= now)} onClick={() => void continueInventoryResolution()}>{submitting ? "Đang kiểm tra sức chứa…" : "Tiếp tục xử lý sai lệch"}</Button>}
-                  {inventoryStage === 3 && inventoryPublished && <Button onClick={() => setInventoryStage(4)}>Theo dõi xử lý sai lệch</Button>}
+                  {inventoryStage === 3 && !inventoryPublished && <Button disabled={submitting || (lineInventory && !inventoryReviewConfirmed) || Boolean(handoverTarget.inventoryFinalDeadlineAt && Date.parse(handoverTarget.inventoryFinalDeadlineAt) <= now)} onClick={() => void continueInventoryResolution()}>{submitting ? "Đang kiểm tra sức chứa…" : "Tiếp tục đến kết quả tiếp nhận"}</Button>}
+                  {inventoryStage === 3 && inventoryPublished && <Button onClick={() => setInventoryStage(4)}>Xem kết quả tiếp nhận</Button>}
                 </div>
               ) : isReviewingCompletedStep ? (
                 <div className="flex flex-wrap items-center justify-end gap-3">

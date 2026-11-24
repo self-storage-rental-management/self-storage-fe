@@ -13,6 +13,7 @@ export interface OverdueSettlement {
   requiresReconciliation: boolean
 }
 export interface ReturnSettlementReceiptView {
+  receiptCode?: string | null
   direction: 'COLLECTION' | 'REFUND' | 'OFFSET'
   amount: number
   paymentMethod: string
@@ -74,6 +75,7 @@ export interface ApiReturn {
   returnedKey?: boolean
   returnedCard?: boolean
   returnedLock?: boolean
+  lockInspectionResult?: LockInspectionResult | null
   inventoryMatch?: 'match' | 'missing' | 'excess' | null
   damageClassification?: 'no_damage' | 'minor_damage' | 'major_damage' | 'abandoned_goods' | null
   status: typeof returnStatuses[number]; scheduledDate: string
@@ -285,6 +287,8 @@ export function sanitizeFees(f: Partial<ReturnFees>): ReturnFees {
     outstandingFee: Number.isFinite(f.outstandingFee) && (f.outstandingFee ?? 0) >= 0 ? (f.outstandingFee ?? 0) : 0,
   }
 }
+export type LockInspectionResult = 'RETURNED_USABLE' | 'MISSING_OR_INCOMPLETE' | 'DAMAGED' | 'UNVERIFIED'
+
 export interface InspectionInput extends ReturnFees {
   unitVacated?: boolean
   customerPresent?: boolean
@@ -292,6 +296,7 @@ export interface InspectionInput extends ReturnFees {
   recoveryWitnessStaffId?: string
   inventoryMatch: 'match' | 'missing' | 'excess'; damageClassification: 'no_damage' | 'minor_damage' | 'major_damage' | 'abandoned_goods'
   staffNotes: string; evidencePhotos: string[]; returnedKey: boolean; returnedCard: boolean; returnedLock: boolean
+  lockInspectionResult?: LockInspectionResult
   proposedUnitStatus: 'available' | 'maintenance'
   damageItems?: DamageItemInput[]
 }
@@ -380,7 +385,7 @@ function readReturnEvidenceAsset(payload: unknown): ReturnEvidenceAsset {
   if (!object(payload) || !object(payload.data) || !isUuid(payload.data.id) ||
     typeof payload.data.originalName !== 'string' || typeof payload.data.contentType !== 'string' ||
     typeof payload.data.sizeBytes !== 'number') {
-    throw new ApiClientError('Backend trả về bằng chứng trả kho không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+    throw new ApiClientError('Chưa tải được thông tin. Vui lòng thử lại.', { code: 'INVALID_API_RESPONSE' })
   }
   return {
     id: payload.data.id,

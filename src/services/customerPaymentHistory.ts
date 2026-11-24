@@ -54,6 +54,7 @@ export interface HistoryEntry {
     overdueFee: number | null
     outstandingFee: number | null
     overdueSettlement: OverdueSettlement | null
+    receiptCode?: string | null
     receiptFileId: string | null
   }
 }
@@ -158,6 +159,7 @@ interface ReturnPayment {
   outstandingFee?: number | null
   overdueSettlement?: OverdueSettlement | null
   settlementReceipt?: {
+    receiptCode?: string | null
     direction: "COLLECTION" | "REFUND" | "OFFSET"
     amount: number
     paymentMethod: "CASH" | "BANK_TRANSFER" | "DEPOSIT_OFFSET"
@@ -352,6 +354,7 @@ export async function loadCustomerPaymentHistory(): Promise<{
               outstandingFee: r.outstandingFee ?? null,
               overdueSettlement: r.overdueSettlement ?? null,
               receiptFileId: receipt?.receiptFileId ?? null,
+              receiptCode: receipt?.receiptCode ?? null,
             },
           }]
         })

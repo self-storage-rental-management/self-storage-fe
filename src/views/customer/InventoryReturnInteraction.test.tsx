@@ -7,6 +7,7 @@ const state = vi.hoisted(() => ({ index: 0, resolve: vi.fn(), detail: { reservat
 vi.mock('react', async original => ({
   ...await original<typeof import('react')>(),
   useEffect: () => {},
+  useLayoutEffect: () => {},
   useRef: (value: unknown) => ({ current: value }),
   useState: (value: unknown) => [++state.index === 2 ? state.detail : typeof value === 'function' ? value() : value, () => {}],
 }))

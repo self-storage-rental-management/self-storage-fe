@@ -141,7 +141,7 @@ export default function CustomerWarehouseSuggestion({
       : currentCheck.issues[0] || `Khối lượng hàng vượt giới hạn của ${currentName}.`
     const compartmentDisplay = currentUsedCompartments == null
       ? currentTotalCompartments == null ? 'Không xếp đủ' : `Không xếp đủ / ${n(currentTotalCompartments)}`
-      : currentTotalCompartments == null ? `${n(currentUsedCompartments)} / —` : `${n(currentUsedCompartments)} / ${n(currentTotalCompartments)}`
+      : currentTotalCompartments == null ? `${n(currentUsedCompartments)} / -` : `${n(currentUsedCompartments)} / ${n(currentTotalCompartments)}`
     const showPalletSlotProgress = !currentCheck.palletPlan
       && requiredPallets != null
       && availablePalletSlots != null

@@ -130,7 +130,7 @@ export function OperationEventCard({
         </div>
         <dl className="grid gap-3 sm:grid-cols-2">
           <div className="min-w-0"><dt className="text-xs text-stone-500">Nội dung thu</dt><dd className="mt-1 font-medium text-stone-800">Thanh toán gia hạn theo bảng kê</dd></div>
-          <div className="min-w-0"><dt className="text-xs text-stone-500">Mã biên lai</dt><dd className="mt-1 break-words font-medium text-stone-800 [overflow-wrap:anywhere]">{field("transactionReference") || field("reference") || "Chưa ghi nhận"}</dd></div>
+          <div className="min-w-0"><dt className="text-xs text-stone-500">Mã biên lai</dt><dd className="mt-1 break-words font-medium text-stone-800 [overflow-wrap:anywhere]">{field("receiptCode") || field("transactionReference") || field("reference") || "Chưa ghi nhận"}</dd></div>
         </dl>
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-100 pt-3">
           <span className="text-xs font-medium text-stone-500">Chứng từ đính kèm</span>

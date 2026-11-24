@@ -279,7 +279,7 @@ export default function BusinessDashboardPanel({
         id: fac.id,
         code: fac.code || fac.id,
         name: fac.name,
-        city: fac.city || "—",
+        city: fac.city || "-",
         address: fac.address,
         totalUnits,
         occupiedUnits,
@@ -298,7 +298,7 @@ export default function BusinessDashboardPanel({
       const exportedData = chartMonthlyData.map((d) => ({
         month: d.month,
         revenue: d.revenue,
-        growth: "—",
+        growth: "-",
         growthNumber: 0,
         contracts: d.transactions,
         occupancyRate: `${metrics.occupancyRate}%`,

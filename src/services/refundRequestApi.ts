@@ -57,8 +57,8 @@ export async function listRefundRequests(status?: RefundRequestStatus): Promise<
   const suffix = status ? `?status=${encodeURIComponent(status)}` : ''
   const response = await apiRequest<unknown>(`/api/business/refund-requests${suffix}`)
   const rawList = extractRefundList(response)
-  if (!rawList) throw new ApiClientError('Backend trả về danh sách refund request không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
-  if (!rawList.every(valid)) throw new ApiClientError('Backend trả về refund request không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+  if (!rawList) throw new ApiClientError('Chưa tải được thông tin. Vui lòng thử lại.', { code: 'INVALID_API_RESPONSE' })
+  if (!rawList.every(valid)) throw new ApiClientError('Chưa tải được thông tin. Vui lòng thử lại.', { code: 'INVALID_API_RESPONSE' })
   return rawList
 }
 

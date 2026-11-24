@@ -74,8 +74,8 @@ function WorkflowMetrics() {
                 <td className="p-3 text-right tabular-nums">{row.pending}</td>
                 <td className={`p-3 text-right tabular-nums ${row.overdue ? 'font-medium text-red-800' : ''}`}>{row.overdue}</td>
                 <td className="p-3 text-right tabular-nums">{row.closed}</td>
-                <td className="p-3 text-right tabular-nums">{row.closed ? percent.format(row.onTime / row.closed) : '—'}</td>
-                <td className="whitespace-nowrap p-3 text-right tabular-nums">{row.averageSeconds == null ? '—' : `${duration.format(row.averageSeconds / 3600)} giờ`}</td>
+                <td className="p-3 text-right tabular-nums">{row.closed ? percent.format(row.onTime / row.closed) : '-'}</td>
+                <td className="whitespace-nowrap p-3 text-right tabular-nums">{row.averageSeconds == null ? '-' : `${duration.format(row.averageSeconds / 3600)} giờ`}</td>
               </tr>
             ))}
           </tbody>

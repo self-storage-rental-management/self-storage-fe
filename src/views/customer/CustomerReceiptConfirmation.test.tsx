@@ -8,6 +8,7 @@ const state = vi.hoisted(() => ({ confirm: vi.fn(), messages: [] as unknown[] })
 vi.mock('react', async original => ({
   ...await original<typeof import('react')>(),
   useEffect: () => {},
+  useLayoutEffect: () => {},
   useRef: (value: unknown) => ({ current: value }),
   useState: (value: unknown) => [typeof value === 'function' ? value() : value, (next: unknown) => state.messages.push(next)],
 }))

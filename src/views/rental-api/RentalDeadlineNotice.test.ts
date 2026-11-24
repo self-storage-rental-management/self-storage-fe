@@ -51,12 +51,12 @@ describe('rental deadline notices', () => {
   })
 
   describe('getRentalRenewalEligibility', () => {
-    it('disables renewal button when contract has more than 7 days left', () => {
+    it('enables renewal button when contract has more than 7 days left', () => {
       // Contract ends in 10 days (2026-10-24, now is 2026-10-14)
       const res = getRentalRenewalEligibility({ id: 'r1', status: 'active', contractEndDate: '2026-10-24' }, [], now)
-      expect(res.canRenew).toBe(false)
+      expect(res.canRenew).toBe(true)
       expect(res.remainingDays).toBe(10)
-      expect(res.reason).toBe('Chỉ có thể gia hạn khi hợp đồng còn 7 ngày trước ngày hết hạn.')
+      expect(res.reason).toBeUndefined()
     })
 
     it('enables renewal button when contract has 7 days or less remaining', () => {

@@ -110,7 +110,7 @@ export function CustomerNoCompatibleWarehouse({ check, goodsItems = [], maxSuppo
               return <tr key={row.label} className="border-b border-stone-100">
                 <th className="py-2 font-medium">{row.label}</th>
                 <td className={`px-2 py-2 text-right ${fits ? 'text-stone-700' : 'font-semibold text-red-600'}`}>{n(row.value)} cm</td>
-                <td className="py-2 pl-2 text-right">{row.limit == null ? '—' : `${n(row.limit)} cm`} <span className={fits ? 'text-emerald-600' : 'text-red-600'}>{fits ? '✓' : '×'}</span></td>
+                <td className="py-2 pl-2 text-right">{row.limit == null ? '-' : `${n(row.limit)} cm`} <span className={fits ? 'text-emerald-600' : 'text-red-600'}>{fits ? '✓' : '×'}</span></td>
               </tr>
             })}</tbody>
           </table>

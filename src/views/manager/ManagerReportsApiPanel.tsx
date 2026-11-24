@@ -231,7 +231,7 @@ function ManagerReportsSession({ actor, facilityId, overview }: { actor: ApiActo
             </Td>
             <Td><p className="text-sm text-stone-800">{entityLabels[row.entityType.toLowerCase()] || 'Thông tin cơ sở'}</p><p className="mt-1 break-all text-xs text-stone-500" title={row.entityId}>{row.entityId || 'Chưa có mã'}</p></Td>
             <Td><p className="break-words text-sm font-medium text-stone-800">{actorLabel(row.actorName)}</p><p className="mt-1 break-all text-xs text-stone-400">{actorLabel(row.actorRole)}</p></Td>
-            <Td><p className="line-clamp-2 break-words text-xs leading-relaxed text-stone-600">{row.notes ? managerDisplayExplanation(row.notes) : '—'}</p></Td>
+            <Td><p className="line-clamp-2 break-words text-xs leading-relaxed text-stone-600">{row.notes ? managerDisplayExplanation(row.notes) : '-'}</p></Td>
             <Td className="text-right"><Button size="sm" variant="outline" onClick={() => setSelectedActivity(row)} aria-label={`Chi tiết: ${activityTitle(row)}`}>Xem</Button></Td>
           </Tr>)}{!activities.data.length && <tr><td colSpan={6} className="p-10 text-center text-sm text-stone-500">Không có hoạt động phù hợp.</td></tr>}</Tbody>
         </Table>

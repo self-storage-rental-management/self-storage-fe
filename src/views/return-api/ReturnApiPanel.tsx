@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Modal } from '../../components/ui'
 import { FilePreviewList } from '../staff/StaffFileUpload'
 import VietnameseDateInput from '../../components/VietnameseDateInput'
+import LockInspectionSelect, { lockInspectionLabels } from '../../components/LockInspectionSelect'
 import { getAuthenticatedActor } from '../../services/authApi'
 import { useRentalApiResource } from '../../hooks/useRentalApiResource'
 import { rentalDate, rentalMoney } from '../rental-api/presentation'
@@ -26,6 +27,7 @@ import {
   type ApiReturn,
   type DamageItemInput,
   type InspectionInput,
+  type LockInspectionResult,
   type ReturnFees,
   type ReturnRole,
 } from '../../services/returnApi'
@@ -1073,9 +1075,10 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       damageClassification: goodsLeft ? 'abandoned_goods' : damage,
       staffNotes: note,
       evidencePhotos,
-      returnedKey: false,
+      returnedKey: returnedLock,
       returnedCard: false,
       returnedLock,
+      lockInspectionResult: returnedLock ? 'RETURNED_USABLE' : 'MISSING_OR_INCOMPLETE',
       proposedUnitStatus: unit,
       unitVacated,
     })
@@ -1176,7 +1179,6 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                           <h4 className="text-sm font-bold text-stone-900">
                             1. Thu hồi khóa &amp; Kiểm tra hàng hóa
                           </h4>
-                          <span className="text-[11px] font-medium text-stone-500">Chạm để đổi trạng thái</span>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div className="p-3.5 rounded-xl border border-stone-200 bg-stone-50/40 text-left transition select-none flex flex-col justify-between">
@@ -1671,7 +1673,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       )}
       {!recovery && record.status === 'completed' && record.settlementReceipt?.direction === 'COLLECTION' &&
         record.settlementReceipt.paymentMethod === 'CASH' && (
-          <p className="break-all text-sm text-stone-700">Mã biên lai <b>{record.settlementReceipt.transactionReference}</b></p>
+          <p className="break-all text-sm text-stone-700">Mã biên lai <b>{record.settlementReceipt.receiptCode || record.settlementReceipt.transactionReference}</b></p>
       )}
       {recovery && (role === 'staff' || role === 'manager') && record.recoveryTaskId && <RecoveryTaskLink role={role} taskId={record.recoveryTaskId} facilityId={record.facilityId} disabled={busy || recoveryLocked} onChanged={onRecoveryChanged} />}
       {write && recovery && role === 'staff' && ['payment_due', 'refund_pending'].includes(record.status) && <RecoveryReturnSettlement role={role} record={record} busy={busy} onLocked={onRecoveryLocked} onChanged={onRecoveryChanged} />}
