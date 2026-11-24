@@ -904,22 +904,6 @@ export async function markCustomerPreparationComplete(reservationId: string, not
   return checkedReservationDetail(response.data)
 }
 
-export async function resolveCustomerInventory(
-  reservationId: string,
-  decision: 'ACCEPT_FULL' | 'ACCEPT_PARTIAL' | 'CANCEL_AND_RETURN',
-  note?: string,
-  scheduledDate?: string,
-) {
-  const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
-    `/api/customer/reservations/${encodeURIComponent(reservationId)}/inventory-resolution`,
-    {
-      method: 'POST',
-      body: JSON.stringify({ decision, note: note?.trim() || null, scheduledDate: scheduledDate || null }),
-    },
-  )
-  return checkedReservationDetail(response.data)
-}
-
 export async function setCustomerCheckInAppointment(reservationId: string, appointmentAt: string) {
   const response = await apiRequest<ApiEnvelope<CustomerReservation>>(
     `/api/customer/reservations/${reservationId}/check-in-appointment`,
