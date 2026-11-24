@@ -13,7 +13,6 @@ import { useBackendNotifications } from '../../hooks/useBackendNotifications'
 import { userFacingError } from '../../presentation/userFacingError'
 import { useState, useEffect, useRef, useMemo, type ChangeEvent } from 'react'
 import { useStableJsonValue } from '../../hooks/useStableJsonValue'
-import InventoryMismatchReturnNotice from '../../components/InventoryMismatchReturnNotice'
 import Layout, { getInitialPage, Icon, type LayoutNotification, type NavItem } from '../../components/Layout'
 import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Input, Select, Tabs, Avatar } from '../../components/ui'
 import { formatVnd, formatVndAmount } from '../../i18n/currency'
@@ -3810,7 +3809,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             </>}
 
             {bookingStep === 4 && <div className="space-y-3 rounded-xl border border-stone-200 bg-stone-50 p-4">
-              <InventoryMismatchReturnNotice />
               <div>
 
                 <p className="mt-1 text-xs leading-5 text-stone-600">
