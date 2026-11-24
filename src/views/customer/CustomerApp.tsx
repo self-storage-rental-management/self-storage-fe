@@ -2133,7 +2133,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         setServerQuote(quote)
         quotedGoodsItems.current = structuredClone(apiGoodsItems)
         setArrivalTermsAccepted(false)
-    setTermsAccepted(false)
+        setAcceptedSetupQuoteId(null)
+        setTermsAccepted(false)
         setBookingReview(true)
         setBookingStep(3)
         return
@@ -3817,19 +3818,22 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 months={rentalMonths} setupDays={previewSetupDays} date={moveInDate} time={bookingAppointmentTime}
                 minDate={earliestCheckInDate} maxDate={latestCheckInDate} earliestTime={earliestCheckInTime}
                 startDate={previewRentalPeriod?.startDate} endDate={previewRentalPeriod?.endDate} quote={serverQuote} needsReview={hasOtherGoods}
-                accepted={arrivalTermsAccepted} onAccepted={setArrivalTermsAccepted}
-                onDate={value => { setMoveInDate(value); setArrivalTermsAccepted(false); setSchedulePolicyMessage(null) }}
-                onTime={value => { setBookingAppointmentTime(value); setArrivalTermsAccepted(false); setSchedulePolicyMessage(null) }}
+                accepted={arrivalTermsAccepted && (!serverQuote?.setupEarlyExitPolicyVersion || serverQuote.setupEarlyExitFee == null || acceptedSetupQuoteId === serverQuote.quoteId)}
+                onAccepted={value => {
+                  setArrivalTermsAccepted(value)
+                  if (serverQuote?.setupEarlyExitPolicyVersion && serverQuote.setupEarlyExitFee != null) {
+                    setAcceptedSetupQuoteId(value ? serverQuote.quoteId : null)
+                  } else if (!value) {
+                    setAcceptedSetupQuoteId(null)
+                  }
+                }}
+                onDate={value => { setMoveInDate(value); setArrivalTermsAccepted(false); setAcceptedSetupQuoteId(null); setSchedulePolicyMessage(null) }}
+                onTime={value => { setBookingAppointmentTime(value); setArrivalTermsAccepted(false); setAcceptedSetupQuoteId(null); setSchedulePolicyMessage(null) }}
                 isAllowed={(date, time) => isCheckInAppointmentAllowed(new Date(`${date}T${time}:00+07:00`), checkInWindow)} />
               {bookingErrors.moveInDate && <p role="alert" className="text-xs text-red-700">{bookingErrors.moveInDate}</p>}
               {bookingErrors.appointmentTime && <p role="alert" className="text-xs text-red-700">{bookingErrors.appointmentTime}</p>}
-              {isApiAuthenticated() && serverQuote && <div className="space-y-2 text-xs leading-5 text-stone-600">
-                {serverQuote.setupEarlyExitPolicyVersion && serverQuote.setupEarlyExitFee != null ? <>
-                  <label className="flex items-start gap-2 text-stone-700">
-                    <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-amber-600" checked={acceptedSetupQuoteId === serverQuote.quoteId} disabled={reservationSubmitting} onChange={event => setAcceptedSetupQuoteId(event.target.checked ? serverQuote.quoteId : null)} />
-                    <span>Tôi đã đọc và đồng ý điều khoản trả kho trong thời gian chuẩn bị của báo giá này.</span>
-                  </label>
-                </> : <p role="status">Báo giá chưa có điều khoản trả kho trong thời gian chuẩn bị. Vui lòng quay lại lấy báo giá mới hoặc liên hệ cơ sở.</p>}
+              {isApiAuthenticated() && serverQuote && (!serverQuote.setupEarlyExitPolicyVersion || serverQuote.setupEarlyExitFee == null) && <div className="space-y-2 text-xs leading-5 text-stone-600">
+                <p role="status">Báo giá chưa có điều khoản trả kho trong thời gian chuẩn bị. Vui lòng quay lại lấy báo giá mới hoặc liên hệ cơ sở.</p>
               </div>}
             </div>}
 
