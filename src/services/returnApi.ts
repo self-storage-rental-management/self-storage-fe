@@ -57,6 +57,9 @@ export function isOverdueSettlement(value: unknown): value is OverdueSettlement 
       && amount(v.overdueDays) && typeof v.calculatedAt === 'string' && Number.isFinite(Date.parse(v.calculatedAt)))
 }
 export interface ApiReturn {
+  missingPalletCount?: number
+  palletLossFee?: number
+  equipment?: { rackCount: number; frameCount: number; palletCount: number | null; palletUnitPrice: number }
   setupExitRequested?: boolean
   setupEarlyExit?: boolean
   setupReturnedAt?: string | null
@@ -290,6 +293,7 @@ export function sanitizeFees(f: Partial<ReturnFees>): ReturnFees {
 export type LockInspectionResult = 'RETURNED_USABLE' | 'MISSING_OR_INCOMPLETE' | 'DAMAGED' | 'UNVERIFIED'
 
 export interface InspectionInput extends ReturnFees {
+  missingPalletCount?: number
   unitVacated?: boolean
   customerPresent?: boolean
   recoveryHandoverLocation?: string
