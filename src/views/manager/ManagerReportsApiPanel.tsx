@@ -1,12 +1,13 @@
 import { useState, type FormEvent } from 'react'
 import './managerInventoryList.css'
-import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { ApiClientError } from '../../services/apiClient'
 import { getAuthenticatedActor, type ApiActor } from '../../services/authApi'
 import { useRentalApiResource } from '../../hooks/useRentalApiResource'
 import { getManagerReportSummary, listManagerReportActivities, type ManagerReportActivity } from '../../services/managerReportingApi'
 import { formatVndAmount } from '../../i18n/currency'
 import { exportManagerFacilityExcel } from '../../utils/excelExport'
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import { Badge, Button, Card, Input, Modal, SectionHeader, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import ManagerPagination from './ManagerPagination'
 import ManagerCashflowPanel from './ManagerCashflowPanel'
@@ -129,6 +130,19 @@ function ManagerReportsSession({ actor, facilityId, overview }: { actor: ApiActo
   const summary = !summaryRead.loading && !summaryRead.error ? summaryRead.data : undefined
   const activities = !activityRead.loading && !activityRead.error ? activityRead.data : undefined
 
+  const chartMonthlyData = summary?.monthlyRevenue && summary.monthlyRevenue.length > 0
+    ? summary.monthlyRevenue.map((m) => {
+        const [year, month] = m.month.split('-')
+        const label = month ? `Th${month}/${year.slice(2)}` : m.month
+        return {
+          month: label,
+          fullMonth: m.month,
+          revenue: Number(m.revenue),
+          transactions: m.transactionsCount,
+        }
+      })
+    : []
+
   function submitSearch(event: FormEvent) {
     event.preventDefault()
     setPage(1)
@@ -180,15 +194,93 @@ function ManagerReportsSession({ actor, facilityId, overview }: { actor: ApiActo
       />
     )}
     {summaryRead.loading ? <Card className="p-5" role="status">Đang tải báo cáo cơ sở...</Card> : summaryRead.error ? <Card className="flex flex-wrap items-center justify-between gap-3 p-5" role="alert"><p>{managerDisplayError(summaryRead.error)}</p><Button variant="outline" onClick={summaryRead.refresh}>Thử lại</Button></Card> : summary ? <>
-      <div className="grid min-w-0 grid-cols-2 gap-3 xl:grid-cols-3 2xl:grid-cols-6">
-        <ReportMetric title="Tỷ lệ lấp đầy" value={`${summary.occupancyRate}%`} detail="Tỷ lệ gian kho đang được sử dụng" />
+      <div className="grid min-w-0 grid-cols-2 gap-3 xl:grid-cols-3 2xl:grid-cols-5">
         <ReportMetric title="Tiền thuê dự kiến/tháng" value={formatVndAmount(summary.monthlyRecurringRevenue)} detail="Theo các hợp đồng đang hiệu lực" />
-        <ReportMetric title="Gian kho đang thuê" value={summary.occupiedUnits} detail="Số gian kho đang được sử dụng" />
+        <ReportMetric
+          title="Tiền đã thu"
+          value={summary.collectedRevenue === null ? 'Chưa xác minh' : formatVndAmount(summary.collectedRevenue)}
+          detail={
+            summary.totalRefunds && summary.totalRefunds > 0
+              ? `Đã trừ ${formatVndAmount(summary.totalRefunds)} hoàn tiền`
+              : 'Chỉ tính khoản thu đã được đối soát'
+          }
+        />
         <ReportMetric title="Hợp đồng quá hạn" value={summary.overdueRentalsCount} detail="Hồ sơ đã qua ngày hết hạn thuê" />
         <ReportMetric title="Nhận kho trong tháng" value={summary.monthCheckinsCount} detail="Số lượt nhận kho trong tháng này" />
         <ReportMetric title="Yêu cầu trả kho" value={summary.openReturnsCount} detail="Các yêu cầu đang chờ hoàn tất" />
       </div>
       <ManagerCashflowPanel key={facilityId} facilityId={facilityId} identity={identity} onReport={setFinancialReport} />
+
+      <Card className="p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-base font-bold text-stone-900">Biến động doanh thu thực thu theo tháng</h3>
+            <p className="mt-0.5 text-xs text-stone-500">
+              Doanh thu thực thu (đã khấu trừ tiền hoàn) trong 6 tháng gần nhất tại cơ sở
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-4 text-xs">
+            <div className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+              <span className="text-stone-600">
+                Tổng thực thu:{' '}
+                <b className="font-semibold text-stone-900">
+                  {summary.collectedRevenue === null ? 'Chưa xác minh' : formatVndAmount(summary.collectedRevenue)}
+                </b>
+              </span>
+            </div>
+            {summary.totalRefunds && summary.totalRefunds > 0 ? (
+              <div className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
+                <span className="text-stone-600">
+                  Đã hoàn tiền:{' '}
+                  <b className="font-semibold text-rose-600">{formatVndAmount(summary.totalRefunds)}</b>
+                </span>
+              </div>
+            ) : null}
+          </div>
+        </div>
+        {chartMonthlyData.length > 0 ? (
+          <ResponsiveContainer width="100%" height={260}>
+            <AreaChart data={chartMonthlyData} margin={{ top: 10, right: 15, left: 10, bottom: 0 }}>
+              <defs>
+                <linearGradient id="managerRevGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.35} />
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis dataKey="month" tickLine={false} axisLine={{ stroke: '#e2e8f0' }} tick={{ fontSize: 11, fill: '#64748b' }} />
+              <YAxis
+                tickLine={false}
+                axisLine={false}
+                tick={{ fontSize: 11, fill: '#64748b' }}
+                tickFormatter={(val) => {
+                  if (val >= 1000000) return `${Math.round(val / 1000000)}tr`
+                  if (val >= 1000) return `${Math.round(val / 1000)}k`
+                  return String(val)
+                }}
+              />
+              <Tooltip
+                formatter={(value) => [`${formatVndAmount(Number(value))}`, 'Doanh thu thực thu']}
+                labelFormatter={(label) => `Thời gian: ${label}`}
+                contentStyle={{
+                  backgroundColor: '#ffffff',
+                  borderRadius: '0.75rem',
+                  border: '1px solid #e2e8f0',
+                  boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                  fontSize: '12px',
+                }}
+              />
+              <Area type="monotone" dataKey="revenue" stroke="#059669" strokeWidth={2.5} fillOpacity={1} fill="url(#managerRevGrad)" />
+            </AreaChart>
+          </ResponsiveContainer>
+        ) : (
+          <p className="flex h-[240px] items-center justify-center text-sm text-stone-500">
+            Chưa có dữ liệu biến động doanh thu.
+          </p>
+        )}
+      </Card>
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="p-5">
           <h3 className="mb-4 font-bold">Phân bổ trạng thái gian kho</h3>
@@ -229,7 +321,7 @@ function ManagerReportsSession({ actor, facilityId, overview }: { actor: ApiActo
             <Td>
               <Badge variant={activityVariant(row.action)}>{activityTitle(row)}</Badge>
             </Td>
-            <Td><p className="text-sm text-stone-800">{entityLabels[row.entityType.toLowerCase()] || 'Thông tin cơ sở'}</p><p className="mt-1 break-all text-xs text-stone-500" title={row.entityId}>{row.entityId || 'Chưa có mã'}</p></Td>
+            <Td><p className="text-sm text-stone-800">{entityLabels[row.entityType.toLowerCase()] || 'Thông tin cơ sở'}</p><p className="mt-1 break-all text-xs text-stone-500" title={recordDisplayCode(row.entityId)}>{recordDisplayCode(row.entityId)}</p></Td>
             <Td><p className="break-words text-sm font-medium text-stone-800">{actorLabel(row.actorName)}</p><p className="mt-1 break-all text-xs text-stone-400">{actorLabel(row.actorRole)}</p></Td>
             <Td><p className="line-clamp-2 break-words text-xs leading-relaxed text-stone-600">{row.notes ? managerDisplayExplanation(row.notes) : '-'}</p></Td>
             <Td className="text-right"><Button size="sm" variant="outline" onClick={() => setSelectedActivity(row)} aria-label={`Chi tiết: ${activityTitle(row)}`}>Xem</Button></Td>

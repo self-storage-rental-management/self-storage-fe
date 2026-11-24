@@ -1,3 +1,4 @@
+import type { InventoryDecision } from './inventoryDecision'
 import { apiDownload, apiRequest } from './apiClient'
 import type { ApiInvoiceStatus, ApiPaymentStatus, ApiReservationStatus } from '../types/statusContracts'
 import { checkedPayment, checkedReservation, checkedReservationDetail, checkedReservationState, checkedStatusPage } from './statusContractValidation'
@@ -541,11 +542,17 @@ export interface CustomerReservationDetail {
   inventoryRemainderDeadlineAt?: string | null
   inventoryRemovalPublishedAt?: string | null
   inventoryRemovalDeadlineAt?: string | null
+  inventoryReturnWindowDays?: number | null
+  inventoryReturnExtensionDays?: number | null
+  inventoryReturnExtensionCount?: number | null
+  inventoryReturnCanExtend?: boolean | null
+  inventoryReturnPolicyVersion?: string | null
   inventoryEscalatedAt?: string | null
   setupCompletedAt?: string | null
   inventoryAppointmentAt?: string | null
   inventoryArrivedAt?: string | null
   inventoryIdentityVerifiedAt?: string | null
+  inventoryDecision?: InventoryDecision | null
   inventoryResolutionStatus?: InventoryResolutionStatus | null
   inventoryFullFit?: boolean
   inventoryPartialFitAvailable?: boolean
@@ -882,7 +889,7 @@ export async function setCustomerInventoryAppointment(reservationId: string, app
 
 export async function resolveCustomerInventory(
   reservationId: string,
-  decision: 'ACCEPT_FULL' | 'ACCEPT_PARTIAL' | 'CANCEL_AND_RETURN',
+  decision: 'ACCEPT_FULL' | 'CANCEL_AND_RETURN',
   note?: string,
   scheduledDate?: string,
 ) {
@@ -892,6 +899,14 @@ export async function resolveCustomerInventory(
       method: 'POST',
       body: JSON.stringify({ decision, note: note?.trim() || null, scheduledDate: scheduledDate || null }),
     },
+  )
+  return checkedReservationDetail(response.data)
+}
+
+export async function extendCustomerInventoryReturnWindow(reservationId: string) {
+  const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
+    `/api/customer/reservations/${encodeURIComponent(reservationId)}/inventory-return-extension`,
+    { method: 'POST' },
   )
   return checkedReservationDetail(response.data)
 }

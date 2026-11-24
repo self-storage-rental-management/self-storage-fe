@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { PaymentHistoryDossier, paymentHistoryTimestamp, visibleCustomerPaymentWarnings } from './CustomerPaymentHistory'
+import {
+  historyTransactionCode,
+  PaymentHistoryDossier,
+  formatCompactPaymentCode,
+  paymentHistoryTimestamp,
+  paymentStatusBadgeClass,
+  visibleCustomerPaymentWarnings,
+} from './CustomerPaymentHistory'
 import { formatHistoryPaymentMethod, paymentMethodLabel } from './paymentLabels'
 import { renderToStaticMarkup } from 'react-dom/server'
 import ReservationReceipt from './ReservationReceipt'
@@ -13,6 +20,19 @@ const paid: ReservationPaymentResult = {
   paymentStatus: 'PAID', reservationStatus: 'CONFIRMED', responseCode: '00', transactionStatus: '00',
   gatewayPayDate: '20261011080000', message: '', processedAt: '2026-10-11T01:00:00Z', lastReconciledAt: null,
 }
+
+describe('mã giao dịch trong lịch sử', () => {
+  const entry: HistoryEntry = {
+    id: 'payment-id', reference: 'RSV-TEST', category: 'checkin', amount: 600000,
+    currency: 'VND', timestamp: null, status: 'PAID', method: 'Tiền mặt',
+    reservationPayment: { ...paid, transactionReference: 'MANUAL-RENTAL-123456789', receiptCode: 'PT-2026-123' },
+  }
+  it('ưu tiên mã phiếu thu và hiển thị đầy đủ mã tham chiếu của giao dịch cũ', () => {
+    expect(historyTransactionCode(entry)).toBe('PT-2026-123')
+    expect(historyTransactionCode({ ...entry, reservationPayment: { ...entry.reservationPayment!, receiptCode: null } })).toBe('MANUAL-RENTAL-123456789')
+    expect(historyTransactionCode({ ...entry, receiptCode: 'PT-RENEWAL-1' })).toBe('PT-RENEWAL-1')
+  })
+})
 
 describe('Số hóa đơn trên biên lai', () => {
   it.each([[null, 'Chưa cấp'], ['   ', 'Chưa cấp'], ['INV-OLD-123', 'INV-OLD-123']])(
@@ -135,3 +155,42 @@ describe('standardized payment method labels in payment history', () => {
     expect(paymentMethodLabel(null)).toBe('Chưa có thông tin')
   })
 })
+
+describe('formatCompactPaymentCode extracts clean short code without prefix truncation', () => {
+  it.each([
+    ['MANUAL-RENTAL-8805b328-0e44-43a9-aa77-52eb02f597f7', '8805b328'],
+    ['MANUAL-3E258170', '3E258170'],
+    ['SIMULATED-5fc1ddbc', '5fc1ddbc'],
+    ['5fc1ddbc-e822-4a0f-903d-9ecd27c43d73', '5fc1ddbc'],
+    ['88796', '88796'],
+    ['TM-3E258170E2F049DB9A0B7CC1863395B9', '3E258170'],
+    ['PAY-RNW-BAL-abcd1234', 'abcd1234'],
+    ['RET-BAL-99887766', '99887766'],
+    [null, '—'],
+    [undefined, '—'],
+    ['', '—'],
+  ])('formats %s to %s', (input, expected) => {
+    expect(formatCompactPaymentCode(input)).toBe(expected)
+  })
+})
+
+describe('paymentStatusBadgeClass provides unified status badge colors', () => {
+  it.each([
+    ['SUCCEEDED', 'Thanh toán thành công', 'bg-emerald-700 text-white'],
+    ['PAID', 'Thanh toán thành công', 'bg-emerald-700 text-white'],
+    ['REFUNDED', 'Đã hoàn', 'bg-emerald-700 text-white'],
+    ['SETTLED', 'Đã đối trừ', 'bg-emerald-700 text-white'],
+    ['PARTIALLY_REFUNDED', 'Đã hoàn tiền một phần', 'bg-emerald-700 text-white'],
+    ['UNKNOWN', 'Thanh toán thành công', 'bg-emerald-700 text-white'],
+    ['FAILED', 'Thanh toán thất bại', 'bg-red-100 text-red-800'],
+    ['CANCELLED', 'Giao dịch đã hủy', 'bg-red-100 text-red-800'],
+    ['EXPIRED', 'Phiên thanh toán hết hạn', 'bg-red-100 text-red-800'],
+    ['PENDING', 'Chờ thanh toán', 'bg-amber-100 text-amber-900'],
+    ['PROCESSING', 'Đang xử lý', 'bg-amber-100 text-amber-900'],
+    ['RECONCILIATION_REQUIRED', 'Chờ đối soát', 'bg-amber-100 text-amber-900'],
+    ['UNKNOWN', 'Chưa ghi nhận tiền', 'bg-amber-100 text-amber-900'],
+  ])('maps status=%s, label=%s to %s', (status, label, expectedClass) => {
+    expect(paymentStatusBadgeClass(status, label)).toBe(expectedClass)
+  })
+})
+

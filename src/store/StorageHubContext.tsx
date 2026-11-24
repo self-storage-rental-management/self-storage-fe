@@ -3167,8 +3167,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const contractEndDay = toValidDate(rental.endDate); contractEndDay.setHours(0, 0, 0, 0)
     const inspectionDay = new Date(now); inspectionDay.setHours(0, 0, 0, 0)
     const overdueDays = inspectionDay.getTime() > contractEndDay.getTime() ? Math.floor((inspectionDay.getTime() - contractEndDay.getTime()) / 86_400_000) : 0
-    const lateFeePerDay = Math.round(((rental.monthlyRate / 30) * 0.5) * 100) / 100
-    const calculatedOverdueFee = Math.round(overdueDays * lateFeePerDay * 100) / 100
+    const lateFeePerDay = Math.round((rental.monthlyRate / 30) * 1.5)
+    const calculatedOverdueFee = Math.round(overdueDays * lateFeePerDay)
 
     // VẤN ĐỀ 2: Nếu lỗi phát sinh do cơ sở (thấm dột trần/vách, máy lạnh hỏng), khách hàng được miễn trừ phí hư hỏng/vệ sinh
     const isFacilityFault = params.moistureOrigin === 'facility_fault' || params.structuralInspection?.ceiling === 'leaking' || params.structuralInspection?.wall === 'damp_seepage'

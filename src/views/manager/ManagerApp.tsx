@@ -21,6 +21,7 @@ import ManagerReportsPanel from './ManagerReportsPanel'
 import ManagerStaffTasksPanel from './ManagerStaffTasksPanel'
 import ManagerApiStaffTasksPanel from './ManagerApiStaffTasksPanel'
 import ManagerPaymentComplaintsPanel from './ManagerPaymentComplaintsPanel'
+import ManagerComplaintsWorkspace from './ManagerComplaintsWorkspace'
 import ManagerReturnsPanel from './ManagerReturnsPanel'
 import SupportApiWorkspace from '../support-api/SupportApiWorkspace'
 import { canApiActor, getAuthenticatedActor, isApiAuthenticated } from '../../services/authApi'
@@ -28,21 +29,38 @@ import { isFacilityTaskOverdue, isManagerFacilityVisible } from '../../domain/ma
 import { managerStatusLabel } from './managerI18n'
 import { listNotifications, markNotificationRead, notifyBell, type ApiNotification } from '../../services/notificationApi'
 import { listManagerPaymentComplaints } from '../../services/managerPaymentComplaintApi'
+import { listReturns } from '../../services/returnApi'
 
 export default function ManagerApp({ user, onLogout }: { user: User; onLogout: () => void }) {
   const hub = useStorageHub()
   const [complaintCount, setComplaintCount] = useState<number>(0)
+  const [complaintInitialTab, setComplaintInitialTab] = useState<'payment' | 'returns'>('payment')
 
   const refreshComplaintCount = useCallback(async () => {
-    if (!isApiAuthenticated()) return
+    if (!isApiAuthenticated()) {
+      const mockDisputes = hub.returns.filter(
+        item => item.status === 'disputed' && isManagerFacilityVisible(user, item.facilityId, item.facilityName)
+      ).length
+      setComplaintCount(mockDisputes)
+      return
+    }
     try {
-      const res = await listManagerPaymentComplaints(0, 100)
-      const count = res.data?.filter(item => item.status === 'PENDING' || item.status === 'REVIEW_OVERDUE').length ?? 0
-      setComplaintCount(count)
+      const [res, returnsRes] = await Promise.allSettled([
+        listManagerPaymentComplaints(0, 100),
+        listReturns('manager', 0, 100)
+      ])
+      let total = 0
+      if (res.status === 'fulfilled') {
+        total += res.value.data?.filter(item => item.status === 'PENDING' || item.status === 'REVIEW_OVERDUE').length ?? 0
+      }
+      if (returnsRes.status === 'fulfilled') {
+        total += returnsRes.value.data?.filter(item => item.status === 'disputed').length ?? 0
+      }
+      setComplaintCount(total)
     } catch {
       // ignore
     }
-  }, [])
+  }, [hub.returns, user])
 
   useEffect(() => {
     void refreshComplaintCount()
@@ -65,7 +83,9 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     { id: 'returns', label: 'Trả kho & Quyết toán', icon: Icon.clipboard, group: 'Vận hành', permission: 'returns:read' as const },
     { id: 'payments', label: isApiAuthenticated() ? 'Lịch sử thanh toán' : 'Lịch sử thanh toán & Công nợ', icon: Icon.dollar, group: 'Tài chính', permission: isApiAuthenticated() ? 'payments:read' : 'payments:collect' },
     ...(isApiAuthenticated() ? [{ id: 'overdue-cases', label: 'Theo dõi quá hạn', icon: Icon.alert, group: 'Tài chính', permission: 'rentals:read' as const }] : []),
-    ...(isApiAuthenticated() ? [{ id: 'payment-complaints', label: 'Khiếu nại thanh toán', icon: Icon.alert, group: 'Tài chính', permission: 'payments:confirm' as const, badgeCount: complaintCount }] : []),
+    ...(isApiAuthenticated()
+      ? [{ id: 'complaints', label: 'Quản lý khiếu nại', icon: Icon.alert, group: 'Tài chính', permission: 'payments:confirm' as const, badgeCount: complaintCount }]
+      : [{ id: 'complaints', label: 'Quản lý khiếu nại', icon: Icon.alert, group: 'Tài chính', permission: 'payments:collect' as const, badgeCount: complaintCount }]),
     { id: 'staff-tasks', label: 'Nhân viên & Nhiệm vụ', icon: Icon.users, group: 'Điều phối', permission: 'staff_tasks:update' },
     ...(isApiAuthenticated() ? [{ id: 'support', label: 'Yêu cầu hỗ trợ', icon: Icon.support, group: 'Điều phối', permission: 'support:read' as const }] : []),
   ]
@@ -90,7 +110,8 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
       returns: 'Trả kho & Quyết toán',
       payments: 'Lịch sử thanh toán',
       'overdue-cases': 'Theo dõi quá hạn',
-      'payment-complaints': 'Khiếu nại thanh toán',
+      complaints: 'Quản lý khiếu nại',
+      'payment-complaints': 'Quản lý khiếu nại',
       'staff-tasks': 'Nhân viên & Nhiệm vụ',
       reports: 'Báo cáo cơ sở'
     }
@@ -138,7 +159,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     }))
   const returnDisputeNotifications: LayoutNotification[] = (isApiAuthenticated() ? [] : hub.returns)
     .filter(item => item.status === 'disputed' && isManagerFacilityVisible({ ...user, facilityId: managerFacilityId }, item.facilityId, item.facilityName))
-    .map(item => ({ id: `manager-return-dispute-${item.id}`, date: item.customerConfirmedAt || item.inspectedAt || item.requestedAt, title: "khách hàng yêu cầu xem xét lại quyết toán", message: `${item.customerName} · ${item.unitId} · ${item.customerDecisionNote || "Cần quản lý cơ sở xử lý"}`, page: 'returns', targetId: item.id }))
+    .map(item => ({ id: `manager-return-dispute-${item.id}`, date: item.customerConfirmedAt || item.inspectedAt || item.requestedAt, title: "khách hàng yêu cầu xem xét lại quyết toán", message: `${item.customerName} · ${item.unitId} · ${item.customerDecisionNote || "Cần quản lý cơ sở xử lý"}`, page: 'complaints', targetId: item.id }))
   const managerTaskNotifications: LayoutNotification[] = (isApiAuthenticated() ? [] : hub.staffTasks)
     .filter(task => isManagerFacilityVisible({ ...user, facilityId: managerFacilityId }, task.facilityId, task.facilityName))
     .flatMap(task => {
@@ -158,7 +179,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     }
     if (notification.type === 'RESERVATION') return 'unit-assignment'
     if (notification.type === 'RENEWAL') return 'rentals'
-    if (notification.type === 'PAYMENT' || notification.type === 'OVERDUE') return notification.type === 'OVERDUE' ? 'overdue-cases' : 'payment-complaints'
+    if (notification.type === 'PAYMENT' || notification.type === 'OVERDUE') return notification.type === 'OVERDUE' ? 'overdue-cases' : 'complaints'
     return 'dashboard'
   }
   const managerApiNotifications: LayoutNotification[] = backendNotifications.map(notification => ({
@@ -193,11 +214,29 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
       : <ManagerInventoryPanel user={user} units={hub.units} rentals={hub.rentals} reservations={hub.holds} checkins={hub.checkins} returns={hub.returns} activities={hub.activities} maintenanceTasks={hub.maintenanceTasks} unitTypes={hub.unitTypes} facilityId={managerFacilityId || ''} facilityName={facility?.name || user.facility || ''} createUnit={hub.createUnit} updateUnit={hub.updateUnit} deleteUnit={hub.deleteUnit} updateUnitStatus={hub.updateUnitStatus} onCreateMaintenanceWork={draft => { setStaffTaskDraft(draft); setPage('staff-tasks') }} onOpenRental={rentalId => { setInventoryRentalId(rentalId); setPage('rentals') }} onOpenMaintenance={(unitId, unitCode) => { setInventoryMaintenanceDraft({ unitId, unitCode }); setPage('staff-tasks') }} showToast={showToast} />)}
     {page === 'unit-assignment' && isApiAuthenticated() && <ManagerAssignmentWorkspace showToast={showToast} onOpenRental={rentalId => { setInventoryRentalId(rentalId); setPage('rentals') }} onOpenMaintenance={(unitId, unitCode) => { setInventoryMaintenanceDraft({ unitId, unitCode }); setPage('staff-tasks') }} />}
     {page === 'rentals' && (isApiAuthenticated() ? <ManagerRentalsApiPanel key={`${user.id}:${JSON.stringify(getAuthenticatedActor()?.facilityScopes)}`} initialRentalId={inventoryRentalId} /> : <ManagerRentalsPanel user={user} rentals={hub.rentals} renewals={hub.renewals} reservations={hub.holds} units={hub.units} unitTypes={hub.unitTypes} assignUnitToHold={hub.assignUnitToHold} showToast={showToast} />)}
-    {page === 'returns' && <ManagerReturnsPanel user={user} showToast={showToast} sb={statusBadge} onCreateMaintenanceWork={draft => { setStaffTaskDraft(draft); setPage('staff-tasks') }} />}
+    {page === 'returns' && (
+      <ManagerReturnsPanel
+        user={user}
+        showToast={showToast}
+        sb={statusBadge}
+        onCreateMaintenanceWork={draft => { setStaffTaskDraft(draft); setPage('staff-tasks') }}
+        onNavigateToComplaints={tab => {
+          setComplaintInitialTab(tab || 'returns')
+          setPage('complaints')
+        }}
+      />
+    )}
 
     {page === 'payments' && (isApiAuthenticated() ? <ManagerFinancialApiPanel /> : <ManagerPaymentsPanel user={user} rentals={hub.rentals} payments={hub.payments} config={hub.config} applyRentalLateFee={hub.applyRentalLateFee} setRentalOverlock={hub.setRentalOverlock} sendDelinquencyReminder={hub.sendDelinquencyReminder} showToast={showToast} />)}
     {page === 'overdue-cases' && isApiAuthenticated() && <ManagerOverdueApiPanel key={user.id} />}
-    {page === 'payment-complaints' && isApiAuthenticated() && <ManagerPaymentComplaintsPanel showToast={showToast} />}
+    {(page === 'complaints' || page === 'payment-complaints') && (
+      <ManagerComplaintsWorkspace
+        user={resolvedUser}
+        showToast={showToast}
+        initialTab={complaintInitialTab}
+        onTabChange={setComplaintInitialTab}
+      />
+    )}
     {page === 'staff-tasks' && (isApiAuthenticated()
       ? <ManagerApiStaffTasksPanel showToast={showToast} initialUnit={inventoryMaintenanceDraft} onInitialUnitConsumed={() => setInventoryMaintenanceDraft(null)} />
       : <ManagerStaffTasksPanel user={user} facilityId={managerFacilityId || ''} facilityName={facility?.name || user.facility || ''} tasks={hub.staffTasks} createFacilityTask={hub.createFacilityTask} updateFacilityTask={hub.updateFacilityTask} initialDraft={staffTaskDraft} onDraftConsumed={() => setStaffTaskDraft(null)} showToast={showToast} />)}

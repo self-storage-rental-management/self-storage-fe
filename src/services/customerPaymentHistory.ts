@@ -36,6 +36,7 @@ export interface HistoryEntry {
   receiptAvailable?: boolean
   refundedAmount?: number | null
   paymentReference?: string | null
+  receiptCode?: string | null
   method: string | null
   reservationPayment?: ReservationPaymentResult
   renewalId?: string
@@ -234,6 +235,7 @@ export async function loadCustomerPaymentHistory(): Promise<{
     unitCode: payment.assignedUnitCode || payment.unitTypeName || undefined,
     facilityName: payment.facilityName || undefined,
     reservationPayment: payment,
+    receiptCode: payment.receiptCode,
   }))
   const originalPayments = new Map(reservationEntries.map(entry => [entry.id, entry]))
   const supplemental = await Promise.allSettled([
@@ -276,6 +278,7 @@ export async function loadCustomerPaymentHistory(): Promise<{
                 updatedAt: event.occurredAt,
                 status: 'UNKNOWN',
                 receiptAvailable: false,
+                receiptCode: typeof data.receiptCode === 'string' ? data.receiptCode : null,
                 refundedAmount: null,
                 method: cash ? data.paymentMethod === 'BANK_TRANSFER' ? 'Chuyển khoản' : 'Tiền mặt' : 'VNPay',
               } satisfies HistoryEntry]
@@ -303,6 +306,7 @@ export async function loadCustomerPaymentHistory(): Promise<{
                 statusSource: 'RENEWAL_PROJECTION',
                 receiptAvailable: transaction.receiptAvailable,
                 paymentReference: transaction.reference ?? original?.reservationPayment?.transactionReference ?? null,
+                receiptCode: transaction.receiptCode || event?.receiptCode || original?.receiptCode || null,
                 method: normalizeHistoryMethod(event?.method ?? original?.method ?? null),
               }
             })
@@ -334,6 +338,7 @@ export async function loadCustomerPaymentHistory(): Promise<{
           if (amount == null || amount <= 0) return []
           return [{
             id: receipt?.transactionReference ?? r.settlementPaymentId!,
+            receiptCode: receipt?.receiptCode ?? null,
             reference: `Trả kho ${r.unitNumber}`,
             category: offset ? "returnOffset" : refund ? "refund" : "damage",
             amount,

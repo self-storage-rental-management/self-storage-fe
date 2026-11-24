@@ -35,12 +35,12 @@ const render = () => renderToStaticMarkup(<ManagerDashboardApiPanel setPage={() 
 describe('Manager dashboard uses the current facility report', () => {
   it('shows compact metrics and distinguishes unverified receipts from verified zero', () => {
     const html = render()
-    for (const title of ['Tỷ lệ lấp đầy', 'Tiền thuê dự kiến/tháng', 'Tiền đã thu', 'Hợp đồng quá hạn', 'Nhận kho trong tháng', 'Yêu cầu trả kho']) expect(html).toContain(title)
-    expect(html).toContain('5%')
+    for (const title of ['Tiền thuê dự kiến/tháng', 'Tiền đã thu', 'Hợp đồng quá hạn', 'Nhận kho trong tháng', 'Yêu cầu trả kho']) expect(html).toContain(title)
+    expect(html).not.toContain('Tỷ lệ lấp đầy')
     expect(html).toContain('9.500.000')
     expect(html).toContain('Chưa đủ dữ liệu')
     expect(html).toContain('min-h-[112px]')
-    expect(html).toContain('2xl:grid-cols-6')
+    expect(html).toContain('2xl:grid-cols-5')
     state.summary = { data: { ...summary, collectedRevenue: 0 } }
     state.cashflow = { data: { ...(state.cashflow.data as object), completeness: 'RECORDED', securityDepositHeld: 0 } }
     const verified = render()
