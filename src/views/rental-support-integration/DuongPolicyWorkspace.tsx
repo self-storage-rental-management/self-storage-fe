@@ -960,7 +960,7 @@ function PolicyEditor({
                     
                     <div>
                       <h4 className="font-semibold text-stone-900">Quy trình xử lý quá hạn & Thu hồi kho</h4>
-                      <p className="text-xs text-stone-500">Tiến trình chuẩn tự động áp dụng khi khách hàng chậm gia hạn hợp đồng.</p>
+                      <p className="text-xs text-stone-500">Các bước xử lý áp dụng khi hợp đồng quá hạn.</p>
                     </div>
                   </div>
 
@@ -1003,7 +1003,7 @@ function PolicyEditor({
                         Chuyển hồ sơ sang xử lý thu hồi khi đủ điều kiện
                       </div>
                       <p className="text-[11px] text-stone-600 leading-relaxed">
-                        Chuyển hồ sơ sang quy trình xử lý thu hồi, niêm phong tài sản và thanh lý kho theo quy định.
+                        Chuyển hồ sơ để cơ sở xem xét và xử lý thu hồi theo quy định.
                       </p>
                     </div>
                   </div>

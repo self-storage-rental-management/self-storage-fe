@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
+import "./staffDailyTaskQueue.css"
 
 import { Badge, Button, Card, Input, Modal, Select, Table, Tbody, Td, Th, Thead, Tr } from "../../components/ui"
 import { getAuthenticatedActor } from "../../services/authApi"
@@ -134,10 +135,10 @@ function TaskGroup({ title, rows, loading, renderRow }: {
   const pagination = paginateStaffItems(rows, page)
   return (
     <section aria-label={title}>
-      <Card className="overflow-hidden">
-        <div className="flex items-center justify-between gap-2 border-b border-stone-200 px-4 py-3">
-          <h3 className="text-sm font-semibold text-stone-900">{title}</h3>
-          <span className="text-xs text-stone-500">{rows.length} nhiệm vụ</span>
+      <Card className="staff-task-group overflow-hidden !rounded-2xl !shadow-none">
+        <div className="flex items-center justify-between gap-2 border-b border-stone-200 px-5 py-5">
+          <h3 className="text-lg font-semibold text-stone-900">{title} <span className="ml-2 rounded-full border border-stone-200 bg-stone-100 px-3 py-1 text-sm font-normal text-stone-600">{rows.length}</span></h3>
+          <span className="text-sm text-stone-500">{rows.length} nhiệm vụ</span>
         </div>
         {rows.length > 0 ? (
           <>
@@ -357,19 +358,19 @@ export default function StaffDailyTaskQueue({
   }
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <div className="border-b border-stone-200 p-4">
+    <div className="staff-task-queue space-y-5">
+      <Card className="!rounded-2xl !shadow-none">
+        <div className="border-b border-stone-200 px-5 py-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h3 className="font-bold text-stone-900">Danh sách nhiệm vụ ca làm</h3>
+              <h3 className="text-xl font-semibold text-stone-900">Danh sách nhiệm vụ ca làm</h3>
             </div>
             <Button variant="outline" size="sm" disabled={maintenanceRead.loading} onClick={() => maintenanceRead.refresh()}>
               Tải lại
             </Button>
           </div>
         </div>
-        <div className="grid gap-3 p-4 sm:grid-cols-3">
+        <div className="staff-task-filters grid gap-4 p-5 sm:grid-cols-3">
           <Input label="Ngày đến hạn" type="date" value={dateFilter} onChange={(event) => onDateFilterChange(event.target.value)} />
           <Select label="Mức ưu tiên" value={priorityFilter} onChange={(event) => onPriorityFilterChange(event.target.value)}>
             <option value="all">Tất cả mức ưu tiên</option>

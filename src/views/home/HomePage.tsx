@@ -575,7 +575,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
               </div>
 
               <p className="text-sm sm:text-base text-stone-600 leading-relaxed max-w-2xl">
-                StorageHub cung cấp hệ thống kho tự lưu trữ (Self-Storage) đạt chuẩn an ninh quốc tế. Tìm kiếm cơ sở thuận tiện, lựa chọn quy cách kho đa dạng, đặt giữ chỗ trực tuyến và kiểm soát quyền ra vào thông minh hoàn toàn trên một nền tảng hợp nhất.
+                Tìm cơ sở, chọn loại kho và đặt kho trực tuyến. Theo dõi thông tin thuê và quyền ra vào trên StorageHub.
               </p>
 
               {/* Call to Action Buttons */}
@@ -1125,7 +1125,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
             {activeModal === 'facilities' && (
               <div className="mt-4 space-y-4 text-xs">
                 <p className="text-stone-600 text-sm">
-                  StorageHub hiện đang vận hành các cơ sở lưu trữ tại các vị trí giao thông thuận tiện, trang bị hệ thống kiểm soát an ninh và đội ngũ quản lý chuyên nghiệp:
+                  Xem địa chỉ và thông tin liên hệ của các cơ sở:
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {facilitiesList.map(f => (
@@ -1310,7 +1310,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
             {activeModal === 'how_it_works' && (
               <div className="mt-4 space-y-4 text-xs">
                 <p className="text-stone-600 text-sm">
-                  Quy trình đặt giữ và thuê kho tại StorageHub được thiết kế an toàn, minh bạch qua 4 bước chuẩn nghiệp vụ:
+                  Đặt và thuê kho qua 4 bước:
                 </p>
                 <div className="space-y-3">
                   {workflowSteps.map(step => (

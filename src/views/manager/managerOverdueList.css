@@ -1,0 +1,132 @@
+.manager-overdue-list {
+  container-type: inline-size;
+}
+
+.manager-overdue-filters {
+  grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr));
+}
+
+.overdue-search-icon {
+  position: relative;
+  width: 0.9rem;
+  height: 0.9rem;
+  margin: -0.15rem 0.15rem 0 0;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+}
+
+.overdue-search-icon::after {
+  position: absolute;
+  right: -0.34rem;
+  bottom: -0.16rem;
+  width: 0.4rem;
+  height: 2px;
+  border-radius: 1px;
+  background: currentColor;
+  content: "";
+  transform: rotate(45deg);
+}
+
+.manager-overdue-table th,
+.manager-overdue-table td {
+  padding: 1rem 0.625rem;
+  vertical-align: middle;
+}
+
+.manager-overdue-table tr > :where(:first-child) {
+  padding-inline-start: 1.5rem;
+}
+
+.manager-overdue-table tr > :where(:last-child) {
+  padding-inline-end: 1.5rem;
+}
+
+.manager-overdue-table td {
+  padding-block: 1.25rem;
+}
+
+.overdue-unit-code {
+  font-family: ui-monospace, Consolas, monospace;
+}
+
+.manager-overdue-table .overdue-status {
+  gap: 0.5rem;
+  border: 0;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.25rem;
+}
+
+.manager-overdue-table .overdue-status:is([data-status="RECOVERY"], [data-status="WAITING_RECOVERY"]) {
+  background: #fbe0e0;
+  color: #991b1b;
+}
+
+.overdue-detail-chevron {
+  height: 0.4rem;
+  width: 0.4rem;
+  border-block-start: 1.5px solid currentColor;
+  border-inline-end: 1.5px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.overdue-mobile-label {
+  display: none;
+}
+
+@container (width < 50rem) {
+  .manager-overdue-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .manager-overdue-search {
+    grid-column: 1 / -1;
+  }
+}
+
+@container (width < 43rem) {
+  .manager-overdue-table,
+  .manager-overdue-table tbody {
+    display: block;
+  }
+
+  .manager-overdue-table colgroup {
+    display: none;
+  }
+
+  .manager-overdue-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .manager-overdue-table tbody tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: center;
+    gap: 0.875rem 1rem;
+    padding: 1rem;
+  }
+
+  .manager-overdue-table tbody tr > td {
+    display: block;
+    padding: 0;
+  }
+
+  .overdue-mobile-label {
+    display: block;
+    margin-bottom: 0.2rem;
+    font-size: 0.75rem;
+    color: #57534e;
+  }
+}
+
+@container (width < 26rem) {
+  .manager-overdue-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

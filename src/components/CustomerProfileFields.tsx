@@ -96,7 +96,7 @@ export function CustomerProfileFields({ value, onChange, user, onNameChange, onP
         {!locked && <button type="button" className="shrink-0 text-sm underline" onClick={() => { setEditingIdentity(true); setShowIdentity(true); document.getElementById('profile-cccd')?.focus() }}>Sửa</button>}
       </div>
       <div id="profile-cccd-feedback">{identityTouched && errorLine(result?.error)}{result?.warning && <p className="text-xs text-amber-800">{result.warning}</p>}</div>
-      {locked && <p className="text-xs text-stone-600">Staff đã đối chiếu giấy tờ gốc. Vui lòng liên hệ Staff nếu cần sửa.</p>}
+      {locked && <p className="text-xs text-stone-600">Nhân viên đã đối chiếu giấy tờ gốc. Vui lòng liên hệ nhân viên nếu cần sửa.</p>}
     </fieldset>
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">{[false, true].map(second => {
       const index = second ? 2 : 1

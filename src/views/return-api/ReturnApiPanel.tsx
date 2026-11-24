@@ -23,6 +23,9 @@ import {
   returnError,
   uploadReturnEvidence,
   type ApiReturn,
+  calculateDamageFee,
+  returnDamageCatalog,
+  type DamageItemInput,
   type InspectionInput,
   type ReturnFees,
   type ReturnRole,
@@ -80,7 +83,7 @@ export function returnRecoveryCountdown(value: string | null | undefined, now = 
 
 function statusLabel(record: Pick<ApiReturn, 'status' | 'returnType'>) {
   if (record.status === 'awaiting_business_review' && record.returnType === 'INVENTORY_MISMATCH') {
-    return 'Chờ Manager duyệt quyết toán'
+    return 'Chờ quản lý cơ sở duyệt quyết toán'
   }
   if (record.status === 'awaiting_business_review') return 'Chờ Ban điều hành duyệt bảng giá cũ'
   return labels[record.status]
@@ -111,14 +114,14 @@ export function ReturnSummary({ record, hideTerminationFee = false }: { record: 
       </div>
       <p className="text-sm text-stone-600">{'Ngày dự kiến trả: '}<strong className="text-stone-900">{rentalDate(record.scheduledDate)}</strong></p>
       {['requested', 'scheduled'].includes(record.status) && record.recoveryEligibleAt && <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">Nếu khách chưa đến và chưa hoàn tất trả kho, hồ sơ sẽ chuyển sang nhiệm vụ xử lý sau <strong>{returnRecoveryCountdown(record.recoveryEligibleAt, now) || returnRecoveryCutoff(record.recoveryEligibleAt)}</strong>. Hàng chưa được tự động di chuyển.</p>}
-      {record.returnType === 'INVENTORY_MISMATCH' && <p className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-950">Đây là yêu cầu trả kho do kết quả kiểm kê không phù hợp. Phí và thời gian được quyết toán theo nhánh xử lý kiểm kê, không gộp với trả kho hợp lệ thông thường.</p>}
+      {record.returnType === 'INVENTORY_MISMATCH' && <p className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-950">Yêu cầu trả kho này liên quan đến hàng hóa không khớp khai báo. Phí và thời gian được tính theo kết quả kiểm kê.</p>}
       {record.status === 'recovery_required' && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-950">Khách chưa đến theo lịch và đã hết thời gian ân hạn. Hàng chưa được tự động di chuyển. Cơ sở cần lập biên bản, kiểm kê và bàn giao hai người trước khi thu hồi.</p>}
       {record.status === 'recovery_required' && record.recoveryTaskDeadlineAt && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-950">Hạn xử lý nhiệm vụ thu hồi: {returnRecoveryCutoff(record.recoveryTaskDeadlineAt)}</p>}
       {inventoryMismatch && record.earlyTerminationPolicy && <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-950">
         <p className="font-semibold">Trả kho do hàng hóa sai khai báo</p>
         <ul className="mt-1 list-disc space-y-1 pl-5">
           <li>Tính tiền từ ngày xác nhận nhận kho đến ngày hẹn trả kho dự kiến.</li>
-          <li>Manager lập quyết toán, khách xác nhận trước khi hoàn tiền hoặc thu thêm.</li>
+          <li>Quản lý cơ sở lập quyết toán, khách xác nhận trước khi hoàn tiền hoặc thu thêm.</li>
         </ul>
       </div>}
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
@@ -129,7 +132,7 @@ export function ReturnSummary({ record, hideTerminationFee = false }: { record: 
         ] as const).map(([label, amount]) => <div key={label} className="rounded-lg bg-stone-50 p-3"><p className="text-xs text-stone-500">{label}</p><p className="mt-1 text-sm font-bold text-stone-900">{amount == null ? 'Chưa xác định' : rentalMoney(amount, 'VND')}</p></div>)}
       </div>
       {record.setupExitRequested && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{inventoryMismatch
-        ? 'Quyết toán trả kho do kiểm kê không phù hợp. Chỉ tính thời gian sử dụng thực tế và các khoản có bằng chứng, không áp dụng phí chấm dứt sớm cố định.'
+        ? 'Chỉ tính thời gian sử dụng thực tế và các khoản có bằng chứng, không áp dụng phí chấm dứt sớm cố định.'
         : record.setupEarlyExit
         ? hideTerminationFee ? 'Quyết toán trả kho trong thời gian chuẩn bị theo bảng kê đã ghi nhận.' : 'Quyết toán trả kho trong thời gian chuẩn bị. Tiền thuê thực thu và tiền cọc đảm bảo thuê được trừ phí chấm dứt sớm một lần cùng các khoản phí có chứng cứ.'
         : record.setupReturnedAt ? 'Kho được nghiệm thu sau hạn chuẩn bị, áp dụng quyết toán của kỳ thuê đã bắt đầu.' : 'Nhân viên cần xác nhận đã dọn hết hàng và bàn giao kho trống. Điều khoản thời gian chuẩn bị áp dụng theo thời điểm nghiệm thu thực tế.'}</p>}
@@ -370,7 +373,7 @@ function ReturnWorkspace({
           void run(() => editing ? updateReturnRequest(editing, date, notes) : requestReturn(rentalId, date, notes))
         }} className="space-y-4 rounded-xl border border-stone-200 bg-stone-50 p-4">
           {rows.some(record => record.id === editing && record.returnType === 'INVENTORY_MISMATCH')
-            ? <div className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-950"><p className="font-semibold">Trả kho do hàng hóa sai khai báo</p><ul className="mt-1 list-disc space-y-1 pl-5"><li>Tính tiền từ ngày xác nhận nhận kho đến ngày hẹn trả kho dự kiến.</li><li>Manager lập quyết toán, khách xác nhận trước khi hoàn tiền hoặc thu thêm.</li></ul></div>
+            ? <div className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-950"><p className="font-semibold">Trả kho do hàng hóa sai khai báo</p><ul className="mt-1 list-disc space-y-1 pl-5"><li>Tính tiền từ ngày xác nhận nhận kho đến ngày hẹn trả kho dự kiến.</li><li>Quản lý cơ sở lập quyết toán, khách xác nhận trước khi hoàn tiền hoặc thu thêm.</li></ul></div>
             : <ReturnPolicyNotice />}
           <div>
             <VietnameseDateInput label="Ngày trả kho" value={date} min={today} max={maxEditReturnDate} onChange={setDate} />
@@ -433,7 +436,7 @@ function ReturnWorkspace({
                   Ngày hẹn trả: <strong className="text-stone-700">{rentalDate(record.scheduledDate)}</strong>
                 </span>
                 {(record.managerReviewDueAt || record.customerConfirmationDueAt) && <span className="rounded bg-red-50 px-2 py-1 text-xs font-bold text-red-800">
-                  {record.managerReviewDueAt ? 'Hạn Manager duyệt 6 giờ' : 'Hạn xác nhận 72 giờ'}: {new Date(record.managerReviewDueAt || record.customerConfirmationDueAt!).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}
+                  {record.managerReviewDueAt ? 'Hạn quản lý cơ sở duyệt' : 'Hạn xác nhận 72 giờ'}: {new Date(record.managerReviewDueAt || record.customerConfirmationDueAt!).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}
                   {' · '}{Date.parse(record.managerReviewDueAt || record.customerConfirmationDueAt!) <= Date.now() ? 'Đã quá hạn' : `Còn ${Math.ceil((Date.parse(record.managerReviewDueAt || record.customerConfirmationDueAt!) - Date.now()) / 60_000)} phút`}
                 </span>}
                 {role === 'staff' && ['requested', 'scheduled'].includes(record.status) && <button type="button" disabled={busy} className="rounded border px-2 py-1 text-xs" onClick={async e => {
@@ -615,11 +618,93 @@ function FeeInputRow({
   )
 }
 
+function DamagePricingSelector({
+  category,
+  items,
+  onChange,
+  disabled,
+}: {
+  category: 'minor' | 'major'
+  items: DamageItemInput[]
+  onChange: (items: DamageItemInput[]) => void
+  disabled?: boolean
+}) {
+  const catalog = returnDamageCatalog.filter((item) => item.category === category)
+  const addItem = () => {
+    const first = catalog[0]
+    if (first) onChange([...items, { code: first.code, quantity: 1 }])
+  }
+  return (
+    <div className="rounded-xl border border-stone-200 bg-stone-50/50 p-3 space-y-2">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="text-xs font-bold text-stone-800">Bảng giá hư hỏng tự động</p>
+          <p className="text-[11px] text-stone-500">Chọn hạng mục và số lượng/diện tích; hệ thống tự tính theo giá chuẩn.</p>
+        </div>
+        <span className="shrink-0 rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-bold text-stone-700">Tự động tính</span>
+      </div>
+      {items.length === 0 && <p className="rounded-lg bg-white/70 p-2 text-xs text-stone-500">Chưa có hạng mục. Nếu kho không hư hại, giữ nguyên mức phí 0 ₫.</p>}
+      {items.map((item, index) => {
+        const price = catalog.find((entry) => entry.code === item.code) ?? catalog[0]
+        return (
+          <div key={`${item.code}-${index}`} className="grid grid-cols-[minmax(0,1fr)_6.5rem_auto] items-end gap-2">
+            <label className="text-[11px] font-semibold text-stone-700">
+              Hạng mục
+              <select
+                value={item.code}
+                disabled={disabled}
+                onChange={(event) => onChange(items.map((current, currentIndex) => currentIndex === index ? { ...current, code: event.target.value } : current))}
+                className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-2 py-2 text-xs text-stone-800"
+              >
+                {catalog.map((entry) => <option key={entry.code} value={entry.code}>{entry.label}</option>)}
+              </select>
+            </label>
+            <label className="text-[11px] font-semibold text-stone-700">
+              Số lượng ({price?.unit ?? 'đơn vị'})
+              <input
+                type="number"
+                min="0.01"
+                step={price?.unit === 'm²' ? '0.01' : '1'}
+                value={item.quantity}
+                disabled={disabled}
+                onChange={(event) => onChange(items.map((current, currentIndex) => currentIndex === index ? { ...current, quantity: Number(event.target.value) || 0 } : current))}
+                className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-2 py-2 text-right text-xs text-stone-800"
+              />
+            </label>
+            <button
+              type="button"
+              disabled={disabled}
+              aria-label="Xóa hạng mục hư hỏng"
+              onClick={() => onChange(items.filter((_, currentIndex) => currentIndex !== index))}
+              className="rounded-lg border border-stone-300 bg-white px-2.5 py-2 text-xs text-stone-600 hover:border-rose-300 hover:text-rose-700"
+            >
+              Xóa
+            </button>
+            <p className="col-span-full -mt-1 text-[10px] text-stone-500">
+              Giá chuẩn: {price ? `${rentalMoney(price.unitPrice, 'VND')} / ${price.unit} (khung ${rentalMoney(price.suggestedMin, 'VND')}–${rentalMoney(price.suggestedMax, 'VND')})` : ''}
+            </p>
+            <p className="col-span-full text-[10px] font-semibold text-stone-800">
+              Tính: {item.quantity || 0} × {price ? rentalMoney(price.unitPrice, 'VND') : '0 ₫'} = {rentalMoney(calculateDamageFee([item]), 'VND')}
+            </p>
+          </div>
+        )
+      })}
+      <div className="flex items-center justify-between gap-2 border-t border-stone-200 pt-2">
+        <button type="button" disabled={disabled} onClick={addItem} className="rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-stone-800 hover:bg-stone-50">
+          + Thêm hạng mục
+        </button>
+        <span className="text-sm font-extrabold text-stone-900">{rentalMoney(calculateDamageFee(items), 'VND')}</span>
+      </div>
+    </div>
+  )
+}
+
 function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLocked, onRecoveryChanged }: { role: ReturnRole; record: ApiReturn; run: (work: () => Promise<ApiReturn>) => Promise<void>; busy: boolean; recoveryLocked: boolean; onRecoveryLocked: (locked: boolean) => void; onRecoveryChanged: () => void }) {
   const id = record.id
   const actor = getAuthenticatedActor()
   const [note, setNote] = useState('')
   const [fees, setFees] = useState<ReturnFees>({ damageFee: 0, cleaningFee: 0, lostItemFee: 0, overdueFee: 0, outstandingFee: 0 })
+  const [damageItems, setDamageItems] = useState<DamageItemInput[]>([])
   const [goodsLeft, setGoodsLeft] = useState(false)
   const [damage, setDamage] = useState<InspectionInput['damageClassification']>('no_damage')
   const [unit, setUnit] = useState<'available' | 'maintenance'>('available')
@@ -682,6 +767,8 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
     }
     return inspectReturn(id, {
       ...sanitizeFees(fees),
+      damageFee: calculateDamageFee(damageItems),
+      damageItems,
       inventoryMatch: 'match',
       damageClassification: goodsLeft ? 'abandoned_goods' : damage,
       staffNotes: note,
@@ -703,7 +790,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       {role !== 'customer' && <EmergencyContactsPanel key={record.rentalId} rentalId={record.rentalId} />}
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
         <p className="font-semibold">Bước tiếp theo</p>
-        <p className="mt-1">{recoveryNextStep ?? { requested: 'Yêu cầu đã được gửi. Cơ sở sẽ sắp xếp lịch và thực hiện nghiệm thu trước khi quyết toán.', scheduled: 'Đến cơ sở theo ngày hẹn để trả kho và bàn giao cho nhân viên nghiệm thu.', inspected: 'Nghiệm thu đã được ghi nhận. Chờ cơ sở gửi kết quả quyết toán để khách hàng xác nhận.', awaiting_business_review: record.returnType === 'INVENTORY_MISMATCH' ? 'Bảng kê kiểm kê sai lệch đang chờ Manager duyệt. Sau đó bạn sẽ được xem và xác nhận quyết toán.' : 'Hồ sơ cũ chưa có bảng giá trả sớm đã lưu. Chờ Ban điều hành xem xét.', awaiting_customer_confirmation: 'Kiểm tra các khoản phí bên dưới, sau đó đồng ý quyết toán hoặc yêu cầu xem xét lại.', disputed: 'Hồ sơ đang có khiếu nại từ khách hàng. Cần Ban điều hành hoặc Quản lý cơ sở giải quyết trước khi tiếp tục.', payment_due: 'Thanh toán khoản quyết toán còn thiếu để tiếp tục hoàn tất trả kho.', refund_pending: 'Cơ sở đang xử lý hoàn cọc. Hồ sơ chỉ hoàn tất khi khoản hoàn tiền được ghi nhận.', recovery_required: 'Khách chưa đến theo lịch và đã hết thời gian ân hạn. Cơ sở cần lập biên bản kiểm kê và bàn giao hàng trước khi xử lý tiếp.', completed: 'Hồ sơ trả kho và quyết toán đã hoàn tất.' }[record.status]}</p>
+        <p className="mt-1">{recoveryNextStep ?? { requested: 'Yêu cầu đã được gửi. Cơ sở sẽ sắp xếp lịch và thực hiện nghiệm thu trước khi quyết toán.', scheduled: 'Đến cơ sở theo ngày hẹn để trả kho và bàn giao cho nhân viên nghiệm thu.', inspected: 'Nghiệm thu đã được ghi nhận. Chờ cơ sở gửi kết quả quyết toán để khách hàng xác nhận.', awaiting_business_review: record.returnType === 'INVENTORY_MISMATCH' ? 'Bảng kê kiểm kê sai lệch đang chờ quản lý cơ sở duyệt. Sau đó bạn sẽ được xem và xác nhận quyết toán.' : 'Hồ sơ cũ chưa có bảng giá trả sớm đã lưu. Chờ Ban điều hành xem xét.', awaiting_customer_confirmation: 'Kiểm tra các khoản phí bên dưới, sau đó đồng ý quyết toán hoặc yêu cầu xem xét lại.', disputed: 'Hồ sơ đang có khiếu nại từ khách hàng. Cần Ban điều hành hoặc Quản lý cơ sở giải quyết trước khi tiếp tục.', payment_due: 'Thanh toán khoản quyết toán còn thiếu để tiếp tục hoàn tất trả kho.', refund_pending: 'Cơ sở đang xử lý hoàn cọc. Hồ sơ chỉ hoàn tất khi khoản hoàn tiền được ghi nhận.', recovery_required: 'Khách chưa đến theo lịch và đã hết thời gian ân hạn. Cơ sở cần lập biên bản kiểm kê và bàn giao hàng trước khi xử lý tiếp.', completed: 'Hồ sơ trả kho và quyết toán đã hoàn tất.' }[record.status]}</p>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded-xl border border-stone-200 p-4">
@@ -756,7 +843,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       {/* ─── OPTION 1: MODERN 2-COLUMN INSPECTION & LIVE SETTLEMENT ─── */}
       {(canInspect || canReview) && (() => {
         const deposit = record.depositAmount ?? 0
-        const totalFees = Object.values(fees).reduce((sum, v) => sum + (Number.isNaN(v) ? 0 : v), 0)
+        const totalFees = Object.values(canInspect ? { ...fees, damageFee: calculateDamageFee(damageItems) } : fees).reduce((sum, v) => sum + (Number.isNaN(v) ? 0 : v), 0)
         const projectedRefund = Math.max(0, deposit - totalFees)
         const projectedDue = Math.max(0, totalFees - deposit)
 
@@ -917,6 +1004,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                                 disabled={busy}
                                 onClick={() => {
                                   setDamage(opt.id)
+                                  setDamageItems([])
                                   setVacatedReturnId(null)
                                 }}
                                 className={`rounded-xl border p-2.5 text-center transition cursor-pointer ${
@@ -1072,7 +1160,8 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
 
                     {/* Danh sách 5 khoản phí khấu trừ */}
                     <div className="space-y-2">
-                      <FeeInputRow label="Phí hư hỏng" value={fees.damageFee} onChange={(v) => setFees((f) => ({ ...f, damageFee: v }))} disabled={busy} />
+
+                      {damage === 'minor_damage' || damage === 'major_damage' ? <DamagePricingSelector key={damage} category={damage === 'major_damage' ? 'major' : 'minor'} items={damageItems} onChange={setDamageItems} disabled={busy} /> : null}
                       <FeeInputRow label="Phí vệ sinh" value={fees.cleaningFee} onChange={(v) => setFees((f) => ({ ...f, cleaningFee: v }))} disabled={busy} />
                       <FeeInputRow label="Phí mất khóa đã bàn giao" value={fees.lostItemFee} onChange={(v) => setFees((f) => ({ ...f, lostItemFee: v }))} disabled={busy} />
                       <FeeInputRow label="Phí quá hạn" value={fees.overdueFee} onChange={(v) => setFees((f) => ({ ...f, overdueFee: v }))} disabled={busy} />
@@ -1093,7 +1182,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                         <p className="font-bold">Trả kho do hàng hóa sai khai báo</p>
                         <ul className="mt-2 list-disc space-y-1 pl-5">
                           <li>Tính tiền từ ngày xác nhận nhận kho đến ngày hẹn trả kho dự kiến.</li>
-                          <li>Manager lập quyết toán, khách xác nhận trước khi hoàn tiền hoặc thu thêm.</li>
+                          <li>Quản lý cơ sở lập quyết toán, khách xác nhận trước khi hoàn tiền hoặc thu thêm.</li>
                         </ul>
                       </div>
                     ) : projectedDue === 0 ? (
@@ -1137,7 +1226,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                       <Button
                         type="submit"
                         variant="primary"
-                        disabled={busy || (canReview && !note.trim()) || (canInspect && !!record.setupExitRequested && (vacatedReturnId !== id || goodsLeft))}
+                        disabled={busy || (canReview && !note.trim()) || (canInspect && !goodsLeft && (damage === "minor_damage" || damage === "major_damage") && (damageItems.length === 0 || damageItems.some(item => item.quantity <= 0))) || (canInspect && !!record.setupExitRequested && (vacatedReturnId !== id || goodsLeft))}
                         className="w-full !bg-emerald-600 hover:!bg-emerald-700 text-white font-bold py-3 text-sm shadow-md flex items-center justify-center gap-2 cursor-pointer"
                       >
                         <span>{canInspect ? 'Ghi nhận kết quả nghiệm thu' : 'Ghi nhận xem xét khiếu nại'}</span>

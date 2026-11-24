@@ -71,7 +71,7 @@ export default function InventoryAppointmentPanel({ detail, now, onSaved }: {
       {detail.inventoryEscalatedAt
         ? <p className="font-semibold text-red-800">Đang chờ thu hồi. Vui lòng liên hệ cơ sở.</p>
         : awaitingResult
-          ? <p>Staff đã công bố kết quả kiểm kê. Xem kết quả để thực hiện bước tiếp theo.</p>
+          ? <p>Nhân viên đã cập nhật kết quả kiểm kê. Vui lòng xem kết quả và thực hiện các bước được hướng dẫn.</p>
         : expired
           ? <p className="font-semibold text-red-800">Đã quá hạn kiểm kê. Vui lòng liên hệ cơ sở.</p>
           : detail.inventoryArrivedAt
