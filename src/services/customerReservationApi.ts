@@ -17,6 +17,7 @@ export type ReservationStatus = ApiReservationStatus
 export type InventoryResolutionStatus =
   | 'NOT_STARTED'
   | 'PENDING_CUSTOMER'
+  | 'PENDING_STAFF_RESOLUTION'
   | 'ACCEPTED'
   | 'PARTIAL_ACCEPTED'
   | 'RETURN_REQUESTED'
@@ -552,6 +553,11 @@ export interface CustomerReservationDetail {
   inventoryActualJson?: string | null
   inventoryMismatchJson?: string | null
   inventorySuggestedQuantitiesJson?: string | null
+  /** Version of the inspection record that the at-site confirmation approved. */
+  inventoryResultVersion?: number
+  /** Staff who recorded the arrangement at the facility with the verified customer present. */
+  inventoryAtSiteConfirmedByName?: string | null
+  inventoryDecisionAt?: string | null
 }
 
 export interface ReservationEmailVerificationResult {

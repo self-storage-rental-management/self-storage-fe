@@ -1,4 +1,5 @@
 import { LEGACY_RENEWAL_NOTICE, LEGACY_RENEWAL_HISTORY_NOTICE, legacyRenewalMoney } from '../../domain/legacyRenewal'
+import { VIETNAM_TIME_ZONE } from '../../utils/vietnamTime'
 import { useEffect, useRef, useState } from "react"
 
 import Layout, {
@@ -161,7 +162,9 @@ const formatDate = (value?: string) => {
 
   const date = new Date(value)
 
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("vi-VN")
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleDateString("vi-VN", { timeZone: VIETNAM_TIME_ZONE })
 }
 
 const formatExactDateTime = (value?: string) => {
@@ -169,7 +172,9 @@ const formatExactDateTime = (value?: string) => {
 
   const date = new Date(value)
 
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("vi-VN")
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleString("vi-VN", { timeZone: VIETNAM_TIME_ZONE })
 }
 
 const formatDateTime = (value: string) => {
@@ -2996,7 +3001,7 @@ export default function StaffApp({
       )}
 
       {/* ── CHECK-IN / HANDOVER ───────────────────────────────── */}
-      {page === "checkin" && <StaffCheckInOperationsPanel showToast={showToast} />}
+      {page === "checkin" && <StaffCheckInOperationsPanel showToast={showToast} onOpenReturns={() => setPage("return")} />}
       {page === "unit-release" && isApiAuthenticated() && <StaffUnitReleasePanel showToast={showToast} />}
       {page === "credentials" && isApiAuthenticated() && <StaffCredentialReissuePanel showToast={showToast} />}
 
