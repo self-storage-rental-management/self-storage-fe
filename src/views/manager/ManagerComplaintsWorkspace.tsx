@@ -246,9 +246,11 @@ export default function ManagerComplaintsWorkspace({
     disputeSettlement.outstandingFee
 
   const deposit = selectedReturn?.depositAmount || 0
-  const totalFund = deposit + unusedRentCredit
-  const calculatedRefund = Math.max(0, totalFund - totalDeductions)
-  const calculatedDue = Math.max(0, totalDeductions - totalFund)
+  const depositRemaining = Math.max(0, deposit - totalDeductions)
+  const excessDeduction = Math.max(0, totalDeductions - deposit)
+  const netRentRefund = Math.max(0, unusedRentCredit - excessDeduction)
+  const calculatedRefund = depositRemaining + netRentRefund
+  const calculatedDue = Math.max(0, excessDeduction - unusedRentCredit)
 
   const handleReviewDispute = async () => {
     if (!selectedReturn) return
@@ -695,91 +697,107 @@ export default function ManagerComplaintsWorkspace({
                       </div>
                     </div>
 
-                    {/* Bảng chiết tính dòng tiền minh bạch ("người tính sao lên đó tính vậy") */}
-                    <div className="rounded-lg bg-stone-50 border border-stone-200 p-2 text-xs space-y-1">
+                    {/* Bảng chiết tính 2 bước minh bạch theo đúng tư duy con người */}
+                    <div className="rounded-lg bg-stone-50 border border-stone-200 p-2.5 text-xs space-y-1.5">
                       <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-stone-600 border-b border-stone-200 pb-0.5">
-                        <span>Chiết tính dòng tiền hoàn cọc</span>
+                        <span>Chiết tính hoàn tiền quyết toán</span>
                         <span className="text-stone-400 font-normal text-[10px]">Đơn vị: VNĐ</span>
                       </div>
 
-                      {/* Bước 1: Quỹ tiền của khách */}
+                      {/* BƯỚC 1: Quyết toán tiền cọc an ninh */}
                       <div className="space-y-0.5 text-[11px]">
-                        <div className="flex justify-between items-center text-stone-700">
-                          <span className="font-medium flex items-center gap-1">
-                            <span className="text-emerald-700 font-bold">(+)</span> 1. Tiền cọc an ninh ban đầu:
-                          </span>
-                          <strong className="font-mono text-emerald-800">{formatVnd(deposit)}</strong>
+                        <p className="font-bold text-stone-700">1. Quyết toán tiền cọc an ninh:</p>
+                        <div className="flex justify-between items-center text-stone-600 pl-2">
+                          <span>· Tiền cọc ban đầu:</span>
+                          <span className="font-mono font-semibold text-stone-800">{formatVnd(deposit)}</span>
                         </div>
-                        {unusedRentCredit > 0 && (
-                          <div className="flex justify-between items-center text-stone-700">
-                            <span className="font-medium flex items-center gap-1">
-                              <span className="text-emerald-700 font-bold">(+)</span> 2. Tiền cước thuê chưa sử dụng:
-                            </span>
-                            <strong className="font-mono text-emerald-800">+{formatVnd(unusedRentCredit)}</strong>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Bước 2: Chi phí khấu trừ */}
-                      <div className="border-t border-stone-200 pt-0.5 space-y-0.5 text-[11px]">
-                        <div className="flex justify-between items-center text-stone-700">
-                          <span className="font-medium flex items-center gap-1">
-                            <span className="text-rose-700 font-bold">(-)</span> Tổng chi phí khấu trừ biên bản:
-                          </span>
-                          <strong className="font-mono text-rose-700">-{formatVnd(totalDeductions)}</strong>
+                        <div className="flex justify-between items-center text-rose-700 pl-2">
+                          <span>· Trừ chi phí phát sinh sau phân xử:</span>
+                          <span className="font-mono font-semibold">-{formatVnd(totalDeductions)}</span>
                         </div>
                         {totalDeductions > 0 && (
-                          <div className="pl-3 text-[10px] text-stone-500 space-y-0.5">
+                          <div className="pl-5 text-[10px] text-stone-500 space-y-0.5">
                             {disputeSettlement.damageFee > 0 && (
                               <div className="flex justify-between">
-                                <span>· Phí hư hại kho:</span>
+                                <span>Hư hại kho:</span>
                                 <span>-{formatVnd(disputeSettlement.damageFee)}</span>
                               </div>
                             )}
                             {disputeSettlement.cleaningFee > 0 && (
                               <div className="flex justify-between">
-                                <span>· Phí dọn vệ sinh:</span>
+                                <span>Vệ sinh kho:</span>
                                 <span>-{formatVnd(disputeSettlement.cleaningFee)}</span>
                               </div>
                             )}
                             {lockFee > 0 && (
                               <div className="flex justify-between">
-                                <span>· Phí mất chìa/thẻ/khóa:</span>
+                                <span>Mất chìa/thẻ/khóa:</span>
                                 <span>-{formatVnd(lockFee)}</span>
                               </div>
                             )}
                             {palletFee > 0 && (
                               <div className="flex justify-between">
-                                <span>· Phí thiếu tấm kê (Pallet):</span>
+                                <span>Thiếu tấm kê (Pallet):</span>
                                 <span>-{formatVnd(palletFee)}</span>
                               </div>
                             )}
                             {disputeSettlement.overdueFee > 0 && (
                               <div className="flex justify-between">
-                                <span>· Phí phạt trễ hạn:</span>
+                                <span>Quá hạn trả kho:</span>
                                 <span>-{formatVnd(disputeSettlement.overdueFee)}</span>
                               </div>
                             )}
                             {disputeSettlement.outstandingFee > 0 && (
                               <div className="flex justify-between">
-                                <span>· Nợ cước tồn đọng:</span>
+                                <span>Nợ cước tồn đọng:</span>
                                 <span>-{formatVnd(disputeSettlement.outstandingFee)}</span>
                               </div>
                             )}
                           </div>
                         )}
+                        <div className="flex justify-between items-center border-t border-dashed border-stone-200 pt-0.5 pl-2 font-semibold">
+                          <span className="text-stone-700">=&gt; Tiền cọc còn lại hoàn trả:</span>
+                          <span className={`font-mono ${depositRemaining > 0 ? 'text-emerald-700' : 'text-stone-600'}`}>
+                            {formatVnd(depositRemaining)}
+                          </span>
+                        </div>
+                        {excessDeduction > 0 && (
+                          <div className="flex justify-between items-center text-rose-700 pl-2 text-[10px] font-medium">
+                            <span>(Chi phí vượt quá tiền cọc:</span>
+                            <span>-{formatVnd(excessDeduction)})</span>
+                          </div>
+                        )}
                       </div>
 
-                      {/* Bước 3: Kết luận thực nhận */}
+                      {/* BƯỚC 2: Tiền thuê các tháng chưa sử dụng (nếu có) */}
+                      {unusedRentCredit > 0 && (
+                        <div className="border-t border-stone-200 pt-1 space-y-0.5 text-[11px]">
+                          <p className="font-bold text-stone-700">2. Hoàn tiền thuê chưa sử dụng:</p>
+                          <div className="flex justify-between items-center text-stone-700 pl-2">
+                            <span>· Tiền cước các kỳ chưa dùng:</span>
+                            <span className="font-mono font-semibold text-emerald-700">+{formatVnd(unusedRentCredit)}</span>
+                          </div>
+                          {excessDeduction > 0 && (
+                            <div className="flex justify-between items-center text-rose-700 pl-2 text-[10px]">
+                              <span>· Cấn trừ phần chi phí vượt cọc:</span>
+                              <span className="font-mono">-{formatVnd(Math.min(unusedRentCredit, excessDeduction))}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* BƯỚC 3: Kết luận tổng tiền thực nhận / nộp thêm */}
                       <div className="border-t-2 border-stone-300 pt-1">
                         {calculatedRefund > 0 ? (
-                          <div className="rounded bg-emerald-50 border border-emerald-300 px-2 py-1 flex items-center justify-between">
+                          <div className="rounded bg-emerald-50 border border-emerald-300 px-2 py-1.5 flex items-center justify-between">
                             <div>
                               <span className="text-[11px] font-black text-emerald-900 uppercase block leading-tight">
-                                (=) Hoàn trả lại khách hàng:
+                                (=) Thực nhận hoàn trả khách:
                               </span>
-                              <span className="text-[9px] text-emerald-700 leading-none">
-                                [Tiền quỹ {formatVnd(totalFund)}] − [Khấu trừ {formatVnd(totalDeductions)}]
+                              <span className="text-[9px] text-emerald-700 leading-none block mt-0.5">
+                                {unusedRentCredit > 0
+                                  ? `Cọc còn (${formatVnd(depositRemaining)}) + Cước hoàn (${formatVnd(netRentRefund)})`
+                                  : `Cọc (${formatVnd(deposit)}) − Chi phí (${formatVnd(totalDeductions)})`}
                               </span>
                             </div>
                             <span className="text-sm font-black text-emerald-700 font-mono">
@@ -787,13 +805,13 @@ export default function ManagerComplaintsWorkspace({
                             </span>
                           </div>
                         ) : calculatedDue > 0 ? (
-                          <div className="rounded bg-rose-50 border border-rose-300 px-2 py-1 flex items-center justify-between">
+                          <div className="rounded bg-rose-50 border border-rose-300 px-2 py-1.5 flex items-center justify-between">
                             <div>
                               <span className="text-[11px] font-black text-rose-900 uppercase block leading-tight">
                                 (=) Khách hàng cần đóng thêm:
                               </span>
-                              <span className="text-[9px] text-rose-700 leading-none">
-                                Khấu trừ vượt quá tiền cọc
+                              <span className="text-[9px] text-rose-700 leading-none block mt-0.5">
+                                Chi phí vượt quá tiền cọc và tiền hoàn
                               </span>
                             </div>
                             <span className="text-sm font-black text-rose-700 font-mono">
@@ -801,13 +819,13 @@ export default function ManagerComplaintsWorkspace({
                             </span>
                           </div>
                         ) : (
-                          <div className="rounded bg-stone-100 border border-stone-300 px-2 py-1 flex items-center justify-between">
+                          <div className="rounded bg-stone-100 border border-stone-300 px-2 py-1.5 flex items-center justify-between">
                             <div>
                               <span className="text-[11px] font-black text-stone-800 uppercase block leading-tight">
                                 (=) Quyết toán cân bằng:
                               </span>
-                              <span className="text-[9px] text-stone-600 leading-none">
-                                Khấu trừ vừa đủ tiền cọc
+                              <span className="text-[9px] text-stone-600 leading-none block mt-0.5">
+                                Tiền cọc cấn trừ vừa đủ chi phí
                               </span>
                             </div>
                             <span className="text-sm font-black text-stone-800 font-mono">0 ₫</span>
