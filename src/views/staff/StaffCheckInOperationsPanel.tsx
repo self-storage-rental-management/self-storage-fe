@@ -1349,6 +1349,9 @@ export default function StaffCheckInOperationsPanel({
         const asset = await uploadCheckInEvidence(
           handoverTarget.checkInId,
           file,
+          'CHECK_IN',
+          'bang-chung-kiem-ke-hang-hoa',
+          handoverTarget.reservationCode,
         )
 
         uploadedEvidence.push(asset.id)
@@ -1511,14 +1514,14 @@ export default function StaffCheckInOperationsPanel({
         if (setupTermsKey && (confirmedSetupTerms !== setupTermsKey || handoverTarget.setupEarlyExitFee == null)) {
           throw new Error('Cần đối chiếu điều khoản phí trả kho trong thời gian chuẩn bị trong hợp đồng đã ký trước khi tiếp tục.')
         }
-        const asset = await uploadCheckInEvidence(handoverTarget.checkInId, contractFile)
+        const asset = await uploadCheckInEvidence(handoverTarget.checkInId, contractFile, 'CHECK_IN', 'hop-dong-da-ky-luc-ban-giao', handoverTarget.reservationCode)
         updated = await signCheckInContract(handoverTarget.checkInId, asset.id, handoverTarget.setupEarlyExitPolicyVersion)
         setChecklist((current) => ({ ...current, contractVerified: true }))
       } else if (handoverStep === 3) {
         const due = handoverTarget.dueAtCheckIn ?? 0
         if (due > 0) {
           if (!paymentEvidenceFile) return
-          const asset = await uploadCheckInEvidence(handoverTarget.checkInId, paymentEvidenceFile)
+          const asset = await uploadCheckInEvidence(handoverTarget.checkInId, paymentEvidenceFile, 'CHECK_IN', 'bang-chung-thu-tien-luc-ky-hop-dong', handoverTarget.reservationCode)
           await recordCheckInRemainingPayment(handoverTarget.checkInId, {
             amount: due,
             paymentMethod,
@@ -1560,7 +1563,7 @@ export default function StaffCheckInOperationsPanel({
         }
         const emptyStorageEvidence = checkInEvidenceAssetIds(evidenceReferences)
         for (const file of evidenceFiles) {
-          const asset = await uploadCheckInEvidence(handoverTarget.checkInId, file)
+          const asset = await uploadCheckInEvidence(handoverTarget.checkInId, file, 'CHECK_IN', 'bang-chung-ban-giao-kho-luc-ban-giao', handoverTarget.reservationCode)
           emptyStorageEvidence.push(asset.id)
         }
         setEvidenceReferences(emptyStorageEvidence)
@@ -1606,7 +1609,7 @@ export default function StaffCheckInOperationsPanel({
       const uploadedEvidence = [...rejectEvidenceReferences]
 
       for (const file of rejectEvidenceFiles) {
-        const asset = await uploadCheckInEvidence(rejectTarget.checkInId, file)
+        const asset = await uploadCheckInEvidence(rejectTarget.checkInId, file, 'CHECK_IN', 'bien-ban-tu-choi-nhan-kho', rejectTarget.reservationCode)
 
         uploadedEvidence.push(asset.id)
       }
@@ -1700,7 +1703,7 @@ export default function StaffCheckInOperationsPanel({
       const evidenceReferences: string[] = []
       for (const file of partialRemovalFiles) {
         if (!validateUploadFile(file, "bằng chứng đưa phần hàng dư ra", setError)) return
-        const asset = await uploadCheckInEvidence(partialRemovalTarget.checkInId, file)
+        const asset = await uploadCheckInEvidence(partialRemovalTarget.checkInId, file, 'CHECK_IN', 'bang-chung-dua-hang-du-ra', partialRemovalTarget.reservationCode)
         evidenceReferences.push(asset.id)
       }
       const updatedInventory = await confirmPartialInventoryRemoval(partialRemovalTarget.checkInId, {
@@ -2182,7 +2185,7 @@ export default function StaffCheckInOperationsPanel({
                   </div>
                 ) : (
                   <>
-                    <label className="block text-sm font-medium text-stone-700">Hợp đồng đã ký (PDF hoặc ảnh, tối đa 25MB) *<input disabled={submitting || isReviewingCompletedStep} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => {
+                    <label className="block text-sm font-medium text-stone-700">Hợp đồng đã ký lúc nhận kho (PDF hoặc ảnh, tối đa 25MB) *<input disabled={submitting || isReviewingCompletedStep} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => {
                       const selected = event.target.files?.[0] || null
                       if (!validateUploadFile(selected, 'hợp đồng', setError)) {
                         event.target.value = ""
@@ -2216,7 +2219,7 @@ export default function StaffCheckInOperationsPanel({
                 {(handoverTarget.dueAtCheckIn ?? 0) > 0 && !isReviewingCompletedStep ? (
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Select label="Phương thức thanh toán" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as CheckInPaymentMethod)}><option value="CASH">Tiền mặt</option><option value="BANK_TRANSFER">Chuyển khoản</option></Select>
-                    <label className="block text-sm font-medium">Biên lai / bằng chứng giao dịch (tối đa 25MB) *<input className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => {
+                    <label className="block text-sm font-medium">Bằng chứng thu tiền lúc ký hợp đồng (biên lai, ảnh hoặc PDF, tối đa 25MB) *<input className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => {
                       const selected = event.target.files?.[0] || null
                       if (!validateUploadFile(selected, 'biên lai', setError)) {
                         event.target.value = ""
@@ -2350,7 +2353,7 @@ export default function StaffCheckInOperationsPanel({
                   {!isReviewingCompletedStep && (
                     <>
                       <label className="block text-sm font-semibold text-stone-800">
-                        Ảnh hoặc PDF bằng chứng kho trống *
+                        Bằng chứng bàn giao kho lúc bàn giao (ảnh hoặc PDF) *
                         <input
                           type="file"
                           multiple
@@ -2367,7 +2370,7 @@ export default function StaffCheckInOperationsPanel({
                           }}
                         />
                       </label>
-                      <p className="text-xs text-stone-600">Chọn ít nhất một tệp ghi nhận hiện trạng kho trước khi khách chuyển hàng vào. Tối đa 25 MB mỗi tệp.</p>
+                      <p className="text-xs text-stone-600">Chọn ít nhất một tệp ghi nhận hiện trạng kho, mã ổ khóa và việc bàn giao trước khi khách chuyển hàng vào. Tối đa 25 MB mỗi tệp.</p>
                       <FilePreviewList
                         files={evidenceFiles}
                         onRemove={index => setEvidenceFiles(files => files.filter((_, current) => current !== index))}
@@ -2795,7 +2798,7 @@ export default function StaffCheckInOperationsPanel({
                 {!isReviewingCompletedStep && (
                   <div className="space-y-1">
                     <label className="block text-sm font-medium">
-                      Ảnh/PDF bằng chứng kiểm kê hàng hóa (tối đa 25MB/tệp) *
+                      Bằng chứng kiểm kê hàng hóa (ảnh/PDF, tối đa 25MB/tệp) *
                       <input
                         className={`mt-1 block w-full rounded-lg border ${fieldErrors.evidenceFiles || fieldErrors.evidenceReferences ? 'border-red-500 bg-red-50/20' : 'border-stone-300'} bg-white px-3 py-2 text-sm`}
                         type="file"
@@ -3319,7 +3322,7 @@ export default function StaffCheckInOperationsPanel({
               <option value="MAINTENANCE">Chuyển sang bảo trì</option>
             </Select>
             <label className="block text-sm font-medium text-stone-700">
-              Bằng chứng từ chối (ảnh hoặc PDF)
+              Biên bản từ chối nhận kho (ảnh hoặc PDF)
               <input
                 className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
                 type="file"
@@ -3388,7 +3391,7 @@ export default function StaffCheckInOperationsPanel({
               onChange={event => setPartialRemovalNotes(event.target.value)}
             />
             <label className="block text-sm font-medium text-stone-700">
-              Bằng chứng đưa phần hàng dư ra (ảnh hoặc PDF)
+              Bằng chứng bàn giao phần hàng dư ra (ảnh hoặc PDF)
               <input
                 className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
                 type="file"

@@ -103,7 +103,8 @@ function ReceiptForm({ role = 'staff', embedded = false, record, view, busy, onC
       <label className="block">Phương thức thanh toán<select className="block w-full rounded border p-2" value={method} onChange={event => handleMethodChange(event.target.value as typeof method)}><option value="BANK_TRANSFER">Chuyển khoản</option><option value="CASH">Tiền mặt</option></select></label>
       {!autoReceiptCode && <label className="block">Mã giao dịch hoặc biên nhận<input className="block w-full rounded border p-2" required maxLength={64} value={reference} onChange={event => handleReferenceChange(event.target.value)} /></label>}
       <EvidenceUpload entityType={view ? 'DUONG_RECOVERY_SETTLEMENT' : 'RETURN_CASE'} entityId={view ? record.recoveryTaskId! : record.id} label="Biên lai quyết toán" limit={1} value={files} onChange={handleFilesChange}
-        upload={view ? undefined : file => uploadReturnEvidence(record.id, file, role)}
+        fileNamePurpose={view ? 'bien-lai-quyet-toan-thu-hoi' : undefined}
+        upload={view ? undefined : file => uploadReturnEvidence(record.id, file, role, 'bien-lai-quyet-toan-tra-kho')}
         disabled={frozen || !allowed} onBusy={value => { uploadLock.current = value; setUploading(value); listener.current(value || command.isLocked()) }} />
       <label className="block"><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} /> Tôi xác nhận đã thực thu hoặc thực hoàn đúng số tiền quyết toán, kèm biên lai đã đối chiếu.</label>
     </fieldset>

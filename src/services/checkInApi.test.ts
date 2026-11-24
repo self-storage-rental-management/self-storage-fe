@@ -195,7 +195,7 @@ describe('checkInApi', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    await uploadCheckInEvidence('checkin-1', new File(['test'], 'handover.png', { type: 'image/png' }))
+    await uploadCheckInEvidence('checkin-1', new File(['test'], 'handover.png', { type: 'image/png' }), 'CHECK_IN', 'bang-chung-ban-giao-kho-luc-ban-giao', 'RSV-ABC-123')
 
     const options = fetchMock.mock.calls[0][1] as RequestInit
     expect(fetchMock.mock.calls[0][0]).toContain('/api/files')
@@ -203,6 +203,7 @@ describe('checkInApi', () => {
     expect((options.headers as Headers).has('Content-Type')).toBe(false)
     expect((options.body as FormData).get('entityType')).toBe('CHECK_IN')
     expect((options.body as FormData).get('entityId')).toBe('checkin-1')
+    expect(((options.body as FormData).get('file') as File).name).toMatch(/^bang-chung-ban-giao-kho-luc-ban-giao-rsv-abc-123-\d{14}\.png$/)
   })
 
   it('downloads check-in evidence through the authenticated file endpoint', async () => {

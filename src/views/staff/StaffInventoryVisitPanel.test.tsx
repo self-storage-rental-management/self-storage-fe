@@ -28,7 +28,7 @@ describe('staff inventory visit', () => {
   it('offers the arrival action only with an appointment inside the deadline', () => {
     expect(render(null)).not.toContain('Ghi nhận khách đã đến')
     expect(render(visit)).toContain('Số CCCD hoặc hộ chiếu trên giấy tờ gốc')
-    expect(render(visit)).toContain('Ảnh khách tại buổi kiểm kê')
+    expect(render(visit)).toContain('Ảnh đối chiếu khách lúc kiểm kê')
     expect(render(visit)).not.toContain('Ghi nhận khách đã đến')
     expect(render(visit, Date.parse(deadline))).toContain('Đã quá hạn kiểm kê')
     expect(render(visit, Date.parse(deadline))).not.toContain('Ghi nhận khách đã đến')
