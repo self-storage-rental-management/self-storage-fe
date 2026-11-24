@@ -6,10 +6,17 @@ import { newRenewalIdempotencyKey } from "./useRenewalCommand"
 
 import { getRenewalOperations } from "../services/renewalOperationsApi"
 
+type SigningAppointment = Pick<Awaited<ReturnType<typeof getRenewalOperations>>, "appointmentRef" | "appointmentStart">
+
+function hasFutureSigningAppointment(appointment: SigningAppointment) {
+  return Boolean(appointment.appointmentRef && appointment.appointmentStart
+    && Date.parse(appointment.appointmentStart) > Date.now())
+}
+
 export function renewalPaymentError(error: unknown): string {
   if(error instanceof ApiClientError) {
     if(error.status===401)return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại rồi tiếp tục thanh toán."
-    if(error.message.includes("DEFERRED_SOURCE")||error.code==="DEFERRED_SOURCE")
+    if(error.diagnosticMessage.includes("DEFERRED_SOURCE")||error.code==="DEFERRED_SOURCE")
       return "Hệ thống chưa đủ dữ liệu để mở thanh toán gia hạn. Vui lòng liên hệ hỗ trợ để kiểm tra hồ sơ."
     if(error.status===409)return `Chưa thể mở thanh toán: ${error.message}. Vui lòng cập nhật hồ sơ hoặc liên hệ hỗ trợ.`
     if(error.status!==null&&error.status>=500)
@@ -53,7 +60,7 @@ export function useRenewalPayment(renewal: RenewalApiRecord, enabled: boolean, o
       try {
         const operations=await getRenewalOperations("customer",renewal.id)
         if(!active||currentScope.current!==scope||request!==epoch.current)return
-        setAppointmentSelected(!!operations.appointmentRef && !!operations.appointmentStart && Date.parse(operations.appointmentStart)>Date.now())
+        setAppointmentSelected(hasFutureSigningAppointment(operations))
         const result=await getRenewalVnpayPayment(renewal.id)
         if(!active||currentScope.current!==scope||request!==epoch.current)return
         setPayment(result);setError(null)
@@ -109,11 +116,11 @@ export function useRenewalPayment(renewal: RenewalApiRecord, enabled: boolean, o
         if(!isCurrent())return
         if(!(e instanceof ApiClientError&&e.status===404))throw e
       }
-      try {
-        const operations=await getRenewalOperations("customer",renewal.id)
-        if(!isCurrent())return
-        setAppointmentSelected(!!operations.appointmentRef && !!operations.appointmentStart && Date.parse(operations.appointmentStart)>Date.now())
-      } catch {}
+      const operations = await getRenewalOperations("customer", renewal.id)
+      if (!isCurrent()) return
+      const hasAppointment = hasFutureSigningAppointment(operations)
+      setAppointmentSelected(hasAppointment)
+      if (!hasAppointment) throw new Error("Vui lòng lưu lịch hẹn ký còn hiệu lực trước khi thanh toán.")
       if(attempt.current?.scope!==scope)attempt.current=null
       let key=attempt.current?.key
       if(!key) { try { key=sessionStorage.getItem(scope)??undefined } catch {} }

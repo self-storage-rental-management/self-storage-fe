@@ -2,7 +2,7 @@ import { defaultRackPallet, type RackResult } from '../services/rackLayoutApi'
 
 const n = (value: number | undefined, digits = 2) => value !== undefined && Number.isFinite(value)
   ? value.toLocaleString('vi-VN', { maximumFractionDigits: digits })
-  : '—'
+  : '-'
 
 const dimensions = (...values: (number | undefined)[]) => `${values.map(value => n(value)).join(' × ')} cm`
 
@@ -15,14 +15,14 @@ function Detail({ label, value }: { label: string; value: string }) {
 
 function geometryStatus(status?: string) {
   if (status === 'CONFIG_GEOMETRY_VALID' || status === 'CONFIGURATION_VALID') return 'Hợp lệ theo hình học'
-  if (status === 'LEGACY_CONFIGURATION') return 'Cấu hình cũ — cần rà soát'
+  if (status === 'LEGACY_CONFIGURATION') return 'Cấu hình cũ - cần rà soát'
   return status || 'Chưa có kết quả'
 }
 
 function operationStatus(status?: string) {
   if (status === 'CONFIGURED_NOT_VERIFIED') return 'Đã có cấu hình, chưa xác minh vận hành'
   if (status === 'NOT_EVALUATED') return 'Chưa xác minh vận hành'
-  if (status === 'LEGACY') return 'Cấu hình cũ — cần rà soát'
+  if (status === 'LEGACY') return 'Cấu hình cũ - cần rà soát'
   return status || 'Chưa có kết quả'
 }
 
@@ -59,7 +59,7 @@ export default function RackLayoutSummary({ result }: { result: RackResult }) {
         <Detail label="Số khoang mỗi tầng" value={n(result.compartmentsPerLevel ?? firstRack?.bayCount, 0)} />
         <Detail label="Tổng số khoang" value={n(compartments, 0)} />
         <Detail label="Tổng số tấm kê" value={n(totalPallets, 0)} />
-        <Detail label="Diện tích gian kho" value={area === undefined ? '—' : `${n(area)} m²`} />
+        <Detail label="Diện tích gian kho" value={area === undefined ? '-' : `${n(area)} m²`} />
         <Detail label="Hàng tối đa mỗi gian" value={`${n(maxCargoWarehouse)} kg`} />
       </dl>
     </section>
@@ -74,7 +74,7 @@ export default function RackLayoutSummary({ result }: { result: RackResult }) {
         <Detail label="Tải hàng tối đa mỗi khoang" value={`${n(result.maxCargoWeightPerCompartmentKg)} kg`} />
         <Detail label="Tải hàng tối đa mỗi khung" value={`${n(result.maxCargoWeightPerRackKg)} kg`} />
         <Detail label="Tải hàng tối đa mỗi gian" value={`${n(maxCargoWarehouse)} kg`} />
-        <Detail label="Tổng tấm kê và hàng ở mức tính toán" value={grossAtCapacity === undefined ? '—' : `${n(grossAtCapacity)} kg`} />
+        <Detail label="Tổng tấm kê và hàng ở mức tính toán" value={grossAtCapacity === undefined ? '-' : `${n(grossAtCapacity)} kg`} />
         <Detail label="Tấm kê tối đa theo hình học" value={`${n(maxPalletByGeometry, 0)} tấm/khoang`} />
         <Detail label="Tấm kê tối đa theo tải trọng" value={`${n(maxPalletByLoad, 0)} tấm/khoang`} />
         <Detail label="Tấm kê có thể dùng" value={`${n(maxPalletUsable, 0)} tấm/khoang`} />

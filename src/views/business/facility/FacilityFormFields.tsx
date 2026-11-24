@@ -20,6 +20,8 @@ export interface FacilityGeneralInfoProps {
   isEditing: boolean
   code: string
   onChangeCode: (code: string) => void
+  autoCode?: boolean
+  onChangeAutoCode?: (enabled: boolean) => void
   city: string
   onChangeCity: (city: string) => void
   name: string
@@ -106,7 +108,7 @@ export function generateFacilityCode(
   existingFacilities: { id: string; code?: string }[],
   currentFacilityId?: string,
 ): string {
-  const prefix = generateFacilityPrefix(name, city)
+  const prefix = generateFacilityPrefix(name, city).slice(0, 28)
   const existingCodes = new Set(
     (existingFacilities || [])
       .filter(f => !currentFacilityId || f.id !== currentFacilityId)
@@ -132,6 +134,8 @@ export const FacilityGeneralInfo: React.FC<FacilityGeneralInfoProps> = ({
   isEditing,
   code,
   onChangeCode,
+  autoCode = true,
+  onChangeAutoCode,
   city,
   onChangeCity,
   name,
@@ -146,7 +150,7 @@ export const FacilityGeneralInfo: React.FC<FacilityGeneralInfoProps> = ({
   lang = 'vi',
 }) => {
   const [isCityListOpen, setIsCityListOpen] = useState(false)
-  const [isAutoCode, setIsAutoCode] = useState(!isEditing)
+  const isAutoCode = !isEditing && autoCode
 
   // Tự động cập nhật mã khi ở chế độ tạo mới và đang bật Auto
   useEffect(() => {
@@ -161,10 +165,8 @@ export const FacilityGeneralInfo: React.FC<FacilityGeneralInfoProps> = ({
   }, [name, city, isAutoCode, isEditing, existingFacilities, currentFacilityId])
 
   const toggleAutoCode = () => {
-    if (isAutoCode) {
-      setIsAutoCode(false)
-    } else {
-      setIsAutoCode(true)
+    onChangeAutoCode?.(!isAutoCode)
+    if (!isAutoCode) {
       const nextCode = generateFacilityCode(name, city, existingFacilities, currentFacilityId)
       onChangeCode(nextCode)
     }
@@ -485,13 +487,20 @@ export const FacilityImageManager: React.FC<FacilityImageManagerProps> = ({
   lang = 'vi',
 }) => {
   const [loadError, setLoadError] = useState<boolean>(false)
+  const [uploadError, setUploadError] = useState('')
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (!file.type.startsWith('image/')) return
+    setUploadError('')
+    if (!file.type.startsWith('image/')) {
+      setUploadError(lang === 'vi' ? 'Vui lòng chọn tệp ảnh.' : 'Choose an image file.')
+      e.target.value = ''
+      return
+    }
     if (file.size > 5 * 1024 * 1024) {
-      alert('Kích thước ảnh vượt quá giới hạn 5MB!')
+      setUploadError(lang === 'vi' ? 'Ảnh vượt quá 5 MB. Chọn ảnh nhỏ hơn hoặc bằng 5 MB.' : 'The image exceeds 5 MB. Choose a smaller image.')
+      e.target.value = ''
       return
     }
 
@@ -631,6 +640,7 @@ export const FacilityImageManager: React.FC<FacilityImageManagerProps> = ({
                 </button>
               ) : null}
             </div>
+            {uploadError && <p role="alert" className="mt-1 text-xs text-red-700">{uploadError}</p>}
             {loadError && (
               <p className="text-[10px] text-red-600 mt-1 font-semibold">
                 Không thể tải ảnh. Hãy kiểm tra liên kết hoặc chọn tệp từ máy tính.

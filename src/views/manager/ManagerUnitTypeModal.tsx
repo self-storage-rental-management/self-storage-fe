@@ -17,7 +17,7 @@ import {
 const steps = ['Thông tin chung', 'Thông số gian kho', 'Cấu hình khung kệ', 'Thiết lập tấm kê', 'Loại hàng và xác nhận'] as const
 const inputClass = 'w-full border border-stone-300 rounded-lg px-3 py-2 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:bg-stone-100'
 
-type UnitTypeEditorTarget = CustomerUnitType & { floor?: string; zone?: string }
+type UnitTypeEditorTarget = CustomerUnitType & { zone?: string }
 
 type UnitTypeForm = {
   code: string
@@ -35,7 +35,6 @@ type UnitTypeForm = {
   overheadClearanceM: string
   trolleyType: string
   physicalUnitCount: string
-  floor: string
   zone: string
   imageUrl: string
   detailImageUrl: string
@@ -52,7 +51,7 @@ function initialForm(initial?: UnitTypeEditorTarget): UnitTypeForm {
     gateWidthM: text(initial?.gateWidthM, '2.4'), gateHeightM: text(initial?.gateHeightM, '3.0'),
     lowestObstructionHeightM: text(initial?.lowestObstructionHeightM), overheadClearanceM: text(initial?.overheadClearanceM),
     trolleyType: text(initial?.trolleyType, 'Xe đẩy tay / xe sàn nhỏ'),
-    physicalUnitCount: text(initial?.totalCount, '1'), floor: text(initial?.floor, '1'), zone: text(initial?.zone, 'Khu A'),
+    physicalUnitCount: text(initial?.totalCount, '1'), zone: text(initial?.zone, 'Khu A'),
     imageUrl: text(initial?.imageUrl), detailImageUrl: text(initial?.detailImageUrl),
   }
 }
@@ -74,9 +73,9 @@ function initialRackForm(initial?: UnitTypeEditorTarget): RackForm {
 }
 
 const format = (value: number | null | undefined, digits = 2) => value == null || !Number.isFinite(value)
-  ? '—' : value.toLocaleString('vi-VN', { maximumFractionDigits: digits })
-const cm = (value: number | null | undefined) => value == null ? '—' : `${format(value)} cm`
-const kg = (value: number | null | undefined) => value == null ? '—' : `${format(value)} kg`
+  ? '-' : value.toLocaleString('vi-VN', { maximumFractionDigits: digits })
+const cm = (value: number | null | undefined) => value == null ? '-' : `${format(value)} cm`
+const kg = (value: number | null | undefined) => value == null ? '-' : `${format(value)} kg`
 
 function Stat({ label, value }: { label: string; value: string }) {
   return <div className="rounded-lg bg-stone-50 p-3">
@@ -366,8 +365,8 @@ export default function ManagerUnitTypeModal({ open, facilityId, onClose, onCrea
       if (!form.name.trim()) return 'Vui lòng nhập tên loại kho.'
       if (form.name.trim().length > 100 || form.description.trim().length > 500) return 'Tên loại kho tối đa 100 ký tự và mô tả tối đa 500 ký tự.'
       if (!validPhysicalUnitCount) return 'Số lượng gian kho phải là số nguyên không âm.'
-      if (physicalUnitCount > 0 && (!form.floor.trim() || !form.zone.trim())) return 'Khi tạo gian kho, cần nhập tầng và khu vực.'
-      if (form.floor.trim().length > 32 || form.zone.trim().length > 32) return 'Tầng và khu vực tối đa 32 ký tự.'
+      if (physicalUnitCount > 0 && !form.zone.trim()) return 'Khi tạo gian kho, cần nhập khu vực.'
+      if (form.zone.trim().length > 32) return 'Khu vực tối đa 32 ký tự.'
       return undefined
     }
     if (index === 1) {
@@ -492,7 +491,7 @@ export default function ManagerUnitTypeModal({ open, facilityId, onClose, onCrea
         lowestObstructionHeightM: form.lowestObstructionHeightM.trim() ? Number(form.lowestObstructionHeightM) : null,
         overheadClearanceM: form.overheadClearanceM.trim() ? Number(form.overheadClearanceM) : null,
         trolleyType: form.trolleyType.trim(), smallBoxCapacity: result.smallBoxesPerUnit, largeBoxCapacity: result.largeBoxesPerUnit,
-        physicalUnitCount, floor: form.floor.trim(), zone: form.zone.trim(), imageUrl: form.imageUrl.trim() || null, detailImageUrl: form.detailImageUrl.trim() || null,
+        physicalUnitCount, zone: form.zone.trim(), imageUrl: form.imageUrl.trim() || null, detailImageUrl: form.detailImageUrl.trim() || null,
         acceptedGoodsCategoryIds: selectedCategories, acceptedGoodsMaterialIds: selectedMaterials,
       }
       if (!initial) {
@@ -547,14 +546,13 @@ export default function ManagerUnitTypeModal({ open, facilityId, onClose, onCrea
       {step === 0 && <section className="space-y-5">
         <div className="grid gap-4 sm:grid-cols-2">
           {field('name', 'Tên loại kho *')}
-          {initial && <div className="rounded-lg bg-stone-50 p-3 text-sm text-stone-600"><span className="block text-xs text-stone-500">Mã loại kho</span><span className="mt-1 block font-mono font-semibold text-stone-900">{form.code || '—'}</span></div>}
+          {initial && <div className="rounded-lg bg-stone-50 p-3 text-sm text-stone-600"><span className="block text-xs text-stone-500">Mã loại kho</span><span className="mt-1 block font-mono font-semibold text-stone-900">{form.code || '-'}</span></div>}
         </div>
         <label className="block text-sm font-medium text-stone-700">Mô tả
           <textarea className={`${inputClass} mt-1 min-h-24 resize-y`} disabled={busy || imageReading} value={form.description} onChange={event => changeField('description', event.target.value)} />
         </label>
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2">
           {field('physicalUnitCount', 'Số lượng gian kho', 'number')}
-          {field('floor', 'Tầng tòa nhà')}
           {field('zone', 'Khu vực')}
         </div>
         <div className="grid items-start gap-4 lg:grid-cols-2">
@@ -629,7 +627,7 @@ export default function ManagerUnitTypeModal({ open, facilityId, onClose, onCrea
         </section>
         <section className="rounded-xl border border-stone-200 p-4">
           <h3 className="font-semibold text-stone-900">Tổng hợp cấu hình gian kho</h3>
-          <dl className="mt-3 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-3"><Stat label="Số lượng gian kho" value={`${format(validPhysicalUnitCount ? physicalUnitCount : undefined, 0)} gian`} /><Stat label="Kích thước gian kho" value={`${form.lengthM || '—'} × ${form.widthM || '—'} × ${form.heightM || '—'} m`} /><Stat label="Giới hạn khối lượng hàng" value={kg(Number(form.maxLoadKg))} /><Stat label="Số khung / khoang / tấm kê" value={`${format(confirmedResult?.rackCount ?? confirmedResult?.racks.length, 0)} / ${format(confirmedResult?.totalCompartments, 0)} / ${format(confirmedResult?.totalPallets ?? confirmedResult?.palletSlotCount, 0)}`} /><Stat label="Kích thước tấm kê" value={`${cm(confirmedResult?.palletLengthCm)} × ${cm(confirmedResult?.palletWidthCm)} × ${cm(confirmedResult?.palletHeightCm)}`} /><Stat label="Tổng khối lượng tấm kê và hàng" value={kg(confirmedResult?.maxStoredLoadAtCapacityKg)} /><Stat label="Thùng nhỏ tham khảo" value={`${format(confirmedResult?.smallBoxesPerUnit, 0)} thùng · ${confirmedResult?.smallBox.lengthCm ?? '—'} × ${confirmedResult?.smallBox.widthCm ?? '—'} × ${confirmedResult?.smallBox.heightCm ?? '—'} cm · ${confirmedResult?.smallBox.weightKg ?? '—'} kg/thùng`} /><Stat label="Thùng lớn tham khảo" value={`${format(confirmedResult?.largeBoxesPerUnit, 0)} thùng · ${confirmedResult?.largeBox.lengthCm ?? '—'} × ${confirmedResult?.largeBox.widthCm ?? '—'} × ${confirmedResult?.largeBox.heightCm ?? '—'} cm · ${confirmedResult?.largeBox.weightKg ?? '—'} kg/thùng`} /></dl>
+          <dl className="mt-3 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-3"><Stat label="Số lượng gian kho" value={`${format(validPhysicalUnitCount ? physicalUnitCount : undefined, 0)} gian`} /><Stat label="Kích thước gian kho" value={`${form.lengthM || '-'} × ${form.widthM || '-'} × ${form.heightM || '-'} m`} /><Stat label="Giới hạn khối lượng hàng" value={kg(Number(form.maxLoadKg))} /><Stat label="Số khung / khoang / tấm kê" value={`${format(confirmedResult?.rackCount ?? confirmedResult?.racks.length, 0)} / ${format(confirmedResult?.totalCompartments, 0)} / ${format(confirmedResult?.totalPallets ?? confirmedResult?.palletSlotCount, 0)}`} /><Stat label="Kích thước tấm kê" value={`${cm(confirmedResult?.palletLengthCm)} × ${cm(confirmedResult?.palletWidthCm)} × ${cm(confirmedResult?.palletHeightCm)}`} /><Stat label="Tổng khối lượng tấm kê và hàng" value={kg(confirmedResult?.maxStoredLoadAtCapacityKg)} /><Stat label="Thùng nhỏ tham khảo" value={`${format(confirmedResult?.smallBoxesPerUnit, 0)} thùng · ${confirmedResult?.smallBox.lengthCm ?? '-'} × ${confirmedResult?.smallBox.widthCm ?? '-'} × ${confirmedResult?.smallBox.heightCm ?? '-'} cm · ${confirmedResult?.smallBox.weightKg ?? '-'} kg/thùng`} /><Stat label="Thùng lớn tham khảo" value={`${format(confirmedResult?.largeBoxesPerUnit, 0)} thùng · ${confirmedResult?.largeBox.lengthCm ?? '-'} × ${confirmedResult?.largeBox.widthCm ?? '-'} × ${confirmedResult?.largeBox.heightCm ?? '-'} cm · ${confirmedResult?.largeBox.weightKg ?? '-'} kg/thùng`} /></dl>
           {confirmedResult?.warnings?.length ? <div className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900"><p className="font-semibold">Lưu ý kiểm tra</p><ul className="mt-1 list-disc space-y-1 pl-5">{confirmedResult.warnings.slice(0, 4).map((warning, index) => <li key={`${warning}-${index}`}>{warning}</li>)}</ul></div> : null}
         </section>
       </section>}

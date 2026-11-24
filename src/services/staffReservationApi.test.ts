@@ -10,6 +10,13 @@ describe('staff goods review API', () => {
     expect(await listStaffReservationReviews()).toEqual(result)
     expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:8080/api/staff/reservation-reviews?page=0&size=20')
   })
+  it('loads completed reviews from the server so history survives reloads', async () => {
+    const result = { data: [{ reservationId: 'r1', goodsReviewStatus: 'REJECTED', reservationStatus: 'REJECTED' }], pagination: { totalPages: 1 } }
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    expect(await listStaffReservationReviews(0, 20, true)).toEqual(result)
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:8080/api/staff/reservation-reviews?page=0&size=20&completed=true')
+  })
   it.each(['APPROVE', 'REJECT'] as const)('sends %s to the backend decision endpoint', async decision => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: { reservationId: 'r1', reservationStatus: decision === 'APPROVE' ? 'AWAITING_PAYMENT' : 'REJECTED' } }), { headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)

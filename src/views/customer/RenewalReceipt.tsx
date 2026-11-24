@@ -4,7 +4,7 @@ import { getRenewalReceipt } from '../../services/renewalReceiptApi'
 import { formatVndAmount } from '../../i18n/currency'
 import { rentalDate } from '../rental-api/presentation'
 import ApiReadState from '../rental-api/ApiReadState'
-import { paymentCurrencyLabel, paymentMethodLabel } from './paymentLabels'
+import { invoiceNumberLabel, paymentCurrencyLabel, paymentMethodLabel } from './paymentLabels'
 import PaymentReceiptCard from './PaymentReceiptCard'
 
 import type { RentalApiRole } from '../../types/rentalApi'
@@ -23,12 +23,12 @@ export default function RenewalReceipt({ id,paymentId,role='customer' }: { id: s
     : rentalDate(p.paidAt)
   return <PaymentReceiptCard title={p.kind==='DEPOSIT'?'Biên lai tiền thuê gia hạn trả trước':remaining?'Biên lai thanh toán khi ký gia hạn':'Biên lai tiền thuê gia hạn'} reference={p.renewalId}
     status="Khoản thu đã đối soát" fields={[
-      ['Mã giao dịch StorageHub',p.paymentId], [remaining?'Mã tham chiếu thanh toán':'Mã tham chiếu VNPay',p.transactionReference || '-'],
+      ['Mã phiếu thu',p.receiptCode || p.transactionReference || p.paymentId], ['Mã giao dịch StorageHub',p.paymentId], [remaining?'Mã tham chiếu thanh toán':'Mã tham chiếu VNPay',p.transactionReference || '-'],
       [remaining?'Mã phiếu thu hoặc giao dịch':'Mã giao dịch VNPay',p.gatewayTransactionNo || '-'],['Yêu cầu gia hạn',p.renewalId],
       [remaining?'Thời điểm ghi nhận tại quầy':'Thời điểm VNPay ghi nhận',remaining ? rentalDate(p.paidAt) : gatewayTime],['Thời điểm StorageHub xử lý',rentalDate(p.processedAt)],
       ['Phương thức thanh toán',method],['Người ghi nhận',p.initiatedByName || '-'],
       ['Nội dung',content],['Số tiền',formatVndAmount(p.amount)],['Tiền tệ',paymentCurrencyLabel(p.currency)],
-      ['Số hóa đơn',p.invoiceNumber || '-'],['Trạng thái hóa đơn',p.invoiceStatus],
+      ['Số hóa đơn',invoiceNumberLabel(p.invoiceNumber)],['Trạng thái hóa đơn',p.invoiceStatus],
       ['Ngày phát hành hóa đơn',p.invoiceIssuedAt ? rentalDate(p.invoiceIssuedAt) : '-'],
     ]} footer={p.environment==='SANDBOX'?'Biên lai VNPay thử nghiệm được lưu cùng yêu cầu gia hạn để đối chiếu thanh toán.':'Biên lai được lưu cùng yêu cầu gia hạn để đối chiếu thanh toán.'} />
 }

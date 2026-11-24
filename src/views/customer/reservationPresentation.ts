@@ -1,8 +1,15 @@
-import type { ReservationStatus } from '../../services/customerReservationApi'
+import type { CustomerReservation, ReservationStatus } from '../../services/customerReservationApi'
+
+export const goodsReviewLabels: Record<CustomerReservation['goodsReviewStatus'], string> = {
+  NOT_REQUIRED: 'Hàng hóa đủ điều kiện thanh toán cọc trực tiếp',
+  PENDING: 'Chờ nhân viên cơ sở duyệt hàng hóa',
+  APPROVED: 'Nhân viên cơ sở đã duyệt hàng hóa',
+  REJECTED: 'Nhân viên cơ sở đã từ chối hàng hóa',
+}
 
 export function paymentCountdown(deadline: string | null | undefined, now: number) {
   const timestamp = deadline ? Date.parse(deadline) : NaN
-  if (!Number.isFinite(timestamp)) return { text: 'Đang tải thời hạn…', expired: true, urgency: 'normal' as const }
+  if (!Number.isFinite(timestamp)) return { text: 'Đang tải thời hạn…', expired: true, urgency: 'danger' as const }
   const seconds = Math.max(0, Math.ceil((timestamp - now) / 1000))
   const hours = Math.floor(seconds / 3600)
   const minutes = Math.floor((seconds % 3600) / 60)
@@ -10,7 +17,14 @@ export function paymentCountdown(deadline: string | null | undefined, now: numbe
     ? `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
     : `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
 
-  return { text, expired: seconds === 0, urgency: seconds < 60 ? 'danger' as const : seconds < 300 ? 'warning' as const : 'normal' as const }
+  return { text, expired: seconds === 0, urgency: paymentCountdownUrgency(deadline, now) }
+}
+
+export function paymentCountdownUrgency(deadline: string | null | undefined, now: number): 'danger' | 'warning' | 'normal' {
+  const timestamp = deadline ? Date.parse(deadline) : NaN
+  if (!Number.isFinite(timestamp)) return 'normal'
+  const seconds = Math.max(0, Math.ceil((timestamp - now) / 1000))
+  return seconds < 60 ? 'danger' : seconds < 300 ? 'warning' : 'normal'
 }
 
 export const reservationStatusLabels: Record<ReservationStatus, string> = {

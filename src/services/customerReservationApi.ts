@@ -20,6 +20,7 @@ export type InventoryResolutionStatus =
   | 'PENDING_STAFF_RESOLUTION'
   | 'ACCEPTED'
   | 'PARTIAL_ACCEPTED'
+  | 'TRANSFER_REQUESTED'
   | 'RETURN_REQUESTED'
   | 'RECOVERY_REQUIRED'
 
@@ -387,7 +388,7 @@ export interface CreateReservationInput {
   goodsCondition?: string | null
   notes?: string | null
   goodsItems: GoodsItemInput[]
-  appointmentAt?: string | null
+  appointmentAt: string
   acceptedTerms: boolean
 }
 
@@ -397,6 +398,7 @@ export interface CustomerReservation {
   setupEarlyExitFee?: number | null
   setupReturnRentalId?: string | null
   setupReturnCaseId?: string | null
+  setupReturnScheduledDate?: string | null
   pricingPolicyVersion?: string | null
   pricingSnapshotStatus?: 'COMPLETE' | 'INCOMPLETE' | null
   pricingQuotedAt?: string | null
@@ -553,6 +555,7 @@ export interface CustomerReservationDetail {
   inventoryActualJson?: string | null
   inventoryMismatchJson?: string | null
   inventorySuggestedQuantitiesJson?: string | null
+  /** Version of the inspection record that the at-site confirmation approved. */
   inventoryResultVersion?: number
   inventoryAtSiteConfirmedByName?: string | null
   inventoryDecisionAt?: string | null
@@ -589,6 +592,7 @@ export interface ReservationPaymentResult {
   initiatedByName?: string | null
   createdAt?: string | null
   reservationCode?: string
+  receiptCode?: string | null
   invoiceNumber?: string | null
   invoiceStatus?: InvoiceStatus
   invoiceIssuedAt?: string | null

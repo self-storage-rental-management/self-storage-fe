@@ -124,6 +124,7 @@ export function EvidenceDownload({
   previewOnly = false,
   chatFile = false,
   compact = false,
+  iconOnly = false,
 }: {
   id: string
   index?: number
@@ -133,6 +134,7 @@ export function EvidenceDownload({
   previewOnly?: boolean
   chatFile?: boolean
   compact?: boolean
+  iconOnly?: boolean
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState<unknown>()
@@ -200,11 +202,13 @@ export function EvidenceDownload({
         type="button"
         variant={compact ? 'ghost' : 'outline'}
         size={compact ? 'sm' : 'md'}
-        className={compact ? 'h-9 w-[108px] whitespace-nowrap !bg-amber-100 !px-2 !font-semibold !text-amber-900 hover:!bg-amber-200 hover:!text-amber-950 active:!bg-amber-300' : 'min-h-11 whitespace-nowrap'}
+        className={iconOnly ? 'h-9 w-9 !p-2 !text-stone-500 hover:!bg-stone-100' : compact ? 'h-9 w-[108px] whitespace-nowrap !bg-amber-100 !px-2 !font-semibold !text-amber-900 hover:!bg-amber-200 hover:!text-amber-950 active:!bg-amber-300' : 'min-h-11 whitespace-nowrap'}
+        aria-label={iconOnly ? previewLabel || "Xem trước" : undefined}
+        title={iconOnly ? previewLabel || "Xem trước" : undefined}
         disabled={busy}
         onClick={openPreview}
       >
-        {busy ? "Đang tải…" : previewLabel || "Xem trước"}
+        {iconOnly ? <><svg aria-hidden="true" className="show-icon h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" /><circle cx="12" cy="12" r="2.5" /></svg><span className="sr-only">{previewLabel || "Xem trước"}</span></> : busy ? "Đang tải…" : previewLabel || "Xem trước"}
       </Button>}
       {!previewOnly && (asLink ? <button
         type="button"
@@ -216,11 +220,13 @@ export function EvidenceDownload({
         type="button"
         variant={compact ? 'ghost' : 'outline'}
         size={compact ? 'sm' : 'md'}
-        className={compact ? 'h-9 w-[108px] whitespace-nowrap !bg-amber-100 !px-2 !font-semibold !text-amber-900 hover:!bg-amber-200 hover:!text-amber-950 active:!bg-amber-300' : 'min-h-11 whitespace-nowrap'}
+        className={iconOnly ? 'h-9 w-9 !p-2 !text-stone-500 hover:!bg-stone-100' : compact ? 'h-9 w-[108px] whitespace-nowrap !bg-amber-100 !px-2 !font-semibold !text-amber-900 hover:!bg-amber-200 hover:!text-amber-950 active:!bg-amber-300' : 'min-h-11 whitespace-nowrap'}
+        aria-label={iconOnly ? label || `Tải minh chứng ${index}` : undefined}
+        title={iconOnly ? label || `Tải minh chứng ${index}` : undefined}
         disabled={busy}
         onClick={download}
       >
-        {label || `Tải minh chứng ${index}`}
+        {iconOnly ? <><svg aria-hidden="true" className="show-icon h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12m-4-4 4 4 4-4M4 19h16" /></svg><span className="sr-only">{label || `Tải minh chứng ${index}`}</span></> : label || `Tải minh chứng ${index}`}
       </Button>)}
       {!!error && <span role="alert">{integrationError(error)}</span>}
       {previewFile && <FilePreviewDialog file={previewFile} onClose={() => setPreviewFile(undefined)} />}
