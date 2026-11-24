@@ -93,7 +93,7 @@ export default function ManagerComplaintsWorkspace({
     () =>
       storeReturns.filter(
         r =>
-          r.status === 'disputed' &&
+          (r.status === 'disputed' || r.customerDecision === 'disputed') &&
           isManagerFacilityVisible(user, r.facilityId, r.facilityName)
       ),
     [storeReturns, user]
@@ -138,6 +138,8 @@ export default function ManagerComplaintsWorkspace({
     overdueFee: 0,
     outstandingFee: 0
   })
+  const [lockFee, setLockFee] = useState(0)
+  const [palletFee, setPalletFee] = useState(0)
   const [disputeResolutionNote, setDisputeResolutionNote] = useState('')
   const [apiBusy, setApiBusy] = useState(false)
   const apiLock = useRef(false)
@@ -146,10 +148,17 @@ export default function ManagerComplaintsWorkspace({
     setSelectedReturn(item)
     setDisputeResolutionNote(item.staffNotes || '')
     setDisputePreset(undefined)
+    const apiMatch = (returnApiRecords.rows || []).find(r => r.id === item.id)
+    const pLoss = apiMatch?.palletLossFee || 0
+    const totalLost = Math.round(item.lostItemFee || 0)
+    const initPallet = pLoss > 0 ? pLoss : 0
+    const initLock = Math.max(0, totalLost - initPallet)
+    setLockFee(initLock)
+    setPalletFee(initPallet)
     setDisputeSettlement({
       damageFee: Math.round(item.damageFee || 0),
       cleaningFee: Math.round(item.cleaningFee || 0),
-      lostItemFee: Math.round(item.lostItemFee || 0),
+      lostItemFee: totalLost,
       overdueFee: Math.round(item.overdueFee || 0),
       outstandingFee: Math.round(item.outstandingFee || 0)
     })
@@ -166,33 +175,49 @@ export default function ManagerComplaintsWorkspace({
       setDisputeSettlement({
         damageFee: 0,
         cleaningFee: 0,
-        lostItemFee: Math.round(selectedReturn.lostItemFee || 0),
+        lostItemFee: 0,
         overdueFee: 0,
         outstandingFee: Math.round(selectedReturn.outstandingFee || 0)
       })
+      setLockFee(0)
+      setPalletFee(0)
       setDisputeResolutionNote(
-        'Thẩm định hiện trường: Phát hiện lỗi kết cấu cơ sở (nóc dột / vách ngấm nước ngoài vào). Cơ sở kho xin lỗi và chịu 100% trách nhiệm: Miễn toàn bộ phí vệ sinh & hư hại, hoàn 100% tiền cọc cho khách hàng.'
+        'Thẩm định hiện trường: Phát hiện lỗi kết cấu cơ sở (nóc dột / vách ngấm nước ngoài vào). Cơ sở kho xin lỗi và chịu 100% trách nhiệm: Miễn toàn bộ phí vệ sinh, hư hại & pallet, hoàn 100% tiền cọc cho khách hàng.'
       )
     } else if (preset === 'customer_fault_deduct') {
+      const apiMatch = (returnApiRecords.rows || []).find(r => r.id === selectedReturn.id)
+      const pLoss = apiMatch?.palletLossFee || 0
+      const totalLost = Math.round(selectedReturn.lostItemFee || 0)
+      const initPallet = pLoss > 0 ? pLoss : 0
+      const initLock = Math.max(0, totalLost - initPallet)
       setDisputeSettlement({
         damageFee: Math.round(selectedReturn.damageFee || 0),
         cleaningFee: Math.round(selectedReturn.cleaningFee || 0),
-        lostItemFee: Math.round(selectedReturn.lostItemFee || 0),
+        lostItemFee: totalLost,
         overdueFee: Math.round(selectedReturn.overdueFee || 0),
         outstandingFee: Math.round(selectedReturn.outstandingFee || 0)
       })
+      setLockFee(initLock)
+      setPalletFee(initPallet)
       setDisputeResolutionNote(
-        'Thẩm định hiện trường: Kết cấu trần, vách, sàn kho khô ráo 100%. Nấm mốc phát sinh do khách đóng gói hàng còn ẩm hoặc vi phạm quy định bảo quản đồ nhạy cảm. Giữ nguyên khấu trừ phí vệ sinh và hư hại theo đúng Hợp đồng.'
+        'Thẩm định hiện trường: Kết cấu trần, vách, sàn kho khô ráo 100%. Nấm mốc phát sinh do khách đóng gói hàng còn ẩm hoặc vi phạm quy định bảo quản đồ nhạy cảm. Giữ nguyên khấu trừ phí vệ sinh, hư hại và phụ kiện/pallet theo đúng Hợp đồng.'
       )
     } else if (preset === 'mutual_settlement') {
       const reducedCleaning = Math.round((selectedReturn.cleaningFee || 0) * 0.5)
+      const apiMatch = (returnApiRecords.rows || []).find(r => r.id === selectedReturn.id)
+      const pLoss = apiMatch?.palletLossFee || 0
+      const totalLost = Math.round(selectedReturn.lostItemFee || 0)
+      const initPallet = pLoss > 0 ? pLoss : 0
+      const initLock = Math.max(0, totalLost - initPallet)
       setDisputeSettlement({
         damageFee: Math.round(selectedReturn.damageFee || 0),
         cleaningFee: reducedCleaning,
-        lostItemFee: Math.round(selectedReturn.lostItemFee || 0),
+        lostItemFee: totalLost,
         overdueFee: Math.round(selectedReturn.overdueFee || 0),
         outstandingFee: Math.round(selectedReturn.outstandingFee || 0)
       })
+      setLockFee(initLock)
+      setPalletFee(initPallet)
       setDisputeResolutionNote(
         'Thỏa thuận hỗ trợ thiện chí: Khách thuê kho tiêu chuẩn không điều hòa, vào mùa nồm ẩm. Cơ sở hỗ trợ giảm 50% phí vệ sinh/khử trùng để hai bên hoàn tất quyết toán nhanh chóng.'
       )
@@ -207,22 +232,34 @@ export default function ManagerComplaintsWorkspace({
     }))
   }
 
+  const matchingApiItem = (returnApiRecords.rows || []).find(r => r.id === selectedReturn?.id)
+  const unusedRentCredit = matchingApiItem?.setupEarlyExit
+    ? (matchingApiItem.rentalRefundCredit ?? 0)
+    : (matchingApiItem?.activeReturnPolicy?.rentalRefundAmount ?? 0)
+
   const totalDeductions =
     disputeSettlement.damageFee +
     disputeSettlement.cleaningFee +
-    disputeSettlement.lostItemFee +
+    lockFee +
+    palletFee +
     disputeSettlement.overdueFee +
     disputeSettlement.outstandingFee
 
   const deposit = selectedReturn?.depositAmount || 0
-  const calculatedRefund = Math.max(0, deposit - totalDeductions)
-  const calculatedDue = Math.max(0, totalDeductions - deposit)
+  const totalFund = deposit + unusedRentCredit
+  const calculatedRefund = Math.max(0, totalFund - totalDeductions)
+  const calculatedDue = Math.max(0, totalDeductions - totalFund)
 
   const handleReviewDispute = async () => {
     if (!selectedReturn) return
     if (!disputeResolutionNote.trim()) {
       showToast('Vui lòng nhập lý do giải quyết khiếu nại.')
       return
+    }
+
+    const finalSettlement: DisputeSettlementFees = {
+      ...disputeSettlement,
+      lostItemFee: lockFee + palletFee
     }
 
     if (useApi) {
@@ -235,7 +272,7 @@ export default function ManagerComplaintsWorkspace({
           throw new Error('Hồ sơ không còn ở trạng thái khiếu nại trả kho. Vui lòng tải lại.')
         }
         await reviewDispute(latest.id, {
-          ...disputeSettlement,
+          ...finalSettlement,
           resolutionNote: disputeResolutionNote.trim(),
           proposedUnitStatus: latest.proposedUnitStatus ?? 'available'
         })
@@ -245,7 +282,7 @@ export default function ManagerComplaintsWorkspace({
             selectedReturn.id,
             user,
             disputeResolutionNote.trim(),
-            disputeSettlement,
+            finalSettlement,
             disputePreset
           )
         } catch {
@@ -270,7 +307,7 @@ export default function ManagerComplaintsWorkspace({
         selectedReturn.id,
         user,
         disputeResolutionNote.trim(),
-        disputeSettlement,
+        finalSettlement,
         disputePreset
       )
       showToast('Đã giải quyết khiếu nại thành công!')
@@ -578,8 +615,8 @@ export default function ManagerComplaintsWorkspace({
                 </div>
 
                 {/* Cột phải: Bảng kê khấu trừ + Dự toán hoàn/thu + Nút hành động */}
-                <div className="space-y-3 flex flex-col justify-between">
-                  <div className="space-y-2.5">
+                <div className="space-y-2.5 flex flex-col justify-between">
+                  <div className="space-y-2">
                     {/* Adjustable Fees Table */}
                     <div>
                       <p className="font-bold text-stone-800 mb-1 text-xs uppercase tracking-wide">
@@ -614,8 +651,22 @@ export default function ManagerComplaintsWorkspace({
                             type="number"
                             min="0"
                             step="10000"
-                            value={disputeSettlement.lostItemFee}
-                            onChange={e => setSettlementFee('lostItemFee', e.target.value)}
+                            value={lockFee}
+                            onChange={e => setLockFee(Math.max(0, Number(e.target.value) || 0))}
+                            className="w-full border border-stone-300 rounded px-2 py-1 text-xs bg-white"
+                          />
+                        </div>
+                        <div>
+                          <div className="flex justify-between items-center mb-0.5">
+                            <label className="block text-stone-600 font-medium text-[11px]">Phí thiếu tấm kê (Pallet):</label>
+                            <span className="text-[10px] text-stone-400">150k/tấm</span>
+                          </div>
+                          <input
+                            type="number"
+                            min="0"
+                            step="150000"
+                            value={palletFee}
+                            onChange={e => setPalletFee(Math.max(0, Number(e.target.value) || 0))}
                             className="w-full border border-stone-300 rounded px-2 py-1 text-xs bg-white"
                           />
                         </div>
@@ -630,7 +681,7 @@ export default function ManagerComplaintsWorkspace({
                             className="w-full border border-stone-300 rounded px-2 py-1 text-xs bg-white"
                           />
                         </div>
-                        <div className="col-span-2">
+                        <div>
                           <label className="block text-stone-600 mb-0.5 font-medium text-[11px]">Nợ cước tồn đọng:</label>
                           <input
                             type="number"
@@ -644,34 +695,130 @@ export default function ManagerComplaintsWorkspace({
                       </div>
                     </div>
 
-                    {/* Real-time Calculation Summary */}
-                    <div className="rounded-lg bg-stone-100 p-2.5 text-xs space-y-1 border border-stone-200">
-                      <div className="flex justify-between">
-                        <span className="text-stone-600">Tổng phí khấu trừ sau điều chỉnh:</span>
-                        <strong className="text-rose-700">{formatVnd(totalDeductions)}</strong>
+                    {/* Bảng chiết tính dòng tiền minh bạch ("người tính sao lên đó tính vậy") */}
+                    <div className="rounded-lg bg-stone-50 border border-stone-200 p-2 text-xs space-y-1">
+                      <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-stone-600 border-b border-stone-200 pb-0.5">
+                        <span>Chiết tính dòng tiền hoàn cọc</span>
+                        <span className="text-stone-400 font-normal text-[10px]">Đơn vị: VNĐ</span>
                       </div>
-                      <div className="flex justify-between border-t border-stone-200 pt-1">
-                        <span className="text-stone-700 font-medium">Tiền cọc an ninh ban đầu:</span>
-                        <strong className="text-emerald-700">{formatVnd(deposit)}</strong>
+
+                      {/* Bước 1: Quỹ tiền của khách */}
+                      <div className="space-y-0.5 text-[11px]">
+                        <div className="flex justify-between items-center text-stone-700">
+                          <span className="font-medium flex items-center gap-1">
+                            <span className="text-emerald-700 font-bold">(+)</span> 1. Tiền cọc an ninh ban đầu:
+                          </span>
+                          <strong className="font-mono text-emerald-800">{formatVnd(deposit)}</strong>
+                        </div>
+                        {unusedRentCredit > 0 && (
+                          <div className="flex justify-between items-center text-stone-700">
+                            <span className="font-medium flex items-center gap-1">
+                              <span className="text-emerald-700 font-bold">(+)</span> 2. Tiền cước thuê chưa sử dụng:
+                            </span>
+                            <strong className="font-mono text-emerald-800">+{formatVnd(unusedRentCredit)}</strong>
+                          </div>
+                        )}
                       </div>
-                      <div className="flex justify-between border-t border-stone-300 pt-1 font-bold text-sm">
+
+                      {/* Bước 2: Chi phí khấu trừ */}
+                      <div className="border-t border-stone-200 pt-0.5 space-y-0.5 text-[11px]">
+                        <div className="flex justify-between items-center text-stone-700">
+                          <span className="font-medium flex items-center gap-1">
+                            <span className="text-rose-700 font-bold">(-)</span> Tổng chi phí khấu trừ biên bản:
+                          </span>
+                          <strong className="font-mono text-rose-700">-{formatVnd(totalDeductions)}</strong>
+                        </div>
+                        {totalDeductions > 0 && (
+                          <div className="pl-3 text-[10px] text-stone-500 space-y-0.5">
+                            {disputeSettlement.damageFee > 0 && (
+                              <div className="flex justify-between">
+                                <span>· Phí hư hại kho:</span>
+                                <span>-{formatVnd(disputeSettlement.damageFee)}</span>
+                              </div>
+                            )}
+                            {disputeSettlement.cleaningFee > 0 && (
+                              <div className="flex justify-between">
+                                <span>· Phí dọn vệ sinh:</span>
+                                <span>-{formatVnd(disputeSettlement.cleaningFee)}</span>
+                              </div>
+                            )}
+                            {lockFee > 0 && (
+                              <div className="flex justify-between">
+                                <span>· Phí mất chìa/thẻ/khóa:</span>
+                                <span>-{formatVnd(lockFee)}</span>
+                              </div>
+                            )}
+                            {palletFee > 0 && (
+                              <div className="flex justify-between">
+                                <span>· Phí thiếu tấm kê (Pallet):</span>
+                                <span>-{formatVnd(palletFee)}</span>
+                              </div>
+                            )}
+                            {disputeSettlement.overdueFee > 0 && (
+                              <div className="flex justify-between">
+                                <span>· Phí phạt trễ hạn:</span>
+                                <span>-{formatVnd(disputeSettlement.overdueFee)}</span>
+                              </div>
+                            )}
+                            {disputeSettlement.outstandingFee > 0 && (
+                              <div className="flex justify-between">
+                                <span>· Nợ cước tồn đọng:</span>
+                                <span>-{formatVnd(disputeSettlement.outstandingFee)}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Bước 3: Kết luận thực nhận */}
+                      <div className="border-t-2 border-stone-300 pt-1">
                         {calculatedRefund > 0 ? (
-                          <>
-                            <span className="text-emerald-800">Hoàn trả lại khách hàng:</span>
-                            <span className="text-emerald-700">{formatVnd(calculatedRefund)}</span>
-                          </>
+                          <div className="rounded bg-emerald-50 border border-emerald-300 px-2 py-1 flex items-center justify-between">
+                            <div>
+                              <span className="text-[11px] font-black text-emerald-900 uppercase block leading-tight">
+                                (=) Hoàn trả lại khách hàng:
+                              </span>
+                              <span className="text-[9px] text-emerald-700 leading-none">
+                                [Tiền quỹ {formatVnd(totalFund)}] − [Khấu trừ {formatVnd(totalDeductions)}]
+                              </span>
+                            </div>
+                            <span className="text-sm font-black text-emerald-700 font-mono">
+                              {formatVnd(calculatedRefund)}
+                            </span>
+                          </div>
+                        ) : calculatedDue > 0 ? (
+                          <div className="rounded bg-rose-50 border border-rose-300 px-2 py-1 flex items-center justify-between">
+                            <div>
+                              <span className="text-[11px] font-black text-rose-900 uppercase block leading-tight">
+                                (=) Khách hàng cần đóng thêm:
+                              </span>
+                              <span className="text-[9px] text-rose-700 leading-none">
+                                Khấu trừ vượt quá tiền cọc
+                              </span>
+                            </div>
+                            <span className="text-sm font-black text-rose-700 font-mono">
+                              {formatVnd(calculatedDue)}
+                            </span>
+                          </div>
                         ) : (
-                          <>
-                            <span className="text-rose-800">Khách hàng cần đóng thêm:</span>
-                            <span className="text-rose-700">{formatVnd(calculatedDue)}</span>
-                          </>
+                          <div className="rounded bg-stone-100 border border-stone-300 px-2 py-1 flex items-center justify-between">
+                            <div>
+                              <span className="text-[11px] font-black text-stone-800 uppercase block leading-tight">
+                                (=) Quyết toán cân bằng:
+                              </span>
+                              <span className="text-[9px] text-stone-600 leading-none">
+                                Khấu trừ vừa đủ tiền cọc
+                              </span>
+                            </div>
+                            <span className="text-sm font-black text-stone-800 font-mono">0 ₫</span>
+                          </div>
                         )}
                       </div>
                     </div>
                   </div>
 
                   {/* Modal Actions */}
-                  <div className="flex gap-2 justify-end pt-2 border-t">
+                  <div className="flex gap-2 justify-end pt-1.5 border-t">
                     <Button
                       variant="outline"
                       size="sm"
