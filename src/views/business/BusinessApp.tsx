@@ -3865,7 +3865,7 @@ export default function BusinessApp({
             setPage('facilities')
             setReviewRequestId(notification.relatedEntityId)
             setReviewOpen(true)
-          } else if (notification.title === 'Manager cập nhật ảnh hoặc thông tin loại kho' || notification.title === 'Loại kho cần BO duyệt lại') {
+          } else if (notification.title === 'Quản lý cập nhật ảnh hoặc thông tin loại kho' || notification.title === 'Loại kho cần BO duyệt lại') {
             setPage('facilities')
             setReviewRequestId(null)
             setReviewOpen(true)

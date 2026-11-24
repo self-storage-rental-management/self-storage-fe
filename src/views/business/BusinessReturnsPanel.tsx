@@ -947,7 +947,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
 
     // Bước 1
     await new Promise((r) => setTimeout(r, 1200))
-    addLog('1. Customer tạo yêu cầu trả kho cho gian HCM-Q1-M-001 (Cọc: 9,500,000 ₫, Hẹn trả: 2026-10-18)')
+    addLog('1. Khách hàng tạo yêu cầu trả kho cho gian HCM-Q1-M-001 (Cọc: 9,500,000 ₫, Hẹn trả: 2026-10-18)')
     setDemoStep(2)
 
     // Bước 2
@@ -957,7 +957,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
 
     // Bước 3
     await new Promise((r) => setTimeout(r, 1600))
-    addLog('3. Customer xem biên bản: Không đồng ý phí vệ sinh 100k, gửi khiếu nại lên Ban Điều Hành -> Trạng thái: DISPUTED')
+    addLog('3. Khách hàng xem biên bản: Không đồng ý phí vệ sinh 100k, gửi khiếu nại lên Ban Điều Hành -> Trạng thái: DISPUTED')
     setDemoStep(4)
 
     // Bước 4
@@ -1194,7 +1194,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                           className="bg-amber-600 hover:bg-amber-700 text-white font-bold cursor-pointer shadow-2xs"
                           onClick={() => handleOpenDetail(item, 'overview')}
                         >
-                          Duyệt hủy setup
+                          Duyệt hủy chuẩn bị
                         </Button>
                       ) : isBusiness && isAwaitingLegacyPricing(item) ? (
                         <Button
@@ -1974,7 +1974,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                 </p>
 
                 <div className="p-3 bg-white rounded-lg border border-purple-200 flex items-center justify-between">
-                  <span className="text-xs text-stone-600 font-medium">Số tiền cọc thực hoàn (Net Refund):</span>
+                  <span className="text-xs text-stone-600 font-medium">Số tiền cọc thực hoàn (Tiền hoàn thực tế):</span>
                   <span className="text-base font-extrabold text-purple-900 font-mono">
                     {formatAmount(selectedItem.netRefundAmount)}
                   </span>

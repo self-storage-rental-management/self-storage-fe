@@ -125,7 +125,7 @@ export function formatHistoryPaymentMethod(value?: string | null): string {
     return '-'
   }
 
-  return trimmed
+  return /[À-ỹ]/.test(trimmed) ? trimmed : 'Phương thức khác'
 }
 
 export function invoiceNumberLabel(number?: string | null): string {

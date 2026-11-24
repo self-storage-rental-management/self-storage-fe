@@ -1,5 +1,6 @@
 import InventoryMismatchEvidence, { type InventoryInspectionReport } from '../staff/InventoryMismatchEvidence'
 import InventoryDecisionSummary from '../../components/InventoryDecisionSummary'
+import { displayStatusLabel } from '../../presentation/statusLabels'
 import { invoiceNumberLabel } from '../customer/paymentLabels'
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { useEffect, useState } from "react"
@@ -548,7 +549,7 @@ export default function RentalDetail({
                   <p className="text-sm font-medium text-stone-600">{bookingPaymentPurposes[payment.purpose]}</p>
                   <p className="mt-1 text-xl font-bold text-stone-900">{rentalMoney(payment.amount, evidence.currency)}</p>
                   <p className="mt-2 text-sm"><strong>Trạng thái:</strong> {bookingPaymentStatuses[payment.status]}</p>
-                  <p className="mt-1 text-sm"><strong>Số hóa đơn:</strong> {invoiceNumberLabel(payment.invoiceNumber)}{payment.invoiceNumber?.trim() && ` · ${payment.invoiceStatus}`}</p>
+                  <p className="mt-1 text-sm"><strong>Số hóa đơn:</strong> {invoiceNumberLabel(payment.invoiceNumber)}{payment.invoiceNumber?.trim() && ` · ${displayStatusLabel(payment.invoiceStatus)}`}</p>
                   {role === 'customer' && payment.status === 'PAID' && rental.reservationId && <Button variant="outline" size="sm" className="mt-3" onClick={() => setReceiptPayment(payment.id)}>Xem biên lai</Button>}
                 </li>
               ))}
