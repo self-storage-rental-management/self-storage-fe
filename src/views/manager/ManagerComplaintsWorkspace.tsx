@@ -35,7 +35,7 @@ function RentalDisplayCode({
     if (useApi) {
       void getRental('manager', rentalId)
         .then(record => {
-          const display = record.displayCode || record.contractId || rentalId
+          const display = record.displayCode || rentalId
           rentalCodeCache.set(rentalId, display)
           if (active) setCode(display)
         })
