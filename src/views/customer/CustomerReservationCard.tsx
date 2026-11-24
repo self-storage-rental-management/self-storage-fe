@@ -656,7 +656,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
     <div className="space-y-5">
       <div className="flex flex-col items-start justify-between gap-5 border-b border-stone-200 pb-4 md:flex-row">
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span className="min-w-0 text-xs font-bold text-amber-700">{r.reservationCode}</span>
             {r.assignedUnitCode && (
@@ -669,8 +669,8 @@ export default function CustomerReservationCard({ user, reservation: r, facility
                 Mã ổ khóa đã bàn giao: <span className="font-mono">{detail.lockReference}</span>
               </span>
             )}
+            <span className={`shrink-0 rounded px-2.5 py-1 text-xs font-bold ${inventoryMismatchPending ? 'bg-red-700 text-white' : awaitingInventory ? (partialInventoryPending ? 'bg-amber-100 text-amber-900' : checkInStatus === 'completed' ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900') : visualTone === 'completed' ? 'bg-emerald-700 text-white' : visualTone === 'expired' ? 'bg-red-100 text-red-900' : progress !== null && progress >= 3 ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{detail?.inventoryResolutionStatus === 'TRANSFER_REQUESTED' ? 'Chờ thu xếp chuyển hàng' : inventoryReturnRequested ? 'Buộc trả kho do kiểm kê sai lệch' : inventoryMismatchPending ? 'Cần xử lý sai lệch kiểm kê' : awaitingInventory ? (partialInventoryPending ? 'Chờ xử lý phần hàng dư' : checkInStatus === 'completed' ? 'Đã kiểm kê' : 'Chờ kiểm kê') : reservationStatusLabels[r.status]}</span>
           </div>
-          <span className={`shrink-0 rounded px-2.5 py-1 text-xs font-bold ${inventoryMismatchPending ? 'bg-red-700 text-white' : awaitingInventory ? (partialInventoryPending ? 'bg-amber-100 text-amber-900' : checkInStatus === 'completed' ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900') : visualTone === 'completed' ? 'bg-emerald-700 text-white' : visualTone === 'expired' ? 'bg-red-100 text-red-900' : progress !== null && progress >= 3 ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{detail?.inventoryResolutionStatus === 'TRANSFER_REQUESTED' ? 'Chờ thu xếp chuyển hàng' : inventoryReturnRequested ? 'Buộc trả kho do kiểm kê sai lệch' : inventoryMismatchPending ? 'Cần xử lý sai lệch kiểm kê' : awaitingInventory ? (partialInventoryPending ? 'Chờ xử lý phần hàng dư' : checkInStatus === 'completed' ? 'Đã kiểm kê' : 'Chờ kiểm kê') : reservationStatusLabels[r.status]}</span>
         </div>
         <h2 className="mt-1 text-lg font-bold text-stone-900">{displayedUnitTypeName} · {displayedFacilityName}</h2>
         <div className="mt-3 space-y-2">
