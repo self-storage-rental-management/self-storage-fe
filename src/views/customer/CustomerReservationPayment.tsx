@@ -174,7 +174,7 @@ export default function CustomerReservationPayment({ user, reservation, facility
         setAcceptedNoRefund(false); setPayOpen(true)
       }}>Thanh toán đặt cọc giữ chỗ</Button>
     </div>}
-    {payment?.paymentStatus === 'PAID' && <Button variant="outline" size="sm" className="reservation-action reservation-action-receipt min-h-10 w-full justify-center" onClick={() => setReceiptOpen(true)}>{bookingDepositAccepted(payment) ? 'Xem biên lai thanh toán' : 'Xem giao dịch cần đối soát'}</Button>}
+    {payment?.paymentStatus === 'PAID' && <Button variant="outline" size="sm" className="reservation-action reservation-action-receipt min-h-10 w-full justify-center" onClick={() => setReceiptOpen(true)}>{bookingDepositAccepted(payment) ? 'Xem biên lai tiền cọc giữ chỗ' : 'Xem giao dịch cọc cần đối soát'}</Button>}
     <Modal size="2xl" open={payOpen} onClose={() => { if (!busy) { setPayOpen(false); setConfirmModalOpen(false); setAcceptedNoRefund(false) } }} title="Thanh toán trước 20% (giữ chỗ)">
       <div className="space-y-4">
         <div className="grid gap-1 text-sm"><p>Đơn giữ kho: <b>{reservation.reservationCode}</b></p><p>Cơ sở: <b>{facilityName}</b></p><p>Loại kho: <b>{unitTypeName}</b></p><p>{reservation.rentalPeriodConfirmed ? 'Kỳ thuê đã chốt:' : 'Kỳ thuê dự kiến sau thời gian chuẩn bị:'} <b>{snapshot.startDate.split('-').reverse().join('/')} đến {rentalEndDateForDisplay(snapshot.endDate).split('-').reverse().join('/')}</b></p></div>
@@ -258,7 +258,7 @@ export default function CustomerReservationPayment({ user, reservation, facility
         </div>
       </div>
     </Modal>
-    <Modal size="3xl" open={receiptOpen} onClose={() => setReceiptOpen(false)} title={payment && bookingDepositAccepted(payment) ? 'Biên lai thanh toán' : 'Chi tiết giao dịch'}>
+    <Modal size="3xl" open={receiptOpen} onClose={() => setReceiptOpen(false)} title={payment && bookingDepositAccepted(payment) ? 'Biên lai tiền cọc giữ chỗ' : 'Chi tiết giao dịch cọc'}>
       {payment && <div className="w-full min-w-0"><ReservationReceipt payment={payment} reservationCode={reservation.reservationCode} /></div>}
     </Modal>
     <Modal open={returnFailure !== null} onClose={() => setReturnFailure(null)} title="Kết quả thanh toán VNPay">

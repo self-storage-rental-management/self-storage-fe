@@ -765,7 +765,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
       if (useApi) {
         let receiptFileId = refundUpload.current?.file === refundFile ? refundUpload.current.id : undefined
         if (!receiptFileId) {
-          const asset = await uploadReturnEvidence(selectedItem.id, refundFile!)
+          const asset = await uploadReturnEvidence(selectedItem.id, refundFile!, 'business', 'bien-lai-thuc-hoan-tra-kho')
           receiptFileId = asset.id
           refundUpload.current = { file: refundFile!, id: asset.id }
         }
@@ -2010,7 +2010,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
 
                 {useApi && <>
                   <label className="block text-xs font-bold text-stone-700">Phương thức hoàn tiền<select className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-normal" value={refundMethod} disabled={submitting} onChange={event => { setRefundMethod(event.target.value as 'CASH' | 'BANK_TRANSFER'); setRefundConfirmed(false) }}><option value="BANK_TRANSFER">Chuyển khoản</option><option value="CASH">Tiền mặt</option></select></label>
-                  <label className="block text-xs font-bold text-stone-700">Biên lai thực hoàn (*)<input key={selectedItem.id} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" disabled={submitting} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-normal" onChange={event => { setRefundFile(event.target.files?.[0] ?? null); setRefundConfirmed(false); refundUpload.current = null }} /></label>
+                  <label className="block text-xs font-bold text-stone-700">Biên lai thực hoàn trả kho (*)<input key={selectedItem.id} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" disabled={submitting} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-normal" onChange={event => { setRefundFile(event.target.files?.[0] ?? null); setRefundConfirmed(false); refundUpload.current = null }} /></label>
                   <label className="flex items-start gap-2 text-xs text-stone-700"><input type="checkbox" className="mt-0.5" checked={refundConfirmed} disabled={submitting || !refundFile} onChange={event => setRefundConfirmed(event.target.checked)} /><span>Tôi xác nhận đã thực hoàn đúng số tiền hiển thị và đã đối chiếu biên lai. Hệ thống chỉ ghi nhận chứng từ, không tự chuyển tiền.</span></label>
                 </>}
                 <div className="flex justify-end gap-2 pt-1">

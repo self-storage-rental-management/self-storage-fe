@@ -1,6 +1,7 @@
 import { ApiClientError, apiDownload, apiRequest } from './apiClient'
 import type { GoodsItemInput, GoodsCategory } from './customerReservationApi'
 import { isCheckInStatus, isReservationStatus, isPaymentStatus, type CheckInStatus as WorkflowCheckInStatus, type ReservationStatus, type PaymentStatus } from '../types/statusContracts'
+import { renameEvidenceFile } from '../utils/evidenceFileName'
 
 export type CheckInStatus = WorkflowCheckInStatus | null
 export type CheckInListStatus = 'UNSCHEDULED' | NonNullable<CheckInStatus>
@@ -534,7 +535,13 @@ export async function verifyInventoryIdentity(checkInId: string, request: {
   ))
 }
 
-export async function uploadCheckInEvidence(checkInId: string, file: File, purpose: 'CHECK_IN' | 'CHECK_IN_IDENTITY' = 'CHECK_IN') {
+export async function uploadCheckInEvidence(
+  checkInId: string,
+  file: File,
+  purpose: 'CHECK_IN' | 'CHECK_IN_IDENTITY' = 'CHECK_IN',
+  fileNamePurpose?: string,
+  fileNameContext?: string,
+) {
   if (file.size > 25 * 1024 * 1024) {
     throw new ApiClientError(
       "Tệp vượt quá dung lượng tối đa 25MB. Vui lòng chọn tệp nhỏ hơn.",
@@ -542,7 +549,10 @@ export async function uploadCheckInEvidence(checkInId: string, file: File, purpo
     )
   }
   const form = new FormData()
-  form.set('file', file)
+  const namedFile = fileNamePurpose
+    ? renameEvidenceFile(file, fileNamePurpose, fileNameContext)
+    : file
+  form.set('file', namedFile)
   form.set('entityType', purpose)
   form.set('entityId', checkInId)
   const payload = await apiRequest<unknown>('/api/files', { method: 'POST', body: form })
