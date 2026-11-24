@@ -1,4 +1,6 @@
+import { checkInTask } from "../../services/staffDailyOperationsApi"
 import { LEGACY_RENEWAL_NOTICE, LEGACY_RENEWAL_HISTORY_NOTICE, legacyRenewalMoney } from '../../domain/legacyRenewal'
+import { VIETNAM_TIME_ZONE } from '../../utils/vietnamTime'
 import { useEffect, useRef, useState } from "react"
 
 import Layout, {
@@ -46,6 +48,7 @@ import {
   listCredentialAlerts,
   revokeAccessCredential,
   type CredentialAlert,
+  type CheckInCase,
 } from "../../services/checkInApi"
 import { listReturns, type ApiReturn } from "../../services/returnApi"
 import { listStaffActiveReservations, listStaffReservationReviews, type ReservationReview, type StaffReservationProgress } from "../../services/staffReservationApi"
@@ -160,7 +163,9 @@ const formatDate = (value?: string) => {
 
   const date = new Date(value)
 
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("vi-VN")
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleDateString("vi-VN", { timeZone: VIETNAM_TIME_ZONE })
 }
 
 const formatExactDateTime = (value?: string) => {
@@ -168,7 +173,9 @@ const formatExactDateTime = (value?: string) => {
 
   const date = new Date(value)
 
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("vi-VN")
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleString("vi-VN", { timeZone: VIETNAM_TIME_ZONE })
 }
 
 const formatDateTime = (value: string) => {
@@ -820,6 +827,7 @@ export default function StaffApp({
 }) {
   const hub = useStorageHub()
 
+  const [handoverCases, setHandoverCases] = useState<CheckInCase[] | null>(null)
   const [apiOverviewCounts, setApiOverviewCounts] = useState({
     depositWaiting: 0,
     upcomingCheckins: 0,
@@ -1301,9 +1309,11 @@ export default function StaffApp({
         "AWAITING_CUSTOMER_RECEIPT",
       ])
 
+      const pendingHandovers = checkIns.filter(item => !["completed", "no_show", "cancelled", "rejected"].includes(item.checkInStatus ?? ""))
+      setHandoverCases(results[1].status === "fulfilled" ? pendingHandovers : null)
       setApiOverviewCounts({
         depositWaiting: reservations.filter((item) => waitingStatuses.has(item.status)).length,
-        upcomingCheckins: checkIns.filter((item) => !["completed", "no_show", "cancelled", "rejected"].includes(item.checkInStatus ?? "")).length,
+        upcomingCheckins: pendingHandovers.length,
         returnsToProcess: returns.filter((item) => item.status !== "completed").length,
         pendingReviews: reviews.filter((item) => item.goodsReviewStatus === "PENDING").length,
       })
@@ -2100,6 +2110,14 @@ export default function StaffApp({
     operationalTaskSort,
   ])
 
+  const queueTasks = new Map(operationalTasks.map(task => [task.id, task]))
+  if (isApiAuthenticated()) {
+    for (const item of handoverCases ?? []) {
+      const task = checkInTask(item)
+      queueTasks.set(task.id, task)
+    }
+  }
+
   const openOperationalTask = (task: typeof operationalTasks[number]) => {
     if (isApiAuthenticated()) {
       const recovery = (task as StaffDailyOperation).recoveryTask
@@ -2502,7 +2520,7 @@ export default function StaffApp({
           </div>
           <StaffDailyTaskQueue
             assignedTasks={assignedFacilityTasks}
-            operationalTasks={operationalTasks}
+            operationalTasks={Array.from(queueTasks.values())}
             dateFilter={operationalTaskDateFilter}
             priorityFilter={operationalTaskPriorityFilter}
             sort={operationalTaskSort}
@@ -2992,7 +3010,7 @@ export default function StaffApp({
       )}
 
       {/* ── CHECK-IN / HANDOVER ───────────────────────────────── */}
-      {page === "checkin" && <StaffCheckInOperationsPanel showToast={showToast} />}
+      {page === "checkin" && <StaffCheckInOperationsPanel showToast={showToast} onOpenReturns={() => setPage("return")} />}
       {page === "credentials" && isApiAuthenticated() && <StaffCredentialReissuePanel showToast={showToast} />}
 
       {/* ── RETURN INSPECTION ────────────────────────────────── */}

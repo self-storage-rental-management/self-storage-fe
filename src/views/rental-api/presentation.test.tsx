@@ -24,10 +24,11 @@ describe("Rental/Renewal business presentation", () => {
     expect(renewalDisplayLabel(identity)).toBe(label)
   })
 
-  it.each(["active", "ACTIVE"])("translates access status %s without changing its value or exposing credentials", status => {
-    const detail = { ...rental, access: { completeness: "COMPLETE", status, reason: "PRIVATE_SOURCE_REASON" } }
+  it.each(["active", "ACTIVE"])("translates access status %s without changing its value or exposing source diagnostics", status => {
+    const detail = { ...rental, access: { completeness: "COMPLETE", status, reference: "LOCK-018", reason: "PRIVATE_SOURCE_REASON" } }
     const html = renderToStaticMarkup(<RentalDetail rental={detail} />)
     expect(html).toContain("Đang hoạt động")
+    expect(html).toContain("LOCK-018")
     expect(html).not.toContain("PRIVATE_SOURCE_REASON")
     expect(detail.access.status).toBe(status)
   })

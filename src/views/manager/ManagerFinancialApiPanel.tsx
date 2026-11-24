@@ -201,7 +201,13 @@ function paymentDisplayLabel(item: ManagerPaymentHistoryItem) {
   return needsReconciliation(item) ? 'Chờ đối soát' : statusLabels[item.status]
 }
 
-const receiptActionClass = 'h-9 w-[108px] whitespace-nowrap !bg-amber-100 !px-2 !font-semibold !text-amber-900 hover:!bg-amber-200 hover:!text-amber-950 active:!bg-amber-300'
+const receiptActionClass = 'h-9 w-9 !p-2 !text-stone-500 hover:!bg-stone-100'
+
+function ReceiptIcon({ kind }: { kind: 'preview' | 'download' }) {
+  return kind === 'preview'
+    ? <svg aria-hidden="true" className="show-icon h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" /><circle cx="12" cy="12" r="2.5" /></svg>
+    : <svg aria-hidden="true" className="show-icon h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12m-4-4 4 4 4-4M4 19h16" /></svg>
+}
 
 export default function ManagerFinancialApiPanel() {
   let actor: ApiActor
@@ -257,16 +263,24 @@ function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; 
 
   return <div className="mx-auto w-full max-w-[1600px] space-y-4">
     <header className="space-y-1">
-      <h1 className="text-xl font-semibold tracking-tight text-stone-900">Lịch sử thanh toán</h1>
+      <h1 className="text-2xl font-bold tracking-tight text-stone-900">Lịch sử thanh toán</h1>
       <p className="text-sm text-stone-500">Các khoản thu, thanh toán gia hạn và hoàn tiền đã được ghi nhận tại cơ sở.</p>
     </header>
 
-    <Card className="p-3 sm:px-4">
-      <form onSubmit={submit} className="flex max-w-2xl flex-col gap-2 sm:flex-row sm:items-end" aria-label="Tìm giao dịch thanh toán">
-        <label className="min-w-0 flex-1 space-y-1.5">
-          <span className="block text-xs font-medium text-stone-600">Tìm giao dịch</span>
+    <ApiReadState loading={read.loading} error={read.error} retry={read.refresh} />
+    {!!downloadError && <p role="alert" className="text-sm text-red-800">{managerDisplayError(downloadError)}</p>}
+
+    <Card className="overflow-hidden rounded-2xl border border-stone-200 bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 px-4 py-3">
+        <div className="flex items-center gap-3">
+          <h2 className="text-sm font-semibold text-stone-900">Giao dịch</h2>
+          {result && <span className="rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-xs font-medium tabular-nums text-stone-600">{result.pagination.totalItems.toLocaleString('vi-VN')} giao dịch</span>}
+        </div>
+      <form onSubmit={submit} className="flex w-full flex-wrap items-center gap-2 sm:w-auto" aria-label="Tìm giao dịch thanh toán">
+        <label className="min-w-0 flex-1 sm:w-72">
+          <span className="sr-only">Tìm giao dịch</span>
           <input
-            className="h-9 w-full rounded-lg border border-stone-300 bg-white px-3 text-sm text-stone-900 transition focus:border-amber-600"
+            className="h-10 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-900 transition focus:border-amber-600"
             value={draft}
             onChange={event => setDraft(event.target.value)}
             maxLength={200}
@@ -274,65 +288,45 @@ function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; 
           />
         </label>
         <div className="flex gap-2">
-          <Button type="submit" size="sm" className="h-9 whitespace-nowrap" disabled={read.loading}>Tìm kiếm</Button>
+          <Button type="submit" size="sm" className="h-10 whitespace-nowrap !bg-[#a64e00] !text-white hover:!bg-[#893f00]" disabled={read.loading}>Tìm kiếm</Button>
           {(draft || search) && <Button type="button" size="sm" className="h-9 whitespace-nowrap" variant="ghost" onClick={clearSearch}>Xóa tìm kiếm</Button>}
         </div>
       </form>
-    </Card>
-
-    <ApiReadState loading={read.loading} error={read.error} retry={read.refresh} />
-    {!!downloadError && <p role="alert" className="text-sm text-red-800">{managerDisplayError(downloadError)}</p>}
-
-    {result && <Card className="overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 px-4 py-3">
-        <div className="flex items-center gap-3">
-          <h2 className="text-sm font-semibold text-stone-900">Giao dịch</h2>
-          <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-medium tabular-nums text-stone-600">{result.pagination.totalItems.toLocaleString('vi-VN')} giao dịch</span>
-        </div>
-        {search && <p className="text-xs text-stone-500">Kết quả tìm kiếm: <span className="font-medium text-stone-700">{search}</span></p>}
       </div>
 
-      <Table tableClassName="min-w-[1008px] table-fixed [&_th]:bg-stone-50 [&_th]:px-4 [&_th]:py-2.5 [&_th]:normal-case [&_th]:tracking-normal [&_th]:whitespace-nowrap [&_td]:px-4 [&_td]:py-2.5 [&_td]:align-middle [&_.ui-badge]:border-0">
+      {result && <><Table tableClassName="manager-payment-table min-w-[1100px] table-fixed [&_th]:bg-[#f6f4f1] [&_th]:px-4 [&_th]:py-3 [&_th]:normal-case [&_th]:tracking-normal [&_th]:whitespace-nowrap [&_td]:px-4 [&_td]:py-4 [&_td]:align-middle [&_.ui-badge]:border-0">
         <colgroup>
-          <col className="w-64" /><col className="w-28" /><col className="w-32" />
-          <col className="w-44" /><col className="w-24" /><col className="w-60" />
+          <col className="w-[14%]" /><col className="w-[16%]" /><col className="w-[11%]" /><col className="w-[12%]" />
+          <col className="w-[13%]" /><col className="w-[12%]" /><col className="w-[12%]" /><col className="w-[10%]" />
         </colgroup>
         <Thead><tr>
-          <Th>Khách hàng / Mã giao dịch</Th>
-          <Th className="!pr-1">Nội dung</Th>
-          <Th className="!pl-1 !pr-2 text-right">Số tiền</Th>
-          <Th className="text-center">Trạng thái</Th>
-          <Th className="!pl-2 !pr-1">Thời gian</Th>
-          <Th className="!px-2 text-center">Biên lai</Th>
+          <Th>Mã giao dịch</Th><Th>Khách hàng</Th><Th>Loại</Th><Th>Phương thức</Th>
+          <Th className="text-right">Số tiền</Th><Th>Trạng thái</Th><Th>Thời gian</Th><Th className="text-center">Biên lai</Th>
         </tr></Thead>
         <Tbody>
           {result.data.map((item: ManagerPaymentHistoryItem) => <Tr key={item.id} className="transition-colors hover:bg-stone-50 focus-within:bg-stone-50">
-            <Td>
-              <p className="truncate text-sm font-medium leading-5 text-stone-900" title={item.customerName}>{item.customerName}</p>
-              <code className="mt-0.5 block max-w-[30ch] truncate text-[11px] leading-4 text-stone-500" title={item.transactionReference}>{item.transactionReference}</code>
-            </Td>
-            <Td className="!pr-1">
-              <span className="block truncate text-sm leading-5 text-stone-700" title={typeLabels[item.type]}>{typeLabels[item.type]}</span>
-              <p className="mt-0.5 truncate text-xs text-stone-500" title={paymentMethodLabel(item.paymentMethod)}>{paymentMethodLabel(item.paymentMethod)}</p>
-            </Td>
-            <Td className="!pl-1 !pr-2 whitespace-nowrap text-right text-sm font-semibold tabular-nums text-stone-900">
+            <Td><code className="block truncate text-xs text-stone-900" title={item.transactionReference}>{item.transactionReference}</code></Td>
+            <Td><p className="break-words font-medium text-stone-900 [overflow-wrap:anywhere]">{item.customerName}</p></Td>
+            <Td><span className="block break-words text-stone-700">{typeLabels[item.type]}</span></Td>
+            <Td><span className="block break-words text-stone-700">{paymentMethodLabel(item.paymentMethod)}</span></Td>
+            <Td className={`!pl-1 !pr-2 whitespace-nowrap text-right text-sm font-semibold tabular-nums ${item.type === 'RETURN_REFUND' ? 'text-red-700' : 'text-stone-900'}`}>
               {item.type === 'RETURN_REFUND' ? `-${money(item.amount, item.currency)}` : money(item.amount, item.currency)}
             </Td>
-            <Td className="text-center"><span className="inline-flex whitespace-nowrap"><Badge variant={needsReconciliation(item) ? 'warning' : statusVariants[item.status]}>{paymentDisplayLabel(item)}</Badge></span></Td>
+            <Td className="text-left"><span className={`payment-status inline-flex max-w-full ${item.status === 'REFUNDED' && !needsReconciliation(item) ? 'payment-status-refunded' : ''}`}><Badge variant={needsReconciliation(item) ? 'warning' : statusVariants[item.status]}>{paymentDisplayLabel(item)}</Badge></span></Td>
             <Td><PaymentTime value={item.occurredAt} /></Td>
             <Td className="!px-2 text-center">
               {canReadReceipt(item) && item.receiptFileId
-                ? <div className="flex items-center justify-center"><EvidenceDownload id={item.receiptFileId} previewLabel="Xem trước" label="Tải xuống" compact /></div>
+                ? <div className="flex items-center justify-center"><EvidenceDownload id={item.receiptFileId} previewLabel="Xem trước" label="Tải xuống" compact iconOnly /></div>
                 : canReadReceipt(item)
                   ? <div className="flex items-center justify-center gap-1">
-                    <Button type="button" size="sm" variant="ghost" className={receiptActionClass} aria-label={`Xem biên lai ${item.transactionReference}`} onClick={() => setReceipt(item)}>Xem trước</Button>
-                    <Button type="button" size="sm" variant="ghost" className={receiptActionClass} aria-label={`Tải biên lai ${item.transactionReference}`} disabled={!!downloading} onClick={() => void downloadReceipt(item)}>{downloading === item.id ? 'Đang tải…' : 'Tải xuống'}</Button>
+                    <Button type="button" size="sm" variant="ghost" className={receiptActionClass} title="Xem trước" aria-label={`Xem biên lai ${item.transactionReference}`} onClick={() => setReceipt(item)}><ReceiptIcon kind="preview" /><span className="sr-only">Xem trước</span></Button>
+                    <Button type="button" size="sm" variant="ghost" className={receiptActionClass} title={downloading === item.id ? 'Đang tải…' : 'Tải xuống'} aria-label={`Tải biên lai ${item.transactionReference}`} disabled={!!downloading} onClick={() => void downloadReceipt(item)}><ReceiptIcon kind="download" /><span className="sr-only">{downloading === item.id ? 'Đang tải…' : 'Tải xuống'}</span></Button>
                   </div>
                   : <span className="text-xs text-stone-400">Chưa có</span>}
             </Td>
           </Tr>)}
           {result.data.length === 0 && <tr>
-            <td colSpan={6} className="px-5 py-14 text-center">
+            <td colSpan={8} className="px-5 py-14 text-center">
               <p className="font-medium text-stone-700">Không tìm thấy giao dịch phù hợp</p>
               <p className="mt-1 text-sm text-stone-500">Thử mã giao dịch hoặc tên khách hàng khác.</p>
             </td>
@@ -342,7 +336,8 @@ function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; 
       <div className="border-t border-stone-200 px-5 py-2">
         <ApiPager pagination={result.pagination} onPage={setPage} disabled={read.loading} />
       </div>
-    </Card>}
+      </>}
+    </Card>
     {receipt && <Modal open title="Chi tiết giao dịch" size="2xl" onClose={() => setReceipt(undefined)}>
       {receipt.renewalId
         ? <RenewalReceipt id={receipt.renewalId} paymentId={receipt.id} role="manager" />

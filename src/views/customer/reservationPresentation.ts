@@ -9,7 +9,7 @@ export const goodsReviewLabels: Record<CustomerReservation['goodsReviewStatus'],
 
 export function paymentCountdown(deadline: string | null | undefined, now: number) {
   const timestamp = deadline ? Date.parse(deadline) : NaN
-  if (!Number.isFinite(timestamp)) return { text: 'Đang tải thời hạn…', expired: true }
+  if (!Number.isFinite(timestamp)) return { text: 'Đang tải thời hạn…', expired: true, urgency: 'danger' as const }
   const seconds = Math.max(0, Math.ceil((timestamp - now) / 1000))
   const hours = Math.floor(seconds / 3600)
   const minutes = Math.floor((seconds % 3600) / 60)
@@ -17,7 +17,7 @@ export function paymentCountdown(deadline: string | null | undefined, now: numbe
     ? `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
     : `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
 
-  return { text, expired: seconds === 0 }
+  return { text, expired: seconds === 0, urgency: paymentCountdownUrgency(deadline, now) }
 }
 
 export function paymentCountdownUrgency(deadline: string | null | undefined, now: number): 'danger' | 'warning' | 'normal' {

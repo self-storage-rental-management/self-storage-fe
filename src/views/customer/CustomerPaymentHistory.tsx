@@ -1,7 +1,7 @@
 import { formatCustomerDateTime } from '../../i18n/customerDate'
 import { userFacingError } from '../../presentation/userFacingError'
 import { useEffect, useState } from "react"
-import { Button, Card, Modal, SectionHeader, Table, Thead, Tbody, Th, Td, Tr } from "../../components/ui"
+import { Button, Card, Modal, Table, Thead, Tbody, Th, Td, Tr } from "../../components/ui"
 import { formatVndAmount } from "../../i18n/currency"
 import {
   loadCustomerPaymentHistory,
@@ -99,10 +99,14 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
   const [revision, setRevision] = useState(0)
   const selectedReceipt = entries.find(entry => entry.id === receiptId)
   const receipt = !loading && !error && selectedReceipt && canViewCustomerHistoryReceipt(selectedReceipt) ? selectedReceipt : null
+  const [search, setSearch] = useState('')
   const [historyFilter, setHistoryFilter] = useState<'all' | 'payments' | 'settlement'>('all')
   const visibleEntries = entries.filter(entry => {
     const settlement = ['damage', 'refund', 'returnOffset'].includes(entry.category) || ['REFUND', 'DAMAGE_FEE'].includes(entry.reservationPayment?.purpose || '')
-    return historyFilter === 'all' || (historyFilter === 'settlement' ? settlement : !settlement)
+    const matchesFilter = historyFilter === 'all' || (historyFilter === 'settlement' ? settlement : !settlement)
+    const query = search.trim().toLocaleLowerCase('vi-VN')
+    const matchesSearch = !query || [entry.paymentReference, entry.reservationPayment?.transactionReference, entry.reference, entry.unitCode, entry.facilityName].some(value => value?.toLocaleLowerCase('vi-VN').includes(query))
+    return matchesFilter && matchesSearch
   })
   useEffect(() => {
     let disposed = false
@@ -135,7 +139,6 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
     window.addEventListener('focus', refresh)
     return () => window.removeEventListener('focus', refresh)
   }, [])
-  const confirmedRenewals = entries.filter(entry => isRenewalHistoryEntry(entry) && canViewCustomerHistoryReceipt(entry))
   const statusLabel = (entry: HistoryEntry) => {
     if (isRenewalHistoryEntry(entry)) return customerHistoryStatusLabel(entry)
     if (entry.reservationPayment && entry.category === "deposit") return paymentRecordLabel(entry.reservationPayment)
@@ -147,24 +150,10 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
   }
   return (
     <div className="fade-in space-y-4">
-      <SectionHeader
-        title="Lịch Sử Thanh Toán & Quyết Toán"
-      />
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Card className="p-4">
-          <p className="text-xs text-stone-500">Giao dịch có biên lai</p>
-          <p className="mt-1 text-2xl font-extrabold text-stone-950">{loading ? "…" : error ? 0 : entries.filter(canViewCustomerHistoryReceipt).length}</p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-xs text-stone-500">Giao dịch gia hạn đã đối soát</p>
-          <p className="mt-1 text-2xl font-extrabold text-emerald-700">{loading ? "…" : error ? 0 : confirmedRenewals.length}</p>
-          <p className="mt-1 text-xs text-stone-500">Xác nhận từng khoản thu, tổng phải trả xem trong hồ sơ gia hạn.</p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-xs text-stone-500">Số giao dịch</p>
-          <p className="mt-1 text-2xl font-extrabold text-amber-700">{loading ? "…" : error ? 0 : entries.length}</p>
-        </Card>
-      </div>
+      <header className="space-y-1">
+        <h1 className="text-2xl font-bold tracking-tight text-stone-900">Lịch sử thanh toán</h1>
+        <p className="text-sm text-stone-500">Theo dõi các khoản thanh toán, gia hạn và hoàn tiền của bạn.</p>
+      </header>
       {loading && (
         <p role="status" className="text-sm text-stone-500">
           Đang tải giao dịch…
@@ -187,22 +176,36 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
           {warning} Tải lại trang để thử lại.
         </p>
       ))}
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Lọc giao dịch">
-        <Button variant={historyFilter === 'all' ? 'primary' : 'outline'} onClick={() => setHistoryFilter('all')}>Tất cả</Button>
-        <Button variant={historyFilter === 'payments' ? 'primary' : 'outline'} onClick={() => setHistoryFilter('payments')}>Lịch sử thanh toán</Button>
-        <Button variant={historyFilter === 'settlement' ? 'primary' : 'outline'} onClick={() => setHistoryFilter('settlement')}>Quyết toán</Button>
-      </div>
-      <Card>
-        <Table tableClassName="min-w-[1120px] table-fixed [&_td]:align-middle [&_th]:align-middle [&_td]:py-3.5">
+      <Card className="overflow-hidden rounded-2xl border border-stone-200 bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 px-4 py-4">
+          <div className="flex items-center gap-3">
+            <h2 className="font-semibold text-stone-900">Giao dịch</h2>
+            {!loading && !error && <span className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs text-stone-600">{visibleEntries.length} giao dịch</span>}
+          </div>
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+            <label className="min-w-0 flex-1 sm:w-72">
+              <span className="sr-only">Tìm giao dịch</span>
+              <input className="h-10 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-900 focus:border-amber-600 focus:outline-none focus:ring-1 focus:ring-amber-600" value={search} onChange={event => setSearch(event.target.value)} placeholder="Mã giao dịch, hồ sơ hoặc gian kho" />
+            </label>
+            <label>
+              <span className="sr-only">Lọc giao dịch</span>
+              <select className="h-10 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-700" value={historyFilter} onChange={event => setHistoryFilter(event.target.value as typeof historyFilter)}>
+                <option value="all">Tất cả</option><option value="payments">Lịch sử thanh toán</option><option value="settlement">Quyết toán</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <Table tableClassName="manager-payment-table min-w-[950px] table-fixed [&_th]:bg-[#f6f4f1] [&_th]:normal-case [&_th]:tracking-normal [&_th]:py-2.5 [&_td]:py-2.5">
+          <colgroup><col className="w-[14%]" /><col className="w-[18%]" /><col className="w-[18%]" /><col className="w-[11%]" /><col className="w-[13%]" /><col className="w-[16%]" /><col className="w-[10%]" /></colgroup>
           <Thead>
             <tr>
-              <Th className="w-[130px]">Mã Giao Dịch</Th>
-              <Th className="w-[210px]">Hồ Sơ</Th>
-              <Th className="w-[230px]">Nội Dung</Th>
-              <Th className="w-[120px]">Phương Thức</Th>
-              <Th className="w-[140px] text-right">Số Tiền</Th>
-              <Th className="w-[170px] text-center">Trạng Thái</Th>
-              <Th className="w-[120px] text-center">Thao Tác</Th>
+              <Th>Mã Giao Dịch</Th>
+              <Th>Hồ Sơ</Th>
+              <Th>Nội Dung</Th>
+              <Th>Phương Thức</Th>
+              <Th className="text-right">Số Tiền</Th>
+              <Th className="text-center">Trạng Thái</Th>
+              <Th className="text-center">Thao Tác</Th>
             </tr>
           </Thead>
           <Tbody>
@@ -225,7 +228,7 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
                   </Td>
                   <Td className="text-center">
                     <div className="flex flex-col items-center justify-center gap-1">
-                      <span className={`inline-flex whitespace-nowrap rounded px-2.5 py-1 text-xs font-bold ${paymentStatusBadgeClass(entry.status, label)}`}>
+                      <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold ${paymentStatusBadgeClass(entry.status, label)}`}>
                         {label}
                       </span>
                       {entry.reservationPayment?.invoiceNumber && (

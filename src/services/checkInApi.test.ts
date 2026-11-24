@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { clearAuthTokens } from './apiClient'
-import { checkInEvidenceAssetIds, completeCheckIn, completeCheckInSetup, confirmCheckInPayment, downloadCheckInEvidence, listCheckIns, listStaffAccessCredentials, markCheckInNoShow, rejectCheckIn, reissueAccessCredential, scheduleCheckIn, signCheckInContract, startCheckInSetup, uploadCheckInEvidence, verifyCheckInIdentity } from './checkInApi'
+import { checkInEvidenceAssetIds, completeCheckIn, completeCheckInSetup, confirmCheckInPayment, downloadCheckInEvidence, listCheckIns, listStaffAccessCredentials, markCheckInNoShow, recordInventoryArrival, rejectCheckIn, reissueAccessCredential, scheduleCheckIn, signCheckInContract, startCheckInSetup, uploadCheckInEvidence, verifyCheckInIdentity, verifyInventoryIdentity } from './checkInApi'
 
 const responseCase = {
   checkInId: 'checkin-1',
@@ -66,9 +66,33 @@ describe('checkInApi', () => {
     expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({ method: 'POST' }))
   })
 
+  it('records the inventory visit separately and uploads a restricted identity photo', async () => {
+    const photo = new File(['sample'], 'arrival.png', { type: 'image/png' })
+    const inventoryVisit = { appointmentAt: '2026-11-02T09:30:00Z', arrivedAt: '2026-11-02T09:05:00Z',
+      identityVerifiedAt: null, verifiedByName: null, photoId: null }
+    const fetchMock = mockEnvelope({ ...responseCase, checkInStatus: 'setup_completed', inventoryVisit })
+    fetchMock.mockImplementationOnce(() => mockEnvelope({ ...responseCase, checkInStatus: 'setup_completed', inventoryVisit })())
+      .mockImplementationOnce(() => mockEnvelope({ id: 'photo-1', entityType: 'CHECK_IN_IDENTITY' })())
+    vi.stubGlobal('fetch', fetchMock)
+
+    expect((await recordInventoryArrival('checkin-1')).inventoryVisit?.arrivedAt).toBe(inventoryVisit.arrivedAt)
+    const asset = await uploadCheckInEvidence('checkin-1', photo, 'CHECK_IN_IDENTITY')
+    await verifyInventoryIdentity('checkin-1', { identityDocumentNumber: 'P1234567', photoId: asset.id, bookingCustomerPresent: true })
+
+    expect(fetchMock.mock.calls[0][0]).toContain('/checkin-1/inventory-arrival')
+    const form = fetchMock.mock.calls[1][1].body as FormData
+    expect(form.get('entityType')).toBe('CHECK_IN_IDENTITY')
+    expect(form.get('entityId')).toBe('checkin-1')
+    expect(fetchMock.mock.calls[2][0]).toContain('/checkin-1/inventory-identity')
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({
+      identityDocumentNumber: 'P1234567', photoId: 'photo-1', bookingCustomerPresent: true,
+    })
+  })
+
   it('completes handover and supports no-show', async () => {
     const inventoryLines = [
       { goodsItemId: 'goods-1', actualQuantity: 2, condition: 'INTACT' as const, note: null,
+        actualCategoryId: 'category-1', actualMaterialId: 'material-1',
         measurements: { lengthCm: 100, widthCm: 100, heightCm: 50, weightKg: 100 } },
       { goodsItemId: 'goods-2', actualQuantity: 0, condition: 'NOT_PRESENT' as const,
         note: 'Khách chưa đưa hàng vào kho', measurements: null },

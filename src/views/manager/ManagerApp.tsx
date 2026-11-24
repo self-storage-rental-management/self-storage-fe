@@ -171,13 +171,17 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
       return notifications
     })
   const managerNotifications = [...renewalNotifications, ...returnDisputeNotifications, ...managerTaskNotifications]
-  const managerNotificationPage = (type: ApiNotification['type']) => {
-    if (type === 'SUPPORT') return 'support'
-    if (type === 'RETURN') return 'returns'
-    if (type === 'CHECKIN') return 'dashboard'
-    if (type === 'RESERVATION') return 'unit-assignment'
-    if (type === 'RENEWAL') return 'rentals'
-    if (type === 'PAYMENT' || type === 'OVERDUE') return type === 'OVERDUE' ? 'overdue-cases' : 'complaints'
+  const managerNotificationPage = (notification: ApiNotification) => {
+    if (notification.type === 'SUPPORT') return 'support'
+    if (notification.type === 'RETURN') return 'returns'
+    if (notification.type === 'CHECKIN') {
+      return notification.title === 'Khách hàng đã cập nhật lịch nhận kho' ? 'unit-assignment' : 'dashboard'
+    }
+    if (notification.type === 'RESERVATION') return 'unit-assignment'
+    if (notification.type === 'RENEWAL') return 'rentals'
+    if (notification.type === 'PAYMENT' || notification.type === 'OVERDUE') return notification.type === 'OVERDUE' ? 'overdue-cases' : 'complaints'
+    return 'dashboard'
+  }
     return 'dashboard'
   }
   const managerApiNotifications: LayoutNotification[] = backendNotifications.map(notification => ({
@@ -185,7 +189,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     title: notification.title,
     message: notification.content,
     date: notification.createdAt,
-    page: managerNotificationPage(notification.type),
+    page: managerNotificationPage(notification),
     targetId: notification.relatedEntityId ?? undefined,
     isRead: notification.isRead,
   }))

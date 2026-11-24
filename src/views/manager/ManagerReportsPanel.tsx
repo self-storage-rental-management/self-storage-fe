@@ -112,7 +112,6 @@ export default function ManagerReportsPanel({ user, units, reservations, rentals
       units: facilityUnits.map(unit => ({
         code: unit.code || unit.id,
         type: unit.type,
-        floor: unit.floor,
         zone: unit.zone,
         status: unit.status,
         price: unit.price,

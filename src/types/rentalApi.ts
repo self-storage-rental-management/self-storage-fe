@@ -52,6 +52,7 @@ export interface RentalApiRecord {
   inventoryVerifiedAt?: string | null
   canConfirmRentalStart?: boolean
   inventoryDueAt?: string | null
+  inventoryFinalDeadlineAt?: string | null
   setupStartedAt?: string | null
   setupEndsAt?: string | null
   moveInCompletedAt?: string | null
@@ -75,6 +76,7 @@ export interface RentalApiDetail extends RentalApiRecord {
   access: {
     completeness: string
     status: string | null
+    reference?: string | null
     reason: string | null
   }
 }
@@ -122,6 +124,10 @@ export interface RentalBookingEvidence {
     widthCm: number
     heightCm: number
     weightPerItemKg: number
+    customMaterial?: string | null
+    stackable?: boolean
+    maxStackLayers?: number
+    allowHorizontalPlacement?: boolean
     fragile: boolean
     customerNote: string | null
     images: { id: string; originalName: string; contentType: string; sizeBytes: number }[]

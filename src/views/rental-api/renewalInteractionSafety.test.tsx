@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { ReactElement } from "react"
 import RenewalOperationsPanel from "./RenewalOperationsPanel"
 import RenewalDepositSettlementPanel from "./RenewalDepositSettlementPanel"
@@ -17,7 +17,7 @@ import { apiPage, ids, operationEvent, operationsActor, signingState } from "../
 const h = vi.hoisted(() => ({
   slots: [] as any[], cursor: 0, effects: [] as (() => void)[],
   actor: undefined as any, state: undefined as any, proposal: undefined as any,
-  operationLoading: false, detail: undefined as any, staffPage: undefined as any, settlement: undefined as any,
+  operationLoading: false, detail: undefined as any, staffPage: undefined as any, settlement: undefined as any, hasIncident: true,
   refresh: vi.fn(), send: vi.fn(), upload: vi.fn(), download: vi.fn(),
 }))
 vi.mock("react", async original => ({
@@ -42,6 +42,7 @@ vi.mock("../manager/managerPresentation", () => ({ useManagerPresentation: () =>
 vi.mock("../../services/authApi", () => ({ getAuthenticatedActor: () => h.actor }))
 vi.mock("../../hooks/useRentalApiResource", () => ({ useRentalApiResource: (key: string) => {
   if (key.endsWith(':payment-events')) return { data: apiPage([]), loading: false, refresh: h.refresh }
+  if (key.includes(':incident-availability:')) return { data: h.hasIncident, loading: false, refresh: h.refresh }
   if (key.includes(":deposit-settlement:")) return { data: h.settlement, loading: false, refresh: h.refresh }
   if (key.endsWith(":proposal")) return { ...h.proposal, refresh: h.refresh }
   if (key.includes(":renewal:")) return { data: h.detail, loading: false, refresh: h.refresh }
@@ -80,8 +81,17 @@ beforeEach(() => {
   h.actor = operationsActor("customer")
   h.state = { ...signingState, pendingExceptionRef: ids.file }
   h.proposal = { loading: false, error: new ApiClientError("proposal unavailable", { status: 503 }) }
-  h.operationLoading = false; h.detail = undefined; h.staffPage = undefined; h.settlement = undefined
+  h.operationLoading = false; h.detail = undefined; h.staffPage = undefined; h.settlement = undefined; h.hasIncident = true
   h.refresh.mockReset(); h.send.mockReset(); h.upload.mockReset(); h.download.mockReset()
+})
+
+it("hides incident actions when no incident is recorded", () => {
+  h.actor = operationsActor("manager")
+  h.hasIncident = false
+  const tree = render(() => RenewalOperationsPanel({ id: ids.renewal, role: "manager", facilityId: ids.facility }))
+  expect(find(tree, RenewalCoordinationPanel)).toBeUndefined()
+  expect(nodes(tree).some(n => n.type === Button && ["Xem xét ngoại lệ", "Xem xét hoàn tiền"].includes(n.props.children))).toBe(false)
+  expect(JSON.stringify(tree)).toContain("Chưa có sự cố cần xử lý")
 })
 
 describe("Deposit refund command safety", () => {
@@ -270,6 +280,8 @@ function detailElement(role: "customer" | "manager") {
 }
 
 describe("D3 upload synchronously protects its owning modal", () => {
+  beforeEach(() => vi.stubGlobal("document", { body: { style: { overflow: "" } } }))
+  afterEach(() => vi.unstubAllGlobals())
   it.each(["customer", "manager", "staff"] as const)("%s operation/upload lock blocks stale modal callbacks; confirmed file is retained when uploaded", async role => {
     h.actor = operationsActor(role)
     let ownerSlots: any[] = [], owner: () => ReactElement<any>, panelElement: ReactElement<any>
