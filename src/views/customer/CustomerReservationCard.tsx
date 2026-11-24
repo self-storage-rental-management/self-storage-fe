@@ -353,13 +353,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
     id={`customer-reservation-${r.id}`}
     tabIndex={-1}
     className={`p-5 transition-all duration-200 border border-stone-200 bg-white rounded-xl shadow-xs hover:shadow-md ${
-      inactive
-        ? 'border-l-4 border-l-stone-300 text-stone-500'
-        : visualTone === 'completed' || r.status === 'COMPLETED'
-          ? 'border-l-4 border-l-emerald-500'
-          : visualTone === 'expired' || r.status === 'EXPIRED'
-            ? 'border-l-4 border-l-red-500'
-            : 'border-l-4 border-l-amber-500'
+      inactive ? 'text-stone-500 bg-stone-50/50' : ''
     }`}
   >
     <div>
