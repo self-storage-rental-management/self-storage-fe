@@ -1064,7 +1064,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
     }
     const evidencePhotos: string[] = []
     for (const file of evidenceFiles) {
-      const asset = await uploadReturnEvidence(id, file, role)
+      const asset = await uploadReturnEvidence(id, file, role, 'bien-ban-nghiem-thu-tra-kho')
       evidencePhotos.push(asset.id)
     }
     return inspectReturn(id, {

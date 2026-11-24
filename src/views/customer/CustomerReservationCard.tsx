@@ -310,6 +310,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
   const preparationLock = useRef(false)
   const [bookingDocument, setBookingDocument] = useState<BookingDocument | null>(null)
   const [bookingDocumentOpen, setBookingDocumentOpen] = useState(false)
+  const [bookingPdfUrl, setBookingPdfUrl] = useState<string | null>(null)
   const [handoverDocuments, setHandoverDocuments] = useState<CheckInDocument[]>([])
   const [handoverDocumentsOpen, setHandoverDocumentsOpen] = useState(false)
   const [paymentReceipt, setPaymentReceipt] = useState<ReservationPaymentResult | null>(null)
@@ -321,6 +322,9 @@ export default function CustomerReservationCard({ user, reservation: r, facility
   const [setupGoodsEditOpen, setSetupGoodsEditOpen] = useState(false)
   const [setupGoodsDraft, setSetupGoodsDraft] = useState<GoodsItemInput[]>([])
   const [now, setNow] = useState(Date.now())
+  useEffect(() => () => {
+    if (bookingPdfUrl) URL.revokeObjectURL(bookingPdfUrl)
+  }, [bookingPdfUrl])
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(timer)
@@ -418,18 +422,14 @@ export default function CustomerReservationCard({ user, reservation: r, facility
     finally { setBusy(false) }
   }
   const viewBookingDocument = async () => {
-    const preview = window.open('', '_blank')
-    if (preview) preview.opener = null
+    if (busy) return
+    setBusy(true); setMessage(null)
     try {
       const file = await downloadBookingDocument(r.id)
-      const url = URL.createObjectURL(file.blob)
-      if (preview) preview.location.href = url
-      else window.open(url, '_blank', 'noopener,noreferrer')
-      window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+      setBookingPdfUrl(URL.createObjectURL(file.blob))
     } catch (error) {
-      preview?.close()
       setMessage(userFacingError(error, 'Không thể xem phiếu xác nhận giữ kho.'))
-    }
+    } finally { setBusy(false) }
   }
   const saveBookingDocument = async () => {
     try {
@@ -661,7 +661,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
           {r.status === 'PREPARING' && <p className="rounded-lg border border-violet-200 bg-violet-50 p-3 text-left text-xs text-violet-950">Đơn đã bàn giao sang <b>Hồ sơ thuê</b>. Vui lòng thực hiện xác nhận setup, chọn lịch kiểm kê và cập nhật hồ sơ sau kiểm kê tại mục <b>Hồ sơ thuê</b>.</p>}
           {documentAvailable && <Button variant="outline" size="sm" className="reservation-action reservation-action-document min-h-10 w-full justify-center" disabled={busy} onClick={() => void prepareBookingDocument()}>{busy ? 'Đang chuẩn bị…' : 'Xem phiếu giữ kho'}</Button>}
           {handoverDocumentsAvailable && <Button variant="outline" size="sm" className="min-h-10 w-full justify-center" disabled={busy} onClick={() => void loadHandoverDocuments()}>{busy ? 'Đang tải…' : 'Xem hợp đồng đã ký'}</Button>}
-          {(remainingPayment || (detail?.payments && detail.payments.some(p => p.paymentStatus === 'PAID'))) && <Button variant="outline" size="sm" className="min-h-10 w-full justify-center" onClick={() => { const p = remainingPayment || detail?.payments?.find(item => item.paymentStatus === 'PAID'); if (p) setPaymentReceipt(p) }}>Xem biên lai thanh toán</Button>}
+          {remainingPayment && <Button variant="outline" size="sm" className="min-h-10 w-full justify-center" onClick={() => setPaymentReceipt(remainingPayment)}>Xem biên lai tiền thuê còn lại</Button>}
           {onRequestSupport && <Button type="button" variant="outline" size="sm" className="min-h-10 w-full justify-center" onClick={onRequestSupport}>Hỗ trợ đơn này</Button>}
           {['PAYMENT_GRACE', 'PAYMENT_REVIEW'].includes(r.status) && <CustomerPaymentComplaint reservation={r} complaintExpiresAt={detail?.complaintExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />}
           {APPOINTMENT_EDITABLE_STATUSES.some(status => status === r.status) && <Button variant="ghost" size="sm" className="reservation-action reservation-action-cancel" onClick={() => setCancelConfirmOpen(true)}>Hủy giữ kho</Button>}
@@ -776,7 +776,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
             {remainingPayment && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-950">
               <p className="font-bold">Biên lai thanh toán phần còn lại</p>
               <p className="mt-1">Đã ghi nhận {formatVnd(remainingPayment.amount)} bằng {remainingPayment.paymentMethod ? paymentMethodLabel(remainingPayment.paymentMethod) : 'phương thức tại quầy'}.</p>
-              <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => setPaymentReceipt(remainingPayment)}>Xem biên lai</Button>
+              <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => setPaymentReceipt(remainingPayment)}>Xem biên lai tiền thuê còn lại</Button>
             </div>}
       </section>
       </div>
@@ -811,10 +811,20 @@ export default function CustomerReservationCard({ user, reservation: r, facility
           Phiếu ghi nhận loại kho đã giữ và khoản trả trước 20% (giữ chỗ) đã thanh toán. Đây không phải hợp đồng thuê và không xác nhận một gian kho vật lý cụ thể.
         </p>
         <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2 border-t border-stone-100">
-          <Button variant="outline" onClick={() => void viewBookingDocument()}>Xem PDF</Button>
+          <Button variant="outline" disabled={busy} onClick={() => void viewBookingDocument()}>{busy ? 'Đang tải…' : 'Xem PDF'}</Button>
           <Button className="bg-amber-600 hover:bg-amber-700 text-white font-semibold" onClick={() => void saveBookingDocument()}>Tải PDF</Button>
         </div>
       </div>}
+    </Modal>
+    <Modal
+      size="3xl"
+      open={Boolean(bookingPdfUrl)}
+      onClose={() => setBookingPdfUrl(null)}
+      title={`Phiếu giữ kho · ${r.reservationCode}`}
+      closeLabel="Đóng phiếu giữ kho"
+      contentClassName="p-0"
+    >
+      {bookingPdfUrl && <iframe title={`Phiếu giữ kho ${r.reservationCode}`} src={bookingPdfUrl} className="h-[75vh] w-full rounded-b-xl border-0" />}
     </Modal>
     <Modal size="2xl" open={handoverDocumentsOpen} onClose={() => setHandoverDocumentsOpen(false)} title="Văn bản hợp đồng và bàn giao">
       <div className="space-y-4 py-1">
@@ -851,7 +861,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
         )}
       </div>
     </Modal>
-    <Modal size="2xl" open={Boolean(paymentReceipt)} onClose={() => setPaymentReceipt(null)} title="Biên lai thanh toán nhận kho">
+    <Modal size="2xl" open={Boolean(paymentReceipt)} onClose={() => setPaymentReceipt(null)} title="Biên lai tiền thuê còn lại">
       {paymentReceipt && <div className="w-full min-w-0"><ReservationReceipt payment={paymentReceipt} reservationCode={r.reservationCode} /></div>}
     </Modal>
     <Modal open={cancelConfirmOpen} onClose={() => setCancelConfirmOpen(false)} title="Xác nhận hủy giữ kho" closeLabel="Đóng xác nhận hủy">

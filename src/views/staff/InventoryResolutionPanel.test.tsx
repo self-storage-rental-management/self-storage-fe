@@ -36,7 +36,7 @@ it('offers acceptance and rejection of declared OTHER goods even when the goods 
 
 it('captures the signed paper record as uploaded photos instead of asking for a file code', () => {
   const html = render({ inventoryFullFit: true })
-  expect(html).toContain('Ảnh biên bản có chữ ký khách')
+  expect(html).toContain('Biên bản xác nhận phương án hàng hóa có chữ ký khách')
   expect(html).toContain('type="file"')
   expect(html).toContain('multiple=""')
   expect(html).not.toContain('Mã ảnh biên bản')
