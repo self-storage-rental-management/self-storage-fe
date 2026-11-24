@@ -2,13 +2,16 @@ import { Button } from '../../components/ui'
 import { renewalInvoiceLabels, renewalRefundLabels, renewalTransactionLabels, type RenewalStatusSummary } from '../../types/renewalStatus'
 import { rentalDate, rentalMoney } from './presentation'
 
-export default function RenewalStatusPanel({ summary, onReceipt }: { summary: RenewalStatusSummary; onReceipt: (id: string) => void }) {
+export default function RenewalStatusPanel({ summary, onReceipt }: {
+  summary: RenewalStatusSummary
+  onReceipt: (id: string) => void
+}) {
   const i = summary.invoice
   const known = !['UNKNOWN', 'NOT_ISSUED'].includes(i.status)
   return <section className="space-y-4 rounded-xl border border-stone-200 p-4 sm:p-5" aria-label="Khoản phải thu và giao dịch gia hạn">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <h4 className="font-semibold">Thanh toán gia hạn</h4>
-      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${i.status === 'PAID' ? 'bg-emerald-50 text-emerald-800' : 'bg-stone-100 text-stone-700'}`}>{i.status === 'PARTIALLY_PAID' ? 'Đã thanh toán cọc gia hạn' : renewalInvoiceLabels[i.status]}</span>
+      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${i.status === 'PAID' ? 'bg-emerald-50 text-emerald-800' : 'bg-stone-100 text-stone-700'}`}>{i.status === 'PARTIALLY_PAID' ? 'Đã thanh toán một phần' : renewalInvoiceLabels[i.status]}</span>
     </div>
     {known ? <>
       <dl className="grid gap-4 border-b border-stone-100 pb-4 text-sm sm:grid-cols-3">
@@ -42,7 +45,6 @@ export default function RenewalStatusPanel({ summary, onReceipt }: { summary: Re
         </div>
         {t.deadlineExpired && t.status === 'RECONCILIATION_REQUIRED' && <p className="mt-2 text-xs text-amber-800">Hạn thanh toán đã qua, đang đối soát kết quả. Chưa xác nhận giao dịch thất bại hoặc chưa thu tiền.</p>}
         {t.refundedAmount > 0 && <p className="mt-2 text-xs text-stone-600">Đã hoàn: {rentalMoney(t.refundedAmount, t.currency)}</p>}
-        <details className="mt-2 text-xs text-stone-600"><summary className="w-fit cursor-pointer rounded py-1 hover:text-amber-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600">Mã giao dịch</summary><p className="mt-1 break-all">{t.reference || t.paymentId}</p></details>
       </article>)}
     </div>
   </section>

@@ -205,7 +205,7 @@ export default function ManagerRentalsPanel({ user, rentals, renewals, reservati
           {assignmentReservation.assignedUnitId && <p className="mt-1 text-stone-500">Gian hiện tại: <b className="font-mono">{assignmentReservation.assignedUnitId}</b></p>}
         </div>
         {assignmentCandidates.length ? <Select label="Gian kho phù hợp và không xung đột" value={assignmentUnitId} onChange={event => setAssignmentUnitId(event.target.value)}>
-          {assignmentCandidates.map(unit => <option key={unit.id} value={unit.id}>{unit.code}, {unit.zone}, Tầng {unit.floor}</option>)}
+          {assignmentCandidates.map(unit => <option key={unit.id} value={unit.id}>{unit.code}, {unit.zone}</option>)}
         </Select> : <ManagerActionNotice tone="warning">Không có gian kho cùng loại, đúng cơ sở và còn trống trong toàn bộ thời gian thuê.</ManagerActionNotice>}
         <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => { setAssignmentReservation(null); setAssignmentUnitId('') }}>Hủy</Button><Button disabled={!assignmentUnitId || assignmentUnitId === assignmentReservation.assignedUnitId} onClick={confirmAssignment}>{assignmentReservation.assignedUnitId ? 'Xác nhận đổi gian' : 'Xác nhận phân gian'}</Button></div>
       </div>}

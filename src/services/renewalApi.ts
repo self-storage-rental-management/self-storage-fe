@@ -12,6 +12,10 @@ import type {
 } from "../types/renewalApi"
 
 type AcceptedTerms = NonNullable<RenewalApiRecord["acceptedTerms"]>
+function isDiscountRate(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1
+}
+
 function validPeriodMetadata(t: AcceptedTerms): boolean {
   if (t.endDateConvention == null && t.rentalStartDate == null) return true // Readable legacy snapshot, not permission to execute.
   if (!["INCLUSIVE", "EXCLUSIVE"].includes(t.endDateConvention ?? "") || typeof t.rentalStartDate !== "string"
@@ -27,7 +31,7 @@ function isAcceptedTerms(value: unknown): value is AcceptedTerms {
   const money = [t.monthlyPrice, t.subtotal, t.discountAmount, t.totalAfterDiscount,
     t.renewalDepositAmount, t.remainingRentalAmount]
   return validPeriodMetadata(t) && money.every(n => typeof n === "number" && Number.isFinite(n) && n >= 0) &&
-    typeof t.discountRate === "number" && Number.isFinite(t.discountRate) && t.discountRate >= 0 && t.discountRate <= 1 &&
+    isDiscountRate(t.discountRate) &&
     (t.signingWindowDays == null || (Number.isInteger(t.signingWindowDays) && t.signingWindowDays >= 1 && t.signingWindowDays <= 14)) &&
     Number.isInteger(t.rentalMonths) && t.rentalMonths > 0 &&
     [t.unitTypeId, t.storageUnitId, t.facilityId, t.pricingPackageCode, t.packagePolicyRef,
@@ -49,6 +53,8 @@ export function isRenewalRecord(value: unknown): boolean {
       Date.parse(r.effectivePeriod.endExclusive) - Date.parse(r.effectivePeriod.newEndDate) === 86400000
     )) &&
     (r.statusSummary == null || isRenewalStatusSummary(r.statusSummary)) &&
+    (r.rentalDisplayCode == null || (typeof r.rentalDisplayCode === "string" && /^SH-\d{6}$/.test(r.rentalDisplayCode))) &&
+    (r.renewalSequence == null || (Number.isSafeInteger(r.renewalSequence) && r.renewalSequence > 0)) &&
     (r.displayCode == null || (typeof r.displayCode === "string" && /^(?:SH-\d{6}|GH-\d{4}-\d{6})$/.test(r.displayCode))) &&
     typeof r.id === "string" &&
     typeof r.rentalId === "string" &&
@@ -137,10 +143,12 @@ export async function getRenewalOptions(rentalId: string) {
       data.every(
         (o) =>
           typeof o?.pricingPackageCode === "string" &&
-            (o.pricingPackageName === undefined || o.pricingPackageName === null || typeof o.pricingPackageName === "string") &&
+          (o.pricingPackageName == null || typeof o.pricingPackageName === "string") &&
+          (o.discountRate === undefined || isDiscountRate(o.discountRate)) &&
           (o.signingWindowDays == null || (Number.isInteger(o.signingWindowDays) && o.signingWindowDays >= 1 && o.signingWindowDays <= 14)) &&
           Number.isInteger(o.rentalMonths) &&
-          o.rentalMonths > 0,
+          o.rentalMonths > 0 &&
+          (o.discountRate == null || typeof o.discountRate === "number"),
       ),
   )
 }
@@ -273,7 +281,7 @@ function isRenewalPaymentResponse(value: unknown,renewalId: string): value is Re
 }
 
 export function renewalPaymentRedirectUrl(payment: RenewalVnpayPaymentResponse): string {
-  if(!payment.paymentUrl)throw new Error("Backend chưa trả về đường dẫn thanh toán. Vui lòng thử lại hoặc liên hệ hỗ trợ.")
+  if(!payment.paymentUrl)throw new Error("Chưa mở được trang thanh toán. Vui lòng thử lại hoặc liên hệ hỗ trợ.")
   let url: URL
   try { url=new URL(payment.paymentUrl) } catch { throw new Error("Đường dẫn thanh toán VNPay không hợp lệ.") }
   if(url.protocol!=="https:"||!["sandbox.vnpayment.vn","pay.vnpay.vn"].includes(url.hostname)

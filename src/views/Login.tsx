@@ -1,3 +1,4 @@
+import { ApiClientError } from '../services/apiClient'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import type { User } from '../types'
 import BrandLogo from '../components/BrandLogo'
@@ -59,7 +60,7 @@ function formatAuthError(error: unknown, fallback: string): string {
   if (error && typeof error === 'object' && 'details' in error) {
     const details = (error as { details?: unknown }).details
     if (typeof details === 'string' && details.trim()) {
-      return details
+      return fallback
     }
     if (details && typeof details === 'object') {
       const fieldTranslations: Record<string, string> = {
@@ -73,8 +74,8 @@ function formatAuthError(error: unknown, fallback: string): string {
       }
       const entries = Object.entries(details as Record<string, string>)
       if (entries.length > 0) {
-        const [field, msg] = entries[0]
-        return fieldTranslations[field] || msg || fallback
+        const [field] = entries[0]
+        return fieldTranslations[field] || fallback
       }
     }
   }
@@ -88,7 +89,7 @@ function formatAuthError(error: unknown, fallback: string): string {
     'Account is disabled': 'Tài khoản của bạn tạm thời bị khóa. Vui lòng liên hệ hỗ trợ.',
     'Request validation failed': 'Thông tin đăng ký chưa hợp lệ. Vui lòng kiểm tra lại các trường thông tin.',
   }
-  return translations[message] || (message.length > 0 && !message.includes('http') && !message.includes('Error:') ? message : fallback)
+  return translations[error instanceof ApiClientError ? error.diagnosticMessage : message] || (message.length > 0 && !message.includes('http') && !message.includes('Error:') ? message : fallback)
 }
 
 // ── Validation Helpers ───────────────────────────────────────────
@@ -461,7 +462,7 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
       setError('')
       setNotice(challenge.debugCode
         ? 'Mã khôi phục development đã được tạo. Nhập mã hiển thị bên dưới để tiếp tục.'
-        : `Mã đặt lại mật khẩu đã được gửi đến ${recoveryAccount.trim()}. Hãy kiểm tra hộp thư đến hoặc thư rác.`)
+        : `Yêu cầu đặt lại mật khẩu đã được tiếp nhận. Nếu ${recoveryAccount.trim()} đủ điều kiện khôi phục, mã sẽ được gửi qua email.`)
     } catch (recoveryError) {
       setNotice('')
       setError(formatAuthError(recoveryError, 'Không thể tạo yêu cầu khôi phục.'))

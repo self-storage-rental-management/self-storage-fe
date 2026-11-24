@@ -32,8 +32,20 @@ export function useBackendNotifications(identity: string, enabled: boolean) {
     const refresh = () => void load()
     refresh()
     const timer = window.setInterval(refresh, 10000)
+    const refreshOnFocus = () => refresh()
+    const refreshOnVisibility = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
     window.addEventListener('storagehub:notifications-refresh', refresh)
-    return () => { disposed = true; window.clearInterval(timer); window.removeEventListener('storagehub:notifications-refresh', refresh) }
+    window.addEventListener('focus', refreshOnFocus)
+    document.addEventListener('visibilitychange', refreshOnVisibility)
+    return () => {
+      disposed = true
+      window.clearInterval(timer)
+      window.removeEventListener('storagehub:notifications-refresh', refresh)
+      window.removeEventListener('focus', refreshOnFocus)
+      document.removeEventListener('visibilitychange', refreshOnVisibility)
+    }
   }, [identity, enabled, pages, retry])
   const loadMore = useCallback(() => setPages(value => value + 1), [])
   const refresh = useCallback(() => setRetry(value => value + 1), [])

@@ -262,6 +262,7 @@ describe("D3 real API transport", () => {
         reschedule: "APPOINTMENT",
         confirmation: "CONFIRMATION",
         arrival: "ARRIVAL",
+        noShow: "NO_SHOW",
         incident: "INCIDENT",
         cash: "CASH",
         completion: "COMPLETION",

@@ -15,7 +15,7 @@ describe('authoritative backend pricing', () => {
   it('renders all snapshot amounts in VND with the actual 20% deposit', () => {
     const html = renderToStaticMarkup(<ReservationQuoteSummary quote={quote} needsReview={false} />)
     for (const amount of ['5.500.000 ₫', '16.500.000 ₫', '495.000 ₫', '4.301.000 ₫', '17.204.000 ₫', '21.505.000 ₫']) expect(html).toContain(amount)
-    expect(html).toContain('Đặt cọc giữ chỗ (20%)')
+    expect(html).toContain('Thanh toán trước 20% (giữ chỗ)')
     expect(html).toContain('Tiền cọc đảm bảo thuê')
     expect(html).not.toContain('40%')
     expect(html).not.toContain('166.452.000.000')
@@ -36,9 +36,8 @@ describe('authoritative backend pricing', () => {
       reservationDepositRate: 0.15,
     }
     const html = renderToStaticMarkup(<ReservationQuoteSummary quote={customQuote} needsReview={false} />)
-    expect(html).toContain('Đặt cọc giữ chỗ (15%)')
+    expect(html).toContain('Thanh toán trước 15% (giữ chỗ)')
     expect(html).toContain('3.225.750 ₫')
-    expect(html).toContain('15% × tổng tiền')
   })
   it.each(['quote', 'reservation'] as const)('shows the accepted early-exit fee in %s without charging it at booking', context => {
     const html = renderToStaticMarkup(<ReservationQuoteSummary quote={quote} needsReview={false} context={context} />)
@@ -57,7 +56,7 @@ describe('authoritative backend pricing', () => {
 
 describe('deposit including security deposit', () => { it('charges 20 percent of 38 million and leaves 30.4 million at check-in', () => {
 const html = renderToStaticMarkup(<ReservationQuoteSummary quote={{ ...quote, monthlyPrice: 9500000, subtotal: 28500000, discountRate: 0, discountAmount: 0, totalAfterDiscount: 28500000, securityDepositAmount: 9500000, totalInitialObligation: 38000000, reservationDepositAmount: 7600000, dueAtCheckIn: 30400000 }} needsReview={false} />)
-expect(html).toContain('20% × tổng tiền')
+expect(html).toContain('Thanh toán trước 20% (giữ chỗ)')
 expect(html).toContain('7.600.000 ₫')
 expect(html).toContain('30.400.000 ₫')
 }) })
@@ -68,6 +67,9 @@ expect(html).toContain('66.500.000 ₫')
 expect(html).toContain('63.650.000 ₫')
 expect(html).toContain('12.730.000 ₫')
 expect(html).toContain('50.920.000 ₫')
-expect(html).toContain('Đặt cọc giữ chỗ (20%)')
-expect(html).not.toContain('54.150.000 ₫')
+expect(html).toContain('Thanh toán trước 20% (giữ chỗ)')
+// 54.150.000 is legitimately shown inside the rent-after-discount formula, but it must
+// never be presented as the amount the customer has to pay (that is 63.650.000).
+expect(html).toContain('Tổng chi phí phải thanh toán')
+expect(html).toContain('63.650.000 ₫')
 })

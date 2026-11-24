@@ -1179,7 +1179,7 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
                 <strong className="text-red-900">{confirmDeleteModal.fullName}</strong> ({confirmDeleteModal.email}).
               </p>
               <p className="mt-2 text-xs text-red-700 leading-relaxed">
-                Tài khoản, phiên đăng nhập, role, facility scope và dữ liệu xác thực sẽ bị xóa khỏi hệ thống.
+                Tài khoản, các phiên đăng nhập, vai trò, quyền truy cập cơ sở và dữ liệu xác thực sẽ bị xóa.
                 Nếu tài khoản còn hồ sơ thuê, thanh toán, bằng chứng hoặc dữ liệu nghiệp vụ, hệ thống sẽ từ chối để bảo toàn lịch sử.
               </p>
             </div>

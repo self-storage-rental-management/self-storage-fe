@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactElement } from 'react'
 import CustomerSupportWidget from './CustomerSupportWidget'
 
-const h = vi.hoisted(() => ({ actor: undefined as any, slots: [] as any[], cursor: 0, session: { version: 0, snapshot: { messages: [] as any[], ticketId: null as string | null, autoReturn: false } } }))
+const h = vi.hoisted(() => ({ actor: undefined as any, slots: [] as any[], cursor: 0, refs: [] as any[], refCursor: 0, session: { version: 0, snapshot: { messages: [] as any[], ticketId: null as string | null, autoReturn: false } } }))
 vi.mock('../../hooks/useRentalApiResource', () => ({ useRentalApiResource: () => ({ data: h.session, loading: false, refresh: vi.fn() }) }))
 vi.mock('../../hooks/useCustomerChatPersistence', () => ({ useCustomerChatPersistence: () => ({ save: vi.fn(), retry: vi.fn(), error: undefined }) }))
 vi.mock('../../hooks/useSupportMessageReads', () => ({ useSupportUnread: () => new Map() }))
@@ -10,10 +10,10 @@ vi.mock('react', async original => ({
   ...await original<typeof import('react')>(),
   useState: (initial: any) => {
     const index = h.cursor++
-    if (!(index in h.slots)) h.slots[index] = initial
+    if (!(index in h.slots)) h.slots[index] = typeof initial === 'function' ? initial() : initial
     return [h.slots[index], (value: any) => { h.slots[index] = typeof value === 'function' ? value(h.slots[index]) : value }]
   },
-  useRef: () => ({ current: null }),
+  useRef: (initial: any) => h.refs[h.refCursor++] ??= { current: initial },
   useId: () => 'widget-test',
   useEffect: () => {},
 }))
@@ -29,13 +29,15 @@ function nodes(tree: any): Element[] {
 function shell() {
   const root = CustomerSupportWidget() as Element
   const widget = (root.type as any)(root.props) as Element
-  return () => { h.cursor = 0; return (widget.type as any)(widget.props) }
+  return () => { h.cursor = 0; h.refCursor = 0; return (widget.type as any)(widget.props) }
 }
 function button(tree: any, label: string) { return nodes(tree).find(node => node.type === 'button' && node.props['aria-label'] === label)! }
+function openChat(tree: any) { button(tree, 'Mở chat hỗ trợ').props.onClick({ detail: 0 }) }
 
 beforeEach(() => {
   h.actor = { id: 'customer-one', roles: ['CUSTOMER'] }
   h.slots = []; h.cursor = 0
+  h.refs = []; h.refCursor = 0
   h.session = { version: 0, snapshot: { messages: [], ticketId: null, autoReturn: false } }
   vi.stubGlobal('document', { body: {} })
 })
@@ -45,7 +47,7 @@ describe('API Customer support widget', () => {
   it('returns to AI with an icon while retaining the Staff conversation and saved AI text', () => {
     h.session = { version: 4, snapshot: { messages: [{ id: 1, role: 'customer', body: 'Nội dung đã lưu' }], ticketId: 'active-ticket', autoReturn: true } }
     const render = shell()
-    button(render(), 'Mở chat hỗ trợ').props.onClick()
+    openChat(render())
     const back = button(render(), 'Quay về chat AI')
     expect(back).toBeDefined()
     expect(nodes(back).some(node => node.type === 'svg')).toBe(true)
@@ -60,14 +62,14 @@ describe('API Customer support widget', () => {
   })
   it('uses one conversation without a session list or a new-conversation action', () => {
     const render = shell()
-    button(render(), 'Mở chat hỗ trợ').props.onClick()
+    openChat(render())
     expect(button(render(), 'Lịch sử hỗ trợ')).toBeUndefined()
     expect(nodes(render()).some(node => node.props.children === 'Cuộc trò chuyện mới')).toBe(false)
   })
   it('restores the saved AI transcript and active Staff ticket on a new login', () => {
     h.session = { version: 4, snapshot: { messages: [{ id: 1, role: 'customer', body: 'Câu hỏi đã lưu' }], ticketId: 'existing-ticket', autoReturn: true } }
     const render = shell()
-    button(render(), 'Mở chat hỗ trợ').props.onClick()
+    openChat(render())
     const assistant = nodes(render()).find(node => typeof node.type === 'function' && 'onMeetStaff' in node.props)!
     expect(assistant.props.initialMessages).toEqual(h.session.snapshot.messages)
     expect(assistant.props.staffTicketId).toBe('existing-ticket')
@@ -76,7 +78,7 @@ describe('API Customer support widget', () => {
   })
   it('returns to AI inside the same conversation after Staff completion and allows another handoff', () => {
     const render = shell()
-    button(render(), 'Mở chat hỗ trợ').props.onClick()
+    openChat(render())
     const assistant = () => nodes(render()).find(node => typeof node.type === 'function' && 'onMeetStaff' in node.props)!
     let chat = assistant()
     const originalKey = chat.key
@@ -103,7 +105,7 @@ describe('API Customer support widget', () => {
   it('restores the same completed conversation beneath the AI composer after login', () => {
     h.session = { version: 4, snapshot: { messages: [{ id: 2, role: 'customer', body: 'Tiếp tục với AI' }], ticketId: 'ticket-archived', autoReturn: false } }
     const render = shell()
-    button(render(), 'Mở chat hỗ trợ').props.onClick()
+    openChat(render())
     const assistant = () => nodes(render()).find(node => typeof node.type === 'function' && 'onMeetStaff' in node.props)!
     expect(assistant().props.staffTicketId).toBe('ticket-archived')
     expect(assistant().props.staffActive).toBe(false)
@@ -130,7 +132,7 @@ describe('API Customer support widget', () => {
     const render = shell()
     let tree = render()
     expect(nodes(tree).some(node => node.props.role === 'dialog')).toBe(false)
-    button(tree, 'Mở chat hỗ trợ').props.onClick()
+    openChat(tree)
     tree = render()
     const panel = nodes(tree).find(node => node.props.role === 'dialog')!
     const content = nodes(panel).find(node => node.props.actorId === 'customer-one')!
@@ -141,7 +143,7 @@ describe('API Customer support widget', () => {
     expect(minimized.props['aria-hidden']).toBe(true)
     expect(minimized.props.inert).toBe(true)
     expect(nodes(minimized).find(node => node.props.actorId === 'customer-one')!.type).toBe(content.type)
-    button(tree, 'Mở chat hỗ trợ').props.onClick()
+    openChat(tree)
     expect(nodes(render()).find(node => node.props.role === 'dialog')!.props['aria-hidden']).toBe(false)
   })
 
@@ -151,11 +153,38 @@ describe('API Customer support widget', () => {
     const icon = nodes(button(tree, 'Mở chat hỗ trợ')).find(node => typeof node.type === 'function')!
     const svg = (icon.type as any)(icon.props) as Element
     expect(svg.props.className).toContain('show-icon')
-    button(tree, 'Mở chat hỗ trợ').props.onClick()
+    openChat(tree)
     tree = render()
     const stopPropagation = vi.fn()
     nodes(tree).find(node => node.props.role === 'dialog')!.props.onKeyDown({ key: 'Escape', stopPropagation })
     expect(stopPropagation).toHaveBeenCalledOnce()
     expect(nodes(render()).find(node => node.props.role === 'dialog')!.props['aria-hidden']).toBe(true)
+  })
+
+  it('saves the launcher position after dragging without opening the chat', () => {
+    const setItem = vi.fn()
+    vi.stubGlobal('localStorage', { getItem: () => null, setItem })
+    vi.stubGlobal('document', { body: {}, documentElement: { clientWidth: 1000, clientHeight: 600 } })
+    const render = shell()
+    const launcher = () => button(render(), 'Mở chat hỗ trợ').props
+    const currentTarget = {
+      getBoundingClientRect: () => ({ left: 928, top: 528 }),
+      setPointerCapture: vi.fn(),
+      offsetWidth: 48,
+      offsetHeight: 48,
+    }
+    const start = { currentTarget, isPrimary: true, button: 0, pointerId: 1, clientX: 952, clientY: 552 }
+    launcher().onPointerDown(start)
+    const end = { ...start, clientX: 800, clientY: 452 }
+    launcher().onPointerMove(end)
+    expect(setItem).not.toHaveBeenCalled()
+    launcher().onPointerUp(end)
+    launcher().onClick({ detail: 1 })
+    expect(launcher()['aria-expanded']).toBe(false)
+    expect(setItem).toHaveBeenCalledWith('storagehub:chat-launcher-position', JSON.stringify({ x: 776, y: 428 }))
+    launcher().onPointerDown(end)
+    launcher().onPointerUp(end)
+    launcher().onClick({ detail: 1 })
+    expect(launcher()['aria-expanded']).toBe(true)
   })
 })

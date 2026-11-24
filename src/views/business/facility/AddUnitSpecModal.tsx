@@ -40,7 +40,6 @@ export const AddUnitSpecModal: React.FC<AddUnitSpecModalProps> = ({
   const [monthlyPrice, setMonthlyPrice] = useState<number>(28000000)
   const [priceInputText, setPriceInputText] = useState<string>('28.000.000 ₫')
   const [count, setCount] = useState<number>(5)
-  const [floor, setFloor] = useState<number>(1)
   const [zone, setZone] = useState<string>('Khu A')
 
   // Frame specs
@@ -62,7 +61,6 @@ export const AddUnitSpecModal: React.FC<AddUnitSpecModalProps> = ({
       setMonthlyPrice(28000000)
       setPriceInputText('28.000.000 ₫')
       setCount(5)
-      setFloor(((existingSpecs.length % 4) + 1))
       setZone(`Khu ${String.fromCharCode(65 + (existingSpecs.length % 4))}`)
       setFrameCount(12)
       setFrameLengthM(4.0)
@@ -177,7 +175,6 @@ export const AddUnitSpecModal: React.FC<AddUnitSpecModalProps> = ({
       monthlyPrice: Math.max(0, monthlyPrice),
       count: Math.max(0, Math.floor(Number(count) || 0)),
       badgeClass: 'bg-rose-50 text-rose-800 border-rose-200',
-      floor: Number(floor) || 1,
       zone: zone.trim() || 'Khu A',
       frameCount: Math.max(0, Math.floor(Number(frameCount) || 0)),
       frameDimensions: {
@@ -560,8 +557,8 @@ export const AddUnitSpecModal: React.FC<AddUnitSpecModalProps> = ({
                 )}
               </div>
 
-              {/* Số lượng, Tầng, Khu */}
-              <div className="grid grid-cols-3 gap-2">
+              {/* Số lượng, Khu */}
+              <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block text-xs font-semibold text-stone-700 mb-1">
                     {lang === 'vi' ? 'Số lượng ban đầu' : 'Initial Qty'}
@@ -573,21 +570,6 @@ export const AddUnitSpecModal: React.FC<AddUnitSpecModalProps> = ({
                     className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-center bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
                     value={count}
                     onChange={(e) => setCount(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-stone-700 mb-1">
-                    {lang === 'vi' ? 'Tầng' : 'Floor'}
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={20}
-                    step={1}
-                    className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-center bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-                    value={floor}
-                    onChange={(e) => setFloor(Math.max(1, parseInt(e.target.value, 10) || 1))}
                   />
                 </div>
 

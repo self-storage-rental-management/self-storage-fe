@@ -202,11 +202,24 @@ describe("D1/D2 wire contracts", () => {
     await expect(listRentals("manager", query)).rejects.toThrow()
     expect(fetch).not.toHaveBeenCalled()
   })
-  it("loads renewal options only from backend", async () => {
+  it("keeps legacy renewal options readable without assuming a zero discount", async () => {
     response({ data: [{ pricingPackageCode: "P3", rentalMonths: 3 }] })
     expect(await getRenewalOptions("r1")).toEqual([
       { pricingPackageCode: "P3", rentalMonths: 3 },
     ])
+  })
+  it("reads the configured discount for each package even when their durations match", async () => {
+    const options = [
+      { pricingPackageCode: "BASE", rentalMonths: 3, discountRate: 0 },
+      { pricingPackageCode: "LOYAL", rentalMonths: 3, discountRate: 0.0725 },
+      { pricingPackageCode: "FREE", rentalMonths: 3, discountRate: 1 },
+    ]
+    response({ data: options })
+    expect(await getRenewalOptions("r1")).toEqual(options)
+  })
+  it.each([-0.01, 1.01, "0.05", null])("rejects an invalid package discount %s", async discountRate => {
+    response({ data: [{ pricingPackageCode: "P3", rentalMonths: 3, discountRate }] })
+    await expect(getRenewalOptions("r1")).rejects.toMatchObject({ code: "INVALID_RESPONSE" })
   })
   it("keeps flattened quote.id and applied VND amounts unchanged", async () => {
     const fetch = response({ data: quote })

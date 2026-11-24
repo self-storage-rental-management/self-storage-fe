@@ -94,24 +94,16 @@ export function managerDisplayExplanation(value: string): string {
 
 export function managerDisplayError(error: unknown): string {
   if (error instanceof ApiClientError) {
-    if (error.status === 409 && error.message === 'Material already exists in this goods category')
+    if (error.status === 409 && error.diagnosticMessage === 'Material already exists in this goods category')
       return 'Vật liệu này đã có trong loại hàng hóa. Vui lòng nhập tên khác.'
     if (error.code === 'FEATURE_DISABLED') return 'Chức năng này chưa được bật trên hệ thống.'
     if (error.code === 'INVALID_RESPONSE') return 'Dữ liệu nhận được chưa đúng định dạng. Vui lòng tải lại trang.'
-    if (error.code === 'DEFERRED_SOURCE' || error.message.includes('DEFERRED_SOURCE'))
+    if (error.code === 'DEFERRED_SOURCE' || error.diagnosticMessage.includes('DEFERRED_SOURCE'))
       return 'Chưa đủ dữ liệu hoặc chính sách để thực hiện thao tác này.'
     if (error.status === 401) return 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'
     if (error.status === 403) return 'Bạn không có quyền xử lý hồ sơ này.'
     if (error.status === 404) return 'Không tìm thấy dữ liệu cần thao tác. Vui lòng tải lại trang.'
     if (error.status === 400 || error.status === 422) {
-      const detailValues = Array.isArray(error.details)
-        ? error.details.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
-        : error.details && typeof error.details === 'object'
-          ? Object.values(error.details).filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
-          : []
-      const vietnameseDetails = detailValues.filter(value => /[À-ỹ]/u.test(value))
-      if (vietnameseDetails.length > 0) return vietnameseDetails.join(' ')
-      if (/[À-ỹ]/u.test(error.message)) return error.message
       return 'Thông tin chưa hợp lệ. Vui lòng kiểm tra lại các mục đã nhập.'
     }
     if (error.status === 409 && (

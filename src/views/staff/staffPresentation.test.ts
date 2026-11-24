@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest"
 import {
+  compareCheckInSchedule,
   compareStaffTaskSchedule,
   formatStaffDate,
   parseEmptyStorageHandover,
+  inventoryReportNote,
   staffCheckInStatusLabel,
   staffErrorMessage,
   staffGoodsCategoryLabel,
@@ -10,6 +12,12 @@ import {
 } from "./staffPresentation"
 
 describe("trình bày dữ liệu cho giao diện nhân viên", () => {
+  it("đọc đúng ghi chú kiểm kê mới và biên bản cũ ghép ghi chú xác minh", () => {
+    expect(inventoryReportNote("Ghi chú kiểm kê: Thiếu một kiện")).toBe("Thiếu một kiện")
+    expect(inventoryReportNote("Ghi chú xác minh: Đã xem CCCD\nGhi chú bàn giao: Kiện 2 bị móp", "Đã xem CCCD")).toBe("Kiện 2 bị móp")
+    expect(inventoryReportNote("Ghi chú xác minh: Đã xem CCCD", "Đã xem CCCD")).toBe("")
+    expect(inventoryReportNote("Nội dung cũ")).toBe("Nội dung cũ")
+  })
   it("giữ mã tệp bàn giao khi khách thêm ghi chú có dấu phẩy", () => {
     const first = "84ec5e47-685e-4ff5-abc5-76d81be44742"
     const last = "23ca7b74-54ff-4b46-811c-a98dd06516b6"
@@ -93,5 +101,24 @@ describe("trình bày dữ liệu cho giao diện nhân viên", () => {
         )
         .map((task) => task.id),
     ).toEqual(["som-cao", "som-thap", "muon"])
+  })
+
+  it("sắp xếp hồ sơ nhận kho gần nhất, mới nhất và đơn đang chờ xử lý lên đầu", () => {
+    const checkIns = [
+      { reservationCode: "RSV-218059", checkInStatus: "completed", appointmentAt: "2026-11-09T19:58:00" },
+      { reservationCode: "RSV-235461", checkInStatus: "completed", appointmentAt: "2026-11-10T20:35:00" },
+      { reservationCode: "RSV-ER2T", checkInStatus: "completed", appointmentAt: "2026-11-03T06:37:00" },
+      { reservationCode: "RSV-3WJN", checkInStatus: "completed", appointmentAt: "2026-11-24T02:00:00" },
+      { reservationCode: "RSV-ZBWR", checkInStatus: "setup_completed", appointmentAt: "2026-11-25T23:10:00" },
+    ]
+
+    const sorted = [...checkIns].sort(compareCheckInSchedule)
+    expect(sorted.map(item => item.reservationCode)).toEqual([
+      "RSV-ZBWR", // Chờ kiểm kê hàng hóa (active & 25/11/2026) -> Lên đầu
+      "RSV-3WJN", // Đã hoàn tất (24/11/2026)
+      "RSV-235461", // Đã hoàn tất (10/11/2026)
+      "RSV-218059", // Đã hoàn tất (09/11/2026)
+      "RSV-ER2T", // Đã hoàn tất (03/11/2026)
+    ])
   })
 })
