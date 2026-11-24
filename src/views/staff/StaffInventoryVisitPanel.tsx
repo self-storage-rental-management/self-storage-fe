@@ -71,10 +71,9 @@ export default function StaffInventoryVisitPanel({ item, now, busy, onBusyChange
       <span>Đã xác minh lúc {format(visit.identityVerifiedAt)}{visit.verifiedByName ? ` bởi ${visit.verifiedByName}` : ''}.</span>
       {visit.photoId && <Button type="button" size="sm" variant="outline" onClick={() => onPreview(visit.photoId!)}>Xem ảnh xác minh</Button>}
     </div> : open && <div className="space-y-4">
-      {expired && <p role="status" className="font-semibold text-red-800">Đã quá hạn kiểm kê. Hồ sơ cần Manager xử lý.</p>}
+      {expired && <p role="status" className="font-semibold text-red-800">Đã quá hạn kiểm kê. Hồ sơ cần quản lý cơ sở xử lý.</p>}
       {!visit?.appointmentAt && <p role="status">Đang chờ khách chọn lịch kiểm kê.</p>}
       <fieldset className="space-y-4" disabled={busy || expired || !visit?.appointmentAt}>
-
         <label className="grid gap-1">Số CCCD hoặc hộ chiếu trên giấy tờ gốc
           <input className="rounded-md border border-stone-300 bg-white p-2" autoComplete="off" maxLength={30}
             value={document} disabled={busy} onChange={event => setDocument(event.target.value)} />

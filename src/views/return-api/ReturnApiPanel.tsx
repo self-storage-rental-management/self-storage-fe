@@ -22,9 +22,9 @@ import {
   reviewDispute,
   returnError,
   uploadReturnEvidence,
+  type ApiReturn,
   calculateDamageFee,
   returnDamageCatalog,
-  type ApiReturn,
   type DamageItemInput,
   type InspectionInput,
   type ReturnFees,
@@ -103,7 +103,7 @@ export function ReturnSummary({ record, hideTerminationFee = false, hideHeader =
           <p className="font-semibold">Trả kho do hàng hóa sai khai báo</p>
           <ul className="mt-1 list-disc space-y-1 pl-5">
             <li>Tính tiền từ ngày xác nhận nhận kho đến ngày hẹn trả kho dự kiến.</li>
-            <li>Manager lập quyết toán, khách xác nhận trước khi hoàn tiền hoặc thu thêm.</li>
+            <li>Quản lý cơ sở lập quyết toán, khách xác nhận trước khi hoàn tiền hoặc thu thêm.</li>
           </ul>
         </div>}
         </>
@@ -117,7 +117,7 @@ export function ReturnSummary({ record, hideTerminationFee = false, hideHeader =
         ] as const).map(([label, amount]) => <div key={label} className="rounded-lg bg-stone-50 p-3"><p className="text-xs text-stone-500">{label}</p><p className="mt-1 text-sm font-bold text-stone-900">{amount == null ? 'Chưa xác định' : rentalMoney(amount, 'VND')}</p></div>)}
       </div>
       {record.setupExitRequested && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{inventoryMismatch
-        ? 'Quyết toán trả kho do kiểm kê không phù hợp. Chỉ tính thời gian sử dụng thực tế và các khoản có bằng chứng, không áp dụng phí chấm dứt sớm cố định.'
+        ? 'Chỉ tính thời gian sử dụng thực tế và các khoản có bằng chứng, không áp dụng phí chấm dứt sớm cố định.'
         : record.setupEarlyExit
         ? hideTerminationFee ? 'Trả trong thời gian chuẩn bị: hoàn 80% tiền thuê sau ưu đãi, giữ lại 20%; tiền cọc đảm bảo quyết toán riêng sau khi trừ hư hỏng theo bảng giá.' : 'Trả trong thời gian chuẩn bị: hệ thống giữ lại 20% tiền thuê sau ưu đãi và hoàn 80%. Hư hỏng trừ vào cọc một tháng; chỉ phần vượt cọc mới yêu cầu khách trả thêm.'
         : record.setupReturnedAt ? 'Kho được nghiệm thu sau hạn chuẩn bị, áp dụng quyết toán của kỳ thuê đã bắt đầu.' : 'Nhân viên cần xác nhận đã dọn hết hàng và bàn giao kho trống. Điều khoản thời gian chuẩn bị áp dụng theo thời điểm nghiệm thu thực tế.'}</p>}
@@ -152,13 +152,12 @@ function RecoveryReturnSummary({ record, hideTerminationFee, hideHeader = false 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {([
           ['Tiền cọc đảm bảo thuê thực thu', record.depositAmount], ['Phí đã ghi nhận', record.totalDeductions],
-          ...(record.setupEarlyExit ? [['Tiền thuê được hoàn (80%)', record.rentalRefundCredit], ...(!hideTerminationFee ? [['Khoản giữ lại theo chính sách setup (Phí chấm dứt sớm một lần)', record.earlyTerminationFee]] as const : [])] as const : []),
-          ...(!record.setupEarlyExit && record.activeReturnPolicy ? [['Tiền thuê các tháng chưa bắt đầu', record.activeReturnPolicy.rentalRefundAmount]] as const : []),
+          ...(record.setupEarlyExit ? [['Tiền thuê thực thu được quyết toán', record.rentalRefundCredit], ...(!hideTerminationFee ? [['Phí chấm dứt sớm một lần', record.earlyTerminationFee]] as const : [])] as const : []),
           ['Khoản hoàn tiền', record.netRefundAmount], ['Khách cần đóng thêm', record.amountDueFromCustomer],
         ] as const).map(([label, amount]) => <div key={label} className="rounded-lg bg-stone-50 p-3"><p className="text-xs text-stone-500">{label}</p><p className="mt-1 text-sm font-bold text-stone-900">{amount == null ? 'Chưa xác định' : rentalMoney(amount, 'VND')}</p></div>)}
       </div>
       {record.setupExitRequested && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{record.setupEarlyExit
-        ? hideTerminationFee ? 'Trả trong thời gian chuẩn bị: hoàn 80% tiền thuê sau ưu đãi, giữ lại 20%; tiền cọc đảm bảo quyết toán riêng sau khi trừ hư hỏng theo bảng giá.' : 'Trả trong thời gian chuẩn bị: hệ thống giữ lại 20% tiền thuê sau ưu đãi và hoàn 80%. Hư hỏng trừ vào cọc một tháng; chỉ phần vượt cọc mới yêu cầu khách trả thêm.'
+        ? hideTerminationFee ? 'Quyết toán trả kho trong thời gian chuẩn bị theo bảng kê đã ghi nhận.' : 'Quyết toán trả kho trong thời gian chuẩn bị. Tiền thuê thực thu và tiền cọc đảm bảo thuê được trừ phí chấm dứt sớm một lần cùng các khoản phí có chứng cứ.'
         : record.setupReturnedAt ? 'Kho được nghiệm thu sau hạn chuẩn bị, áp dụng quyết toán của kỳ thuê đã bắt đầu.' : 'Nhân viên cần xác nhận đã dọn hết hàng và bàn giao kho trống. Điều khoản thời gian chuẩn bị áp dụng theo thời điểm nghiệm thu thực tế.'}</p>}
       {record.settlementBlocker && (
         <p role="status" className="rounded bg-amber-50 p-3">
@@ -270,21 +269,9 @@ function ReturnWorkspace({
   const editRemovalDeadline = rows.find(record => record.id === editing)?.inventoryRemovalDeadlineAt
   const maxEditReturnDate = editRemovalDeadline ? vietnamDateInput(Date.parse(editRemovalDeadline) - 1) : undefined
 
-  const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending_inspection' | 'review' | 'settlement' | 'completed'>('all')
   const [emergencyModalOpen, setEmergencyModalOpen] = useState(false)
-
-  // Automatically select record if exactly 1 record is present (e.g. within a specific rental's context)
-  useEffect(() => {
-    if (rentalId && rows.length > 0 && !selectedRecordId) {
-      setSelectedRecordId(rows[0].id)
-    }
-  }, [rentalId, rows, selectedRecordId])
-
-  const selectedRecord = useMemo(() => {
-    return selectedRecordId ? rows.find((r) => r.id === selectedRecordId) ?? null : null
-  }, [rows, selectedRecordId])
 
   const counts = useMemo(() => {
     const pending = rows.filter((r) => ['requested', 'scheduled'].includes(r.status)).length
@@ -318,365 +305,459 @@ function ReturnWorkspace({
     (role === 'manager' && (actor.roles.includes('BUSINESS') || actor.roles.includes('ADMIN')))
   )
 
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set())
+  const [initializedExpansion, setInitializedExpansion] = useState(false)
+
+  useEffect(() => {
+    if (rows.length > 0 && !initializedExpansion) {
+      const activeIds = rows.filter((r) => r.status !== 'completed').map((r) => r.id)
+      setExpandedIds(new Set(activeIds.length > 0 ? activeIds : [rows[0].id]))
+      setInitializedExpansion(true)
+    }
+  }, [rows, initializedExpansion])
+
+  const allExpanded = rows.length > 0 && rows.every((r) => expandedIds.has(r.id))
+
+  const toggleAllExpanded = () => {
+    if (allExpanded) {
+      setExpandedIds(new Set())
+    } else {
+      setExpandedIds(new Set(rows.map((r) => r.id)))
+    }
+  }
+
+  const toggleExpand = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
   if (!readable) return null
 
   return (
-    <div className={rentalId ? 'space-y-4' : 'space-y-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-xs'}>
-      {/* ─── FOCUSED DETAIL WORKSPACE (When a record is selected) ─── */}
-      {selectedRecord ? (
-        <div className="space-y-5 fade-in">
-          {/* Header Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 pb-4">
-            <div className="flex flex-wrap items-center gap-2.5">
-              {!rentalId && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setSelectedRecordId(null)}
-                  className="font-semibold text-xs border-stone-300 text-stone-700 hover:bg-stone-50"
-                >
-                  ← Quay lại danh sách hồ sơ
-                </Button>
-              )}
-              <span className="font-mono font-extrabold text-stone-900 text-sm sm:text-base bg-stone-100 px-3 py-1 rounded-lg border border-stone-200">
-                {selectedRecord.unitNumber}
+    <div className={rentalId ? 'space-y-4' : 'space-y-4 rounded-xl border border-stone-200 bg-white p-5'}>
+      {!rentalId ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 pb-3">
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-bold text-stone-900">Trả kho & quyết toán</h3>
+            {rows.length > 0 && (
+              <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-600">
+                {rows.length} hồ sơ
               </span>
-              <span className="text-xs sm:text-sm font-semibold text-stone-600">
-                {selectedRecord.facilityName}
-              </span>
-              <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                selectedRecord.status === 'disputed'
-                  ? 'bg-rose-100 text-rose-800 border border-rose-300'
-                  : selectedRecord.status === 'completed'
-                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                  : selectedRecord.status === 'refund_pending'
-                  ? 'bg-purple-100 text-purple-800 border border-purple-300'
-                  : selectedRecord.status === 'payment_due'
-                  ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                  : 'bg-amber-50 text-amber-800 border border-amber-200'
-              }`}>
-                {statusLabel(selectedRecord)}
-              </span>
-              {selectedRecord.customerName && (
-                <span className="text-xs text-stone-700">
-                  Khách: <strong className="font-bold text-stone-900">{selectedRecord.customerName}</strong>
-                </span>
-              )}
-              {selectedRecord.customerNotes && (
-                <span className="text-xs text-stone-600 italic">
-                  Lý do: &ldquo;{selectedRecord.customerNotes}&rdquo;
-                </span>
-              )}
-              <span className="text-xs text-stone-500">
-                Hạn trả: <strong className="text-stone-700">{rentalDate(selectedRecord.scheduledDate)}</strong>
-              </span>
-            </div>
-
-            {role !== 'customer' && (
+            )}
+            <span className="hidden text-xs text-stone-500 mt-0.5 sm:inline">Chọn một hồ sơ để tiến hành nghiệm thu hoặc xem quyết toán chi tiết.</span>
+          </div>
+          {rows.length > 0 && role !== 'customer' && (
+            <div className="flex items-center gap-2">
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
-                onClick={() => setEmergencyModalOpen(true)}
-                className="ml-auto shrink-0 text-xs font-semibold text-stone-700 border-stone-300 bg-white hover:bg-stone-50"
+                onClick={toggleAllExpanded}
+                className="text-xs font-medium cursor-pointer"
               >
-                Liên hệ khẩn cấp
-              </Button>
-            )}
-          </div>
-
-          {/* Form Actions / 2-Column Inspection */}
-          <ReturnActions
-            role={role}
-            record={selectedRecord}
-            run={run}
-            busy={busy || read.loading || (recoveryBusy && !recoveryLocks.current.has(selectedRecord.id))}
-            recoveryLocked={recoveryBusy}
-            onRecoveryLocked={value => {
-              if (value) recoveryLocks.current.add(selectedRecord.id)
-              else recoveryLocks.current.delete(selectedRecord.id)
-              recoveryLock.current = recoveryLocks.current.size > 0
-              setRecoveryBusy(recoveryLock.current)
-            }}
-            onRecoveryChanged={() => {
-              setFeedback('Đã cập nhật hồ sơ trả kho.')
-              read.refresh()
-              onChanged?.()
-            }}
-          />
-
-          {role === 'customer' && selectedRecord.status === 'requested' && editing !== selectedRecord.id && (
-            <div className="mt-3 flex justify-end border-t border-stone-100 pt-3">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={busy || read.loading}
-                onClick={() => {
-                  setEditing(selectedRecord.id)
-                  setDate(selectedRecord.scheduledDate)
-                  setNotes(selectedRecord.customerNotes || '')
-                }}
-              >
-                Chỉnh sửa yêu cầu
+                {allExpanded ? 'Thu gọn tất cả' : 'Trải ra tất cả'}
               </Button>
             </div>
-          )}
-
-          {/* Emergency contacts modal */}
-          {emergencyModalOpen && selectedRecord.rentalId && (
-            <Modal open={emergencyModalOpen} onClose={() => setEmergencyModalOpen(false)} title="Thông tin người liên hệ khẩn cấp" size="lg">
-              <div className="p-1">
-                <EmergencyContactsPanel rentalId={selectedRecord.rentalId} />
-              </div>
-            </Modal>
           )}
         </div>
       ) : (
-        /* ─── MASTER LIST VIEW (When no record is selected) ─── */
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 pb-3">
-            <div>
-              <h3 className="text-base font-bold text-stone-900">Danh sách hồ sơ trả kho &amp; quyết toán</h3>
-              <p className="text-xs text-stone-500 mt-0.5">Chọn một hồ sơ để tiến hành nghiệm thu hoặc xem quyết toán chi tiết.</p>
-            </div>
-            <span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-bold text-stone-700 border border-stone-200">
-              {rows.length} hồ sơ
-            </span>
+        rows.length > 1 && role !== 'customer' && (
+          <div className="flex justify-end pb-1">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={toggleAllExpanded}
+              className="text-xs font-medium cursor-pointer"
+            >
+              {allExpanded ? 'Thu gọn tất cả' : 'Trải ra tất cả'}
+            </Button>
           </div>
+        )
+      )}
 
-          {/* Search bar & Status Tabs */}
-          <div className="space-y-3">
-            <div className="relative">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Tìm kiếm theo mã kho, tên khách hàng, cơ sở hoặc lý do trả kho..."
-                className="w-full rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-xs text-stone-900 focus:border-amber-500 focus:outline-none placeholder:text-stone-400"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-stone-400 hover:text-stone-700"
-                >
-                  Xóa
-                </button>
+      {/* ─── Tìm kiếm & lọc hồ sơ trả kho ─── */}
+      <div className="space-y-3">
+        <div className="relative">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Tìm kiếm theo mã kho, tên khách hàng, cơ sở hoặc lý do trả kho..."
+            className="w-full rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-xs text-stone-900 focus:border-amber-500 focus:outline-none placeholder:text-stone-400"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-stone-400 hover:text-stone-700"
+            >
+              Xóa
+            </button>
+          )}
+        </div>
+
+        {/* Segmented control tabs */}
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-stone-200 pb-2 text-xs">
+          {[
+            { id: 'all' as const, label: 'Tất cả', count: counts.all },
+            { id: 'pending_inspection' as const, label: 'Chờ nghiệm thu', count: counts.pending },
+            { id: 'review' as const, label: 'Chờ khách / Khiếu nại', count: counts.review },
+            { id: 'settlement' as const, label: 'Quyết toán / Hoàn cọc', count: counts.settlement },
+            { id: 'completed' as const, label: 'Đã hoàn tất', count: counts.completed },
+          ].map((tab) => {
+            const active = statusFilter === tab.id
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setStatusFilter(tab.id)}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-semibold transition cursor-pointer ${
+                  active
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'bg-stone-100 text-stone-600 hover:bg-stone-200 hover:text-stone-900'
+                }`}
+              >
+                <span>{tab.label}</span>
+                <span className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
+                  active ? 'bg-amber-700 text-white' : 'bg-stone-200 text-stone-700'
+                }`}>
+                  {tab.count}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Customer request return form (if applicable) */}
+      {role === 'customer' && rentalId && read.data && ((rentalActive && !rows.some(record => record.status !== 'completed' || (record.sourceType === 'RECOVERY' && record.recoveryTaskStatus !== 'CLOSED'))) || editing) && (
+        <form onSubmit={(event) => {
+          event.preventDefault()
+          if (date && date < today) {
+            setFeedback('Ngày trả kho không được ở quá khứ.')
+            return
+          }
+          if (editRemovalDeadline && (Date.now() >= Date.parse(editRemovalDeadline)
+            || (maxEditReturnDate && date > maxEditReturnDate))) {
+            setFeedback('Ngày trả kho phải nằm trong thời hạn đưa hàng ra khỏi kho.')
+            return
+          }
+          void run(() => editing ? updateReturnRequest(editing, date, notes) : requestReturn(rentalId, date, notes))
+        }} className="space-y-4 rounded-xl border border-stone-200 bg-stone-50 p-4">
+          {rows.some(record => record.id === editing && record.returnType === 'INVENTORY_MISMATCH')
+            ? <div className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-950"><p className="font-semibold">Trả kho do hàng hóa sai khai báo</p><ul className="mt-1 list-disc space-y-1 pl-5"><li>Tính tiền từ ngày xác nhận nhận kho đến ngày hẹn trả kho dự kiến.</li><li>Manager lập quyết toán, khách xác nhận trước khi hoàn tiền hoặc thu thêm.</li></ul></div>
+            : <ReturnPolicyNotice />}
+          <div>
+            <VietnameseDateInput label="Ngày trả kho" value={date} min={today} max={maxEditReturnDate} onChange={setDate} />
+            {date && date < today && (
+              <p className="mt-1 text-xs font-semibold text-rose-600">Ngày trả kho không được ở quá khứ.</p>
+            )}
+          </div>
+          <label className="block text-sm font-medium text-stone-700">Lý do<textarea required rows={3} placeholder="Nhập lý do trả kho…" value={notes} maxLength={2000} disabled={busy} onChange={(event) => setNotes(event.target.value)} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white p-3 font-normal" /></label>
+          <div className="flex flex-wrap gap-3">
+            <Button type="submit" disabled={busy || !date || date < today || Boolean(maxEditReturnDate && date > maxEditReturnDate) || !notes.trim() || read.loading}>{editing ? 'Lưu chỉnh sửa' : 'Gửi yêu cầu trả kho'}</Button>
+            {editing && <Button type="button" variant="outline" disabled={busy} onClick={() => setEditing(null)}>Hủy chỉnh sửa</Button>}
+          </div>
+        </form>
+      )}
+
+      {read.loading && !read.data && <p role="status">Đang tải hồ sơ trả kho...</p>}
+      {!!read.error && <p role="alert">{returnError(read.error)}</p>}
+      {feedback && <p role="status">{feedback}</p>}
+
+      {!read.loading && !read.error && filteredRows.length === 0 && (
+        <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50/50 p-8 text-center text-xs text-stone-500">
+          {rows.length === 0 ? 'Chưa có yêu cầu trả kho nào.' : 'Không tìm thấy hồ sơ trả kho phù hợp với bộ lọc hiện tại.'}
+        </div>
+      )}
+
+      {filteredRows.map((record) => {
+        const isExpanded = role === 'customer' || expandedIds.has(record.id)
+        const inventoryMismatch = record.returnType === 'INVENTORY_MISMATCH'
+        const badgeClass =
+          inventoryMismatch
+            ? 'bg-red-100 text-red-900 border border-red-300 font-bold'
+            : record.status === 'disputed'
+            ? 'bg-rose-100 text-rose-800 border border-rose-300 font-bold'
+            : record.status === 'completed'
+            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+            : record.status === 'refund_pending'
+            ? 'bg-purple-100 text-purple-800 border border-purple-300 font-semibold'
+            : 'bg-amber-50 text-amber-800 border border-amber-200'
+
+        return (
+          <div key={record.id} className="rounded-xl border border-stone-200 bg-white shadow-xs transition overflow-hidden">
+            {/* ─── Compact Summary Header (Bấm để mở rộng với nhân viên/quản lý) ─── */}
+            <div
+              className={`flex flex-wrap items-center justify-between gap-3 p-3.5 transition select-none ${
+                role === 'customer'
+                  ? 'bg-stone-50/80 border-b border-stone-200'
+                  : inventoryMismatch
+                    ? isExpanded ? 'bg-red-50/80 border-b border-red-200' : 'bg-red-50/40 hover:bg-red-50/80'
+                    : isExpanded ? 'bg-stone-50/80 border-b border-stone-200' : 'hover:bg-stone-50/60'
+              } ${role === 'customer' ? '' : 'cursor-pointer'}`}
+              onClick={role === 'customer' ? undefined : () => toggleExpand(record.id)}
+            >
+              <div className="flex flex-wrap items-center gap-2.5">
+                <span className="text-sm font-bold text-stone-900 bg-stone-100 px-2.5 py-1 rounded-md border border-stone-200 font-mono">
+                  {record.unitNumber}
+                </span>
+                <span className="text-xs font-medium text-stone-500">
+                  {record.facilityName}
+                </span>
+                {record.customerName && (
+                  <span className="text-xs text-stone-700 bg-white px-2 py-0.5 rounded border border-stone-200">
+                    Khách: <strong className="font-semibold text-stone-800">{record.customerName}</strong>
+                  </span>
+                )}
+                <span className="text-xs text-stone-500">
+                  Ngày hẹn trả: <strong className="text-stone-700">{rentalDate(record.scheduledDate)}</strong>
+                </span>
+                {(record.managerReviewDueAt || record.customerConfirmationDueAt) && <span className="rounded bg-red-50 px-2 py-1 text-xs font-bold text-red-800">
+                  {record.managerReviewDueAt ? 'Hạn Manager duyệt 6 giờ' : 'Hạn xác nhận 72 giờ'}: {new Date(record.managerReviewDueAt || record.customerConfirmationDueAt!).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}
+                  {' · '}{Date.parse(record.managerReviewDueAt || record.customerConfirmationDueAt!) <= Date.now() ? 'Đã quá hạn' : `Còn ${Math.ceil((Date.parse(record.managerReviewDueAt || record.customerConfirmationDueAt!) - Date.now()) / 60_000)} phút`}
+                </span>}
+                {role === 'staff' && ['requested', 'scheduled'].includes(record.status) && <button type="button" disabled={busy} className="rounded border px-2 py-1 text-xs" onClick={async e => {
+                  e.stopPropagation()
+                  try { await apiRequest(`/api/intake-workflow/reservations/returns/${encodeURIComponent(record.id)}/arrival`, { method: 'POST' }); setFeedback('Đã ghi nhận khách bàn giao đủ điều kiện. Hạn nghiệm thu là 4 giờ làm việc.'); read.refresh() }
+                  catch { setFeedback('Chưa thể ghi nhận bàn giao. Vui lòng kiểm tra hồ sơ và thử lại.') }
+                }}>Ghi nhận bàn giao đủ điều kiện nghiệm thu</button>}
+              </div>
+
+              <div className="flex items-center gap-2.5 ml-auto">
+                {record.status === 'refund_pending' && record.netRefundAmount != null && (
+                  <span className="text-xs font-bold text-purple-700 bg-purple-50 px-2 py-1 rounded border border-purple-200">
+                    Hoàn cọc: {rentalMoney(record.netRefundAmount, 'VND')}
+                  </span>
+                )}
+                {record.status === 'payment_due' && record.amountDueFromCustomer != null && (
+                  <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-1 rounded border border-amber-200">
+                    Cần thu: {rentalMoney(record.amountDueFromCustomer, 'VND')}
+                  </span>
+                )}
+                <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${badgeClass}`}>
+                  {inventoryMismatch ? `Trả kho do kiểm kê sai lệch · ${statusLabel(record)}` : statusLabel(record)}
+                </span>
+
+                {role !== 'customer' && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      toggleExpand(record.id)
+                    }}
+                    className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium transition cursor-pointer ${
+                      isExpanded
+                        ? 'border-stone-300 bg-white text-stone-700 hover:bg-stone-100'
+                        : 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 font-semibold'
+                    }`}
+                    title={isExpanded ? 'Thu gọn hồ sơ này' : 'Trải ra xem chi tiết và xử lý'}
+                  >
+                    {isExpanded ? 'Thu gọn' : 'Trải ra'}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* ─── Dữ liệu tóm tắt hồ sơ ─── */}
+            <div className="grid grid-cols-2 gap-2 border-b border-stone-100 px-3.5 py-2.5 text-xs sm:grid-cols-4">
+              <div>
+                <span className="text-stone-400 block text-[11px]">Khách hàng</span>
+                <span className="font-bold text-stone-800">{record.customerName || 'Khách thuê'}</span>
+              </div>
+              <div>
+                <span className="text-stone-400 block text-[11px]">Hạn dự kiến trả</span>
+                <span className="font-semibold text-stone-700">{rentalDate(record.scheduledDate)}</span>
+              </div>
+              <div>
+                <span className="text-stone-400 block text-[11px]">
+                  {record.status === 'refund_pending' ? 'Tiền hoàn cọc' : record.status === 'payment_due' ? 'Phụ phí cần thu' : 'Cọc theo HĐ'}
+                </span>
+                <span className={`font-mono font-bold ${
+                  record.status === 'refund_pending' ? 'text-purple-700' : record.status === 'payment_due' ? 'text-amber-800' : 'text-stone-900'
+                }`}>
+                  {record.status === 'refund_pending' && record.netRefundAmount != null
+                    ? rentalMoney(record.netRefundAmount, 'VND')
+                    : record.status === 'payment_due' && record.amountDueFromCustomer != null
+                    ? rentalMoney(record.amountDueFromCustomer, 'VND')
+                    : record.depositAmount != null
+                    ? rentalMoney(record.depositAmount, 'VND')
+                    : 'Chưa xác định'}
+                </span>
+              </div>
+              <div>
+                <span className="text-stone-400 block text-[11px]">Mã hồ sơ thuê</span>
+                <span className="font-mono font-semibold text-stone-500">#{record.rentalId.slice(0, 8)}</span>
+              </div>
+              {record.inventoryRemovalDeadlineAt && (
+                <p className="col-span-full text-stone-600">
+                  Hạn đưa hàng ra <strong>{new Date(record.inventoryRemovalDeadlineAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</strong>
+                </p>
+              )}
+              {record.customerNotes && (
+                <p className="col-span-full text-stone-600 line-clamp-1 italic">
+                  Lý do: &ldquo;{record.customerNotes}&rdquo;
+                </p>
               )}
             </div>
 
-            {/* Segmented control tabs */}
-            <div className="flex flex-wrap items-center gap-1.5 border-b border-stone-200 pb-2 text-xs">
-              {[
-                { id: 'all' as const, label: 'Tất cả', count: counts.all },
-                { id: 'pending_inspection' as const, label: 'Chờ nghiệm thu', count: counts.pending },
-                { id: 'review' as const, label: 'Chờ khách / Khiếu nại', count: counts.review },
-                { id: 'settlement' as const, label: 'Quyết toán / Hoàn cọc', count: counts.settlement },
-                { id: 'completed' as const, label: 'Đã hoàn tất', count: counts.completed },
-              ].map((tab) => {
-                const active = statusFilter === tab.id
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setStatusFilter(tab.id)}
-                    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-semibold transition cursor-pointer ${
-                      active
-                        ? 'bg-amber-600 text-white shadow-xs'
-                        : 'bg-stone-100 text-stone-600 hover:bg-stone-200 hover:text-stone-900'
-                    }`}
-                  >
-                    <span>{tab.label}</span>
-                    <span className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
-                      active ? 'bg-amber-700 text-white' : 'bg-stone-200 text-stone-700'
-                    }`}>
-                      {tab.count}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* Customer request return form (if applicable) */}
-          {role === 'customer' && rentalId && read.data && ((rentalActive && !rows.some(record => record.status !== 'completed' || (record.sourceType === 'RECOVERY' && record.recoveryTaskStatus !== 'CLOSED'))) || editing) && (
-            <form onSubmit={(event) => {
-              event.preventDefault()
-              if (date && date < today) {
-                setFeedback('Ngày trả kho không được ở quá khứ.')
-                return
-              }
-              if (editRemovalDeadline && (Date.now() >= Date.parse(editRemovalDeadline)
-                || (maxEditReturnDate && date > maxEditReturnDate))) {
-                setFeedback('Ngày trả kho phải nằm trong thời hạn đưa hàng ra khỏi kho.')
-                return
-              }
-              void run(() => editing ? updateReturnRequest(editing, date, notes) : requestReturn(rentalId, date, notes))
-            }} className="space-y-4 rounded-xl border border-stone-200 bg-stone-50 p-4">
-              {rows.some(record => record.id === editing && record.returnType === 'INVENTORY_MISMATCH')
-                ? <div className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-950"><p className="font-semibold">Trả kho do hàng hóa sai khai báo</p><ul className="mt-1 list-disc space-y-1 pl-5"><li>Tính tiền từ ngày xác nhận nhận kho đến ngày hẹn trả kho dự kiến.</li><li>Manager lập quyết toán, khách xác nhận trước khi hoàn tiền hoặc thu thêm.</li></ul></div>
-                : <ReturnPolicyNotice />}
-              <div>
-                <VietnameseDateInput label="Ngày trả kho" value={date} min={today} max={maxEditReturnDate} onChange={setDate} />
-                {date && date < today && (
-                  <p className="mt-1 text-xs font-semibold text-rose-600">Ngày trả kho không được ở quá khứ.</p>
-                )}
-              </div>
-              <label className="block text-sm font-medium text-stone-700">Lý do<textarea required rows={3} placeholder="Nhập lý do trả kho…" value={notes} maxLength={2000} disabled={busy} onChange={(event) => setNotes(event.target.value)} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white p-3 font-normal" /></label>
-              <div className="flex flex-wrap gap-3">
-                <Button type="submit" disabled={busy || !date || date < today || Boolean(maxEditReturnDate && date > maxEditReturnDate) || !notes.trim() || read.loading}>{editing ? 'Lưu chỉnh sửa' : 'Gửi yêu cầu trả kho'}</Button>
-                {editing && <Button type="button" variant="outline" disabled={busy} onClick={() => setEditing(null)}>Hủy chỉnh sửa</Button>}
-              </div>
-            </form>
-          )}
-
-          {read.loading && !read.data && <p role="status">Đang tải hồ sơ trả kho...</p>}
-          {!!read.error && <p role="alert">{returnError(read.error)}</p>}
-          {feedback && <p role="status">{feedback}</p>}
-
-          {/* Empty states */}
-          {!read.loading && !read.error && filteredRows.length === 0 && (
-            <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50/50 p-8 text-center text-xs text-stone-500">
-              {rows.length === 0 ? 'Chưa có yêu cầu trả kho nào.' : 'Không tìm thấy hồ sơ trả kho phù hợp với bộ lọc hiện tại.'}
-            </div>
-          )}
-
-          {/* Cards List */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-            {filteredRows.map((record) => {
-              const isCompleted = record.status === 'completed'
-              const isPending = ['requested', 'scheduled'].includes(record.status)
-              const isSettlement = ['payment_due', 'refund_pending'].includes(record.status)
-              const badgeClass =
-                record.status === 'disputed'
-                  ? 'bg-rose-100 text-rose-800 border border-rose-300 font-bold'
-                  : record.status === 'completed'
-                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                  : record.status === 'refund_pending'
-                  ? 'bg-purple-100 text-purple-800 border border-purple-300 font-semibold'
-                  : record.status === 'payment_due'
-                  ? 'bg-amber-100 text-amber-900 border border-amber-300 font-semibold'
-                  : 'bg-amber-50 text-amber-800 border border-amber-200'
-
-              return (
-                <div
-                  key={record.id}
-                  onClick={() => setSelectedRecordId(record.id)}
-                  className="rounded-2xl border border-stone-200 bg-white p-4 shadow-xs hover:border-amber-400 hover:shadow-md transition-all cursor-pointer space-y-3 flex flex-col justify-between"
-                >
-                  <div className="space-y-2.5">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-extrabold text-stone-900 bg-stone-100 px-2.5 py-1 rounded-md border border-stone-200 font-mono tracking-tight">
-                          {record.unitNumber}
-                        </span>
-                        <span className="text-xs font-semibold text-stone-500">
-                          {record.facilityName}
-                        </span>
-                      </div>
-                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${badgeClass}`}>
-                        {record.returnType === 'INVENTORY_MISMATCH' ? `Trả kho do kiểm kê sai lệch · ${statusLabel(record)}` : statusLabel(record)}
-                      </span>
-                    </div>
-
-                    {(record.managerReviewDueAt || record.customerConfirmationDueAt) && <div className="rounded-lg bg-red-50 px-2 py-1 text-xs font-bold text-red-800">
-                      {record.managerReviewDueAt ? 'Hạn Manager duyệt 6 giờ' : 'Hạn xác nhận 72 giờ'}: {new Date(record.managerReviewDueAt || record.customerConfirmationDueAt!).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}
-                      {' · '}{Date.parse(record.managerReviewDueAt || record.customerConfirmationDueAt!) <= Date.now() ? 'Đã quá hạn' : `Còn ${Math.ceil((Date.parse(record.managerReviewDueAt || record.customerConfirmationDueAt!) - Date.now()) / 60_000)} phút`}
-                    </div>}
-
-                    <div className="grid grid-cols-2 gap-2 py-2 border-y border-stone-100 text-xs">
-                      <div>
-                        <span className="text-stone-400 block text-[11px]">Khách hàng</span>
-                        <span className="font-bold text-stone-800">{record.customerName || 'Khách thuê'}</span>
-                      </div>
-                      <div>
-                        <span className="text-stone-400 block text-[11px]">Hạn dự kiến trả</span>
-                        <span className="font-semibold text-stone-700">{rentalDate(record.scheduledDate)}</span>
-                      </div>
-                      <div className="col-span-2 pt-1 border-t border-stone-50 flex items-center justify-between">
-                        <span className="text-stone-400 text-[11px]">
-                          {record.status === 'refund_pending' ? 'Tiền hoàn cọc:' : record.status === 'payment_due' ? 'Phụ phí cần thu:' : 'Cọc theo HĐ:'}
-                        </span>
-                        <span className={`font-mono font-bold text-sm ${
-                          record.status === 'refund_pending' ? 'text-purple-700' : record.status === 'payment_due' ? 'text-amber-800' : 'text-stone-900'
-                        }`}>
-                          {record.status === 'refund_pending' && record.netRefundAmount != null
-                            ? rentalMoney(record.netRefundAmount, 'VND')
-                            : record.status === 'payment_due' && record.amountDueFromCustomer != null
-                            ? rentalMoney(record.amountDueFromCustomer, 'VND')
-                            : record.depositAmount != null
-                            ? rentalMoney(record.depositAmount, 'VND')
-                            : 'Chưa xác định'}
-                        </span>
-                      </div>
-                    </div>
-
-                    {record.inventoryRemovalDeadlineAt && (
-                      <p className="text-xs text-stone-600">
-                        Hạn đưa hàng ra <strong>{new Date(record.inventoryRemovalDeadlineAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</strong>
-                      </p>
-                    )}
-
-                    {role === 'staff' && ['requested', 'scheduled'].includes(record.status) && <button type="button" disabled={busy} className="rounded border px-2 py-1 text-xs" onClick={async e => {
-                      e.stopPropagation()
-                      try { await apiRequest(`/api/intake-workflow/reservations/returns/${encodeURIComponent(record.id)}/arrival`, { method: 'POST' }); setFeedback('Đã ghi nhận khách bàn giao đủ điều kiện. Hạn nghiệm thu là 4 giờ làm việc.'); read.refresh() }
-                      catch { setFeedback('Chưa thể ghi nhận bàn giao. Vui lòng kiểm tra hồ sơ và thử lại.') }
-                    }}>Ghi nhận bàn giao đủ điều kiện nghiệm thu</button>}
-
-                    {record.customerNotes && (
-                      <p className="text-xs text-stone-600 line-clamp-1 italic">
-                        Lý do: &ldquo;{record.customerNotes}&rdquo;
-                      </p>
-                    )}
+            {/* ─── Chi tiết mở rộng & thao tác ─── */}
+            {isExpanded && (
+              <div className="p-4 space-y-4">
+                <ReturnActions
+                  role={role}
+                  record={record}
+                  run={run}
+                  busy={busy || read.loading || (recoveryBusy && !recoveryLocks.current.has(record.id))}
+                  recoveryLocked={recoveryBusy}
+                  onRecoveryLocked={value => {
+                    if (value) recoveryLocks.current.add(record.id)
+                    else recoveryLocks.current.delete(record.id)
+                    recoveryLock.current = recoveryLocks.current.size > 0
+                    setRecoveryBusy(recoveryLock.current)
+                  }}
+                  onRecoveryChanged={() => {
+                    setFeedback('Đã cập nhật hồ sơ trả kho.')
+                    read.refresh()
+                    onChanged?.()
+                  }}
+                />
+                {role === 'customer' && (record.status === 'requested'
+                  || (record.status === 'scheduled' && Boolean(record.inventoryRemovalDeadlineAt)))
+                  && (!record.inventoryRemovalDeadlineAt || Date.now() < Date.parse(record.inventoryRemovalDeadlineAt))
+                  && editing !== record.id && (
+                  <div className="mt-3 flex justify-end border-t border-stone-100 pt-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={busy || read.loading}
+                      onClick={() => {
+                        setEditing(record.id)
+                        setDate(record.scheduledDate)
+                        setNotes(record.customerNotes || '')
+                      }}
+                    >
+                      Chỉnh sửa yêu cầu
+                    </Button>
                   </div>
-
-                  <div className="flex items-center justify-between pt-2 border-t border-stone-100">
-                    <span className="text-[11px] text-stone-400 font-medium">
-                      #{record.rentalId.slice(0, 8)}
-                    </span>
+                )}
+                {role !== 'customer' && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-stone-100 pt-3">
                     <Button
                       type="button"
                       size="sm"
-                      className={
-                        isPending
-                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs'
-                          : isSettlement
-                          ? 'bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs'
-                          : 'border-stone-300 text-stone-700 hover:bg-stone-50 font-semibold text-xs'
-                      }
-                      variant={isPending || isSettlement ? 'primary' : 'outline'}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setSelectedRecordId(record.id)
-                      }}
+                      variant="outline"
+                      onClick={() => setEmergencyModalOpen(true)}
+                      className="text-xs font-semibold text-stone-700 border-stone-300 bg-white hover:bg-stone-50"
                     >
-                      {isPending
-                        ? 'Tiến hành nghiệm thu'
-                        : isSettlement
-                        ? 'Xử lý quyết toán'
-                        : isCompleted
-                        ? 'Xem biên bản quyết toán'
-                        : 'Xem chi tiết'}
+                      Liên hệ khẩn cấp
                     </Button>
+                    <button
+                      type="button"
+                      onClick={() => toggleExpand(record.id)}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-stone-500 hover:text-stone-800 hover:underline cursor-pointer"
+                    >
+                      Thu gọn hồ sơ {record.unitNumber}
+                    </button>
                   </div>
-                </div>
-              )
-            })}
-          </div>
-
-          {!rentalId && rows.length > 0 && (
-            <div className="flex items-center justify-between border-t border-stone-200 pt-3 text-xs">
-              <span className="text-stone-500">
-                Hiển thị {filteredRows.length} / {rows.length} hồ sơ
-              </span>
-              <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" disabled={busy || recoveryBusy || page === 0} onClick={() => { if (!recoveryLock.current) setPage((value) => value - 1) }}>Trang trước</Button>
-                <span className="font-semibold text-stone-600 px-2">Trang {page + 1}</span>
-                <Button size="sm" variant="outline" disabled={busy || recoveryBusy || !read.data || page + 1 >= read.data.pagination.totalPages} onClick={() => { if (!recoveryLock.current) setPage((value) => value + 1) }}>Trang sau</Button>
+                )}
               </div>
-            </div>
-          )}
+            )}
+          </div>
+        )
+      })}
+
+      {/* Thông tin người liên hệ khẩn cấp */}
+      {emergencyModalOpen && (
+        <Modal open={emergencyModalOpen} onClose={() => setEmergencyModalOpen(false)} title="Thông tin người liên hệ khẩn cấp" size="lg">
+          <div className="p-1">
+            <EmergencyContactsPanel />
+          </div>
+        </Modal>
+      )}
+      {!rentalId && rows.length > 0 && (
+        <div className="flex gap-2">
+          <Button disabled={busy || recoveryBusy || page === 0} onClick={() => { if (!recoveryLock.current) setPage((value) => value - 1) }}>Trang trước</Button>
+          <span>Trang {page + 1}</span>
+          <Button disabled={busy || recoveryBusy || !read.data || page + 1 >= read.data.pagination.totalPages} onClick={() => { if (!recoveryLock.current) setPage((value) => value + 1) }}>Trang sau</Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function FeeInputRow({
+  label,
+  icon,
+  value,
+  onChange,
+  disabled,
+  readOnly,
+}: {
+  label: string
+  icon?: string
+  value: number
+  onChange: (val: number) => void
+  disabled?: boolean
+  readOnly?: boolean
+}) {
+  const displayVal = Number.isNaN(value) || value === 0 ? '' : value
+  return (
+    <div className="rounded-xl border border-stone-200 bg-stone-50/50 p-2.5 transition focus-within:border-emerald-500 focus-within:bg-white focus-within:ring-1 focus-within:ring-emerald-500">
+      <div className="flex items-center justify-between gap-2">
+        <label className="text-xs font-semibold text-stone-700 flex items-center gap-1.5">
+          {icon && <span>{icon}</span>}<span>{label}</span>
+        </label>
+        {readOnly && <span className="text-[10px] text-stone-400 font-medium">Tự động</span>}
+      </div>
+      <div className="mt-1.5 flex items-center gap-1.5">
+        <div className="relative flex-1">
+          <input
+            type="number"
+            min="0"
+            step="1000"
+            readOnly={readOnly}
+            disabled={disabled}
+            value={displayVal}
+            placeholder="0"
+            onChange={(e) => {
+              const v = e.target.value === '' ? 0 : Math.max(0, Number(e.target.value))
+              onChange(v)
+            }}
+            className="w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-right font-mono text-sm font-bold text-stone-900 focus:outline-none"
+          />
+          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-medium text-stone-400">₫</span>
+        </div>
+      </div>
+      {!readOnly && !disabled && (
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {[
+            { label: '0đ', add: 0, reset: true },
+            { label: '+50k', add: 50000 },
+            { label: '+100k', add: 100000 },
+            { label: '+200k', add: 200000 },
+            { label: '+500k', add: 500000 },
+          ].map((pill) => (
+            <button
+              key={pill.label}
+              type="button"
+              onClick={() => {
+                const cur = Number.isNaN(value) ? 0 : value
+                onChange(pill.reset ? 0 : cur + pill.add)
+              }}
+              className="rounded-md border border-stone-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-stone-600 hover:border-emerald-400 hover:bg-emerald-50 hover:text-emerald-800 transition cursor-pointer"
+            >
+              {pill.label}
+            </button>
+          ))}
         </div>
       )}
     </div>
@@ -831,45 +912,6 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
     }
   }, [record])
 
-  const handleToggleLock = () => {
-    const next = !returnedLock
-    setReturnedLock(next)
-    setFees((f) => ({ ...f, lostItemFee: next ? 0 : 150000 }))
-  }
-
-  const handleToggleGoods = () => {
-    const next = !goodsLeft
-    setGoodsLeft(next)
-    if (next) {
-      setDamage('no_damage')
-      setDamageItems([])
-      setUnit('maintenance')
-    } else if (fees.cleaningFee === 0 && damage === 'no_damage') {
-      setUnit('available')
-    }
-    setVacatedReturnId(null)
-  }
-
-  const handleCleaningChange = (fee: number) => {
-    setFees((f) => ({ ...f, cleaningFee: fee }))
-    if (fee > 0) {
-      setUnit('maintenance')
-    } else if (damage === 'no_damage' && !goodsLeft) {
-      setUnit('available')
-    }
-  }
-
-  const handleDamageChange = (newDamage: InspectionInput['damageClassification']) => {
-    setDamage(newDamage)
-    setDamageItems([])
-    setVacatedReturnId(null)
-    if (newDamage !== 'no_damage') {
-      setUnit('maintenance')
-    } else if (fees.cleaningFee === 0 && !goodsLeft) {
-      setUnit('available')
-    }
-  }
-
   const write = role === 'customer' || !!actor?.permissions.includes(role === 'manager' ? 'rentals:update' : 'returns:process')
   const recovery = record.sourceType === 'RECOVERY'
   const inventoryMismatch = record.returnType === 'INVENTORY_MISMATCH'
@@ -968,7 +1010,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
               <dl className="divide-y divide-stone-100 text-sm">
                 {!recovery && record.setupEarlyExit && <>
                   <div className="flex justify-between gap-3 py-2"><dt className="text-stone-500">Tiền thuê thực thu được quyết toán</dt><dd className="shrink-0 font-medium">{record.rentalRefundCredit == null ? 'Chưa xác định' : rentalMoney(record.rentalRefundCredit, 'VND')}</dd></div>
-                  {<div className="flex justify-between gap-3 py-2"><dt className="text-stone-500">Khoản giữ lại theo chính sách setup</dt><dd className="shrink-0 font-medium">{record.earlyTerminationFee == null ? 'Chưa xác định' : rentalMoney(record.earlyTerminationFee, 'VND')}</dd></div>}
+                  {!inventoryMismatch && <div className="flex justify-between gap-3 py-2"><dt className="text-stone-500">Phí chấm dứt sớm một lần</dt><dd className="shrink-0 font-medium">{record.earlyTerminationFee == null ? 'Chưa xác định' : rentalMoney(record.earlyTerminationFee, 'VND')}</dd></div>}
                 </>}
                 {feeKeys.map((key, index) => <div key={key} className="flex justify-between gap-3 py-2"><dt className="text-stone-500">{['Phí hư hỏng', 'Phí vệ sinh', 'Phí mất đồ', 'Phí quá hạn', 'Phí còn thiếu'][index]}</dt><dd className="shrink-0 font-medium">{rentalMoney(record[key], 'VND')}</dd></div>)}
                 <div className="flex justify-between gap-3 py-3 font-bold"><dt>Tổng phí ghi nhận</dt><dd>{rentalMoney(record.totalDeductions, 'VND')}</dd></div>
@@ -1027,115 +1069,52 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                 <div className="lg:col-span-7 space-y-4">
                   {canInspect && (
                     <>
-                      {/* KHỐI 1: BÀN GIAO PHỤ KIỆN & KIỂM TRA HÀNG HÓA */}
+                      {/* KHỐI 1: BÀN GIAO PHỤ KIỆN & CHÌA KHÓA */}
                       <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-xs space-y-3">
                         <div className="flex items-center justify-between border-b border-stone-100 pb-2.5">
-                          <h4 className="text-sm font-bold text-stone-900">
-                            1. Thu hồi khóa &amp; Kiểm tra hàng hóa
+                          <h4 className="text-sm font-bold text-stone-900 flex items-center gap-2">
+                            <span>1. Thu hồi khóa đã bàn giao</span>
                           </h4>
                           <span className="text-[11px] font-medium text-stone-500">Chạm để đổi trạng thái</span>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <div className="p-3.5 rounded-xl border border-stone-200 bg-stone-50/40 text-left transition select-none flex flex-col justify-between">
-                            <div>
-                              <div className="flex w-full items-center justify-between gap-2">
-                                <span className="text-xs font-bold text-stone-800">Ổ khóa / Chìa khóa</span>
-                                <div className="inline-flex rounded-lg border border-stone-300 bg-stone-100 p-0.5 text-xs">
-                                  <button
-                                    type="button"
-                                    disabled={busy}
-                                    onClick={() => {
-                                      if (!returnedLock) handleToggleLock()
-                                    }}
-                                    className={`px-3 py-1 rounded-md text-xs font-semibold transition cursor-pointer ${
-                                      returnedLock
-                                        ? 'bg-white text-stone-900 shadow-xs'
-                                        : 'text-stone-500 hover:text-stone-800'
-                                    }`}
-                                  >
-                                    Đã thu hồi đủ
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={busy}
-                                    onClick={() => {
-                                      if (returnedLock) handleToggleLock()
-                                    }}
-                                    className={`px-3 py-1 rounded-md text-xs font-semibold transition cursor-pointer ${
-                                      !returnedLock
-                                        ? 'bg-white text-stone-900 shadow-xs'
-                                        : 'text-stone-500 hover:text-stone-800'
-                                    }`}
-                                  >
-                                    Làm mất / Thiếu
-                                  </button>
+                        <div className="grid grid-cols-1 gap-2.5">
+                          {([
+                            { key: 'returnedLock' as const, label: 'Ổ khóa / Chìa khóa đã bàn giao', desc: 'Đối chiếu mã khóa trong hồ sơ nhận kho và thu lại bộ khóa đã cấp' },
+                          ]).map((item) => {
+                            const isReturned = returnedLock
+                            return (
+                              <button
+                                key={item.key}
+                                type="button"
+                                disabled={busy}
+                                aria-pressed={isReturned}
+                                onClick={() => setReturnedLock((prev) => !prev)}
+                                className={`flex flex-col items-start p-3 rounded-xl border text-left transition cursor-pointer select-none ${
+                                  isReturned
+                                    ? 'border-emerald-400 bg-emerald-50/70 text-emerald-950 shadow-xs ring-1 ring-emerald-400'
+                                    : 'border-stone-200 bg-stone-50/50 text-stone-600 hover:border-stone-300 hover:bg-stone-100/60'
+                                }`}
+                              >
+                                <div className="flex w-full items-center justify-between">
+                                  
+                                  <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold ${
+                                    isReturned ? 'bg-emerald-600 text-white' : 'bg-stone-200 text-stone-600'
+                                  }`}>
+                                    {isReturned ? 'Đã thu hồi' : 'Chưa thu hồi'}
+                                  </span>
                                 </div>
-                              </div>
-                              <p className="text-[11px] text-stone-500 leading-tight mt-2">
-                                {returnedLock
-                                  ? 'Đã nhận lại đủ bộ khóa đã cấp.'
-                                  : 'Khách làm mất hoặc không bàn giao bộ khóa.'}
-                              </p>
-                            </div>
-                            {!returnedLock && (
-                              <div className="mt-3 pt-2.5 border-t border-stone-200 flex items-center justify-between gap-2">
-                                <span className="text-xs text-stone-600 font-medium">Phí làm lại khóa:</span>
-                                <span className="font-mono font-bold text-xs text-stone-900">
-                                  150.000 ₫
-                                </span>
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="p-3.5 rounded-xl border border-stone-200 bg-stone-50/40 text-left transition select-none flex flex-col justify-between">
-                            <div>
-                              <div className="flex w-full items-center justify-between gap-2">
-                                <span className="text-xs font-bold text-stone-800">Tình trạng hàng hóa</span>
-                                <div className="inline-flex rounded-lg border border-stone-300 bg-stone-100 p-0.5 text-xs">
-                                  <button
-                                    type="button"
-                                    disabled={busy}
-                                    onClick={() => {
-                                      if (goodsLeft) handleToggleGoods()
-                                    }}
-                                    className={`px-3 py-1 rounded-md text-xs font-semibold transition cursor-pointer ${
-                                      !goodsLeft
-                                        ? 'bg-white text-stone-900 shadow-xs'
-                                        : 'text-stone-500 hover:text-stone-800'
-                                    }`}
-                                  >
-                                    Đã dọn sạch
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={busy}
-                                    onClick={() => {
-                                      if (!goodsLeft) handleToggleGoods()
-                                    }}
-                                    className={`px-3 py-1 rounded-md text-xs font-semibold transition cursor-pointer ${
-                                      goodsLeft
-                                        ? 'bg-white text-stone-900 shadow-xs'
-                                        : 'text-stone-500 hover:text-stone-800'
-                                    }`}
-                                  >
-                                    Còn hàng
-                                  </button>
-                                </div>
-                              </div>
-                              <p className="text-[11px] text-stone-500 leading-tight mt-2">
-                                {!goodsLeft
-                                  ? 'Gian kho đã dọn trống hoàn toàn, không còn đồ đạc bỏ lại.'
-                                  : 'Còn đồ đạc hoặc tài sản bỏ quên trong kho, cần lập biên bản xử lý.'}
-                              </p>
-                            </div>
-                          </div>
+                                <span className="mt-2 text-xs font-bold">{item.label}</span>
+                                <span className="text-[11px] text-stone-500 leading-tight mt-0.5">{item.desc}</span>
+                              </button>
+                            )
+                          })}
                         </div>
                         <p className="text-xs text-stone-500">Chỉ thu hồi bộ khóa đã cấp khi nhận kho. Quyền ra vào được hệ thống thu hồi khi ghi nhận nghiệm thu.</p>
                         {(record.setupExitRequested || noShowRecovery) && (
                           <div className="pt-2 border-t border-stone-100">
                             <label className={`flex items-center gap-3 p-3 rounded-xl border transition cursor-pointer select-none ${
                               vacatedReturnId === id
-                                ? 'border-stone-900 bg-stone-50/80 text-stone-900 ring-1 ring-stone-900'
+                                ? 'border-emerald-400 bg-emerald-50/80 text-emerald-950 ring-1 ring-emerald-400'
                                 : 'border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100'
                             }`}>
                               <input
@@ -1143,7 +1122,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                                 checked={vacatedReturnId === id}
                                 disabled={busy || goodsLeft}
                                 onChange={(e) => setVacatedReturnId(e.target.checked ? id : null)}
-                                className="h-4 w-4 rounded border-stone-300 text-stone-900 focus:ring-stone-500"
+                                className="h-4 w-4 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
                               />
                               <div>
                               <p className="text-xs font-bold">{noShowRecovery ? 'Xác nhận đã đưa toàn bộ hàng ra khu lưu tạm và bàn giao kho trống' : 'Xác nhận khách đã dọn sạch hàng và bàn giao kho trống'}</p>
@@ -1181,77 +1160,71 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                         )}
                       </div>
 
-                      {/* KHỐI 2: ĐÁNH GIÁ HIỆN TRẠNG, VỆ SINH & HƯ HẠI */}
+                      {/* KHỐI 2: ĐÁNH GIÁ HIỆN TRẠNG KHO & HÀNG HÓA */}
                       <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-xs space-y-4">
                         <div className="border-b border-stone-100 pb-2.5">
-                          <h4 className="text-sm font-bold text-stone-900">
-                            2. Đánh giá vệ sinh, hư hại &amp; Đề xuất trạng thái
+                          <h4 className="text-sm font-bold text-stone-900 flex items-center gap-2">
+                            <span>2. Hiện trạng kho và hàng hóa</span>
                           </h4>
                         </div>
 
-                        {/* Tình trạng vệ sinh gian kho */}
+                        {/* Đối chiếu hàng hóa */}
                         <div className="space-y-1.5">
-                          <div className="flex items-center justify-between">
-                            <label className="text-xs font-semibold text-stone-700 block">
-                              Tình trạng vệ sinh gian kho
-                            </label>
-                            {fees.cleaningFee > 0 && (
-                              <span className="text-xs font-bold font-mono text-stone-800">
-                                Phí vệ sinh: {rentalMoney(fees.cleaningFee, 'VND')}
-                              </span>
-                            )}
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                            {[
-                              { id: 'clean', label: 'Kho sạch sẽ', fee: 0, desc: 'Đạt chuẩn vệ sinh (0 ₫)' },
-                              { id: 'minor', label: 'Cần quét dọn bụi', fee: 100000, desc: 'Bẩn nhẹ (+100.000 ₫)' },
-                              { id: 'major', label: 'Cần tổng vệ sinh', fee: 200000, desc: 'Bẩn nặng / Rác (+200.000 ₫)' },
-                            ].map((opt) => {
-                              const active = fees.cleaningFee === opt.fee
-                              return (
-                                <button
-                                  key={opt.id}
-                                  type="button"
-                                  disabled={busy}
-                                  onClick={() => handleCleaningChange(opt.fee)}
-                                  className={`rounded-xl border p-2.5 text-center transition cursor-pointer select-none ${
-                                    active
-                                      ? 'border-stone-900 bg-stone-50 ring-1 ring-stone-900 font-bold text-stone-900 shadow-xs'
-                                      : 'border-stone-200 bg-white text-stone-600 hover:border-stone-300 hover:bg-stone-50/50'
-                                  }`}
-                                >
-                                  <div className="text-xs font-bold mt-0.5">{opt.label}</div>
-                                  <div className={`text-[10px] mt-0.5 ${active ? 'text-stone-600' : 'text-stone-400'}`}>{opt.desc}</div>
-                                </button>
-                              )
-                            })}
+                          <label className="text-xs font-semibold text-stone-700 block">
+                            Hàng hóa trong kho lúc trả
+                          </label>
+                          <div className="grid grid-cols-2 gap-2">
+                            {([
+                              { id: false, label: 'Đã dọn sạch' },
+                              { id: true, label: 'Còn hàng trong kho' },
+                            ] as const).map((opt) => (
+                              <button
+                                key={String(opt.id)}
+                                type="button"
+                                disabled={busy}
+                                aria-pressed={goodsLeft === opt.id}
+                                onClick={() => { setGoodsLeft(opt.id); setVacatedReturnId(null) }}
+                                className={`rounded-xl border py-2.5 px-2 text-center text-xs transition cursor-pointer ${
+                                  goodsLeft === opt.id
+                                    ? 'border-emerald-500 bg-emerald-50 text-emerald-950 ring-1 ring-emerald-500 font-bold shadow-xs'
+                                    : 'border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100'
+                                }`}
+                              >
+                                
+                                <div className="mt-0.5 font-medium">{opt.label}</div>
+                              </button>
+                            ))}
                           </div>
                         </div>
 
                         {/* Mức độ hư hại */}
                         <div className="space-y-1.5">
                           <label className="text-xs font-semibold text-stone-700 block">
-                            Mức độ hư hại kết cấu (Trần, Vách, Sàn, Cửa)
+                            Mức độ hư hại gian kho (Trần, Vách, Sàn, Cửa)
                           </label>
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                             {([
                               { id: 'no_damage', label: 'Không hư hại', desc: 'Kho nguyên vẹn' },
-                              { id: 'minor_damage', label: 'Hư hỏng nhẹ', desc: 'Trầy xước, bong tróc sơn' },
-                              { id: 'major_damage', label: 'Hư hỏng nặng', desc: 'Cong cửa, hỏng khóa, nứt/vỡ sàn' },
+                              { id: 'minor_damage', label: 'Hư hại nhẹ', desc: 'Trầy xước/bẩn' },
+                              { id: 'major_damage', label: 'Hư hại nặng', desc: 'Móp méo/vỡ' },
                             ] as const).map((opt) => (
                               <button
                                 key={opt.id}
                                 type="button"
                                 disabled={busy}
-                                onClick={() => handleDamageChange(opt.id)}
-                                className={`rounded-xl border p-2.5 text-center transition cursor-pointer select-none ${
+                                onClick={() => {
+                                  setDamage(opt.id)
+                                  setDamageItems([])
+                                  setVacatedReturnId(null)
+                                }}
+                                className={`rounded-xl border p-2.5 text-center transition cursor-pointer ${
                                   damage === opt.id
-                                    ? 'border-stone-900 bg-stone-50 ring-1 ring-stone-900 font-bold text-stone-900 shadow-xs'
-                                    : 'border-stone-200 bg-white text-stone-600 hover:border-stone-300 hover:bg-stone-50/50'
+                                    ? 'border-emerald-500 bg-emerald-50 text-emerald-950 ring-1 ring-emerald-500 font-bold shadow-xs'
+                                    : 'border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100'
                                 }`}
                               >
-                                <div className="text-xs font-bold mt-0.5">{opt.label}</div>
-                                <div className={`text-[10px] mt-0.5 ${damage === opt.id ? 'text-stone-600' : 'text-stone-400'}`}>{opt.desc}</div>
+                                                                <div className="text-xs font-bold mt-0.5">{opt.label}</div>
+                                <div className="text-[10px] text-stone-500 mt-0.5">{opt.desc}</div>
                               </button>
                             ))}
                           </div>
@@ -1272,16 +1245,17 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                                 type="button"
                                 disabled={busy}
                                 onClick={() => setUnit(opt.id)}
-                                className={`rounded-xl border p-3 text-left transition cursor-pointer select-none ${
+                                className={`rounded-xl border p-3 text-left transition cursor-pointer ${
                                   unit === opt.id
-                                    ? 'border-stone-900 bg-stone-50 ring-1 ring-stone-900 font-bold text-stone-900 shadow-xs'
-                                    : 'border-stone-200 bg-white text-stone-600 hover:border-stone-300 hover:bg-stone-50/50'
+                                    ? 'border-emerald-500 bg-emerald-50 text-emerald-950 ring-1 ring-emerald-500 font-bold shadow-xs'
+                                    : 'border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100'
                                 }`}
                               >
                                 <div className="flex items-center gap-2">
+                                  
                                   <span className="text-xs font-bold">{opt.label}</span>
                                 </div>
-                                <p className={`text-[11px] mt-1 ${unit === opt.id ? 'text-stone-600' : 'text-stone-400'}`}>{opt.desc}</p>
+                                <p className="text-[11px] text-stone-500 mt-1">{opt.desc}</p>
                               </button>
                             ))}
                           </div>
@@ -1301,9 +1275,9 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                     {canInspect && (
                       <div className="space-y-2.5">
                         <p className="text-xs font-semibold text-stone-700">Ảnh hiện trường theo khu vực</p>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <div className="grid grid-cols-2 gap-2">
                           {(['Trần', 'Vách', 'Sàn', 'Cửa'] as const).map((area) => (
-                            <label key={area} className="relative cursor-pointer rounded-xl border border-dashed border-stone-300 bg-stone-50/50 p-3 text-center text-xs font-semibold text-stone-700 hover:border-stone-400 hover:bg-stone-100/50 transition">
+                            <label key={area} className="relative cursor-pointer rounded-xl border border-dashed border-stone-300 bg-stone-50 p-3 text-center text-xs font-semibold text-stone-700 hover:border-emerald-500 hover:bg-emerald-50">
                               Thêm ảnh {area.toLowerCase()}
                               <input
                                 type="file"
@@ -1325,7 +1299,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                         <label className="text-xs font-semibold text-stone-700 block">
                           Biên bản đối chứng / Tài liệu khác
                         </label>
-                        <div className="relative rounded-xl border-2 border-dashed border-stone-300 bg-stone-50/50 p-4 text-center hover:border-stone-400 hover:bg-stone-100/50 transition cursor-pointer group">
+                        <div className="relative rounded-xl border-2 border-dashed border-stone-300 bg-stone-50/70 p-4 text-center hover:border-emerald-500 hover:bg-emerald-50/30 transition cursor-pointer group">
                           <input
                             type="file"
                             multiple
@@ -1358,7 +1332,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                         {canInspect ? 'Ghi chú biên bản của nhân viên' : 'Kết luận xem xét giải quyết khiếu nại'}
                       </label>
                       <textarea
-                        className="block w-full rounded-xl border border-stone-300 p-3 text-xs leading-relaxed focus:border-stone-500 focus:outline-none bg-stone-50/40"
+                        className="block w-full rounded-xl border border-stone-300 p-3 text-xs leading-relaxed focus:border-emerald-500 focus:outline-none bg-stone-50/40"
                         disabled={busy}
                         rows={3}
                         value={note}
@@ -1376,7 +1350,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                   <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-xs space-y-4 sticky top-4">
                     <div className="border-b border-stone-100 pb-3">
                       <h4 className="text-sm font-bold text-stone-900 flex items-center gap-2">
-                        <span>Bảng quyết toán hoàn tiền & khấu trừ</span>
+                        <span>Bảng quyết toán hoàn tiền &amp; khấu trừ</span>
                       </h4>
                       <p className="text-xs text-stone-500 mt-0.5">
                         Phí hư hỏng lấy từ bảng giá chuẩn. Hệ thống trừ vào cọc trước; với trả sau ngày bắt đầu thuê, phần vượt cọc mới trừ vào tiền thuê chưa sử dụng.
@@ -1403,61 +1377,15 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                       </div>
                     )}
 
-                    {/* Danh sách phí khấu trừ */}
+                    {/* Danh sách 5 khoản phí khấu trừ */}
                     <div className="space-y-2">
-                      {/* Phí hư hỏng kết cấu */}
-                      {canInspect && !goodsLeft && damage !== 'no_damage' && damage !== 'abandoned_goods' ? (
-                        <DamagePricingSelector
-                          category={damage === 'major_damage' ? 'major' : 'minor'}
-                          items={damageItems}
-                          onChange={setDamageItems}
-                          disabled={busy}
-                        />
-                      ) : (
-                        <div className="rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs text-stone-600 flex items-center justify-between">
-                          <span className="font-semibold text-stone-800">Phí hư hỏng kết cấu</span>
-                          <span className={`font-mono font-bold ${effectiveFees.damageFee > 0 ? 'text-rose-700' : 'text-stone-700'}`}>
-                            {effectiveFees.damageFee > 0 ? `− ${rentalMoney(effectiveFees.damageFee, 'VND')}` : '0 ₫'}
-                          </span>
-                        </div>
-                      )}
+
+                      {damage === 'minor_damage' || damage === 'major_damage' ? <DamagePricingSelector key={damage} category={damage === 'major_damage' ? 'major' : 'minor'} items={damageItems} onChange={setDamageItems} disabled={busy} /> : null}
                       {missingDamageItems && <p className="text-[11px] font-semibold text-rose-700">Chọn ít nhất một hạng mục và số lượng hư hỏng để hệ thống tính phí.</p>}
-
-                      {/* Phí mất khóa */}
-                      <div className="rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs text-stone-600 flex items-center justify-between">
-                        <div>
-                          <span className="font-semibold text-stone-800 block">Phí mất khóa đã bàn giao</span>
-                          <span className="text-[10px] text-stone-400">{returnedLock ? 'Đã nhận đủ khóa' : 'Khách làm mất / thiếu khóa'}</span>
-                        </div>
-                        <span className={`font-mono font-bold ${fees.lostItemFee > 0 ? 'text-rose-700' : 'text-stone-700'}`}>
-                          {fees.lostItemFee > 0 ? `− ${rentalMoney(fees.lostItemFee, 'VND')}` : '0 ₫'}
-                        </span>
-                      </div>
-
-                      {/* Phí vệ sinh */}
-                      <div className="rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs text-stone-600 flex items-center justify-between">
-                        <div>
-                          <span className="font-semibold text-stone-800 block">Phí vệ sinh gian kho</span>
-                          <span className="text-[10px] text-stone-400">{fees.cleaningFee === 0 ? 'Kho sạch sẽ' : fees.cleaningFee <= 100000 ? 'Bẩn nhẹ' : 'Bẩn nặng / Rác'}</span>
-                        </div>
-                        <span className={`font-mono font-bold ${fees.cleaningFee > 0 ? 'text-rose-700' : 'text-stone-700'}`}>
-                          {fees.cleaningFee > 0 ? `− ${rentalMoney(fees.cleaningFee, 'VND')}` : '0 ₫'}
-                        </span>
-                      </div>
-
-                      {/* Phí quá hạn & công nợ nếu có */}
-                      {fees.overdueFee > 0 && (
-                        <div className="flex items-center justify-between rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs">
-                          <span className="text-stone-600">Phí quá hạn (tự động)</span>
-                          <span className="font-mono font-bold text-rose-700">− {rentalMoney(fees.overdueFee, 'VND')}</span>
-                        </div>
-                      )}
-                      {fees.outstandingFee > 0 && (
-                        <div className="flex items-center justify-between rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs">
-                          <span className="text-stone-600">Công nợ còn thiếu (tự động)</span>
-                          <span className="font-mono font-bold text-rose-700">− {rentalMoney(fees.outstandingFee, 'VND')}</span>
-                        </div>
-                      )}
+                      <FeeInputRow label="Phí vệ sinh" value={fees.cleaningFee} onChange={(v) => setFees((f) => ({ ...f, cleaningFee: v }))} disabled={busy} />
+                      <FeeInputRow label="Phí mất khóa đã bàn giao" value={fees.lostItemFee} onChange={(v) => setFees((f) => ({ ...f, lostItemFee: v }))} disabled={busy} />
+                      <FeeInputRow label="Phí quá hạn" value={fees.overdueFee} onChange={(v) => setFees((f) => ({ ...f, overdueFee: v }))} disabled={busy} />
+                      <FeeInputRow label="Phí còn thiếu (Công nợ)" value={fees.outstandingFee} onChange={(v) => setFees((f) => ({ ...f, outstandingFee: v }))} readOnly disabled={busy} />
                     </div>
 
                     {/* Tổng khấu trừ */}
@@ -1474,40 +1402,40 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                         <p className="font-bold">Trả kho do hàng hóa sai khai báo</p>
                         <ul className="mt-2 list-disc space-y-1 pl-5">
                           <li>Tính tiền từ ngày xác nhận nhận kho đến ngày hẹn trả kho dự kiến.</li>
-                          <li>Manager lập quyết toán, khách xác nhận trước khi hoàn tiền hoặc thu thêm.</li>
+                          <li>Quản lý cơ sở lập quyết toán, khách xác nhận trước khi hoàn tiền hoặc thu thêm.</li>
                         </ul>
                       </div>
                     ) : projectedDue === 0 ? (
-                      <div className="rounded-xl border border-stone-200 bg-stone-50/90 p-4 space-y-1.5">
+                      <div className="rounded-xl border border-emerald-300 bg-gradient-to-br from-emerald-50 to-teal-50/70 p-4 space-y-1.5">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-stone-500 uppercase tracking-wider">
-                            Hoàn tiền dự kiến cho khách
+                          <span className="text-xs font-bold text-emerald-950 uppercase tracking-wide">
+                            Hoàn cọc dự kiến cho khách
                           </span>
-                          <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[10px] font-bold text-stone-700">
+                          <span className="rounded-full bg-emerald-200 px-2 py-0.5 text-[10px] font-extrabold text-emerald-900">
                             HOÀN CỌC
                           </span>
                         </div>
-                        <p className="text-2xl font-black text-stone-900 font-mono">
+                        <p className="text-xl font-black text-emerald-800 font-mono">
                           {rentalMoney(projectedRefund, 'VND')}
                         </p>
-                        <p className="text-xs text-stone-500 leading-relaxed">
+                        <p className="text-[11px] text-emerald-900 leading-relaxed">
                           Số tiền này sẽ được chuyển hoàn cho khách sau khi khách xác nhận biên bản.
                         </p>
                       </div>
                     ) : (
-                      <div className="rounded-xl border border-rose-200 bg-rose-50/40 p-4 space-y-1.5">
+                      <div className="rounded-xl border border-rose-300 bg-gradient-to-br from-rose-50 to-amber-50/70 p-3.5 space-y-1">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-rose-800 uppercase tracking-wider">
+                          <span className="text-xs font-bold text-rose-950 uppercase tracking-wide">
                             Khách cần nộp thêm phụ phí
                           </span>
-                          <span className="rounded-md bg-rose-200 px-2 py-0.5 text-[10px] font-bold text-rose-900">
+                          <span className="rounded-full bg-rose-200 px-2 py-0.5 text-[10px] font-extrabold text-rose-900">
                             THU THÊM
                           </span>
                         </div>
-                        <p className="text-2xl font-black text-rose-700 font-mono">
+                        <p className="text-xl font-black text-rose-700 font-mono">
                           {rentalMoney(projectedDue, 'VND')}
                         </p>
-                        <p className="text-xs text-rose-700/80 leading-relaxed">
+                        <p className="text-[11px] text-rose-900 leading-relaxed">
                           Tổng phí vượt quá tiền cọc gốc. Khách hàng cần thanh toán thêm khoản chênh lệch này.
                         </p>
                       </div>
@@ -1524,7 +1452,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                         type="submit"
                         variant="primary"
                         disabled={busy || (canReview && !note.trim()) || missingDamageItems || (canInspect && !hasEvidence) || (canInspect && !!record.setupExitRequested && (vacatedReturnId !== id || goodsLeft))}
-                        className="w-full font-bold py-3 text-sm shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+                        className="w-full !bg-emerald-600 hover:!bg-emerald-700 text-white font-bold py-3 text-sm shadow-md flex items-center justify-center gap-2 cursor-pointer"
                       >
                         <span>{canInspect ? 'Ghi nhận kết quả nghiệm thu' : 'Ghi nhận xem xét khiếu nại'}</span>
                       </Button>
@@ -1542,7 +1470,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                         }}
                         className="w-full py-1.5 text-xs font-semibold text-stone-500 hover:text-stone-800 transition cursor-pointer"
                       >
-                        Đặt lại tất cả phụ phí về 0đ
+                        ↺ Đặt lại tất cả phụ phí về 0đ
                       </button>
                     </div>
                   </div>

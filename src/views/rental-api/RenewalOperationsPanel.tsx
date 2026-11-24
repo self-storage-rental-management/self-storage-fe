@@ -277,7 +277,7 @@ export function RenewalOperationsSummary({ state: s, role, cashRecorded = false,
   return (
     <Card className="space-y-3 p-4 text-sm">
       <h3 className="font-semibold">Lịch ký</h3>
-      {showProgress && <section className="space-y-3 rounded-xl border border-stone-200 bg-stone-50 p-3" aria-label="Tiến trình gia hạn">
+      {showProgress && s.phase !== "NO_SHOW" && <section className="space-y-3 rounded-xl border border-stone-200 bg-stone-50 p-3" aria-label="Tiến trình gia hạn">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h4 className="font-semibold">Tiến trình gia hạn</h4>

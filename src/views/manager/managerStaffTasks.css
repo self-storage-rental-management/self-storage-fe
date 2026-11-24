@@ -1,0 +1,48 @@
+.manager-staff-tasks .app-card {
+  border-radius: 1rem;
+  box-shadow: none;
+}
+
+.manager-staff-task-table thead {
+  background: #f6f4f0;
+}
+
+.manager-staff-task-table th {
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+  color: #57534e;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.manager-staff-task-table td {
+  padding-top: 1.25rem;
+  padding-bottom: 1.25rem;
+  overflow-wrap: anywhere;
+}
+
+.manager-staff-task-table .ui-badge {
+  border: 0;
+  border-radius: 9999px;
+  padding: 0.375rem 0.75rem;
+  white-space: nowrap;
+}
+
+.manager-staff-task-table button {
+  white-space: nowrap;
+}
+
+.manager-task-contacts > div {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.manager-task-contacts button {
+  white-space: normal;
+  text-align: left;
+  font-size: 0.75rem;
+  color: #76520e;
+}

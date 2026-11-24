@@ -138,7 +138,7 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
 
           <div className="mt-3 flex flex-wrap items-baseline justify-between gap-2">
             <div>
-              <p className="text-sm font-bold text-stone-900">Đặt cọc giữ chỗ ({depositRatePercent}%) · Thanh toán trước {depositRatePercent}% (giữ chỗ)</p><p className={formulaClass}>{depositRatePercent}% × tổng tiền {formatVndAmount(q.totalInitialObligation)} (đã gồm tiền thuê và tiền cọc đảm bảo thuê) = {formatVndAmount(q.reservationDepositAmount)}.</p>
+              <p className="text-sm font-bold text-stone-900">Đặt cọc giữ chỗ ({depositRatePercent}%) · Thanh toán trước {depositRatePercent}% (giữ chỗ)</p><p className={formulaClass}>{depositRatePercent}% × tổng tiền {formatVndAmount(q.totalInitialObligation)} (đã gồm tiền thuê và tiền cọc đảm bảo thuê) = {formatVndAmount(q.reservationDepositAmount)}. Khoản này đã nằm trong tổng chi phí.</p>
             </div>
             <div className="ml-auto text-right">
               <span className={`${payableAmountClass} block`}>

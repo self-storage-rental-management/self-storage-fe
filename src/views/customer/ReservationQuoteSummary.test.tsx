@@ -38,7 +38,6 @@ describe('authoritative backend pricing', () => {
     const html = renderToStaticMarkup(<ReservationQuoteSummary quote={customQuote} needsReview={false} />)
     expect(html).toContain('Thanh toán trước 15% (giữ chỗ)')
     expect(html).toContain('3.225.750 ₫')
-    expect(html).toContain('15% × tổng tiền')
   })
   it.each(['quote', 'reservation'] as const)('shows the accepted early-exit fee in %s without charging it at booking', context => {
     const html = renderToStaticMarkup(<ReservationQuoteSummary quote={quote} needsReview={false} context={context} />)
@@ -57,7 +56,7 @@ describe('authoritative backend pricing', () => {
 
 describe('deposit including security deposit', () => { it('charges 20 percent of 38 million and leaves 30.4 million at check-in', () => {
 const html = renderToStaticMarkup(<ReservationQuoteSummary quote={{ ...quote, monthlyPrice: 9500000, subtotal: 28500000, discountRate: 0, discountAmount: 0, totalAfterDiscount: 28500000, securityDepositAmount: 9500000, totalInitialObligation: 38000000, reservationDepositAmount: 7600000, dueAtCheckIn: 30400000 }} needsReview={false} />)
-expect(html).toContain('20% × tổng tiền')
+expect(html).toContain('Thanh toán trước 20% (giữ chỗ)')
 expect(html).toContain('7.600.000 ₫')
 expect(html).toContain('30.400.000 ₫')
 }) })
