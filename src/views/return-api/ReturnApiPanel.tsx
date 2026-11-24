@@ -139,7 +139,6 @@ export function ReturnSummary({ record, hideTerminationFee = false, hideHeader =
         : record.setupEarlyExit
           ? hideTerminationFee ? 'Trả trong thời gian chuẩn bị: hoàn 80% tiền thuê sau ưu đãi, giữ lại 20%; tiền cọc đảm bảo quyết toán riêng sau khi trừ hư hỏng theo bảng giá.' : 'Trả trong thời gian chuẩn bị: hệ thống giữ lại 20% tiền thuê sau ưu đãi và hoàn 80%. Hư hỏng trừ vào cọc một tháng; phần vượt cọc được bù vào tiền thuê chưa sử dụng trước khi yêu cầu khách trả thêm.'
           : record.setupReturnedAt ? 'Kho được nghiệm thu sau hạn chuẩn bị, áp dụng quyết toán của kỳ thuê đã bắt đầu.' : 'Nhân viên cần xác nhận đã dọn hết hàng và bàn giao kho trống. Điều khoản thời gian chuẩn bị áp dụng theo thời điểm nghiệm thu thực tế.'}</p>}
-        : record.setupReturnedAt ? 'Kho được nghiệm thu sau hạn chuẩn bị, áp dụng quyết toán của kỳ thuê đã bắt đầu.' : 'Nhân viên cần xác nhận đã dọn hết hàng và bàn giao kho trống. Điều khoản thời gian chuẩn bị áp dụng theo thời điểm nghiệm thu thực tế.'}</p>}
       {record.settlementBlocker && (
         <p role="status" className="rounded bg-amber-50 p-3">
           {record.settlementBlocker}
@@ -339,7 +338,6 @@ function SettlementCalculationBreakdown({ record }: { record: ApiReturn }) {
   )
 }
 
->>>>>>> feature/fe-tram
 function RecoveryReturnSummary({ record, hideTerminationFee, hideHeader = false }: { record: ApiReturn; hideTerminationFee: boolean; hideHeader?: boolean }) {
   const badgeClass =
     record.status === 'disputed'
