@@ -631,18 +631,8 @@ export default function CustomerReservationCard({ user, reservation: r, facility
     id={`customer-reservation-${r.id}`}
     tabIndex={-1}
     className={`p-5 transition-all duration-200 border border-stone-200 bg-white rounded-xl shadow-xs hover:shadow-md ${
-      inactive
-        ? 'border-l-stone-300 text-stone-500'
-        : inventoryMismatchPending
-          ? 'border-l-red-700 bg-red-50/20'
-          : 'border-l-amber-500'
-    } ${inventoryMismatchPending
-      ? '!border-l-red-700 hover:!border-l-red-900'
-      : visualTone === 'expired'
-      ? '!border-l-red-400 hover:!border-l-red-700'
-      : visualTone === 'completed'
-        ? '!border-l-emerald-400 hover:!border-l-emerald-700'
-        : '!border-l-amber-400 hover:!border-l-amber-700'}`}
+      inactive ? 'text-stone-500 bg-stone-50/50' : ''
+    }`}
   >
     <div className="space-y-5">
       <div className="flex flex-col items-start justify-between gap-5 border-b border-stone-200 pb-4 md:flex-row">
