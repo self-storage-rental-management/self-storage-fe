@@ -14,7 +14,7 @@ import { isCheckInHandoverExpired, staffCheckInActions } from "../../domain/rese
 import { packageVolumeM3 } from '../../domain/reservationCapacity'
 import { inventoryResult } from '../../domain/inventoryResult'
 import { canOpenInventory } from '../../domain/inventoryAccess'
-import { canReturnToInventoryStage, isInventoryStageReadOnly, INVENTORY_STAGE_LABELS, type InventoryStage } from '../../domain/inventoryStages'
+import { canReturnToInventoryStage, isInventoryResultReopenable, isInventoryStageReadOnly, INVENTORY_STAGE_LABELS, type InventoryStage } from '../../domain/inventoryStages'
 
 import {
   archiveCompletedCheckIn,
@@ -523,7 +523,7 @@ const workflowStepLabels = [
   "Ký hợp đồng",
   "Thu tiền",
   "Bàn giao kho",
-  "Thời gian chuẩn bị",
+  "Hoàn tất bàn giao",
   "Kiểm kê hàng",
 
 ]
@@ -672,6 +672,11 @@ export default function StaffCheckInOperationsPanel({
 
   const [handoverStep, setHandoverStep] = useState(1)
   const [inventoryStage, setInventoryStage] = useState<InventoryStage>(1)
+  const [highestInventoryStage, setHighestInventoryStage] = useState<InventoryStage>(1)
+  const advanceInventoryStage = (stage: InventoryStage) => {
+    setInventoryStage(stage)
+    setHighestInventoryStage(current => (stage > current ? stage : current))
+  }
   const inventoryCommandLock = useRef(false)
   const [inventoryDraftRevision, setInventoryDraftRevision] = useState(0)
   const [inventorySavedAt, setInventorySavedAt] = useState<string | null>(null)
@@ -769,6 +774,8 @@ export default function StaffCheckInOperationsPanel({
   const [handoverNotes, setHandoverNotes] = useState("")
 
   const [keyLockReference, setKeyLockReference] = useState("")
+  const [handoverRackCount, setHandoverRackCount] = useState("")
+  const [handoverPalletCount, setHandoverPalletCount] = useState("")
   const lockHelpId = useId()
   const [lockChecked, setLockChecked] = useState(false)
 
@@ -1034,18 +1041,37 @@ export default function StaffCheckInOperationsPanel({
   const packagingNoteRequired = Boolean(packagingCondition && packagingCondition !== "INTACT")
   const effectiveVarianceReason = varianceReason.trim()
   const hasEmptyStorageEvidence = evidenceFiles.length > 0 || evidenceReferences.length > 0
-  const emptyStorageHandoverReady = Boolean(keyLockReference.trim() && initialCondition.trim() && hasEmptyStorageEvidence)
+  const validHandoverRackCount = handoverRackCount.trim() !== "" && Number.isInteger(Number(handoverRackCount)) && Number(handoverRackCount) >= 0
+  const validHandoverPalletCount = handoverPalletCount.trim() !== "" && Number.isInteger(Number(handoverPalletCount)) && Number(handoverPalletCount) >= 0
+  const emptyStorageChecklistReady = Boolean(checklist.unitWalkthrough && checklist.conditionRecorded && checklist.accessHandedOver)
+  const emptyStorageHandoverReady = Boolean(
+    keyLockReference.trim()
+    && initialCondition.trim()
+    && validHandoverRackCount
+    && validHandoverPalletCount
+    && hasEmptyStorageEvidence
+    && emptyStorageChecklistReady,
+  )
 
   const workflowCurrentStep = handoverTarget ? stepForCheckIn(handoverTarget) : 1
   const handoverDeadlinePassed = handoverTarget ? handoverExpired(handoverTarget, now) : false
-  // Walking back into an already published inspection must not reopen an editable form the
-  // backend would reject; those earlier stages are shown read-only instead.
-  const inventoryStageReadOnly = inventoryMode && isInventoryStageReadOnly({ stage: inventoryStage, published: inventoryPublished })
+  // An at-site result was never sent to the customer, so the operator may still correct the
+  // inspection. Anything already sent to the customer keeps the form read-only.
+  const inventoryResultReopenable = isInventoryResultReopenable({
+    resolutionStatus: handoverTarget?.inventoryResolutionStatus,
+    checkInStatus: handoverTarget?.checkInStatus,
+  })
+  const inventoryStageReadOnly = inventoryMode && isInventoryStageReadOnly({
+    stage: inventoryStage,
+    published: inventoryPublished,
+    reopenable: inventoryResultReopenable,
+  })
+  const isViewingEarlierInventoryStage = inventoryMode && inventoryStage < highestInventoryStage
   const isReviewingCompletedStep = Boolean(
     handoverTarget &&
       (handoverTarget.checkInStatus === "completed" || handoverStep < workflowCurrentStep ||
         (handoverStep === 4 && ["handover_pending_receipt", "setup_in_progress", "setup_completed", "completed"].includes(handoverTarget.checkInStatus || ""))),
-  ) || inventoryStageReadOnly
+  ) || inventoryStageReadOnly || isViewingEarlierInventoryStage
 
   const declaredIdentityDocument = handoverTarget?.identityDocumentNumber?.trim() || ""
   const identityVerificationBlocked = !normalizeIdentityDocument(identityDocumentNumber)
@@ -1399,7 +1425,7 @@ export default function StaffCheckInOperationsPanel({
       setInventoryDraftRevision(savedDraft.revision)
       setInventorySavedAt(savedDraft.savedAt)
       setInventoryEditing(false)
-      setInventoryStage(3)
+      advanceInventoryStage(3)
 
       refresh()
     } catch (reason) {
@@ -1417,7 +1443,7 @@ export default function StaffCheckInOperationsPanel({
     try {
       const updated = await prepareInventoryResolution(handoverTarget.checkInId, inventoryDraftRevision)
       setHandoverTarget(updated)
-      setInventoryStage(4)
+      advanceInventoryStage(4)
       showToast('Đã kiểm tra sức chứa. Ghi nhận phương án xử lý trực tiếp tại cơ sở.')
       refresh()
     } catch (reason) { fail(reason, 'Không thể mở bước kết quả tiếp nhận.') }
@@ -1484,7 +1510,7 @@ export default function StaffCheckInOperationsPanel({
           throw new Error("Không nhập mật khẩu hoặc mã PIN vào ô Mã bộ khóa.")
         }
         if (!emptyStorageHandoverReady) {
-          throw new Error("Cần nhập mã ổ khóa, ghi nhận hiện trạng và chọn ít nhất một ảnh hoặc PDF bằng chứng kho trống.")
+          throw new Error("Cần nhập mã ổ khóa, số khung, số tấm kê, ghi nhận hiện trạng, tick đủ danh mục kiểm tra bàn giao và chọn ít nhất một ảnh hoặc PDF bằng chứng kho trống.")
         }
         const lockReference = keyLockReference.trim()
         const activeCredentials = await listStaffAccessCredentials({
@@ -1514,8 +1540,10 @@ export default function StaffCheckInOperationsPanel({
           note: "Bàn giao kho trống để khách chuẩn bị hàng",
           initialUnitCondition: initialCondition.trim(),
           evidenceReferences: emptyStorageEvidence,
+          rackCount: Number(handoverRackCount),
+          palletCount: Number(handoverPalletCount),
         })
-        setChecklist((current) => ({ ...current, accessHandedOver: true, unitWalkthrough: true }))
+        setChecklist((current) => ({ ...current, accessHandedOver: true, unitWalkthrough: true, conditionRecorded: true }))
         if (updated.checkInStatus === "handover_pending_receipt") {
           setCustomerWaitTarget("receipt")
         }
@@ -1661,7 +1689,9 @@ export default function StaffCheckInOperationsPanel({
 
     setHandoverStep(inventory ? 6 : Math.min(5, stepForCheckIn(item)))
     setConfirmedInventoryReview(null)
-    setInventoryStage(published ? 4 : draft?.request ? 3 : item.inventoryVisit?.identityVerifiedAt ? 2 : 1)
+    const initialInventoryStage: InventoryStage = published ? 4 : draft?.request ? 3 : item.inventoryVisit?.identityVerifiedAt ? 2 : 1
+    setInventoryStage(initialInventoryStage)
+    setHighestInventoryStage(initialInventoryStage)
     setHandoverNotes(inventoryReportNote(savedReport?.notes, savedReport?.identityVerificationNote))
 
     const restoredChecklist = savedReport?.checklist ?? emptyChecklist()
@@ -1673,6 +1703,7 @@ export default function StaffCheckInOperationsPanel({
       paymentVerified: Boolean(item.paymentCollectedAt) || restoredChecklist.paymentVerified,
       accessHandedOver: Boolean(item.checkedInAt) || restoredChecklist.accessHandedOver,
       unitWalkthrough: Boolean(item.checkedInAt) || restoredChecklist.unitWalkthrough,
+      conditionRecorded: Boolean(item.checkedInAt) || restoredChecklist.conditionRecorded,
     })
 
     setIdentityDocumentNumber(item.identityDocumentNumber || "")
@@ -1696,6 +1727,8 @@ export default function StaffCheckInOperationsPanel({
 
     setLockChecked(false)
     setKeyLockReference(item.lockReference || "")
+    setHandoverRackCount(item.handoverRecord?.rackCount != null ? String(item.handoverRecord.rackCount) : "")
+    setHandoverPalletCount(item.handoverRecord?.palletCount != null ? String(item.handoverRecord.palletCount) : "")
 
     setPaymentMethod("CASH")
 
@@ -1863,7 +1896,7 @@ export default function StaffCheckInOperationsPanel({
       </Td>
       <Td className="whitespace-normal text-center">
         <div className={`mx-auto w-full gap-1.5 ${actionLayoutClass}`}>
-          <Button size="sm" variant="outline" className={`${actionButtonClass} ${inventoryActionClass}`} disabled={submitting || !canOpenInventory(item.checkInStatus, item.inventoryVisit?.appointmentAt)} title={!canOpenInventory(item.checkInStatus, item.inventoryVisit?.appointmentAt) ? "Chờ khách xác nhận lịch kiểm kê" : "Mở form kiểm kê riêng"} onClick={() => openHandover(item, true)}>Xem tiến trình kiểm kê</Button>
+          <Button size="sm" variant="outline" className={`${actionButtonClass} ${inventoryActionClass}`} disabled={submitting || !canOpenInventory(item.checkInStatus, item.inventoryVisit?.appointmentAt)} title={!canOpenInventory(item.checkInStatus, item.inventoryVisit?.appointmentAt) ? "Chờ khách xác nhận nhận kho" : "Mở tiến trình kiểm kê"} onClick={() => openHandover(item, true)}>Xem tiến trình kiểm kê</Button>
           {showsOngoingActions && (
             <>
 
@@ -2206,10 +2239,40 @@ export default function StaffCheckInOperationsPanel({
                         placeholder="Ghi nhận trần, sàn, vách, đèn..."
                       />
                     </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Input
+                        label="Số khung bàn giao *"
+                        type="number"
+                        min={0}
+                        step={1}
+                        error={fieldErrors.rackCount}
+                        value={handoverRackCount}
+                        disabled={isReviewingCompletedStep}
+                        onChange={(event) => {
+                          clearFieldError("rackCount")
+                          setHandoverRackCount(event.target.value)
+                        }}
+                        placeholder="Ví dụ: 2"
+                      />
+                      <Input
+                        label="Số tấm kê bàn giao *"
+                        type="number"
+                        min={0}
+                        step={1}
+                        error={fieldErrors.palletCount}
+                        value={handoverPalletCount}
+                        disabled={isReviewingCompletedStep}
+                        onChange={(event) => {
+                          clearFieldError("palletCount")
+                          setHandoverPalletCount(event.target.value)
+                        }}
+                        placeholder="Ví dụ: 6"
+                      />
+                    </div>
                   </div>
 
                   <div className="space-y-2.5 border-t border-stone-100 pt-3">
-                    <p className="text-xs font-bold uppercase tracking-wider text-stone-700">2. Danh mục kiểm tra bàn giao (Checklist)</p>
+                    <p className="text-xs font-bold uppercase tracking-wider text-stone-700">2. Danh mục kiểm tra bàn giao</p>
                     <div className="grid gap-2 sm:grid-cols-3 text-xs">
                       <label className="flex items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 p-2.5 cursor-pointer hover:bg-stone-100 transition">
                         <input
@@ -2306,51 +2369,104 @@ export default function StaffCheckInOperationsPanel({
                         {receiptConfirmationState(handoverTarget, now).expired ? "Đã quá hạn" : "Chờ khách xác nhận"}
                       </span>
                     </div>
-                    <p className="mt-3 text-sm">Vui lòng chờ khách hàng nhấn <b>“Xác nhận đã nhận kho”</b>. Thời gian chuẩn bị chưa bắt đầu ở bước này.</p>
+                    <p className="mt-3 text-sm">Vui lòng chờ khách hàng nhấn <b>“Xác nhận đã nhận kho”</b> trên cổng khách hàng để hoàn tất bàn giao kho.</p>
                     {handoverTarget.checkedInAt && <p className="mt-2 text-xs">Bàn giao lúc: <b>{formatStaffDateTime(handoverTarget.checkedInAt)}</b></p>}
                     {handoverTarget.receiptConfirmationDueAt && <p className={`mt-1 text-xs font-bold ${receiptConfirmationState(handoverTarget, now).expired || receiptConfirmationState(handoverTarget, now).urgent ? "text-red-700" : "text-amber-700"}`}>
                       {receiptConfirmationState(handoverTarget, now).text} · Hạn xác nhận: {formatStaffDateTime(handoverTarget.receiptConfirmationDueAt)}
                     </p>}
                   </div>
                 ) : (
-                  <>
-                  <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 text-violet-950">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-violet-200/60 pb-3">
-                    <div>
-                      <p className="font-bold text-base text-violet-950">Khách hàng đang trong thời gian chuẩn bị</p>
-                      <p className="text-xs text-violet-800 mt-0.5">Khách hàng đang chủ động đưa hàng hóa vào gian kho và sắp xếp kiện hàng.</p>
+                  <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-emerald-950">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-200 pb-3">
+                      <div>
+                        <p className="font-bold text-base">Hoàn tất bàn giao kho thành công</p>
+                        <p className="text-xs text-emerald-800 mt-0.5">Khách hàng đã bấm <b>“Xác nhận đã nhận kho”</b>. Quá trình bàn giao kho đã hoàn tất.</p>
+                      </div>
+                      <span className="rounded-full border border-emerald-300 bg-white px-3 py-1 text-xs font-bold text-emerald-800">
+                        Đã nhận kho
+                      </span>
+                    </div>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2 text-xs">
+                      <div className="rounded-lg border border-emerald-200 bg-white p-3">
+                        <span className="text-stone-500">Thời điểm bàn giao:</span>
+                        <p className="font-bold text-stone-900 mt-0.5">{handoverTarget.checkedInAt ? formatStaffDateTime(handoverTarget.checkedInAt) : "Chưa ghi nhận"}</p>
+                      </div>
+                      <div className="rounded-lg border border-emerald-200 bg-white p-3">
+                        <span className="text-stone-500">Khách xác nhận nhận kho lúc:</span>
+                        <p className="font-bold text-stone-900 mt-0.5">{formatStaffDateTime(handoverTarget.customerReceiptConfirmedAt || handoverTarget.setupStartedAt)}</p>
+                      </div>
                     </div>
                   </div>
-
-                  <div className="mt-3 grid gap-3 sm:grid-cols-3 text-xs">
-                    <div className="rounded-lg border border-violet-200 bg-white p-3">
-                      <span className="text-stone-500">Bắt đầu chuẩn bị:</span>
-                      <p className="font-bold text-stone-900 mt-0.5">{formatStaffDateTime(handoverTarget.setupStartedAt)}</p>
-                    </div>
-                    <div className="rounded-lg border border-violet-200 bg-white p-3">
-                      <span className="text-stone-500">Thời gian chuẩn bị miễn phí:</span>
-                      <p className="font-bold text-emerald-700 mt-0.5">{handoverTarget.freeSetupDays} ngày</p>
-                    </div>
-                    <div className="rounded-lg border border-violet-200 bg-white p-3">
-                      <span className="text-stone-500">Tính cước kỳ thuê từ:</span>
-                      <p className="font-bold text-stone-900 mt-0.5">{handoverTarget.paidRentalStartsOn || `Bàn giao + ${handoverTarget.freeSetupDays} ngày`}</p>
-                    </div>
-                  </div>
-                  </div>
-
-                <div className="rounded-xl border border-stone-200 bg-white p-4 text-sm text-stone-700 space-y-2">
-                  <p className="font-bold text-stone-900">Quy trình tiếp theo</p>
-                  <p className="text-xs text-stone-600 leading-relaxed">
-                    Khách báo đã chuẩn bị xong và tự chọn lịch. Khi khách đến, Nhân viên ghi nhận giờ đến và xác minh đúng người đặt kho trước khi kiểm kê.
-                  </p>
-                </div>
-                 </>
                 )}
-
               </div>
             )}
 
-            {inventoryMode && handoverTarget.checkInStatus === 'setup_in_progress' && <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">Khách đã xác nhận nhận kho. Đang chờ khách đưa hàng vào, báo chuẩn bị xong và đặt lịch trước khi kiểm kê.</p>}
+            {inventoryMode && inventoryStage === 1 && (
+              <div className="space-y-4">
+                {handoverTarget.checkInStatus === "setup_in_progress" ? (
+                  <>
+                    <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 text-violet-950">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-violet-200/60 pb-3">
+                        <div>
+                          <p className="font-bold text-base text-violet-950">Khách hàng đang trong thời gian chuẩn bị</p>
+                          <p className="text-xs text-violet-800 mt-0.5">Khách hàng đang chủ động đưa hàng hóa vào gian kho và sắp xếp kiện hàng.</p>
+                        </div>
+                        <span className="rounded-full border border-violet-300 bg-white px-3 py-1 text-xs font-bold text-violet-900">
+                          Đang chuẩn bị
+                        </span>
+                      </div>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-3 text-xs">
+                        <div className="rounded-lg border border-violet-200 bg-white p-3">
+                          <span className="text-stone-500">Bắt đầu chuẩn bị:</span>
+                          <p className="font-bold text-stone-900 mt-0.5">{formatStaffDateTime(handoverTarget.setupStartedAt)}</p>
+                        </div>
+                        <div className="rounded-lg border border-violet-200 bg-white p-3">
+                          <span className="text-stone-500">Thời gian chuẩn bị miễn phí:</span>
+                          <p className="font-bold text-emerald-700 mt-0.5">{handoverTarget.freeSetupDays} ngày</p>
+                        </div>
+                        <div className="rounded-lg border border-violet-200 bg-white p-3">
+                          <span className="text-stone-500">Tính cước kỳ thuê từ:</span>
+                          <p className="font-bold text-stone-900 mt-0.5">{handoverTarget.paidRentalStartsOn || `Bàn giao + ${handoverTarget.freeSetupDays} ngày`}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">Khách đã xác nhận nhận kho. Đang chờ khách đưa hàng vào, báo chuẩn bị xong và đặt lịch trước khi kiểm kê.</p>
+                  </>
+                ) : (
+                  <>
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-950">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-200/70 pb-3">
+                        <div>
+                          <p className="font-bold text-base text-emerald-950">Khách hàng đã chuẩn bị xong</p>
+                          <p className="text-xs text-emerald-800 mt-0.5">Khách đã hoàn tất sắp xếp hàng hóa vào kho và sẵn sàng cho bước kiểm kê.</p>
+                        </div>
+                        <span className="rounded-full border border-emerald-300 bg-white px-3 py-1 text-xs font-bold text-emerald-800">
+                          Đã chuẩn bị xong
+                        </span>
+                      </div>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-3 text-xs">
+                        <div className="rounded-lg border border-emerald-200 bg-white p-3">
+                          <span className="text-stone-500">Bắt đầu chuẩn bị:</span>
+                          <p className="font-bold text-stone-900 mt-0.5">{formatStaffDateTime(handoverTarget.setupStartedAt)}</p>
+                        </div>
+                        <div className="rounded-lg border border-emerald-200 bg-white p-3">
+                          <span className="text-stone-500">Thời gian chuẩn bị miễn phí:</span>
+                          <p className="font-bold text-emerald-700 mt-0.5">{handoverTarget.freeSetupDays} ngày</p>
+                        </div>
+                        <div className="rounded-lg border border-emerald-200 bg-white p-3">
+                          <span className="text-stone-500">Tính cước kỳ thuê từ:</span>
+                          <p className="font-bold text-stone-900 mt-0.5">{handoverTarget.paidRentalStartsOn || `Bàn giao + ${handoverTarget.freeSetupDays} ngày`}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-stone-200 bg-white p-4 text-xs">
+                      <span className="text-stone-500">Ngày hẹn kiểm kê:</span>
+                      <p className="mt-1 text-sm font-bold text-stone-900">{handoverTarget.inventoryVisit?.appointmentAt ? formatStaffDateTime(handoverTarget.inventoryVisit.appointmentAt) : "Chưa đặt lịch"}</p>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
             {inventoryMode && handoverTarget.checkInStatus !== 'setup_in_progress' && inventoryStage === 1 && <StaffInventoryVisitPanel
               key={handoverTarget.checkInId ?? handoverTarget.reservationId}
               item={handoverTarget} now={now} busy={submitting} onBusyChange={setSubmitting}
@@ -2631,7 +2747,7 @@ export default function StaffCheckInOperationsPanel({
                       <p className="text-xs text-red-600 font-medium mt-1">{fieldErrors.initialCondition || fieldErrors.initialUnitCondition}</p>
                     )}
                   </div>}
-                  <div className="space-y-2 rounded-lg border border-stone-200 p-3">
+                  <div className="space-y-2 rounded-lg border border-stone-200 p-3 md:col-span-2">
                     <p className="text-sm">Phương thức khách khai: <b>{handoverTarget?.declaredPackagingMethod || 'Chưa ghi nhận'}</b></p>
                     <Select label="Phương thức đóng gói thực tế *" value={actualPackagingMethod} disabled={isReviewingCompletedStep} onChange={event => { setActualPackagingMethod(event.target.value); clearFieldError("actualPackagingMethod") }}>
                       <option value="">Chọn phương thức đóng gói</option>
@@ -2870,15 +2986,24 @@ export default function StaffCheckInOperationsPanel({
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 pt-4">
               <Button variant="outline" onClick={closeHandover} disabled={submitting}>Đóng</Button>
               {inventoryMode ? (
-                <div className="flex flex-wrap justify-end gap-3">
+                <div className="flex flex-wrap items-center justify-end gap-3">
+                  {isViewingEarlierInventoryStage && (
+                    <span className="text-xs text-stone-500">Đang xem lại bước đã hoàn thành, không thể chỉnh sửa.</span>
+                  )}
                   {inventoryStage === 4 && <Button variant="outline" disabled={submitting} onClick={() => returnToInventoryStage(3)}>← Quay lại bước 3</Button>}
                   {inventoryStage === 3 && <Button variant="outline" disabled={submitting} onClick={() => returnToInventoryStage(2)}>← Quay lại bước 2</Button>}
                   {inventoryStage === 2 && <Button variant="outline" disabled={submitting} onClick={() => returnToInventoryStage(1)}>← Quay lại bước 1</Button>}
-                  {inventoryStage === 1 && <Button disabled={submitting || handoverTarget.checkInStatus === 'setup_in_progress' || !handoverTarget.inventoryVisit?.identityVerifiedAt} onClick={() => setInventoryStage(2)}>Tiếp tục kiểm kê hàng hóa</Button>}
-                  {inventoryStage === 2 && inventoryStageReadOnly && <Button onClick={() => setInventoryStage(4)}>Xem lại kết quả kiểm kê</Button>}
-                  {inventoryStage === 2 && !inventoryStageReadOnly && <Button disabled={submitting || !inventoryLinesComplete || (lineInventory && !inventoryReviewConfirmed) || !actualPackagingMethod.trim() || !packagingCondition || (packagingNoteRequired && !handoverNotes.trim()) || (!evidenceFiles.length && !evidenceReferences.length) || (measurementVariance && !effectiveVarianceReason.trim())} onClick={() => void submitHandover()}>{submitting ? "Đang lưu kiểm kê…" : "Xác nhận hàng hóa kiểm kê"}</Button>}
-                  {inventoryStage === 3 && !inventoryPublished && <Button disabled={submitting || (lineInventory && !inventoryReviewConfirmed) || Boolean(handoverTarget.inventoryFinalDeadlineAt && Date.parse(handoverTarget.inventoryFinalDeadlineAt) <= now)} onClick={() => void continueInventoryResolution()}>{submitting ? "Đang kiểm tra sức chứa…" : "Tiếp tục đến kết quả tiếp nhận"}</Button>}
-                  {inventoryStage === 3 && inventoryPublished && <Button onClick={() => setInventoryStage(4)}>Xem kết quả tiếp nhận</Button>}
+                  {isViewingEarlierInventoryStage ? (
+                    <Button disabled={submitting} onClick={() => setInventoryStage((inventoryStage + 1) as InventoryStage)}>Tiếp theo →</Button>
+                  ) : (
+                    <>
+                      {inventoryStage === 1 && <Button disabled={submitting || handoverTarget.checkInStatus === 'setup_in_progress' || !handoverTarget.inventoryVisit?.identityVerifiedAt} onClick={() => advanceInventoryStage(2)}>Tiếp tục kiểm kê hàng hóa</Button>}
+                      {inventoryStage === 2 && inventoryStageReadOnly && <Button onClick={() => advanceInventoryStage(4)}>Xem lại kết quả kiểm kê</Button>}
+                      {inventoryStage === 2 && !inventoryStageReadOnly && <Button disabled={submitting || !inventoryLinesComplete || (lineInventory && !inventoryReviewConfirmed) || !actualPackagingMethod.trim() || !packagingCondition || (packagingNoteRequired && !handoverNotes.trim()) || (!evidenceFiles.length && !evidenceReferences.length) || (measurementVariance && !effectiveVarianceReason.trim())} onClick={() => void submitHandover()}>{submitting ? "Đang lưu kiểm kê…" : "Xác nhận hàng hóa kiểm kê"}</Button>}
+                      {inventoryStage === 3 && !inventoryPublished && <Button disabled={submitting || (lineInventory && !inventoryReviewConfirmed) || Boolean(handoverTarget.inventoryFinalDeadlineAt && Date.parse(handoverTarget.inventoryFinalDeadlineAt) <= now)} onClick={() => void continueInventoryResolution()}>{submitting ? "Đang kiểm tra sức chứa…" : "Tiếp tục đến kết quả tiếp nhận"}</Button>}
+                      {inventoryStage === 3 && inventoryPublished && <Button onClick={() => advanceInventoryStage(4)}>Xem kết quả tiếp nhận</Button>}
+                    </>
+                  )}
                 </div>
               ) : isReviewingCompletedStep ? (
                 <div className="flex flex-wrap items-center justify-end gap-3">
@@ -3039,7 +3164,7 @@ export default function StaffCheckInOperationsPanel({
           refreshKey={refreshKey} now={now} renderRow={renderRow} />
       ))}
 
-      <Modal open={Boolean(handoverTarget) && !inventoryMode} onClose={closeHandover} title="Bàn giao kho và đưa hàng vào" titleAdornment={<HandoverWorkflowHelp />} size="3xl">
+      <Modal open={Boolean(handoverTarget) && !inventoryMode} onClose={closeHandover} title="Bàn giao kho" titleAdornment={<HandoverWorkflowHelp />} size="3xl">
         {!inventoryMode && workflowForm}
       </Modal>
       <Modal open={Boolean(handoverTarget) && inventoryMode} onClose={closeHandover} title="Tiến trình kiểm kê hàng hóa" size="3xl">

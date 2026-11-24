@@ -87,12 +87,15 @@ export interface HandoverRecord {
   items: { name: string; quantity: number }[]
   signedRecordReference: string | null
   note: string | null
+  rackCount?: number | null
+  palletCount?: number | null
 }
 
 export interface CheckInCase {
   handoverRecord?: HandoverRecord | null
   customerReceiptConfirmedAt?: string | null
   facilityAddress?: string | null
+  inventoryReturnWindowDays?: number | null
   intakeAction: 'START' | 'CONTINUE' | 'NONE'
   declaredGoodsLines?: {
     id: string
@@ -448,6 +451,8 @@ export async function startCheckInSetup(checkInId: string, request: {
   evidenceReferences?: string[]
   handedOverItems?: { name: string; quantity: number }[]
   signedRecordReference?: string
+  rackCount?: number
+  palletCount?: number
 }) {
   return assertEnvelope(await apiRequest<unknown>(
     `/api/staff/check-ins/${encodeURIComponent(checkInId)}/setup/start`,

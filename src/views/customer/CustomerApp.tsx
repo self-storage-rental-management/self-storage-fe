@@ -2001,13 +2001,26 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       ? validateRentalIdentity(effectiveBookingIdentity).error
       : customerPhone.trim() && !isVietnamesePhone(customerPhone) ? VIETNAMESE_PHONE_ERROR_MESSAGE : null
 
-  const cancelBookingForm = () => {
-    if (reservationSubmitting) return
-    if ((bookingDraftDirty || bookingStep > 1) && !window.confirm('Hủy đặt kho? Dữ liệu bạn vừa nhập trong biểu mẫu này sẽ bị xóa.')) return
+  const performCancelBookingForm = () => {
     resetReservationDraft()
     resetBookingForm()
     setBookOpen(false)
     showToast('Đã hủy thao tác đặt kho.')
+  }
+
+  const cancelBookingForm = () => {
+    if (reservationSubmitting) return
+    if (bookingDraftDirty || bookingStep > 1) {
+      requestConfirmation({
+        title: 'Hủy đặt kho?',
+        message: 'Dữ liệu bạn vừa nhập trong biểu mẫu này sẽ bị xóa.',
+        confirmLabel: 'Xác nhận hủy',
+        tone: 'danger',
+        onConfirm: performCancelBookingForm,
+      })
+      return
+    }
+    performCancelBookingForm()
   }
 
   const continueFromPersonalDetails = () => {

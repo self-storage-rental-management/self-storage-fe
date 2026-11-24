@@ -542,6 +542,11 @@ export interface CustomerReservationDetail {
   inventoryRemainderDeadlineAt?: string | null
   inventoryRemovalPublishedAt?: string | null
   inventoryRemovalDeadlineAt?: string | null
+  inventoryReturnWindowDays?: number | null
+  inventoryReturnExtensionDays?: number | null
+  inventoryReturnExtensionCount?: number | null
+  inventoryReturnCanExtend?: boolean | null
+  inventoryReturnPolicyVersion?: string | null
   inventoryEscalatedAt?: string | null
   setupCompletedAt?: string | null
   inventoryAppointmentAt?: string | null
@@ -894,6 +899,14 @@ export async function resolveCustomerInventory(
       method: 'POST',
       body: JSON.stringify({ decision, note: note?.trim() || null, scheduledDate: scheduledDate || null }),
     },
+  )
+  return checkedReservationDetail(response.data)
+}
+
+export async function extendCustomerInventoryReturnWindow(reservationId: string) {
+  const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
+    `/api/customer/reservations/${encodeURIComponent(reservationId)}/inventory-return-extension`,
+    { method: 'POST' },
   )
   return checkedReservationDetail(response.data)
 }

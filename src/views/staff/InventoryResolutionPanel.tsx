@@ -53,9 +53,11 @@ export default function InventoryResolutionPanel({ item, busy, onRefresh, onOpen
       setError(userFacingError(reason, `Không thể tải ảnh biên bản "${accepted[uploaded.length]?.name ?? ''}" lên hệ thống.`))
     } finally { setUploading(false) }
   }
+  const returnWindowDays = item.inventoryReturnWindowDays ?? null
   const needsDate = decision === 'CANCEL_AND_RETURN'
   const today = vietnamDateInput()
-  const invalidDate = needsDate && (!date || date < today)
+  const maxReturnDate = returnWindowDays != null ? vietnamDateInput(Date.now() + returnWindowDays * 86_400_000) : ''
+  const invalidDate = needsDate && (!date || date < today || (maxReturnDate !== '' && date > maxReturnDate))
   const submit = async () => {
     if (!onResolve || !decision || !present || disabled || locked.current || evidence.length !== MAX_EVIDENCE_FILES || invalidDate || (rejectionReasonRequired && !note.trim())) return
     locked.current = true; setSaving(true); setError('')
@@ -80,10 +82,10 @@ export default function InventoryResolutionPanel({ item, busy, onRefresh, onOpen
         <p className="text-xs">Theo dõi yêu cầu tại mục Hỗ trợ khách hàng.</p>
       </div>}
       {!item.inventoryDecision && !transferring && <p role="status" className="rounded-lg border bg-white p-4 text-sm font-semibold text-stone-900">
-        {transferring ? 'Đã tạo yêu cầu thu xếp chuyển hàng. Cơ sở theo dõi yêu cầu tại mục Hỗ trợ khách hàng.' : done ? 'Đã ghi nhận kết quả kiểm kê vào hồ sơ thuê.' : returning ? 'Khách đã chọn trả lại kho. Tiếp tục nghiệm thu và quyết toán ở hồ sơ trả kho.'
-          : partial ? 'Hồ sơ đang dùng phương án cũ đã ngừng áp dụng. Vui lòng ghi nhận lại phương án chuyển hàng hoặc trả kho.'
+        {done ? 'Đã ghi nhận kết quả kiểm kê vào hồ sơ thuê.' : returning ? `Đã tạo yêu cầu buộc trả kho${returnWindowDays != null ? ` (hạn ${returnWindowDays} ngày)` : ''}. Tiếp tục nghiệm thu và quyết toán ở hồ sơ trả kho.`
+          : partial ? `Hồ sơ đang dùng phương án cũ đã ngừng áp dụng. Vui lòng ghi nhận yêu cầu buộc trả kho${returnWindowDays != null ? ` trong ${returnWindowDays} ngày` : ' theo cỡ kho'}.`
           : item.inventoryFullFit ? 'Hàng thực tế vẫn vừa kho. Staff ghi nhận phương án tiếp nhận trực tiếp với khách.'
-          : 'Chọn chuyển hàng hoặc trả kho tại cơ sở.'}
+          : `Hàng thực tế không vừa gian kho. Staff tạo yêu cầu buộc khách trả kho${returnWindowDays != null ? ` trong vòng ${returnWindowDays} ngày` : ' theo cỡ kho'} để nghiệm thu và quyết toán.`}
       </p>}
       {report && <section className="space-y-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -98,10 +100,9 @@ export default function InventoryResolutionPanel({ item, busy, onRefresh, onOpen
         {otherGoods && <p className="rounded-lg bg-amber-50 p-3">Khách khai báo hàng hóa loại Khác. Staff có thể chấp nhận nếu đủ điều kiện hoặc từ chối kèm lý do. Từ chối sẽ mở hồ sơ trả kho, nghiệm thu và quyết toán để xác định tiền hoàn hoặc thu thêm.</p>}
         {([
           ['ACCEPT_FULL', otherGoods ? 'Chấp nhận hàng hóa loại Khác và tiếp nhận toàn bộ' : 'Tiếp nhận toàn bộ hàng thực tế', Boolean(item.inventoryFullFit)],
-          ['REQUEST_TRANSFER', 'Tạo yêu cầu thu xếp chuyển hàng', !item.inventoryFullFit],
-          ['CANCEL_AND_RETURN', otherGoods ? 'Từ chối hàng hóa loại Khác và yêu cầu trả kho, quyết toán' : 'Từ chối tiếp nhận và yêu cầu trả kho', !item.inventoryFullFit || otherGoods],
+          ['CANCEL_AND_RETURN', otherGoods ? `Từ chối hàng hóa loại Khác và buộc trả kho, quyết toán${returnWindowDays != null ? ` (hạn ${returnWindowDays} ngày)` : ''}` : `Buộc trả kho và quyết toán${returnWindowDays != null ? ` (hạn ${returnWindowDays} ngày)` : ''}`, !item.inventoryFullFit || otherGoods],
         ] as const).filter(([, , enabled]) => enabled).map(([value, label]) => <label key={value} className="flex items-center gap-2"><input type="radio" name={`resolution-${item.checkInId}`} checked={decision === value} onChange={() => setDecision(value)} />{label}</label>)}
-        {decision === 'CANCEL_AND_RETURN' && <label className="grid gap-1">Ngày hẹn trả kho *<input type="date" className="rounded-lg border p-2" required value={date} onChange={event => setDate(event.target.value)} /><span className="text-xs text-stone-500">Ngày trả phải nằm trong hạn trả hàng theo hồ sơ; đổi lịch không kéo dài thời hạn.</span></label>}
+        {decision === 'CANCEL_AND_RETURN' && <label className="grid gap-1">Ngày hẹn trả kho {returnWindowDays != null ? `(trong vòng ${returnWindowDays} ngày)` : '(theo cỡ kho)'} *<input type="date" className="rounded-lg border p-2" required min={today} max={maxReturnDate || undefined} value={date} onChange={event => setDate(event.target.value)} /><span className="text-xs text-stone-500">Yêu cầu trả kho có hiệu lực từ ngày kế tiếp, khách có {returnWindowDays != null ? `đủ ${returnWindowDays} ngày` : 'thời hạn theo cỡ kho'} để hoàn tất trả kho, nghiệm thu và quyết toán. Đổi lịch trong hạn không làm kéo dài thời hạn.</span></label>}
         <label className="grid gap-1">{rejectionReasonRequired ? 'Lý do từ chối tiếp nhận *' : 'Ghi chú phương án (không bắt buộc)'}<textarea className="rounded-lg border p-2" required={rejectionReasonRequired} maxLength={1500} value={note} onChange={event => setNote(event.target.value)} /></label>
         <label className="flex items-start gap-2"><input type="checkbox" className="mt-1" checked={present} onChange={event => setPresent(event.target.checked)} />Đã trao đổi phương án với chính chủ đang có mặt tại cơ sở.</label>
         <div className="grid gap-2">
@@ -119,7 +120,7 @@ export default function InventoryResolutionPanel({ item, busy, onRefresh, onOpen
           </li>)}</ul>}
         </div>
         {error && <p role="alert" className="text-red-700">{error}</p>}
-        <Button disabled={!onResolve || !decision || !present || evidence.length !== MAX_EVIDENCE_FILES || invalidDate || (rejectionReasonRequired && !note.trim()) || disabled} onClick={() => void submit()}>{saving ? 'Đang lưu…' : decision === 'REQUEST_TRANSFER' ? 'Gửi yêu cầu chuyển hàng' : decision === 'ACCEPT_FULL' ? 'Ghi nhận vào hồ sơ thuê' : 'Xác nhận từ chối và tạo hồ sơ trả kho'}</Button>
+        <Button disabled={!onResolve || !decision || !present || evidence.length !== MAX_EVIDENCE_FILES || invalidDate || (rejectionReasonRequired && !note.trim()) || disabled} onClick={() => void submit()}>{saving ? 'Đang lưu…' : decision === 'ACCEPT_FULL' ? 'Ghi nhận vào hồ sơ thuê' : 'Xác nhận buộc trả kho và tạo hồ sơ trả kho'}</Button>
       </fieldset>}
       <InventoryDecisionSummary decision={item.inventoryDecision} compact={transferring} onPreview={onPreview} onOpenReturns={onOpenReturns} />
       <div className="flex flex-wrap gap-2 border-t border-stone-200 pt-3">
