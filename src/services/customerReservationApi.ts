@@ -557,7 +557,6 @@ export interface CustomerReservationDetail {
   inventorySuggestedQuantitiesJson?: string | null
   /** Version of the inspection record that the at-site confirmation approved. */
   inventoryResultVersion?: number
-  /** Staff who recorded the arrangement at the facility with the verified customer present. */
   inventoryAtSiteConfirmedByName?: string | null
   inventoryDecisionAt?: string | null
 }
@@ -881,14 +880,6 @@ export async function setCustomerInventoryAppointment(reservationId: string, app
   return response.data
 }
 
-export async function markCustomerPreparationComplete(reservationId: string, note?: string) {
-  const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
-    `/api/customer/reservations/${encodeURIComponent(reservationId)}/preparation-complete`,
-    { method: 'POST', body: JSON.stringify({ note: note?.trim() || null }) },
-  )
-  return checkedReservationDetail(response.data)
-}
-
 export async function resolveCustomerInventory(
   reservationId: string,
   decision: 'ACCEPT_FULL' | 'ACCEPT_PARTIAL' | 'CANCEL_AND_RETURN',
@@ -901,6 +892,14 @@ export async function resolveCustomerInventory(
       method: 'POST',
       body: JSON.stringify({ decision, note: note?.trim() || null, scheduledDate: scheduledDate || null }),
     },
+  )
+  return checkedReservationDetail(response.data)
+}
+
+export async function markCustomerPreparationComplete(reservationId: string, note?: string) {
+  const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
+    `/api/customer/reservations/${encodeURIComponent(reservationId)}/preparation-complete`,
+    { method: 'POST', body: JSON.stringify({ note: note?.trim() || null }) },
   )
   return checkedReservationDetail(response.data)
 }

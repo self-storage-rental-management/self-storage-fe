@@ -12,7 +12,7 @@ import { isCheckInHandoverExpired, staffCheckInActions } from "../../domain/rese
 import { packageVolumeM3 } from '../../domain/reservationCapacity'
 import { inventoryResult } from '../../domain/inventoryResult'
 import { canOpenInventory } from '../../domain/inventoryAccess'
-import { canReturnToInventoryStage, isInventoryStageReadOnly, INVENTORY_STAGE_LABELS, type InventoryStage } from '../../domain/inventoryStages'
+import { canReturnToInventoryStage, isInventoryResultReopenable, isInventoryStageReadOnly, INVENTORY_STAGE_LABELS, type InventoryStage } from '../../domain/inventoryStages'
 
 import {
   archiveCompletedCheckIn,
@@ -568,6 +568,28 @@ function CheckInWorkList({ group, filters, refreshKey, now, renderRow }: {
     return () => { active = false }
   }, [filters, group, page, refreshKey])
 
+  // The customer confirms receipt and reports setup completion on their own portal, so the
+  // operator's list must pick those transitions up on its own instead of waiting for a manual
+  // reload. Only the list data is replaced; an open form keeps its own state untouched.
+  useEffect(() => {
+    let active = true
+    const poll = async () => {
+      try {
+        const response = await listCheckIns({ ...filters, group, page, pageSize: 20 })
+        if (active && page < response.pagination.totalPages) setResult(response)
+      } catch {
+        // Keep the last good list; the next poll can recover from a temporary read error.
+      }
+    }
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void poll()
+    }, 15_000)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
+  }, [filters, group, page])
+
   const { totalItems = 0, totalPages = 0 } = result?.pagination ?? {}
   const title = group === "ONGOING" ? "Đang diễn ra" : "Đã xử lý"
   return (
@@ -671,9 +693,13 @@ export default function StaffCheckInOperationsPanel({
   const [inventoryDraftRevision, setInventoryDraftRevision] = useState(0)
   const [inventorySavedAt, setInventorySavedAt] = useState<string | null>(null)
   const [inventoryEditing, setInventoryEditing] = useState(true)
+  // True after the operator walks back from a recorded at-site result: the corrected draft must
+  // be published again before the case may move on to the discrepancy stage.
+  const [inventoryReopened, setInventoryReopened] = useState(false)
   const [confirmedInventoryReview, setConfirmedInventoryReview] = useState<string | null>(null)
   const inventoryMode = handoverStep === 6
-  const inventoryPublished = Boolean(handoverTarget?.inventoryResolutionStatus && handoverTarget.inventoryResolutionStatus !== "NOT_STARTED" && handoverTarget.inventoryResolutionStatus !== "ACCEPTED") || handoverTarget?.checkInStatus === "completed"
+  const inventoryRecordedAtSite = Boolean(handoverTarget?.inventoryResolutionStatus && handoverTarget.inventoryResolutionStatus !== "NOT_STARTED" && handoverTarget.inventoryResolutionStatus !== "ACCEPTED") || handoverTarget?.checkInStatus === "completed"
+  const inventoryPublished = inventoryRecordedAtSite && !inventoryReopened
 
   /** Steps already passed stay reachable so a mistaken entry does not trap the operator. */
   const canGoBackToInventoryStage = (stage: InventoryStage) => canReturnToInventoryStage({
@@ -691,6 +717,9 @@ export default function StaffCheckInOperationsPanel({
       // Re-open the editable inspection form even when a draft was already saved.
       setInventoryEditing(true)
       setConfirmedInventoryReview(null)
+      // A result recorded at the facility was never sent to the customer, so walking back
+      // unlocks the record and requires publishing the corrected numbers again.
+      if (inventoryRecordedAtSite) setInventoryReopened(true)
     }
     setInventoryStage(stage)
   }
@@ -1035,9 +1064,17 @@ export default function StaffCheckInOperationsPanel({
 
   const workflowCurrentStep = handoverTarget ? stepForCheckIn(handoverTarget) : 1
   const handoverDeadlinePassed = handoverTarget ? handoverExpired(handoverTarget, now) : false
-  // Walking back into an already published inspection must not reopen an editable form the
-  // backend would reject; those earlier stages are shown read-only instead.
-  const inventoryStageReadOnly = inventoryMode && isInventoryStageReadOnly({ stage: inventoryStage, published: inventoryPublished })
+  // An at-site result was never sent to the customer, so the operator may still correct the
+  // inspection. Anything already sent to the customer keeps the form read-only.
+  const inventoryResultReopenable = isInventoryResultReopenable({
+    resolutionStatus: handoverTarget?.inventoryResolutionStatus,
+    checkInStatus: handoverTarget?.checkInStatus,
+  })
+  const inventoryStageReadOnly = inventoryMode && isInventoryStageReadOnly({
+    stage: inventoryStage,
+    published: inventoryPublished,
+    reopenable: inventoryResultReopenable,
+  })
   const isReviewingCompletedStep = Boolean(
     handoverTarget &&
       (handoverTarget.checkInStatus === "completed" || handoverStep < workflowCurrentStep ||
@@ -1077,11 +1114,19 @@ export default function StaffCheckInOperationsPanel({
     }
   }
 
+  // The customer confirms receipt and reports setup completion on their own portal. While the
+  // operator has this case open on a customer-waiting step, the form must follow those
+  // transitions by itself — closing the waiting popup must not stop the sync.
+  const awaitngCustomerTransition = Boolean(
+    handoverTarget?.checkInId
+    && ["handover_pending_receipt", "setup_in_progress"].includes(handoverTarget.checkInStatus || ""),
+  )
+
   useEffect(() => {
-    if (!customerWaitTarget || !handoverTarget?.checkInId) return
+    if (!awaitngCustomerTransition || !handoverTarget?.checkInId) return
 
     let active = true
-    const pollCustomerReceipt = async () => {
+    const pollCustomerTransition = async () => {
       try {
         const response = await listCheckIns({
           page: 0,
@@ -1091,32 +1136,33 @@ export default function StaffCheckInOperationsPanel({
         const latest = response.data.find((item) => item.checkInId === handoverTarget.checkInId)
         if (!active || !latest) return
 
+        const previousStatus = handoverTarget.checkInStatus
         setHandoverTarget(latest)
         setHandoverStep(current => current === 6 && canOpenInventory(latest.checkInStatus, latest.inventoryVisit?.appointmentAt) ? 6 : Math.min(5, stepForCheckIn(latest)))
         if (latest.checkInStatus === "handover_pending_receipt") {
           setCustomerWaitTarget("receipt")
         } else if (latest.checkInStatus === "setup_in_progress") {
-          if (customerWaitTarget === "receipt") {
-            showToast("Khách hàng đã xác nhận sẵn sàng bàn giao. Đang chờ khách chuẩn bị hàng để kiểm kê.")
+          if (previousStatus === "handover_pending_receipt") {
+            showToast("Khách hàng đã xác nhận nhận kho. Đang chờ khách chuẩn bị hàng để kiểm kê.")
           }
           setCustomerWaitTarget("preparation")
         } else {
-          if (customerWaitTarget === "preparation" && latest.checkInStatus === "setup_completed") {
+          if (previousStatus === "setup_in_progress" && latest.checkInStatus === "setup_completed") {
             showToast("Khách hàng đã báo sẵn sàng kiểm kê. Bước kiểm kê hàng hóa đã được mở.")
           }
           setCustomerWaitTarget(null)
         }
       } catch {
-        // Keep the waiting popup open. The next poll can recover from a temporary read error.
+        // Keep the last known state. The next poll can recover from a temporary read error.
       }
     }
 
-    const timer = window.setInterval(() => void pollCustomerReceipt(), 3000)
+    const timer = window.setInterval(() => void pollCustomerTransition(), 3000)
     return () => {
       active = false
       window.clearInterval(timer)
     }
-  }, [customerWaitTarget, handoverTarget?.checkInId, handoverTarget?.reservationCode, showToast])
+  }, [awaitngCustomerTransition, handoverTarget?.checkInId, handoverTarget?.checkInStatus, handoverTarget?.reservationCode, showToast])
 
   const closeHandover = () => {
     if (submitting) return
@@ -1426,6 +1472,7 @@ export default function StaffCheckInOperationsPanel({
     try {
       const updated = await prepareInventoryResolution(handoverTarget.checkInId, inventoryDraftRevision)
       setHandoverTarget(updated)
+      setInventoryReopened(false)
       setInventoryStage(4)
       showToast('Đã kiểm tra sức chứa. Ghi nhận phương án xử lý trực tiếp tại cơ sở.')
       refresh()
@@ -1686,6 +1733,7 @@ export default function StaffCheckInOperationsPanel({
     setInventoryDraftRevision(draft?.revision ?? 0)
     setInventorySavedAt(draft?.savedAt ?? null)
     setInventoryEditing(!draft?.request)
+    setInventoryReopened(false)
     setError(null)
     setFieldErrors({})
     setHandoverTarget(item)

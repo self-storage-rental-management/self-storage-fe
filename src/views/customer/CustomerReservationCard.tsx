@@ -124,7 +124,7 @@ function inventoryComparison(value: string | null | undefined) {
   }
 }
 
-function InventoryResolutionNotice({ detail, now, submitting, onResolve }: {
+export function InventoryResolutionNotice({ detail, now, submitting, onResolve }: {
   detail: CustomerReservationDetail
   now: number
   submitting: boolean
@@ -389,7 +389,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
   const [showContact, setShowContact] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const progress = reservationProgress(r.status)
-  const checkInStatus = detail?.reservation.id === r.id ? detail.checkInStatus : undefined
+  const checkInStatus = detail?.reservation?.id === r.id ? detail.checkInStatus : undefined
   const awaitingInventory = r.status === 'PREPARING' && (checkInStatus === 'setup_completed' || checkInStatus === 'completed')
   const partialInventoryPending = detail?.inventoryResolutionStatus === 'PARTIAL_ACCEPTED'
   const inventoryReturnRequested = detail?.inventoryResolutionStatus === 'RETURN_REQUESTED'
@@ -657,7 +657,19 @@ export default function CustomerReservationCard({ user, reservation: r, facility
       <div className="flex flex-col items-start justify-between gap-5 border-b border-stone-200 pb-4 md:flex-row">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="min-w-0 text-xs font-bold text-amber-700">{r.reservationCode}</span>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <span className="min-w-0 text-xs font-bold text-amber-700">{r.reservationCode}</span>
+            {r.assignedUnitCode && (
+              <span className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-900">
+                Gian kho đã phân: <span className="font-mono">{r.assignedUnitCode}</span>
+              </span>
+            )}
+            {detail?.lockReference && r.status !== 'AWAITING_CUSTOMER_RECEIPT' && (
+              <span className="inline-flex items-center gap-1 rounded border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-950">
+                Mã ổ khóa đã bàn giao: <span className="font-mono">{detail.lockReference}</span>
+              </span>
+            )}
+          </div>
           <span className={`shrink-0 rounded px-2.5 py-1 text-xs font-bold ${inventoryMismatchPending ? 'bg-red-700 text-white' : awaitingInventory ? (partialInventoryPending ? 'bg-amber-100 text-amber-900' : checkInStatus === 'completed' ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900') : visualTone === 'completed' ? 'bg-emerald-700 text-white' : visualTone === 'expired' ? 'bg-red-100 text-red-900' : progress !== null && progress >= 3 ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{detail?.inventoryResolutionStatus === 'TRANSFER_REQUESTED' ? 'Chờ thu xếp chuyển hàng' : inventoryReturnRequested ? 'Buộc trả kho do kiểm kê sai lệch' : inventoryMismatchPending ? 'Cần xử lý sai lệch kiểm kê' : awaitingInventory ? (partialInventoryPending ? 'Chờ xử lý phần hàng dư' : checkInStatus === 'completed' ? 'Đã kiểm kê' : 'Chờ kiểm kê') : reservationStatusLabels[r.status]}</span>
         </div>
         <h2 className="mt-1 text-lg font-bold text-stone-900">{displayedUnitTypeName} · {displayedFacilityName}</h2>
@@ -684,26 +696,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
           {receiptCountdown.expired && <p className="mt-1 font-semibold">Hồ sơ đang chờ cơ sở xử lý tiếp. Bạn vẫn có thể xác nhận nhận kho hoặc liên hệ cơ sở để được hỗ trợ.</p>}
           <Button type="button" className="mt-2" size="sm" disabled={confirmingReceipt} onClick={() => void confirmReceipt()}>{confirmingReceipt ? 'Đang xác nhận…' : 'Xác nhận đã nhận kho'}</Button>
         </div>}
-        {detail?.lockReference && r.status !== 'AWAITING_CUSTOMER_RECEIPT' && <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs text-amber-950">
-          <span className="font-semibold">Mã ổ khóa đã bàn giao</span>
-          <b className="font-mono text-base tracking-wider">{detail.lockReference}</b>
-        </div>}
-        {r.status === 'PREPARING' && checkInStatus !== 'setup_completed' && !detail?.inventoryEscalatedAt && <ReservationPreparationNotice checkInStatus={checkInStatus} submitting={confirmingPreparation} onReady={() => void confirmPreparation()} />}
-        {checkInStatus === 'setup_completed' && !detail?.inventoryMismatchJson && detail?.inventoryFinalDeadlineAt && (
-          <InventoryAppointmentPanel detail={detail} now={now} onSaved={setDetail} />
-        )}
-        {detail && <PackagingInspectionResult detail={detail} />}
-        {detail && <InventoryLineInspectionResult detail={detail} />}
-        {detail && <InventoryResolutionNotice detail={detail} now={now} submitting={resolvingInventory} onResolve={(decision, scheduledDate) => void resolveInventoryDecision(decision, scheduledDate)} />}
-      {detail?.inventoryAtSiteConfirmedByName && <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
-        <p className="font-semibold">Kết quả kiểm kê đã được ghi nhận tại cơ sở</p>
-        <p className="mt-1">
-          Nhân viên <b>{detail.inventoryAtSiteConfirmedByName}</b> đã trình bày kết quả kiểm kê và ghi nhận phương án bạn đồng ý
-          {detail.inventoryDecisionAt ? ` lúc ${formatCustomerDateTime(new Date(detail.inventoryDecisionAt))}` : ''}.
-          Bạn không cần xác nhận lại trên tài khoản.
-        </p>
-        <p className="mt-1 text-xs text-emerald-900">Bảng kê quyết toán (nếu có) vẫn cần bạn xác nhận riêng khi được gửi.</p>
-      </div>}
+        {r.status === 'PREPARING' && <p className="rounded-lg border border-violet-200 bg-violet-50 p-3 text-left text-xs text-violet-950">Đơn đã bàn giao sang <b>Hồ sơ thuê</b>. Vui lòng thực hiện xác nhận setup, chọn lịch kiểm kê và cập nhật hồ sơ sau kiểm kê tại mục <b>Hồ sơ thuê</b>.</p>}
         {documentAvailable && <Button variant="outline" size="sm" className="reservation-action reservation-action-document min-h-10 w-full justify-center" disabled={busy} onClick={() => void prepareBookingDocument()}>{busy ? 'Đang chuẩn bị…' : 'Xem phiếu giữ kho'}</Button>}
         {handoverDocumentsAvailable && <Button variant="outline" size="sm" className="min-h-10 w-full justify-center" disabled={busy} onClick={() => void loadHandoverDocuments()}>{busy ? 'Đang tải…' : 'Xem hợp đồng đã ký'}</Button>}
         {onRequestSupport && <Button type="button" variant="outline" size="sm" className="min-h-10 w-full justify-center" onClick={onRequestSupport}>Hỗ trợ đơn này</Button>}
@@ -729,6 +722,16 @@ export default function CustomerReservationCard({ user, reservation: r, facility
               {prepaymentPaid && r.status !== 'COMPLETED' && r.status !== 'AWAITING_CUSTOMER_RECEIPT' && (
                 <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 border border-emerald-200">
                   Đã cọc 20%
+                </span>
+              )}
+              {r.assignedUnitCode && (
+                <span className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-900">
+                  Gian kho đã phân: <span className="font-mono">{r.assignedUnitCode}</span>
+                </span>
+              )}
+              {detail?.lockReference && r.status !== 'AWAITING_CUSTOMER_RECEIPT' && (
+                <span className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-bold text-amber-950">
+                  Mã ổ khóa đã bàn giao: <span className="font-mono">{detail.lockReference}</span>
                 </span>
               )}
             </div>
@@ -777,6 +780,9 @@ export default function CustomerReservationCard({ user, reservation: r, facility
               </svg>
               <p className="leading-snug">
                 <b>Nhân viên đã hoàn tất bàn giao.</b> Vui lòng kiểm tra kho &amp; mã ra vào trước khi xác nhận.
+                {detail?.lockReference && (
+                  <span className="mt-1 block">Mã ổ khóa đã bàn giao: <b className="font-mono font-bold text-amber-900 bg-white px-1.5 py-0.5 rounded border border-amber-300">{detail.lockReference}</b></span>
+                )}
                 <span className="sr-only">Sẵn sàng bàn giao</span>
               </p>
             </div>
@@ -841,13 +847,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
           {receiptCountdown.expired && <p className="mt-1 font-semibold">Hồ sơ đang chờ cơ sở xử lý tiếp. Bạn vẫn có thể xác nhận nhận kho hoặc liên hệ cơ sở để được hỗ trợ.</p>}
           <Button type="button" className="mt-2" size="sm" disabled={confirmingReceipt} onClick={() => void confirmReceipt()}>{confirmingReceipt ? 'Đang xác nhận…' : 'Xác nhận đã nhận kho'}</Button>
         </div>}
-        {r.status === 'PREPARING' && checkInStatus !== 'setup_completed' && !detail?.inventoryEscalatedAt && <ReservationPreparationNotice checkInStatus={checkInStatus} submitting={confirmingPreparation} onReady={() => void confirmPreparation()} />}
-        {checkInStatus === 'setup_completed' && !detail?.inventoryMismatchJson && detail?.inventoryFinalDeadlineAt && (
-          <InventoryAppointmentPanel detail={detail} now={now} onSaved={setDetail} />
-        )}
-        {detail && <PackagingInspectionResult detail={detail} />}
-        {detail && <InventoryLineInspectionResult detail={detail} />}
-        {detail && <InventoryResolutionNotice detail={detail} now={now} submitting={resolvingInventory} onResolve={(decision, scheduledDate) => void resolveInventoryDecision(decision, scheduledDate)} />}
+        {r.status === 'PREPARING' && <p className="rounded-lg border border-violet-200 bg-violet-50 p-3 text-left text-xs text-violet-950">Đơn đã bàn giao sang <b>Hồ sơ thuê</b>. Vui lòng thực hiện xác nhận setup, chọn lịch kiểm kê và cập nhật hồ sơ sau kiểm kê tại mục <b>Hồ sơ thuê</b>.</p>}
         {['PAYMENT_GRACE', 'PAYMENT_REVIEW'].includes(r.status) && <CustomerPaymentComplaint reservation={r} complaintExpiresAt={detail?.complaintExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />}
           {/* Menu ⋮ (More actions) */}
           <div className="relative inline-block">
@@ -976,9 +976,16 @@ export default function CustomerReservationCard({ user, reservation: r, facility
                 {displayedUnitType.maxLoadKg != null && <p><b>Tải trọng:</b> {displayedUnitType.maxLoadKg.toLocaleString('vi-VN')} kg</p>}
               </>}
               {r.assignedUnitCode && <p><b>Gian kho đã phân:</b> {r.assignedUnitCode}{r.assignedUnitStatus ? ` (${r.assignedUnitStatus})` : ''}</p>}
+              {detail?.lockReference && (
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-left">
+                  <span className="font-semibold text-amber-950">Mã ổ khóa đã bàn giao</span>
+                  <b className="font-mono text-base tracking-wider text-amber-900">{detail.lockReference}</b>
+                </div>
+              )}
             </div>
           </section>
         </div>
+
         <div className="mt-3 space-y-4">
           <section className="rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-700">
             <div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="text-sm font-bold text-stone-900">Thông tin hàng hóa đã khai báo</h3></div>{r.status === 'READY_FOR_CHECKIN' && !r.setupGoodsRevisionUsedAt && !setupGoodsEditOpen && <Button type="button" variant="outline" size="sm" disabled={!goodsItems.length || busy} onClick={beginSetupGoodsEdit}>Sửa khai báo một lần</Button>}</div>
@@ -1008,7 +1015,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
                       <p><b>Hàng dễ bể / dễ vỡ:</b> {item.fragile ? 'Có' : 'Không'}</p>
                       <p><b>Được phép xếp chồng:</b> {item.stackable ? 'Có, hệ thống tự tính số lớp' : 'Không, giới hạn 1 lớp'}</p>
                       <p><b>Được phép đặt nằm ngang:</b> {item.allowHorizontalPlacement ? 'Có, hệ thống có thể thử các hướng đặt' : 'Không, giữ nguyên chiều đứng'}</p>
-                      <div><b>Hình ảnh:</b> {item.images.length ? <span className="mt-1 flex flex-wrap gap-1.5">{item.images.map(image => <button key={image.id} type="button" className="rounded-md border border-stone-300 bg-stone-50 px-2 py-1 text-left text-[11px] text-stone-700 hover:border-amber-400 hover:bg-amber-50" onClick={() => void viewGoodsImage(image.id)}>{image.originalName}</button>)}</span> : 'Chưa có ảnh. Nên bổ sung ảnh hàng hóa làm bằng chứng đối chiếu khi nhận và trả kho.'}</div>
+                      <div><b>Hình ảnh:</b> {item.images?.length ? <span className="mt-1 flex flex-wrap gap-1.5">{item.images.map(image => <button key={image.id} type="button" className="rounded-md border border-stone-300 bg-stone-50 px-2 py-1 text-left text-[11px] text-stone-700 hover:border-amber-400 hover:bg-amber-50" onClick={() => void viewGoodsImage(image.id)}>{image.originalName}</button>)}</span> : 'Chưa có ảnh. Nên bổ sung ảnh hàng hóa làm bằng chứng đối chiếu khi nhận và trả kho.'}</div>
                       {item.customerNote && <p className="sm:col-span-2"><b>Ghi chú:</b> {item.customerNote}</p>}
                     </div>
                   </article>

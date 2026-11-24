@@ -23,10 +23,25 @@ export function canReturnToInventoryStage(input: {
 }
 
 /**
- * Once the result is published the backend refuses further inspection edits,
- * so walking back to the inspection form shows the saved data read-only
- * instead of an editable form that cannot be saved.
+ * An at-site result (`PENDING_STAFF_RESOLUTION`) was only recorded for the operator at the
+ * facility — it never reached the customer — so the inspection may still be corrected. Results
+ * that were sent to the customer, partly accepted, returned or closed stay frozen.
  */
-export function isInventoryStageReadOnly(input: { stage: InventoryStage; published: boolean }) {
-  return input.published && input.stage === 2
+export function isInventoryResultReopenable(input: {
+  resolutionStatus: string | null | undefined
+  checkInStatus: string | null | undefined
+}) {
+  return input.resolutionStatus === 'PENDING_STAFF_RESOLUTION' && input.checkInStatus === 'setup_completed'
+}
+
+/**
+ * A frozen inspection form is shown read-only instead of an editable form the backend rejects.
+ * A still-reopenable at-site result keeps its editable form.
+ */
+export function isInventoryStageReadOnly(input: {
+  stage: InventoryStage
+  published: boolean
+  reopenable: boolean
+}) {
+  return input.published && !input.reopenable && input.stage === 2
 }
