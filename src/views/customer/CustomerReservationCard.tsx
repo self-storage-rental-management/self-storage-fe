@@ -981,7 +981,6 @@ export default function CustomerReservationCard({ user, reservation: r, facility
         <div className="flex justify-end gap-2 border-t border-stone-100 pt-4"><Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>Quay lại</Button><Button variant="danger" onClick={() => { setDeleteConfirmOpen(false); onDelete?.() }}>Xóa đơn đặt giữ kho</Button></div>
       </div>
     </Modal>
-    </div>
  </Card>
   )
 }
