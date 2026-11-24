@@ -556,7 +556,6 @@ export interface CustomerReservationDetail {
   inventorySuggestedQuantitiesJson?: string | null
   /** Version of the inspection record that the at-site confirmation approved. */
   inventoryResultVersion?: number
-  /** Staff who recorded the arrangement at the facility with the verified customer present. */
   inventoryAtSiteConfirmedByName?: string | null
   inventoryDecisionAt?: string | null
 }
@@ -877,6 +876,22 @@ export async function setCustomerInventoryAppointment(reservationId: string, app
     { method: 'POST', body: JSON.stringify({ appointmentAt, reason }) },
   )
   return response.data
+}
+
+export async function resolveCustomerInventory(
+  reservationId: string,
+  decision: 'ACCEPT_FULL' | 'ACCEPT_PARTIAL' | 'CANCEL_AND_RETURN',
+  note?: string,
+  scheduledDate?: string,
+) {
+  const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
+    `/api/customer/reservations/${encodeURIComponent(reservationId)}/inventory-resolution`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ decision, note: note?.trim() || null, scheduledDate: scheduledDate || null }),
+    },
+  )
+  return checkedReservationDetail(response.data)
 }
 
 export async function markCustomerPreparationComplete(reservationId: string, note?: string) {

@@ -336,7 +336,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
   const [showContact, setShowContact] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const progress = reservationProgress(r.status)
-  const checkInStatus = detail?.reservation.id === r.id ? detail.checkInStatus : undefined
+  const checkInStatus = detail?.reservation?.id === r.id ? detail.checkInStatus : undefined
   const awaitingInventory = r.status === 'PREPARING' && (checkInStatus === 'setup_completed' || checkInStatus === 'completed')
   const partialInventoryPending = detail?.inventoryResolutionStatus === 'PARTIAL_ACCEPTED'
   const inventoryReturnRequested = detail?.inventoryResolutionStatus === 'RETURN_REQUESTED'
@@ -722,6 +722,9 @@ export default function CustomerReservationCard({ user, reservation: r, facility
               </svg>
               <p className="leading-snug">
                 <b>Nhân viên đã hoàn tất bàn giao.</b> Vui lòng kiểm tra kho &amp; mã ra vào trước khi xác nhận.
+                {detail?.lockReference && (
+                  <span className="mt-1 block">Mã ổ khóa đã bàn giao: <b className="font-mono font-bold text-amber-900 bg-white px-1.5 py-0.5 rounded border border-amber-300">{detail.lockReference}</b></span>
+                )}
                 <span className="sr-only">Sẵn sàng bàn giao</span>
               </p>
             </div>
@@ -962,9 +965,23 @@ export default function CustomerReservationCard({ user, reservation: r, facility
                 {displayedUnitType.maxLoadKg != null && <p><b>Tải trọng:</b> {displayedUnitType.maxLoadKg.toLocaleString('vi-VN')} kg</p>}
               </>}
               {r.assignedUnitCode && <p><b>Gian kho đã phân:</b> {r.assignedUnitCode}{r.assignedUnitStatus ? ` (${r.assignedUnitStatus})` : ''}</p>}
+              {detail?.lockReference && (
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-left">
+                  <span className="font-semibold text-amber-950">Mã ổ khóa đã bàn giao</span>
+                  <b className="font-mono text-base tracking-wider text-amber-900">{detail.lockReference}</b>
+                </div>
+              )}
             </div>
           </section>
         </div>
+
+        {/* Lịch kiểm kê đầu vào: Hiển thị khi đã setup xong hoặc có thông tin kiểm kê */}
+        {detail && (checkInStatus === 'setup_completed' || detail.setupCompletedAt || detail.inventoryFinalDeadlineAt || detail.inventoryAppointmentAt || detail.inventoryArrivedAt || detail.inventoryDueAt || (detail.inventoryResolutionStatus && detail.inventoryResolutionStatus !== 'NOT_STARTED')) && (
+          <div className="mt-3">
+            <InventoryAppointmentPanel detail={detail} now={now} onSaved={setDetail} />
+          </div>
+        )}
+
         <div className="mt-3 space-y-4">
           <section className="rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-700">
             <div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="text-sm font-bold text-stone-900">Thông tin hàng hóa đã khai báo</h3></div>{r.status === 'READY_FOR_CHECKIN' && !r.setupGoodsRevisionUsedAt && !setupGoodsEditOpen && <Button type="button" variant="outline" size="sm" disabled={!goodsItems.length || busy} onClick={beginSetupGoodsEdit}>Sửa khai báo một lần</Button>}</div>
@@ -994,7 +1011,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
                       <p><b>Hàng dễ bể / dễ vỡ:</b> {item.fragile ? 'Có' : 'Không'}</p>
                       <p><b>Được phép xếp chồng:</b> {item.stackable ? 'Có, hệ thống tự tính số lớp' : 'Không, giới hạn 1 lớp'}</p>
                       <p><b>Được phép đặt nằm ngang:</b> {item.allowHorizontalPlacement ? 'Có, hệ thống có thể thử các hướng đặt' : 'Không, giữ nguyên chiều đứng'}</p>
-                      <div><b>Hình ảnh:</b> {item.images.length ? <span className="mt-1 flex flex-wrap gap-1.5">{item.images.map(image => <button key={image.id} type="button" className="rounded-md border border-stone-300 bg-stone-50 px-2 py-1 text-left text-[11px] text-stone-700 hover:border-amber-400 hover:bg-amber-50" onClick={() => void viewGoodsImage(image.id)}>{image.originalName}</button>)}</span> : 'Chưa có ảnh. Nên bổ sung ảnh hàng hóa làm bằng chứng đối chiếu khi nhận và trả kho.'}</div>
+                      <div><b>Hình ảnh:</b> {item.images?.length ? <span className="mt-1 flex flex-wrap gap-1.5">{item.images.map(image => <button key={image.id} type="button" className="rounded-md border border-stone-300 bg-stone-50 px-2 py-1 text-left text-[11px] text-stone-700 hover:border-amber-400 hover:bg-amber-50" onClick={() => void viewGoodsImage(image.id)}>{image.originalName}</button>)}</span> : 'Chưa có ảnh. Nên bổ sung ảnh hàng hóa làm bằng chứng đối chiếu khi nhận và trả kho.'}</div>
                       {item.customerNote && <p className="sm:col-span-2"><b>Ghi chú:</b> {item.customerNote}</p>}
                     </div>
                   </article>
