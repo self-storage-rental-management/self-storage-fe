@@ -9,9 +9,10 @@ import type { RentalApiDetail, RentalApiRole } from "../../types/rentalApi"
 import { bookingPaymentPurposes, bookingPaymentStatuses } from "../../services/rentalBookingEvidence"
 import { rentalRecordLabel, rentalStatusLabel, rentalMoney, unknown, rentalDataWarning, rentalPeriodText, rentalDate, accessStatusLabels } from "./presentation"
 import { downloadCheckInEvidence } from "../../services/checkInApi"
-import { confirmCustomerRentalStart, getCustomerReservation, markCustomerPreparationComplete, previewCustomerRentalStart, type CustomerReservationDetail, type RentalStartConfirmation } from "../../services/customerReservationApi"
-import { InventoryLineInspectionResult, PackagingInspectionResult } from "../customer/CustomerReservationCard"
+import { confirmCustomerRentalStart, getCustomerReservation, markCustomerPreparationComplete, previewCustomerRentalStart, resolveCustomerInventory, type CustomerReservationDetail, type RentalStartConfirmation } from "../../services/customerReservationApi"
+import { InventoryLineInspectionResult, InventoryResolutionNotice, PackagingInspectionResult } from "../customer/CustomerReservationCard"
 import InventoryAppointmentPanel from "../customer/InventoryAppointmentPanel"
+import { formatCustomerDateTime } from "../../i18n/customerDate"
 import { userFacingError } from "../../presentation/userFacingError"
 import FilePreviewDialog from "../../components/FilePreviewDialog"
 import { vietnamDateInput } from "../../utils/vietnamTime"
@@ -74,7 +75,10 @@ export default function RentalDetail({
   const [inventoryDetail, setInventoryDetail] = useState<CustomerReservationDetail>()
   const [inventoryReadError, setInventoryReadError] = useState('')
   const [inventoryReload, setInventoryReload] = useState(0)
-  const inventoryReservationId = role === 'customer' && (rental.moveInCompletedAt || rental.inventoryVerifiedAt)
+  const [resolvingInventory, setResolvingInventory] = useState(false)
+  const [inventoryActionMessage, setInventoryActionMessage] = useState('')
+  const [inventoryActionError, setInventoryActionError] = useState('')
+  const inventoryReservationId = role === 'customer' && (rental.moveInCompletedAt || rental.inventoryVerifiedAt || rental.inventoryPending)
     ? rental.reservationId : null
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
@@ -139,6 +143,32 @@ export default function RentalDetail({
       setPreparationError(userFacingError(error, 'Không thể báo đã chuẩn bị xong.'))
     } finally {
       setPreparationSubmitting(false)
+    }
+  }
+
+  const resolveInventoryDecision = async (decision: 'ACCEPT_FULL' | 'ACCEPT_PARTIAL' | 'CANCEL_AND_RETURN', scheduledDate?: string) => {
+    if (role !== 'customer' || !rental.reservationId || resolvingInventory) return
+    setResolvingInventory(true)
+    setInventoryActionMessage('')
+    setInventoryActionError('')
+    try {
+      const updated = await resolveCustomerInventory(
+        rental.reservationId,
+        decision,
+        decision === 'CANCEL_AND_RETURN' ? 'Khách yêu cầu xử lý trả kho do kết quả kiểm kê không phù hợp.' : undefined,
+        scheduledDate,
+      )
+      setInventoryDetail(updated)
+      setInventoryActionMessage(decision === 'CANCEL_AND_RETURN'
+        ? 'Đã gửi yêu cầu trả kho. Cơ sở sẽ tiếp nhận và kiểm tra hiện trạng theo quy trình trả kho.'
+        : decision === 'ACCEPT_PARTIAL'
+          ? 'Đã xác nhận nhận phần hàng có thể xếp trong gian kho.'
+          : 'Đã xác nhận nhận toàn bộ hàng hóa.')
+      onRentalStartConfirmed?.()
+    } catch (error) {
+      setInventoryActionError(userFacingError(error, 'Không thể ghi nhận phương án xử lý kiểm kê.'))
+    } finally {
+      setResolvingInventory(false)
     }
   }
 
@@ -220,12 +250,32 @@ export default function RentalDetail({
                   {startError && !startPreview && <p role="alert" className="text-sm text-red-700">{startError}</p>}
                 </div>
               )}
+              {role === 'customer' && inventoryDetail?.reservation.id === rental.reservationId && (
+                <div className="mt-3 space-y-2">
+                  <InventoryResolutionNotice detail={inventoryDetail} now={now} submitting={resolvingInventory} onResolve={(decision, scheduledDate) => void resolveInventoryDecision(decision, scheduledDate)} />
+                  {inventoryDetail.inventoryAtSiteConfirmedByName && <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
+                    <p className="font-semibold">Kết quả kiểm kê đã được ghi nhận tại cơ sở</p>
+                    <p className="mt-1">Nhân viên <b>{inventoryDetail.inventoryAtSiteConfirmedByName}</b> đã trình bày kết quả kiểm kê và ghi nhận phương án bạn đồng ý{inventoryDetail.inventoryDecisionAt ? ` lúc ${formatCustomerDateTime(new Date(inventoryDetail.inventoryDecisionAt))}` : ''}. Bạn không cần xác nhận lại trên tài khoản.</p>
+                  </div>}
+                  {inventoryActionMessage && <p role="status" className="text-xs font-medium text-emerald-700">{inventoryActionMessage}</p>}
+                  {inventoryActionError && <p role="alert" className="text-xs font-medium text-red-700">{inventoryActionError}</p>}
+                </div>
+              )}
             </dd>
           </div> : rental.inventoryPending && <div>
             <dt>Kiểm kê đầu vào</dt>
-            <dd>{role === 'customer' && inventoryDetail?.reservation.id === rental.reservationId
-              && inventoryDetail?.inventoryFinalDeadlineAt ? (
-                <InventoryAppointmentPanel detail={inventoryDetail} now={now} onSaved={setInventoryDetail} />
+            <dd className="space-y-3">{role === 'customer' && inventoryDetail?.reservation.id === rental.reservationId
+              && (inventoryDetail.inventoryFinalDeadlineAt || inventoryDetail.setupCompletedAt || (inventoryDetail.inventoryResolutionStatus && inventoryDetail.inventoryResolutionStatus !== 'NOT_STARTED')) ? (
+                <>
+                  {inventoryDetail.inventoryFinalDeadlineAt && <InventoryAppointmentPanel detail={inventoryDetail} now={now} onSaved={setInventoryDetail} />}
+                  <InventoryResolutionNotice detail={inventoryDetail} now={now} submitting={resolvingInventory} onResolve={(decision, scheduledDate) => void resolveInventoryDecision(decision, scheduledDate)} />
+                  {inventoryDetail.inventoryAtSiteConfirmedByName && <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
+                    <p className="font-semibold">Kết quả kiểm kê đã được ghi nhận tại cơ sở</p>
+                    <p className="mt-1">Nhân viên <b>{inventoryDetail.inventoryAtSiteConfirmedByName}</b> đã trình bày kết quả kiểm kê và ghi nhận phương án bạn đồng ý{inventoryDetail.inventoryDecisionAt ? ` lúc ${formatCustomerDateTime(new Date(inventoryDetail.inventoryDecisionAt))}` : ''}. Bạn không cần xác nhận lại trên tài khoản.</p>
+                  </div>}
+                  {inventoryActionMessage && <p role="status" className="text-xs font-medium text-emerald-700">{inventoryActionMessage}</p>}
+                  {inventoryActionError && <p role="alert" className="text-xs font-medium text-red-700">{inventoryActionError}</p>}
+                </>
               ) : <>
               <Badge variant="warning">Chưa kiểm kê</Badge>
               <p className="mt-2 text-xs leading-5 text-stone-500">Kỳ thuê vẫn tính theo mốc đã bàn giao, hồ sơ kiểm kê cần được hoàn tất trước hạn xử lý.</p>
