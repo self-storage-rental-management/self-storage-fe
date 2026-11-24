@@ -1,3 +1,5 @@
+import InventoryMismatchEvidence, { type InventoryInspectionReport } from '../staff/InventoryMismatchEvidence'
+import InventoryDecisionSummary from '../../components/InventoryDecisionSummary'
 import { invoiceNumberLabel } from '../customer/paymentLabels'
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { useEffect, useState } from "react"
@@ -8,7 +10,7 @@ import BookingTransactionReceipt from "./BookingTransactionReceipt"
 import type { RentalApiDetail, RentalApiRole } from "../../types/rentalApi"
 import { bookingPaymentPurposes, bookingPaymentStatuses } from "../../services/rentalBookingEvidence"
 import { rentalRecordLabel, rentalStatusLabel, rentalMoney, unknown, rentalDataWarning, rentalPeriodText, rentalDate, accessStatusLabels } from "./presentation"
-import { downloadCheckInEvidence } from "../../services/checkInApi"
+import { downloadCheckInEvidence, type CheckInInventoryLine } from "../../services/checkInApi"
 import { confirmCustomerRentalStart, getCustomerReservation, markCustomerPreparationComplete, previewCustomerRentalStart, resolveCustomerInventory, type CustomerReservationDetail, type RentalStartConfirmation } from "../../services/customerReservationApi"
 import { InventoryLineInspectionResult, InventoryResolutionNotice, PackagingInspectionResult } from "../customer/CustomerReservationCard"
 import InventoryAppointmentPanel from "../customer/InventoryAppointmentPanel"
@@ -50,6 +52,26 @@ function GoodsImage({ image }: { image: { id: string; originalName: string; cont
     {preview && url && <FilePreviewDialog file={{ url, type: image.contentType, name: image.originalName }} onClose={() => setPreview(false)} />}
   </div>
 }
+function savedInventoryReport(rental: RentalApiDetail): InventoryInspectionReport | null {
+  if (rental.inventory?.report) return rental.inventory.report
+  if (!rental.inventory?.actualJson) return null
+  try {
+    const actual = JSON.parse(rental.inventory.actualJson)
+    if (!actual || typeof actual !== 'object' || Array.isArray(actual)) return null
+    const finite = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? value : undefined
+    return {
+      packageCount: finite(actual.packageCount),
+      actualMeasurements: { weightKg: finite(actual.weightKg), actualVolumeM3: finite(actual.volumeM3) },
+      inventoryLines: Array.isArray(actual.lines) ? actual.lines.filter((line: unknown): line is CheckInInventoryLine => Boolean(line && typeof line === 'object' && 'goodsItemId' in line && 'actualQuantity' in line && typeof line.goodsItemId === 'string' && typeof line.actualQuantity === 'number')) : [],
+      actualPackagingMethod: typeof actual.packagingMethod === 'string' ? actual.packagingMethod : null,
+      packagingCondition: ['INTACT', 'MINOR_DAMAGE', 'MAJOR_DAMAGE', 'UNPACKAGED'].includes(actual.packagingCondition) ? actual.packagingCondition : null,
+      varianceReason: typeof actual.varianceReason === 'string' ? actual.varianceReason : null,
+      notes: typeof actual.notes === 'string' ? actual.notes : '',
+      evidenceReferences: Array.isArray(actual.evidenceReferences) ? actual.evidenceReferences.filter((id: unknown): id is string => typeof id === 'string') : [],
+    }
+  } catch { return null }
+}
+
 export default function RentalDetail({
   rental,
   onRequest,
@@ -64,7 +86,7 @@ export default function RentalDetail({
   onRentalStartConfirmed?: () => void
 }) {
   const { copy } = useManagerPresentation()
-  const [section, setSection] = useState<'documents' | 'payments'>('documents')
+  const [section, setSection] = useState<'documents' | 'payments' | 'inventory'>('documents')
   const [receiptPayment, setReceiptPayment] = useState<string>()
   const [startPreview, setStartPreview] = useState<RentalStartConfirmation>()
   const [startAcknowledged, setStartAcknowledged] = useState(false)
@@ -74,11 +96,12 @@ export default function RentalDetail({
   const [preparationError, setPreparationError] = useState<string>()
   const [inventoryDetail, setInventoryDetail] = useState<CustomerReservationDetail>()
   const [inventoryReadError, setInventoryReadError] = useState('')
+  const [inventoryPreviewError, setInventoryPreviewError] = useState('')
   const [inventoryReload, setInventoryReload] = useState(0)
   const [resolvingInventory, setResolvingInventory] = useState(false)
   const [inventoryActionMessage, setInventoryActionMessage] = useState('')
   const [inventoryActionError, setInventoryActionError] = useState('')
-  const inventoryReservationId = role === 'customer' && (rental.moveInCompletedAt || rental.inventoryVerifiedAt || rental.inventoryPending)
+  const inventoryReservationId = role === 'customer'
     ? rental.reservationId : null
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
@@ -92,12 +115,28 @@ export default function RentalDetail({
     void getCustomerReservation(inventoryReservationId)
       .then(value => { if (active) setInventoryDetail(value) })
       .catch(error => { if (active) setInventoryReadError(userFacingError(error, 'Không tải được lịch kiểm kê.')) })
-    return () => { active = false }
+    const refresh = () => { if (document.visibilityState !== 'hidden') setInventoryReload(value => value + 1) }
+    const timer = window.setInterval(refresh, 15_000)
+    window.addEventListener('focus', refresh)
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', refresh) }
   }, [inventoryReservationId, inventoryReload])
+  const previewInventoryEvidence = async (id: string) => {
+    const tab = window.open('', '_blank')
+    if (tab) tab.opener = null
+    setInventoryPreviewError('')
+    try {
+      const file = await downloadCheckInEvidence(id)
+      const url = URL.createObjectURL(file.blob)
+      if (tab) tab.location.href = url
+      else window.open(url, '_blank', 'noopener,noreferrer')
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (error) { tab?.close(); setInventoryPreviewError(userFacingError(error, 'Không thể mở bằng chứng kiểm kê.')) }
+  }
   const labelClass = "text-xs font-medium text-stone-500"
   const valueClass = "mt-1 text-sm font-semibold text-stone-900"
 
   const displayCode = rental.displayCode
+  const inspectionReport = savedInventoryReport(rental)
   const evidence = rental.bookingEvidence
   const agreed = evidence?.agreedAmounts
   const warnings = rental.dataWarnings.filter(warning => warning.field !== "contractEndDate")
@@ -177,6 +216,7 @@ export default function RentalDetail({
       <div className="flex flex-wrap gap-2">
         <Button variant={section === 'documents' ? 'primary' : 'outline'} onClick={() => setSection('documents')}>Hồ sơ & tài liệu</Button>
         <Button variant={section === 'payments' ? 'primary' : 'outline'} onClick={() => setSection('payments')}>Thỏa thuận & giao dịch</Button>
+        <Button variant={section === 'inventory' ? 'primary' : 'outline'} onClick={() => setSection('inventory')}>Kết quả kiểm kê</Button>
       </div>
       <div className={section === 'documents' ? 'space-y-5' : 'hidden'}>
       {rental.status === "active" && <RenewalRiskNotice rentalId={rental.id} role={role} />}
@@ -373,22 +413,6 @@ export default function RentalDetail({
           </div>
         )}
       </Card>}
-      {rental.inventory ? (
-        <Card className="space-y-3 rounded-xl p-5">
-          <h3 className="font-bold">Kết quả kiểm kê hàng hóa</h3>
-          <p>{rental.inventory.fullFit ? rental.inventory.mismatch ? 'Có sai lệch so với khai báo, hàng vẫn vừa kho.' : 'Hàng thực tế khớp khai báo.' : 'Hàng thực tế vượt sức chứa của gian kho.'}</p>
-          {rental.inventory.decision === 'TRANSFER_REQUESTED' && <p>Đã tạo yêu cầu thu xếp chuyển hàng.</p>}
-          {rental.inventory.decision === 'PARTIAL_ACCEPTED' && rental.inventory.removalDeadline && <p>Ngày hẹn đưa hàng dư ra: {new Date(Date.parse(rental.inventory.removalDeadline) - 1).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</p>}
-          {rental.inventory.removedAt && <p>Đã xác nhận đưa hàng dư ra ngày {rentalDate(rental.inventory.removedAt)}.</p>}
-          <InventoryLineInspectionResult detail={{ inventoryActualJson: rental.inventory.actualJson, acceptedQuantitiesJson: rental.inventory.decision === 'PARTIAL_ACCEPTED' ? rental.inventory.acceptedQuantitiesJson : null, goodsItems: evidence?.goodsItems }} />
-          <PackagingInspectionResult detail={{ inventoryActualJson: rental.inventory.actualJson, goodsCondition: rental.inventory.declaredPackaging }} />
-        </Card>
-      ) : inventoryDetail?.reservation.id === rental.reservationId && inventoryDetail.inventoryResultPublishedAt && (
-        <Card className="space-y-3 rounded-xl p-5">
-          <InventoryLineInspectionResult detail={inventoryDetail} />
-          <PackagingInspectionResult detail={inventoryDetail} />
-        </Card>
-      )}
       {evidence?.goodsItems?.some(item => item.images.length > 0) && <Card className="rounded-xl p-5">
         <h3 className="mb-4 border-b border-stone-200 pb-3 text-base font-bold">Hình ảnh hàng hóa</h3>
         <div className="space-y-5">{evidence.goodsItems.filter(item => item.images.length > 0).map(item => <div key={item.id}>
@@ -396,6 +420,25 @@ export default function RentalDetail({
           <div className="flex flex-wrap gap-3">{item.images.map(image => <GoodsImage key={image.id} image={image} />)}</div>
         </div>)}</div>
       </Card>}
+      </div>
+      <div className={section === 'inventory' ? 'space-y-4' : 'hidden'}>
+      {(rental.inventory?.intakeDecision || inventoryDetail?.inventoryDecision) && <InventoryDecisionSummary decision={rental.inventory?.intakeDecision || inventoryDetail?.inventoryDecision} />}
+      {inspectionReport ? <Card className="p-4">
+        <h3 className="mb-3 border-b border-stone-200 pb-2 text-base font-semibold">Kết quả kiểm kê hàng hóa</h3>
+        <InventoryMismatchEvidence item={{
+          handover: inspectionReport,
+          inventoryFullFit: rental.inventory?.fullFit,
+          inventoryMismatchJson: rental.inventory?.mismatchJson || (rental.inventory?.mismatch ? '{}' : null),
+          inventoryMismatchSummary: rental.inventory?.mismatchSummary,
+          declaredPackagingMethod: rental.inventory?.declaredPackaging,
+          declaredPackageCount: evidence?.goodsItems?.length ? evidence.goodsItems.reduce((sum, item) => sum + item.quantity, 0) : undefined,
+          declaredGoodsWeightKg: evidence?.goodsItems?.length ? evidence.goodsItems.reduce((sum, item) => sum + item.quantity * item.weightPerItemKg, 0) : undefined,
+          declaredGoodsVolumeM3: evidence?.goodsItems?.length ? evidence.goodsItems.reduce((sum, item) => sum + item.quantity * item.lengthCm * item.widthCm * item.heightCm / 1_000_000, 0) : undefined,
+          declaredGoodsLines: evidence?.goodsItems?.map(item => ({ ...item, code: item.goodsCode,
+            name: item.customGoodsName || item.categoryName, weightPerPackageKg: item.weightPerItemKg })),
+        }} onPreview={id => void previewInventoryEvidence(id)} />
+      </Card> : <p className="rounded-lg border border-stone-200 bg-white p-4 text-sm text-stone-600">Chưa có kết quả kiểm kê đã lưu cho hồ sơ này.</p>}
+      {inventoryPreviewError && <p role="alert" className="text-sm text-red-700">{inventoryPreviewError}</p>}
       </div>
       <div className={section === 'payments' ? 'space-y-5' : 'hidden'}>
       {evidence && (

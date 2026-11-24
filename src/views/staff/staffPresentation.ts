@@ -129,15 +129,18 @@ export function staffGoodsCategoryLabel(value: string) {
 }
 
 export function inventoryReportNote(notes?: string | null, identityNote?: string | null) {
-  let text = notes?.trim() || ""
-  const current = "Ghi chú kiểm kê: "
-  if (text.startsWith(current)) return text.slice(current.length)
-  if (identityNote?.trim()) {
-    const legacyIdentity = "Ghi chú xác minh: " + identityNote.trim()
-    if (text === legacyIdentity) return ""
-    if (text.startsWith(legacyIdentity + "\n")) text = text.slice(legacyIdentity.length + 1)
-  }
-  return text.replace(/^Ghi chú bàn giao: /, "")
+  const identity = identityNote?.trim()
+  const cleaned = (notes || '').split(/\r?\n/).map(line => {
+    let text = line.trim()
+    // Old reports embedded generated conclusions and identity notes inside the free-text note.
+    while (/^(Ghi chú kiểm kê|Ghi chú bàn giao):\s*/.test(text)) {
+      text = text.replace(/^(Ghi chú kiểm kê|Ghi chú bàn giao):\s*/, '')
+    }
+    if (!text || text.startsWith('Kết quả đối chiếu hàng hóa:')) return ''
+    if (identity && text === `Ghi chú xác minh: ${identity}`) return ''
+    return text
+  }).filter(Boolean)
+  return Array.from(new Set(cleaned)).join('\n')
 }
 
 export function parseEmptyStorageHandover(note: string | null | undefined) {
