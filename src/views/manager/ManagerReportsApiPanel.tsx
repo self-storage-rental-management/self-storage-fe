@@ -4,7 +4,7 @@ import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer,
 import { ApiClientError } from '../../services/apiClient'
 import { getAuthenticatedActor, type ApiActor } from '../../services/authApi'
 import { useRentalApiResource } from '../../hooks/useRentalApiResource'
-import { getManagerReportSummary, listManagerReportActivities, type ManagerReportActivity } from '../../services/managerReportingApi'
+import { getManagerReportSummary, listManagerReportActivities, type ManagerReportActivity, type ManagerReportSummary } from '../../services/managerReportingApi'
 import { formatVndAmount } from '../../i18n/currency'
 import { exportManagerFacilityExcel } from '../../utils/excelExport'
 import { recordDisplayCode } from '../../utils/recordDisplayCode'
@@ -90,6 +90,33 @@ function ReportMetric({ title, value, detail }: { title: string; value: string |
   </Card>
 }
 
+const inUseStorageUnitStatuses = new Set(['occupied', 'reserved', 'assigned', 'held'])
+
+const storageTypeOrder: Record<string, number> = { S: 0, M: 1, L: 2, XL: 3 }
+
+function storageTypeSortKey(row: ManagerReportSummary['unitTypeBreakdown'][number]) {
+  const code = row.typeCode.trim().toUpperCase()
+  if (code in storageTypeOrder) return code
+  const sizeFromName = row.typeName.match(/\((XL|S|M|L)\)\s*$/i)?.[1]
+  return sizeFromName?.toUpperCase() || code
+}
+
+export function sortUnitTypeBreakdown(rows: ManagerReportSummary['unitTypeBreakdown']) {
+  return [...rows].sort((left, right) => {
+    const leftKey = storageTypeSortKey(left)
+    const rightKey = storageTypeSortKey(right)
+    const orderDifference = (storageTypeOrder[leftKey] ?? Number.MAX_SAFE_INTEGER) - (storageTypeOrder[rightKey] ?? Number.MAX_SAFE_INTEGER)
+    return orderDifference || left.typeName.localeCompare(right.typeName, 'vi')
+  })
+}
+
+function countStorageUnitsInUse(summary: { occupiedUnits: number; reservedUnits: number; unitStatusBreakdown: Array<{ status: string; count: number }> }) {
+  if (!summary.unitStatusBreakdown.length) return summary.occupiedUnits + summary.reservedUnits
+  return summary.unitStatusBreakdown
+    .filter(row => inUseStorageUnitStatuses.has(row.status))
+    .reduce((total, row) => total + row.count, 0)
+}
+
 function authorizedManager(): ApiActor {
   const actor = getAuthenticatedActor()
   if (!actor || actor.status !== 'ACTIVE' || !actor.roles.includes('MANAGER') || !actor.permissions.includes('reports:read')) {
@@ -129,6 +156,7 @@ function ManagerReportsSession({ actor, facilityId, overview }: { actor: ApiActo
     listManagerReportActivities({ facilityId, page: page - 1, pageSize, search }))
   const summary = !summaryRead.loading && !summaryRead.error ? summaryRead.data : undefined
   const activities = !activityRead.loading && !activityRead.error ? activityRead.data : undefined
+  const orderedUnitTypeBreakdown = summary ? sortUnitTypeBreakdown(summary.unitTypeBreakdown) : []
 
   function submitSearch(event: FormEvent) {
     event.preventDefault()
@@ -181,15 +209,16 @@ function ManagerReportsSession({ actor, facilityId, overview }: { actor: ApiActo
       />
     )}
     {summaryRead.loading ? <Card className="p-5" role="status">Đang tải báo cáo cơ sở...</Card> : summaryRead.error ? <Card className="flex flex-wrap items-center justify-between gap-3 p-5" role="alert"><p>{managerDisplayError(summaryRead.error)}</p><Button variant="outline" onClick={summaryRead.refresh}>Thử lại</Button></Card> : summary ? <>
-      <div className="grid min-w-0 grid-cols-2 gap-3 xl:grid-cols-3 2xl:grid-cols-6">
-        <ReportMetric title="Tỷ lệ lấp đầy" value={`${summary.occupancyRate}%`} detail="Tỷ lệ gian kho đang được sử dụng" />
-        <ReportMetric title="Tiền thuê dự kiến/tháng" value={formatVndAmount(summary.monthlyRecurringRevenue)} detail="Theo các hợp đồng đang hiệu lực" />
-        <ReportMetric title="Gian kho đang thuê" value={summary.occupiedUnits} detail="Số gian kho đang được sử dụng" />
+      <div className="grid min-w-0 grid-cols-2 gap-3 xl:grid-cols-4">
+        <ReportMetric
+          title="Gian kho đang sử dụng"
+          value={countStorageUnitsInUse(summary)}
+          detail="Gồm đang thuê, giữ chỗ, đã phân bổ và tạm giữ; gian chờ trả vẫn tính trong đang thuê"
+        />
         <ReportMetric title="Hợp đồng quá hạn" value={summary.overdueRentalsCount} detail="Hồ sơ đã qua ngày hết hạn thuê" />
         <ReportMetric title="Nhận kho trong tháng" value={summary.monthCheckinsCount} detail="Số lượt nhận kho trong tháng này" />
         <ReportMetric title="Yêu cầu trả kho" value={summary.openReturnsCount} detail="Các yêu cầu đang chờ hoàn tất" />
       </div>
-      <ManagerCashflowPanel key={facilityId} facilityId={facilityId} identity={identity} onReport={setFinancialReport} />
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="p-5">
           <h3 className="mb-4 font-bold">Phân bổ trạng thái gian kho</h3>
@@ -202,11 +231,12 @@ function ManagerReportsSession({ actor, facilityId, overview }: { actor: ApiActo
         </Card>
         <Card className="p-5">
           <h3 className="mb-4 font-bold">Công suất theo loại kho</h3>
-          {summary.unitTypeBreakdown.length ? <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={summary.unitTypeBreakdown}><CartesianGrid strokeDasharray="3 3" stroke="#e7e5e4" /><XAxis dataKey="typeName" tick={{ fontSize: 11 }} /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="totalUnits" fill="#d6d3d1" name="Tổng số" radius={[4, 4, 0, 0]} /><Bar dataKey="occupiedUnits" fill="#e9a12c" name="Đang sử dụng" radius={[4, 4, 0, 0]} /></BarChart>
+          {orderedUnitTypeBreakdown.length ? <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={orderedUnitTypeBreakdown}><CartesianGrid strokeDasharray="3 3" stroke="#e7e5e4" /><XAxis dataKey="typeName" tick={{ fontSize: 11 }} /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="totalUnits" fill="#d6d3d1" name="Tổng số" radius={[4, 4, 0, 0]} /><Bar dataKey="occupiedUnits" fill="#e9a12c" name="Đang sử dụng" radius={[4, 4, 0, 0]} /></BarChart>
           </ResponsiveContainer> : <p className="flex h-[300px] items-center justify-center text-sm text-stone-500">Chưa có dữ liệu loại kho.</p>}
         </Card>
       </div>
+      <ManagerCashflowPanel key={facilityId} facilityId={facilityId} identity={identity} onReport={setFinancialReport} />
     </> : null}
 
     <Card className="manager-inventory-list overflow-hidden !rounded-2xl !shadow-none">
