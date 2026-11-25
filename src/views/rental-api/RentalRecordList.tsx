@@ -65,6 +65,11 @@ export function RentalRecordRow({ rental, role, focused, actions, unitTypeName }
       <div className="flex min-w-0 flex-col items-start gap-1">
         <span className="rental-record-label">Trạng thái</span>
         <Badge variant={tone}>{rentalStatusLabel(rental)}</Badge>
+        {role === 'customer' && rental.inventoryMismatchReturn && (
+          <span className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs font-semibold text-red-800">
+            Trả kho do kiểm kê sai lệch
+          </span>
+        )}
         {rental.status === 'setup' && rental.inventoryVerifiedAt && rental.startDate &&
           <span className="text-xs text-stone-600">Theo lịch: {rentalDate(rental.startDate)}</span>}
         {nearDeadline && <span className={`rounded-md px-2 py-1 text-xs font-semibold ${days <= -8 ? 'bg-red-50 text-red-800' : days < 0 ? 'bg-orange-50 text-orange-800' : 'bg-amber-50 text-amber-900'}`}>

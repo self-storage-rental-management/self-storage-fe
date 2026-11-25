@@ -4,7 +4,8 @@ import { staffCheckInActions, firstBookableCheckInMinute, firstBookableCheckInSl
 it('expires handover at midnight in Vietnam on the eighth calendar day', () => {
   const appointment = '2026-11-21T15:00:00+07:00'
   expect(isCheckInHandoverExpired(appointment, Date.parse('2026-11-27T16:59:59.999Z'))).toBe(false)
-  expect(isCheckInHandoverExpired(appointment, Date.parse('2026-11-27T17:00:00Z'))).toBe(true)
+  expect(isCheckInHandoverExpired(appointment, Date.parse('2026-11-27T17:30:00Z'))).toBe(false)
+  expect(isCheckInHandoverExpired(appointment, Date.parse('2026-11-27T17:30:00.001Z'))).toBe(true)
   expect(isCheckInHandoverExpired(null)).toBe(false)
 })
 
@@ -79,12 +80,16 @@ describe('staff intake actions', () => {
   const scheduled = { intakeAction: 'START', checkInStatus: 'scheduled', checkInId: 'id', appointmentAt,
     scheduledAt: '2026-11-21T10:00:00+07:00' } as const
 
-  it('allows early intake and rejection, then enables absence at the customer appointment', () => {
+  it('allows opening intake and only enables rejection after arrival is recorded', () => {
     expect(staffCheckInActions(scheduled, at - 1)).toEqual({
-      label: 'Bắt đầu nhận kho', canOpen: true, canReject: true, canMarkAbsent: false,
+      label: 'Bắt đầu nhận kho', canOpen: true, canReject: false,
     })
-    expect(staffCheckInActions(scheduled, at).canMarkAbsent).toBe(true)
-    expect(staffCheckInActions({ ...scheduled, appointmentAt: null }, at - 1).canMarkAbsent).toBe(true)
+    expect(staffCheckInActions(scheduled, at).canReject).toBe(false)
+    const arrived = { ...scheduled, attendance: { deadline: null, arrivedAt: appointmentAt } }
+    const comparing = { ...arrived, attendance: { ...arrived.attendance, completionDeadline: new Date(at + 72 * 3600000).toISOString() } }
+    expect(staffCheckInActions(comparing, at + 72 * 3600000).canOpen).toBe(true)
+    expect(staffCheckInActions(comparing, at + 72 * 3600000 + 1).canOpen).toBe(false)
+    expect(staffCheckInActions(arrived, at + 8 * 86400_000)).toMatchObject({ canOpen: true, canReject: true })
   })
 
   it('blocks actions for missing appointments, elapsed deadlines and API-ineligible cases', () => {
@@ -92,19 +97,19 @@ describe('staff intake actions', () => {
       staffCheckInActions({ ...scheduled, appointmentAt: null, scheduledAt: null }, at),
       staffCheckInActions(scheduled, at + 7 * 86400_000),
       staffCheckInActions({ ...scheduled, intakeAction: 'NONE' }, at),
-    ]) expect(actions).toMatchObject({ canOpen: false, canReject: false, canMarkAbsent: false })
+    ]) expect(actions).toMatchObject({ canOpen: false, canReject: false })
   })
 
   it('offers only the primary action before scheduling or after identity verification', () => {
     expect(staffCheckInActions({ ...scheduled, checkInStatus: null, checkInId: null }, at))
-      .toMatchObject({ label: 'Bắt đầu nhận kho', canOpen: true, canReject: false, canMarkAbsent: false })
+      .toMatchObject({ label: 'Bắt đầu nhận kho', canOpen: true, canReject: false })
     expect(staffCheckInActions({ ...scheduled, checkInStatus: 'identity_verified', intakeAction: 'CONTINUE' }, at))
-      .toEqual({ label: 'Tiếp tục nhận kho', canOpen: true, canReject: false, canMarkAbsent: false })
+      .toEqual({ label: 'Tiếp tục nhận kho', canOpen: true, canReject: false })
   })
 
   it('keeps post-handover follow-up available past the intake deadline', () => {
     expect(staffCheckInActions({ ...scheduled, checkInStatus: 'setup_completed', intakeAction: 'CONTINUE' },
-      at + 10 * 86400_000)).toMatchObject({ canOpen: true, canReject: false, canMarkAbsent: false })
+      at + 10 * 86400_000)).toMatchObject({ canOpen: true, canReject: false })
   })
 })
 

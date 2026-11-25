@@ -1,3 +1,4 @@
+import { HANDOVER_TERMS_NOTICE } from '../../domain/reservationCheckInPolicy'
 import type { ReservationQuote } from '../../services/customerReservationApi'
 import { formatVndAmount } from '../../i18n/currency'
 import { rentalEndDateForDisplay } from '../../domain/rentalTimeline'
@@ -43,7 +44,7 @@ export default function BookingArrivalDetails(p: Props) {
       {row('Chuẩn bị miễn phí', `${p.setupDays} ngày (gói ${p.months} tháng)`)}
       {row('Bắt đầu tính tiền thuê', p.startDate ? dateLabel(p.startDate) : 'Chưa xác định')}
       {row('Kết thúc kỳ thuê', p.endDate ? dateLabel(rentalEndDateForDisplay(p.endDate)) : 'Chưa xác định')}
-      <p className="mt-3 text-xs leading-5">Ngày tính tiền dự kiến theo ngày bàn giao + {p.setupDays} ngày chuẩn bị. Nếu nhận kho muộn, các mốc sẽ tính lại theo bàn giao thực tế. Hoàn tất chuẩn bị hoặc kiểm kê sớm không làm đổi ngày bắt đầu tính tiền đã chốt.</p>
+      <p className="mt-3 text-xs leading-5">Ngày tính tiền = ngày nhận kho khách đã chọn + {p.setupDays} ngày chuẩn bị miễn phí theo gói thuê. Hoàn tất chuẩn bị hoặc kiểm kê sớm không làm đổi ngày bắt đầu tính tiền đã chốt.</p>
     </section>
     {p.quote && <section className="rounded-xl border border-stone-200 bg-white p-4 text-sm"><h3 className="mb-2 font-semibold">Tóm tắt đơn</h3>
       {row('Loại kho', `${p.unit} · gói ${p.months} tháng`)}
@@ -58,7 +59,7 @@ export default function BookingArrivalDetails(p: Props) {
       <span className="space-y-1 leading-5">
         <span className="block">Tôi đã đọc, hiểu và đồng ý:</span>
         <ul className="list-disc space-y-0.5 pl-5">
-          <li>Quy định nhận kho: nếu quá hạn đến nhận kho, chỗ giữ được nhả và khoản trả trước không được hoàn lại theo điều khoản đã chấp nhận.</li>
+          <li>{HANDOVER_TERMS_NOTICE} Sau giờ hẹn 12 giờ, nếu bạn vẫn chưa đến, hệ thống sẽ nhắc bạn nhận kho. Nếu đơn vẫn còn chờ xử lý, hệ thống nhắc mỗi 2 giờ trong 24 giờ cuối trước hạn đến nhận kho, từ mốc còn 24 giờ đến mốc còn 2 giờ.</li>
           {hasSetupEarlyExitTerms && <li>Điều khoản trả kho trong thời gian chuẩn bị của báo giá này.</li>}
         </ul>
       </span>

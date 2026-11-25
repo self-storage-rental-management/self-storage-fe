@@ -2,6 +2,7 @@ import { apiRequest, ApiClientError } from './apiClient'
 import { getAuthenticatedActor } from './authApi'
 import { readRentalEnvelope, readRentalPage } from './rentalApi'
 import { isUuid } from './renewalOperationsApi'
+import { renameEvidenceFile } from '../utils/evidenceFileName'
 
 export type ReturnRole = 'customer' | 'staff' | 'manager' | 'business'
 export const returnStatuses = ['requested', 'scheduled', 'inspected', 'awaiting_business_review', 'awaiting_customer_confirmation', 'disputed', 'payment_due', 'refund_pending', 'recovery_required', 'completed'] as const
@@ -57,6 +58,17 @@ export function isOverdueSettlement(value: unknown): value is OverdueSettlement 
       && amount(v.overdueDays) && typeof v.calculatedAt === 'string' && Number.isFinite(Date.parse(v.calculatedAt)))
 }
 export interface ApiReturn {
+  settlementVersion?: number
+  settlementPublishedAt?: string | null
+  settlementPaymentDueAt?: string | null
+  settlementReceipts?: ApiReturn['settlementReceipt'][]
+  displayCode?: string | null
+  rentalDisplayCode?: string | null
+  customerClearedAt?: string | null
+  warehouseEmptyVerified?: boolean | null
+  warehouseEmptyVerifiedAt?: string | null
+  warehouseEmptyVerifiedBy?: string | null
+  clearanceRevision?: number
   missingPalletCount?: number
   palletLossFee?: number
   equipment?: { rackCount: number; frameCount: number; palletCount: number | null; palletUnitPrice: number }
@@ -84,6 +96,15 @@ export interface ApiReturn {
   status: typeof returnStatuses[number]; scheduledDate: string
   inventoryRemovalDeadlineAt?: string | null
   returnWindowDays?: number | null
+  attendance?: {
+    arrivedAt: string | null
+    evidenceId: string | null
+    expiresAt: string | null
+    attempts: number
+    verifiedAt: string | null
+    reviewStartsAt: string | null
+    reviewAccepted: boolean | null
+  } | null
   returnPolicyVersion?: string | null
   returnType?: 'CANCELLED_IN_SETUP' | 'RETURN_IN_SETUP' | 'INVENTORY_MISMATCH' | 'EARLY_RETURN' | 'NORMAL'
   settlementMode?: 'AUTO' | 'MANUAL_REVIEW'
@@ -160,7 +181,10 @@ export function isApiReturn(v: unknown): v is ApiReturn {
     (v.settlementPaymentId === undefined || v.settlementPaymentId === null || typeof v.settlementPaymentId === 'string') &&
     (v.settlementPaidAt === undefined || v.settlementPaidAt === null || (typeof v.settlementPaidAt === 'string' && Number.isFinite(Date.parse(v.settlementPaidAt)))) &&
     (v.completedAt === undefined || v.completedAt === null || (typeof v.completedAt === 'string' && Number.isFinite(Date.parse(v.completedAt)))) &&
-    ['noShowAt', 'recoveryEligibleAt', 'recoveryTaskCreatedAt', 'inventoryRemovalDeadlineAt'].every(k => v[k] === undefined || v[k] === null || (typeof v[k] === 'string' && Number.isFinite(Date.parse(v[k])))) &&
+    (v.clearanceRevision === undefined || (Number.isSafeInteger(v.clearanceRevision) && Number(v.clearanceRevision) >= 0)) &&
+    (v.warehouseEmptyVerified == null || typeof v.warehouseEmptyVerified === 'boolean') &&
+    (v.warehouseEmptyVerifiedBy == null || isUuid(v.warehouseEmptyVerifiedBy)) &&
+    ['customerClearedAt', 'warehouseEmptyVerifiedAt', 'noShowAt', 'recoveryEligibleAt', 'recoveryTaskCreatedAt', 'inventoryRemovalDeadlineAt'].every(k => v[k] === undefined || v[k] === null || (typeof v[k] === 'string' && Number.isFinite(Date.parse(v[k])))) &&
     (v.recoveryWitnessStaffId === undefined || v.recoveryWitnessStaffId === null || isUuid(v.recoveryWitnessStaffId)) &&
     (v.recoveryWitnessStaffName === undefined || v.recoveryWitnessStaffName === null || typeof v.recoveryWitnessStaffName === 'string') &&
     (v.recoveryTaskDeadlineAt === undefined || v.recoveryTaskDeadlineAt === null || (typeof v.recoveryTaskDeadlineAt === 'string' && Number.isFinite(Date.parse(v.recoveryTaskDeadlineAt)))) &&
@@ -311,7 +335,22 @@ async function mutate(role: ReturnRole, id: string, action: string, body: object
   return bound(await apiRequest(`/api/${role}/returns/${id}/${action}`, { method: 'POST', body: JSON.stringify(body) }), role, id)
 }
 function fees(body: ReturnFees) { if (!feeKeys.every(k => money(body[k]))) throw new Error('Phí phải là số tiền VND không âm, tối đa hai chữ số thập phân.') }
-export function inspectReturn(id: string, body: InspectionInput) {
+export function setCustomerClearance(record: ApiReturn, cleared: boolean) {
+  return mutate('customer', record.id, 'clearance', { cleared, clearanceRevision: record.clearanceRevision ?? 0 })
+}
+export function recordReturnArrival(id: string, evidenceId: string) {
+  return mutate('staff', id, 'arrival', { evidenceId })
+}
+export function verifyReturnIdentity(id: string, attemptId: string, documentNumber: string) {
+  return mutate('staff', id, 'identity', { attemptId, documentNumber })
+}
+export function reviewReturnArrival(id: string, accepted: boolean, reason: string) {
+  return mutate('manager', id, 'arrival-review', { accepted, reason })
+}
+export function savePropertyCheck(record: ApiReturn, unitVacated: boolean, staffNotes: string, evidencePhotos: string[]) {
+  return mutate('staff', record.id, 'property-check', { unitVacated, staffNotes, evidencePhotos, clearanceRevision: record.clearanceRevision ?? 0 })
+}
+export function inspectReturn(id: string, body: InspectionInput, clearanceRevision?: number) {
   const safeBody: InspectionInput = { ...body, ...sanitizeFees(body) }
   fees(safeBody)
   if (!['match', 'missing', 'excess'].includes(body.inventoryMatch) ||
@@ -326,7 +365,7 @@ export function inspectReturn(id: string, body: InspectionInput) {
       const price = returnDamageCatalog.find((entry) => entry.code === item.code)
       return !price || !Number.isFinite(item.quantity) || item.quantity <= 0
     })))) throw new Error('Kiểm tra thông tin nghiệm thu.')
-  return mutate('staff', id, 'inspection', { ...safeBody, inspectionNotes: body.staffNotes })
+  return mutate('staff', id, clearanceRevision == null ? 'inspection' : `inspection?clearanceRevision=${clearanceRevision}`, { ...safeBody, inspectionNotes: body.staffNotes })
 }
 export async function completeRefund(id: string, body: {
   transactionReference?: string
@@ -346,10 +385,10 @@ export async function completeRefund(id: string, body: {
   if (!isUuid(id)) throw new Error('Mã hồ sơ hoặc giao dịch gốc hoàn tiền không hợp lệ.')
   const safeBody = {
     paymentMethod: body.paymentMethod || 'BANK_TRANSFER',
-    transactionReference: body.transactionReference || ('AUTO_REFUND_' + id.substring(0, 8)),
     notes: body.notes || 'Xác nhận hoàn tất nghĩa vụ tài chính và đóng hồ sơ trả kho',
     confirmed: true,
     ...body,
+    transactionReference: body.paymentMethod === 'CASH' ? undefined : body.transactionReference?.trim(),
   }
   return bound(await apiRequest(`/api/${role}/returns/${id}/complete-refund`, {
     method: 'POST', body: JSON.stringify(safeBody),
@@ -364,8 +403,9 @@ export interface ReturnSettlementReceipt {
   confirmed: boolean
 }
 export function validateReturnSettlementReceipt(body: ReturnSettlementReceipt) {
-  if (!money(body.amount) || body.amount <= 0 || !['CASH', 'BANK_TRANSFER'].includes(body.paymentMethod) || (body.paymentMethod === 'BANK_TRANSFER' && !body.transactionReference.trim())
-    || body.transactionReference.length > 120 || !isUuid(body.receiptFileId) || body.confirmed !== true)
+  if (!money(body.amount) || body.amount <= 0 || !['CASH', 'BANK_TRANSFER'].includes(body.paymentMethod)
+    || (body.paymentMethod === 'BANK_TRANSFER' && (!body.transactionReference.trim() || body.transactionReference.length > 120))
+    || !isUuid(body.receiptFileId) || body.confirmed !== true)
     throw new Error('Kiểm tra phương thức, tải biên lai và xác nhận đã thực thu hoặc thực hoàn tiền. Với chuyển khoản, nhập mã giao dịch.')
 }
 export async function recordReturnSettlement(id: string, body: ReturnSettlementReceipt, key: string, role: ReturnRole = 'staff') {
@@ -375,8 +415,9 @@ export async function recordReturnSettlement(id: string, body: ReturnSettlementR
   validateReturnSettlementReceipt(body)
 
   if (role === 'business') return completeRefund(id, body)
+  const receipt = { ...body, transactionReference: body.paymentMethod === 'CASH' ? '' : body.transactionReference.trim() }
   return bound(await apiRequest(`/api/${role}/returns/${id}/settlement-receipts`, {
-    method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify(body),
+    method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify(receipt),
   }), role, id)
 }
 
@@ -401,12 +442,21 @@ function readReturnEvidenceAsset(payload: unknown): ReturnEvidenceAsset {
   }
 }
 
-export async function uploadReturnEvidence(returnId: string, file: File, role: ReturnRole = 'staff') {
+export async function uploadReturnEvidence(
+  returnId: string,
+  file: File,
+  role: ReturnRole = 'staff',
+  fileNamePurpose?: string,
+  fileNameContext?: string,
+) {
   actor(role, true)
   if (!isUuid(returnId)) throw new Error('Mã hồ sơ trả kho không hợp lệ.')
   if (!file || file.size <= 0) throw new Error('Tệp bằng chứng không được để trống.')
   const form = new FormData()
-  form.set('file', file)
+  const namedFile = fileNamePurpose
+    ? renameEvidenceFile(file, fileNamePurpose, fileNameContext)
+    : file
+  form.set('file', namedFile)
   form.set('entityType', 'RETURN_CASE')
   form.set('entityId', returnId)
   return readReturnEvidenceAsset(await apiRequest<unknown>('/api/files', { method: 'POST', body: form }))
@@ -469,10 +519,10 @@ export async function decideLegacyPricing(id: string, body: {
     body: JSON.stringify({ ...body, resolutionNote: body.resolutionNote.trim() }),
   }), 'business', id, undefined, 'MANAGE')
 }
-export function confirmReturn(id: string, decision: 'accepted' | 'disputed', note: string, role: ReturnRole = 'customer') {
+export function confirmReturn(id: string, decision: 'accepted' | 'disputed', note: string, role: ReturnRole = 'customer', settlementVersion?: number) {
   if (decision === 'disputed' && !note.trim()) throw new Error('Nhập lý do yêu cầu xem xét lại.')
   if (note.length > 2000) throw new Error('Ghi chú quá dài.')
-  return mutate(role, id, 'confirm', { decision, note })
+  return mutate(role, id, 'confirm', { decision, note, settlementVersion })
 }
 export function paySettlement(id: string, paymentMethod: string, notes = '') {
   if (!paymentMethod.trim() || paymentMethod.length > 40) throw new Error('Nhập phương thức thanh toán hợp lệ.')
@@ -481,10 +531,18 @@ export function paySettlement(id: string, paymentMethod: string, notes = '') {
 }
 export function returnError(error: unknown) {
   if (error instanceof ApiClientError) {
-    const msg = error.diagnosticMessage || error.message || ''
+    const displayMessage = error.message || ''
+    const diagnosticMessage = error.diagnosticMessage || ''
+    const msg = diagnosticMessage || displayMessage
+    const hasSeparateDiagnostic = Boolean(diagnosticMessage && diagnosticMessage !== displayMessage)
     if (error.status === 409 || msg.includes('409')) {
       if (msg === 'Cần đối soát lại phí quá hạn trước khi xác nhận hoặc thu hoàn tiền.') {
         return 'Cần cơ sở đối soát lại phí quá hạn trước khi xác nhận hoặc thu hoàn tiền.'
+      }
+      if (msg.startsWith('Tình trạng dọn kho đã thay đổi') || msg.startsWith('Cần xác minh gian kho trống')
+        || msg.startsWith('Hồ sơ đã qua giai đoạn cập nhật')) return msg
+      if (msg.includes('Vui lòng thanh toán tại cơ sở')) {
+        return 'Vui lòng thanh toán tại cơ sở.'
       }
       if (msg.includes('verified paid security deposit')) {
         return 'Tiền cọc đảm bảo thuê chưa xác nhận thành công.'
@@ -507,15 +565,15 @@ export function returnError(error: unknown) {
       if (msg.includes('Already in progress') || msg.includes('already in progress')) {
         return 'Đã có yêu cầu trả kho đang được xử lý cho hợp đồng này.'
       }
-      if (msg && msg !== 'Conflict' && !msg.startsWith('Request failed with status 409')) {
-        return msg
+      if (!hasSeparateDiagnostic && displayMessage && displayMessage !== 'Conflict' && !displayMessage.startsWith('Request failed with status 409')) {
+        return displayMessage
       }
       return 'Xung đột trạng thái (409): Vui lòng tải lại hồ sơ để kiểm tra.'
     }
     if (error.status === 403) return 'Bạn chưa có quyền xử lý hồ sơ trả kho tại cơ sở này.'
     if (error.status === 401) return 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'
     if (error.status === 404) return 'Không tìm thấy hồ sơ trong phạm vi được truy cập.'
-    return 'Chưa xác nhận được kết quả từ máy chủ. Tải lại hồ sơ trước khi gửi lại thao tác.'
+    return displayMessage || 'Chưa xác nhận được kết quả từ máy chủ. Tải lại hồ sơ trước khi gửi lại thao tác.'
   }
   return error instanceof Error ? error.message : 'Không thể xử lý hồ sơ trả kho.'
 }

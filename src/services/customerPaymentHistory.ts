@@ -1,3 +1,4 @@
+import { recordDisplayCode } from '../utils/recordDisplayCode'
 import { apiRequest } from "./apiClient"
 import { getAuthenticatedActor } from "./authApi"
 import { readRentalPage } from "./rentalApi"
@@ -44,6 +45,7 @@ export interface HistoryEntry {
   unitCode?: string
   facilityName?: string
   returnSettlement?: {
+    displayCode?: string | null
     rentalRefundCredit?: number | null
     earlyTerminationFee?: number | null
     setupEarlyExit?: boolean
@@ -140,6 +142,7 @@ async function allPages<T>(
   return entries
 }
 interface ReturnPayment {
+  displayCode?: string | null
   setupExitRequested?: boolean
   setupEarlyExit?: boolean
   rentalRefundCredit?: number | null
@@ -225,7 +228,7 @@ export async function loadCustomerPaymentHistory(): Promise<{
   )
   const reservationEntries: HistoryEntry[] = payments.map(payment => ({
     id: payment.paymentId,
-    reference: payment.reservationCode || payment.reservationId,
+    reference: payment.reservationCode || recordDisplayCode(payment.reservationId),
     category: reservationPaymentCategory(payment), amount: payment.amount, currency: payment.currency,
     timestamp: payment.paidAt || payment.processedAt || payment.createdAt || null,
     updatedAt: payment.processedAt || payment.createdAt || null,
@@ -256,7 +259,7 @@ export async function loadCustomerPaymentHistory(): Promise<{
                 page,
                 50,
               ),
-              () => warnings.push(`Chưa tải được đầy đủ thanh toán của đơn gia hạn ${renewal.id}.`),
+              () => warnings.push(`Chưa tải được đầy đủ thanh toán của đơn gia hạn ${dossierReference}.`),
             )
             const metadata: HistoryEntry[] = events.flatMap((event) => {
               const data = event.data as Record<string, unknown>
@@ -339,7 +342,7 @@ export async function loadCustomerPaymentHistory(): Promise<{
           return [{
             id: receipt?.transactionReference ?? r.settlementPaymentId!,
             receiptCode: receipt?.receiptCode ?? null,
-            reference: `Trả kho ${r.unitNumber}`,
+            reference: [r.displayCode, `Trả kho ${r.unitNumber}`].filter(Boolean).join(' · '),
             category: offset ? "returnOffset" : refund ? "refund" : "damage",
             amount,
             currency: "VND",
@@ -347,6 +350,7 @@ export async function loadCustomerPaymentHistory(): Promise<{
             status: offset ? "SETTLED" : refund ? "REFUNDED" : "PAID",
             method: offset ? "Đối trừ quyết toán" : receipt ? receipt.paymentMethod === "CASH" ? "Tiền mặt" : "Chuyển khoản" : null,
             returnSettlement: {
+              displayCode: r.displayCode,
               rentalRefundCredit: r.rentalRefundCredit ?? null,
               earlyTerminationFee: r.earlyTerminationFee ?? null,
               setupEarlyExit: r.setupEarlyExit,

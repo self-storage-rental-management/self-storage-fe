@@ -1,6 +1,6 @@
 import { displayStatusLabel } from '../../presentation/statusLabels'
 import { formatCustomerDateTime } from '../../i18n/customerDate'
-import { recordDisplayCode } from '../../utils/recordDisplayCode'
+import { receiptDisplayCode } from '../../utils/recordDisplayCode'
 import { userFacingError } from '../../presentation/userFacingError'
 import { useEffect, useState } from "react"
 import { Button, Card, Modal, Table, Thead, Tbody, Th, Td, Tr } from "../../components/ui"
@@ -28,8 +28,9 @@ export function paymentHistoryTimestamp(value: string | null) {
 }
 
 export function historyTransactionCode(entry: HistoryEntry) {
-  return entry.receiptCode?.trim() || entry.reservationPayment?.receiptCode?.trim()
-    || entry.paymentReference?.trim() || entry.reservationPayment?.transactionReference?.trim() || entry.id
+  if (entry.returnSettlement) return receiptDisplayCode(entry.receiptCode || (entry.category === 'returnOffset' ? entry.returnSettlement.displayCode : null), entry.id)
+  return receiptDisplayCode(entry.receiptCode || entry.reservationPayment?.receiptCode,
+    entry.paymentReference || entry.reservationPayment?.transactionReference, entry.id)
 }
 
 function ShortCode({ value }: { value: string }) {
@@ -245,7 +246,7 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
               {[
                 ["Nội dung", paymentCategories[receipt.category]],
                 ["Hồ sơ", receipt.reference],
-                ["Mã giao dịch", recordDisplayCode(receipt.id)],
+                ["Mã giao dịch", historyTransactionCode(receipt)],
                 [
                   "Thời điểm ghi nhận",
                   paymentHistoryTimestamp(receipt.timestamp),

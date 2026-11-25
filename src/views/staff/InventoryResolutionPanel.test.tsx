@@ -5,7 +5,7 @@ import type { CheckInCase } from '../../services/checkInApi'
 
 function render(overrides: Partial<CheckInCase>) {
   return renderToStaticMarkup(<InventoryResolutionPanel item={{ checkInId: 'checkin', inventoryResolutionStatus: 'PENDING_CUSTOMER', inventoryReturnWindowDays: 7, ...overrides } as CheckInCase}
-    busy={false} onRefresh={vi.fn()} onOpenReturns={vi.fn()} />)
+    busy={false} onOpenReturns={vi.fn()} />)
 }
 
 it('records full intake onsite without suggesting another warehouse when changed goods fit', () => {
@@ -29,7 +29,8 @@ it('routes an actual return request to inspection and settlement', () => {
     inventoryRemovalDeadlineAt: '2026-12-01T17:00:00Z',
   })
   expect(html).toContain('Mở Trả kho &amp; nghiệm thu')
-  expect(html).toContain('Nhắc khách trả kho')
+  expect(html).toContain('Hệ thống tự nhắc khách khi còn 48 giờ và 24 giờ đến hạn trả kho.')
+  expect(html).not.toContain('Nhắc khách trả kho</button>')
   expect(html).toContain('Thời điểm xác nhận buộc trả kho:')
   expect(html).toContain('Hạn cuối trả kho:')
   expect(html).not.toContain('Xác nhận phần dư đã đưa ra')
@@ -45,7 +46,7 @@ it('offers acceptance and rejection of declared OTHER goods even when the goods 
 
 it('captures the signed paper record as uploaded photos instead of asking for a file code', () => {
   const html = render({ inventoryFullFit: true })
-  expect(html).toContain('Ảnh biên bản có chữ ký khách')
+  expect(html).toContain('Biên bản xác nhận phương án hàng hóa có chữ ký khách')
   expect(html).toContain('type="file"')
   expect(html).not.toContain('multiple=""')
   expect(html).not.toContain('Mã ảnh biên bản')

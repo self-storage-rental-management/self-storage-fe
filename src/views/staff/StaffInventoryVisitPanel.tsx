@@ -5,15 +5,13 @@ import { formatCustomerDateTime } from '../../i18n/customerDate'
 import { userFacingError } from '../../presentation/userFacingError'
 import { recordInventoryArrival, uploadCheckInEvidence, verifyInventoryIdentity, type CheckInCase } from '../../services/checkInApi'
 
-export default function StaffInventoryVisitPanel({ item, now, busy, onBusyChange, onSaved, onPreview, noShowDisabled, onNoShow }: {
+export default function StaffInventoryVisitPanel({ item, now, busy, onBusyChange, onSaved, onPreview }: {
   item: CheckInCase
   now: number
   busy: boolean
   onBusyChange: (value: boolean) => void
   onSaved: (updated: CheckInCase) => void
   onPreview: (photoId: string) => void
-  noShowDisabled?: boolean
-  onNoShow?: () => void
 }) {
   const declaredIdentityDocument = item.identityDocumentNumber?.trim() || ''
   const [document, setDocument] = useState(declaredIdentityDocument)
@@ -59,7 +57,7 @@ export default function StaffInventoryVisitPanel({ item, now, busy, onBusyChange
       }
       let uploadedPhotoId = photoId
       if (!uploadedPhotoId && file) {
-        const photo = await uploadCheckInEvidence(checkInId, file, 'CHECK_IN_IDENTITY')
+        const photo = await uploadCheckInEvidence(checkInId, file, 'CHECK_IN_IDENTITY', 'anh-doi-chieu-khach-luc-kiem-ke', item.reservationCode)
         uploadedPhotoId = photo.id
         setPhotoId(uploadedPhotoId)
       }
@@ -86,7 +84,7 @@ export default function StaffInventoryVisitPanel({ item, now, busy, onBusyChange
           <input className="rounded-md border border-stone-300 bg-white p-2" autoComplete="off" maxLength={30}
             value={document} disabled={busy} onChange={event => setDocument(event.target.value)} />
         </label>
-        <label className="grid gap-1">Ảnh khách tại buổi kiểm kê
+        <label className="grid gap-1">Ảnh đối chiếu khách lúc kiểm kê
           <input className="block w-full rounded-lg border border-stone-300 bg-white p-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-stone-100 file:px-3 file:py-2 file:font-medium" type="file" accept="image/jpeg,image/png,image/webp" capture="user" disabled={busy}
             onChange={event => { setFile(event.target.files?.[0]); setPhotoId(undefined) }} />
         </label>
@@ -98,7 +96,6 @@ export default function StaffInventoryVisitPanel({ item, now, busy, onBusyChange
       <div className="flex flex-wrap gap-2">
         <Button type="button" size="sm" disabled={busy || expired || !visit?.appointmentAt || !item.checkInId || !document.trim() || !present || (!file && !photoId)}
           onClick={() => void verify()}>{busy ? 'Đang lưu…' : 'Xác minh người đặt kho'}</Button>
-        {onNoShow && <Button type="button" size="sm" variant="danger" disabled={busy || noShowDisabled} title={noShowDisabled ? 'Chỉ có thể đánh dấu khách không đến khi hồ sơ đang chờ bàn giao.' : undefined} onClick={onNoShow}>Khách không đến</Button>}
       </div>
       </div>}
     {error && <p className="text-red-800" role="alert">{error}</p>}

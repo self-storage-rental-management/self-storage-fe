@@ -45,7 +45,7 @@ export default function RenewalDepositSettlementPanel({ id, role, revision, onLo
       <p className="text-sm text-stone-600">{settlement.environment === "SANDBOX" ? "Ghi nhận chứng từ hoàn khoản trả trước qua VNPay thử nghiệm. Thao tác này không xác nhận chuyển tiền thật." : "Sau khi thực hiện khoản hoàn, tải chứng từ và xác nhận để ghi nhận kết quả."}</p>
       <fieldset disabled={locked} className="space-y-3">
         <label className="block text-sm">Mã giao dịch hoàn tiền thuê trả trước<input className="mt-1 block w-full rounded-lg border border-stone-300 px-3 py-2" value={reference} maxLength={100} onChange={event => setReference(event.target.value)} /></label>
-        <EvidenceUpload entityType="DUONG_RENEWAL_REFUND" entityId={id} value={file ? [file] : []} limit={1} disabled={locked} onChange={ids => setFile(ids[0] ?? "")} onBusy={uploadBusy} />
+        <EvidenceUpload entityType="DUONG_RENEWAL_REFUND" entityId={id} value={file ? [file] : []} limit={1} disabled={locked} fileNamePurpose="chung-tu-hoan-tien-thue-gia-han" onChange={ids => setFile(ids[0] ?? "")} onBusy={uploadBusy} />
         <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={attested} onChange={event => setAttested(event.target.checked)} />Tôi xác nhận khoản hoàn đã được thực hiện và chứng từ đúng với hồ sơ này.</label>
       </fieldset>
       {Boolean(command.error) && <p role="alert" className="text-sm text-red-700">{rentalError(command.error)}</p>}
@@ -100,7 +100,7 @@ function PreparationResolutionForm({ id,settlement,onLocked,onChanged }: {
       <label className="block text-sm">Kết quả kiểm tra của cơ sở
         <textarea className="mt-1 block w-full rounded-lg border border-stone-300 px-3 py-2" rows={3} maxLength={2000} value={reason} onChange={event => setReason(event.target.value)} />
       </label>
-      <EvidenceUpload entityType="DUONG_RENEWAL_REFUND" entityId={id} value={files} limit={10} disabled={locked} onChange={setFiles} onBusy={uploadBusy} />
+      <EvidenceUpload entityType="DUONG_RENEWAL_REFUND" entityId={id} value={files} limit={10} disabled={locked} fileNamePurpose="bien-ban-xu-ly-tien-thue-gia-han" onChange={setFiles} onBusy={uploadBusy} />
       <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={unavailable} onChange={event => setUnavailable(event.target.checked)} />Tôi xác nhận cơ sở không thể thực hiện kỳ gia hạn này và đề nghị hoàn khoản đã thu chưa sử dụng.</label>
     </fieldset>
     <p className="text-xs text-stone-500">Duyệt hoàn chưa xác nhận đã chuyển tiền. Nhân viên khác thực hiện khoản hoàn và lưu chứng từ.</p>

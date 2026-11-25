@@ -9,7 +9,7 @@ import { recoveryOperationError, sendRecoveryCommand, validateRecoveryCommand, t
 import type { RecoveryAudience, RecoveryTask } from '../../services/recoveryTasksApi'
 import { EvidenceDownload, EvidenceUpload } from '../rental-support-integration/EvidenceControls'
 import { rentalDate } from './presentation'
-import { recordDisplayCode } from '../../utils/recordDisplayCode'
+import { recordDisplayCode, receiptDisplayCode } from '../../utils/recordDisplayCode'
 
 export type RecoveryCloseGuard = MutableRefObject<() => boolean>
 export function recoveryAction(view: RecoveryOperations): RecoveryCommand['action'] | null {
@@ -135,8 +135,8 @@ export default function RecoveryTaskOperationsPanel({ role, task, view, identity
         {view.settlementStatus === 'awaiting_customer_confirmation' && <p>Đang chờ khách hàng xác nhận quyết toán tại hồ sơ trả kho.</p>}
         {view.settlementStatus === 'disputed' && <p>Khách hàng đã khiếu nại quyết toán. Quản lý cơ sở xử lý tại hồ sơ trả kho.</p>}
         {view.settlementStatus === 'completed' && <p>Quyết toán đã hoàn tất.</p>}
-        {view.transactionReference && <p className="break-all">Mã biên nhận hoặc giao dịch: <span className="font-mono font-semibold">{view.transactionReference}</span></p>}
-        <p className="break-all text-stone-500">Mã hồ sơ trả kho: {recordDisplayCode(view.returnCaseId)}</p>
+        {view.transactionReference && <p className="break-all">Mã biên nhận hoặc giao dịch: <span className="font-mono font-semibold">{receiptDisplayCode(record?.settlementReceipt?.receiptCode, view.transactionReference)}</span></p>}
+        <p className="break-all text-stone-500">Mã hồ sơ trả kho: {record?.displayCode || recordDisplayCode(view.returnCaseId)}</p>
       </div>
     </details>}
     {needsReconciliation && <section role="alert" className="space-y-3 rounded-lg border border-orange-200 bg-orange-50 p-4 text-sm text-orange-900">
@@ -180,6 +180,7 @@ export default function RecoveryTaskOperationsPanel({ role, task, view, identity
       {action !== 'start' && <EvidenceUpload entityType={`DUONG_RECOVERY_${action === 'inspection' ? 'INSPECTION' : action === 'completion' ? 'COMPLETION' : 'SETTLEMENT'}`} entityId={task.id}
         value={files} onChange={setFiles} limit={action === 'inspection' ? 10 : 1}
         label={action === 'inspection' ? 'Biên bản và minh chứng kiểm kê' : action === 'completion' ? 'Biên bản hoàn tất thu hồi' : 'Biên lai thu hoặc hoàn tiền'}
+        fileNamePurpose={action === 'inspection' ? 'bien-ban-kiem-ke-thu-hoi' : action === 'completion' ? 'bien-ban-hoan-tat-thu-hoi' : 'bien-lai-thu-hoan-thu-hoi'}
         disabled={frozen || !allowed || command.conflict} onBusy={busy => { uploading.current = busy; setUploadBusy(busy) }} />}
       <Button type="submit" disabled={!allowed || command.busy || uploadBusy || command.conflict}>{command.busy ? 'Đang lưu...' : command.uncertain ? 'Gửi lại cùng yêu cầu' : actionLabels[action]}</Button>
     </form>}

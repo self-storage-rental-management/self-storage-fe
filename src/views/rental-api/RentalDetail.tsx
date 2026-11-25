@@ -3,7 +3,7 @@ import InventoryDecisionSummary from '../../components/InventoryDecisionSummary'
 import { displayStatusLabel } from '../../presentation/statusLabels'
 import { invoiceNumberLabel } from '../customer/paymentLabels'
 import { useManagerPresentation } from "../manager/managerPresentation"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import RenewalRiskNotice from "./RenewalRiskNotice"
 import RentalHandoverFiles from "./RentalHandoverFiles"
 import { Badge, Button, Card, Modal } from "../../components/ui"
@@ -18,6 +18,9 @@ import { InventoryLineInspectionResult, InventoryResolutionNotice, PackagingInsp
 import IntakeWorkflowPanel from "../../components/IntakeWorkflowPanel"
 import { formatCustomerDateTime } from "../../i18n/customerDate"
 import { listReturns, type ApiReturn } from "../../services/returnApi"
+import { CustomerClearance } from '../return-api/ReturnClearance'
+import { getAuthenticatedActor } from '../../services/authApi'
+import { getReturn, returnError } from '../../services/returnApi'
 import { ReturnSummary } from "../return-api/ReturnApiPanel"
 import { userFacingError } from "../../presentation/userFacingError"
 import FilePreviewDialog from "../../components/FilePreviewDialog"
@@ -106,6 +109,24 @@ export default function RentalDetail({
   const [inventoryActionMessage, setInventoryActionMessage] = useState('')
   const [inventoryActionError, setInventoryActionError] = useState('')
   const [activeReturnCase, setActiveReturnCase] = useState<ApiReturn>()
+  const clearanceLock = useRef(false)
+  const [clearanceBusy, setClearanceBusy] = useState(false)
+  const [clearanceError, setClearanceError] = useState('')
+  async function updateClearance(work: () => Promise<ApiReturn>) {
+    if (clearanceLock.current || !activeReturnCase) return
+    clearanceLock.current = true
+    setClearanceBusy(true)
+    setClearanceError('')
+    try {
+      setActiveReturnCase(await work())
+    } catch (error) {
+      setClearanceError(returnError(error))
+      try { setActiveReturnCase(await getReturn('customer', activeReturnCase.id)) } catch { /* Keep the action error visible. */ }
+    } finally {
+      clearanceLock.current = false
+      setClearanceBusy(false)
+    }
+  }
   const isReturningRental = ['return_requested', 'return_inspection', 'closing'].includes(rental.status)
   const inventoryReservationId = role === 'customer'
     ? rental.reservationId : null
@@ -260,7 +281,12 @@ export default function RentalDetail({
             <Badge variant="warning">{copy(rentalStatusLabel(rental))}</Badge>
           </div>
           {activeReturnCase ? (
-            <ReturnSummary record={activeReturnCase} hideHeader />
+            <>
+              <ReturnSummary record={activeReturnCase} hideHeader />
+              {role === 'customer' && activeReturnCase.sourceType !== 'RECOVERY' && <CustomerClearance
+                record={activeReturnCase} ownerId={getAuthenticatedActor()?.id} busy={clearanceBusy} run={updateClearance} />}
+              {clearanceError && <p role="alert" className="text-sm text-red-800">{clearanceError}</p>}
+            </>
           ) : (
             <p className="text-sm text-amber-900">Hồ sơ đã chuyển sang trả kho. Vui lòng mở mục <b>Trả kho</b> để theo dõi lịch trả, nghiệm thu và bảng kê quyết toán.</p>
           )}
@@ -315,10 +341,11 @@ export default function RentalDetail({
             <dt>Hạn chuẩn bị (Miễn phí)</dt>
             <dd className="space-y-3">
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-lg border border-stone-200 bg-stone-50 p-3"><p className="text-xs text-stone-500">Bàn giao thực tế</p><p className="mt-1 font-semibold">{rentalDate(vietnamDateInput(rental.setupStartedAt))}</p><p className="mt-1 text-xs text-stone-500">{new Date(rental.setupStartedAt).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })}</p></div>
-                <div className="rounded-lg border border-stone-200 bg-stone-50 p-3"><p className="text-xs text-stone-500">Kết thúc thời gian miễn phí</p><p className="mt-1 font-semibold">{rentalDate(rental.setupEndsAt)}</p><p className="mt-1 text-xs text-stone-500">{new Date(rental.setupEndsAt).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })}</p></div>
+                <div className="rounded-lg border border-stone-200 bg-stone-50 p-3"><p className="text-xs text-stone-500">Ngày nhận kho theo lịch khách chọn</p><p className="mt-1 font-semibold">{rentalDate(rental.setupStartedAt)}</p></div>
+                <div className="rounded-lg border border-stone-200 bg-stone-50 p-3"><p className="text-xs text-stone-500">Kết thúc chuẩn bị miễn phí</p><p className="mt-1 font-semibold">{rentalDate(rental.setupEndsAt)}</p></div>
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3"><span className="text-sm text-emerald-800">Bắt đầu kỳ thuê có tính tiền</span><span className="font-bold text-emerald-900">{rentalDate(rental.startDate)}</span></div>
+              <p className="border-t border-stone-100 pt-3 text-xs text-stone-500">Ngày tính tiền = ngày khách chọn nhận kho + số ngày chuẩn bị miễn phí theo gói thuê.</p>
               {rental.moveInCompletedAt && <p className="border-t border-stone-100 pt-3 text-xs text-stone-500">Đã báo hoàn tất chuẩn bị lúc {new Date(rental.moveInCompletedAt).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })} ngày {rentalDate(vietnamDateInput(rental.moveInCompletedAt))}</p>}
             </dd>
           </div>}
@@ -398,7 +425,7 @@ export default function RentalDetail({
                 </>
               ) : <>
               <Badge variant="warning">Chưa kiểm kê</Badge>
-              <p className="mt-2 text-xs leading-5 text-stone-500">Kỳ thuê vẫn tính theo mốc đã bàn giao, hồ sơ kiểm kê cần được hoàn tất trước hạn xử lý.</p>
+              <p className="mt-2 text-xs leading-5 text-stone-500">Kỳ thuê vẫn tính theo ngày khách chọn nhận kho cộng số ngày chuẩn bị miễn phí, hồ sơ kiểm kê cần được hoàn tất trước hạn xử lý.</p>
               {role === 'customer' && !isReturningRental && rental.reservationId ? (
                 <IntakeWorkflowPanel
                   reservationId={rental.reservationId}
