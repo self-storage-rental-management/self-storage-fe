@@ -180,6 +180,7 @@ export default function RecoveryTaskOperationsPanel({ role, task, view, identity
       {action !== 'start' && <EvidenceUpload entityType={`DUONG_RECOVERY_${action === 'inspection' ? 'INSPECTION' : action === 'completion' ? 'COMPLETION' : 'SETTLEMENT'}`} entityId={task.id}
         value={files} onChange={setFiles} limit={action === 'inspection' ? 10 : 1}
         label={action === 'inspection' ? 'Biên bản và minh chứng kiểm kê' : action === 'completion' ? 'Biên bản hoàn tất thu hồi' : 'Biên lai thu hoặc hoàn tiền'}
+        fileNamePurpose={action === 'inspection' ? 'bien-ban-kiem-ke-thu-hoi' : action === 'completion' ? 'bien-ban-hoan-tat-thu-hoi' : 'bien-lai-thu-hoan-thu-hoi'}
         disabled={frozen || !allowed || command.conflict} onBusy={busy => { uploading.current = busy; setUploadBusy(busy) }} />}
       <Button type="submit" disabled={!allowed || command.busy || uploadBusy || command.conflict}>{command.busy ? 'Đang lưu...' : command.uncertain ? 'Gửi lại cùng yêu cầu' : actionLabels[action]}</Button>
     </form>}

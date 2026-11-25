@@ -7,6 +7,7 @@ import {
   uploadDuongEvidence,
   integrationError,
 } from "../../services/duongIntegrationApi"
+import { renameEvidenceFile } from "../../utils/evidenceFileName"
 
 export function EvidenceUpload({
   entityType,
@@ -21,6 +22,7 @@ export function EvidenceUpload({
   compact = false,
   iconOnly = false,
   upload,
+  fileNamePurpose,
 }: {
   entityType: string
   entityId?: string
@@ -34,6 +36,7 @@ export function EvidenceUpload({
   compact?: boolean
   iconOnly?: boolean
   upload?: (file: File) => Promise<{ id: string }>
+  fileNamePurpose?: string
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState<unknown>()
@@ -73,12 +76,13 @@ export function EvidenceUpload({
             onBusy?.(true)
             setError(undefined)
             try {
-              const uploaded = upload ? await upload(file) : await uploadDuongEvidence(
-                file,
+              const namedFile = fileNamePurpose ? renameEvidenceFile(file, fileNamePurpose) : file
+              const uploaded = upload ? await upload(namedFile) : await uploadDuongEvidence(
+                namedFile,
                 entityType,
                 entityId,
               )
-              setSelectedNames(names => ({ ...names, [uploaded.id]: file.name }))
+              setSelectedNames(names => ({ ...names, [uploaded.id]: namedFile.name }))
               onChange([...value, uploaded.id])
             } catch (e) {
               setError(e)

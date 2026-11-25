@@ -508,7 +508,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
         const expected = Math.round(selectedReturn.netRefundAmount * 100) / 100
         if (latest.netRefundAmount !== expected) { setSelectedReturn(returnScreenRecord(latest)); setRefundConfirmed(false); throw new Error('Số tiền đã thay đổi. Vui lòng đối chiếu và xác nhận lại.') }
         let receiptFileId = refundUpload.current?.returnId === latest.id && refundUpload.current.file === refundFile ? refundUpload.current.id : null
-        if (!receiptFileId) { const uploaded = await uploadReturnEvidence(latest.id, refundFile, 'manager'); receiptFileId = uploaded.id; refundUpload.current = { returnId: latest.id, file: refundFile, id: receiptFileId } }
+        if (!receiptFileId) { const uploaded = await uploadReturnEvidence(latest.id, refundFile, 'manager', 'bien-lai-thuc-hoan-tra-kho'); receiptFileId = uploaded.id; refundUpload.current = { returnId: latest.id, file: refundFile, id: receiptFileId } }
         refundKey.current ??= crypto.randomUUID()
         const updated = await recordReturnSettlement(latest.id, { amount: latest.netRefundAmount, paymentMethod: refundMethod, transactionReference: refundTxnRef.trim(), receiptFileId, confirmed: refundConfirmed }, refundKey.current, 'manager')
         await apiRead.refresh(); setSelectedReturn(returnScreenRecord(updated)); setRefundModalOpen(false)
@@ -1237,7 +1237,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
             />
             {useApi && <>
               <label className="block text-xs font-semibold text-stone-700">Phương thức hoàn tiền<select value={refundMethod} disabled={apiBusy} onChange={event => { setRefundMethod(event.target.value as 'CASH' | 'BANK_TRANSFER'); setRefundConfirmed(false) }} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2"><option value="BANK_TRANSFER">Chuyển khoản</option><option value="CASH">Tiền mặt</option></select></label>
-              <label className="block text-xs font-semibold text-stone-700">Biên lai thực hoàn<input key={selectedReturn.id} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" disabled={apiBusy} className="mt-1 block w-full rounded-lg border border-stone-300 px-3 py-2" onChange={event => { setRefundFile(event.target.files?.[0] ?? null); setRefundConfirmed(false); refundUpload.current = null; refundKey.current = null }} /></label>
+              <label className="block text-xs font-semibold text-stone-700">Biên lai thực hoàn trả kho<input key={selectedReturn.id} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" disabled={apiBusy} className="mt-1 block w-full rounded-lg border border-stone-300 px-3 py-2" onChange={event => { setRefundFile(event.target.files?.[0] ?? null); setRefundConfirmed(false); refundUpload.current = null; refundKey.current = null }} /></label>
               <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={refundConfirmed} disabled={apiBusy || !refundFile} onChange={event => setRefundConfirmed(event.target.checked)} /><span>Đã thực hoàn đúng số tiền và đối chiếu biên lai.</span></label>
             </>}
 

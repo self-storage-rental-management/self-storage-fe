@@ -13,9 +13,10 @@ const MAX_EVIDENCE_FILES = 1
 const MAX_EVIDENCE_SIZE_BYTES = 25 * 1024 * 1024
 const EVIDENCE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
-export default function InventoryResolutionPanel({ item, busy, onRefresh, onOpenReturns, onResolve, onPreview }: {
+export default function InventoryResolutionPanel({ item, busy, onRefresh, onOpenReturns, onResolve, onPreview, onPartialRemoval }: {
   item: CheckInCase; busy: boolean; onRefresh: () => void; onOpenReturns?: () => void
   onPreview?: (assetId: string) => void
+  onPartialRemoval?: () => void
   onResolve?: (request: { decision: AtSiteInventoryDecision; customerPresent: boolean; note?: string; scheduledDate?: string; evidenceReferences?: string[]; resultVersion?: number }) => Promise<void>
 }) {
   const [decision, setDecision] = useState<AtSiteInventoryDecision | ''>('')
@@ -46,7 +47,7 @@ export default function InventoryResolutionPanel({ item, busy, onRefresh, onOpen
       for (const file of accepted) {
         if (!EVIDENCE_TYPES.includes(file.type)) throw new Error(`Tệp "${file.name}" không phải ảnh JPEG, PNG hoặc WebP.`)
         if (!file.size || file.size > MAX_EVIDENCE_SIZE_BYTES) throw new Error(`Ảnh "${file.name}" vượt quá dung lượng tối đa 25MB.`)
-        const asset = await uploadCheckInEvidence(item.checkInId, file)
+        const asset = await uploadCheckInEvidence(item.checkInId, file, 'CHECK_IN', 'bien-ban-xu-ly-chenh-lech-hang-hoa', item.reservationCode)
         uploaded.push(asset.id)
       }
       if (uploaded.length) setEvidence(current => Array.from(new Set([...current, ...uploaded])))
@@ -123,7 +124,7 @@ export default function InventoryResolutionPanel({ item, busy, onRefresh, onOpen
         <label className="grid gap-1">{rejectionReasonRequired ? 'Lý do từ chối tiếp nhận *' : 'Ghi chú phương án (không bắt buộc)'}<textarea className="rounded-lg border p-2" required={rejectionReasonRequired} maxLength={1500} value={note} onChange={event => setNote(event.target.value)} /></label>
         <label className="flex items-start gap-2"><input type="checkbox" className="mt-1" checked={present} onChange={event => setPresent(event.target.checked)} />Đã trao đổi phương án với chính chủ đang có mặt tại cơ sở.</label>
         <div className="grid gap-2">
-          <label className="grid gap-1">Ảnh biên bản có chữ ký khách *
+          <label className="grid gap-1">Biên bản xác nhận phương án hàng hóa có chữ ký khách *
             <input className="block w-full rounded-lg border border-stone-300 bg-white p-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-stone-100 file:px-3 file:py-2 file:font-medium" type="file"
               accept="image/jpeg,image/png,image/webp" disabled={disabled || evidence.length >= MAX_EVIDENCE_FILES}
               onChange={event => { const files = Array.from(event.target.files || []); event.target.value = ''; if (files.length) void uploadEvidence(files) }} />
@@ -163,6 +164,9 @@ export default function InventoryResolutionPanel({ item, busy, onRefresh, onOpen
         </div>
       </div>}
       <InventoryDecisionSummary decision={item.inventoryDecision} compact={transferring} onPreview={onPreview} onOpenReturns={onOpenReturns} />
+      {partial && onPartialRemoval && <Button type="button" variant="danger" disabled={disabled} onClick={onPartialRemoval}>
+        Xác nhận đã đưa phần hàng dư ra
+      </Button>}
       <div className="flex flex-wrap gap-2 border-t border-stone-200 pt-3">
         {onPreview && Array.from(new Set(report?.evidenceReferences || [])).map(id => <Button key={id} size="sm" variant="outline" onClick={() => onPreview(id)}>Xem bằng chứng kiểm kê</Button>)}
         {returning && onOpenReturns && <Button disabled={busy} onClick={onOpenReturns}>Mở Trả kho & nghiệm thu</Button>}

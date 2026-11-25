@@ -53,7 +53,7 @@ export default function IntakeWorkflowPanel({ reservationId, role, checkInId, st
       let photoId: string | undefined
       if (action === 'VERIFY') {
         if (!photo || !checkInId) throw new Error('Thiếu ảnh kiểm kê')
-        photoId = (await uploadCheckInEvidence(checkInId, photo)).id
+        photoId = (await uploadCheckInEvidence(checkInId, photo, 'CHECK_IN_IDENTITY', 'anh-doi-chieu-khach-luc-kiem-ke')).id
       }
       const needsDate = ['EXTEND_SETUP', 'APPOINTMENT', 'FACILITY_EXTENSION'].includes(action)
       if (needsDate && !at) throw new Error('Thiếu lịch')

@@ -1496,6 +1496,7 @@ function OperationForm({
         {needFiles && <EvidenceUpload
           entityType={`DUONG_RENEWAL_${action.toUpperCase()}`}
           entityId={s.renewalId} value={files}
+          fileNamePurpose={`chung-tu-gia-han-${action}`}
           onChange={ids => setEvidence(ids.join(", "))} onBusy={uploadBusy}
         />}
         {action === "cash" && (
@@ -1531,6 +1532,7 @@ function OperationForm({
             {balanceMethod === "BANK_TRANSFER" && <p className="text-sm text-stone-600">Tải ảnh chụp màn hình chuyển khoản làm minh chứng.</p>}
             <EvidenceUpload entityType="DUONG_RENEWAL_CASH_RECEIPT" entityId={s.renewalId}
               disabled={locked} value={receiptFile ? [receiptFile] : []} limit={1}
+              fileNamePurpose="bien-chung-thu-tien-gia-han"
               onChange={ids => setReceiptFile(ids[0] || "")} onBusy={uploadBusy} />
             <label className="flex items-start gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm leading-6 text-stone-700">
               <input
@@ -1566,6 +1568,7 @@ function OperationForm({
                 entityType="DUONG_RENEWAL_SIGNED_CONTRACT"
                 entityId={s.renewalId}
                 label="Tải hợp đồng gia hạn đã ký"
+                fileNamePurpose="hop-dong-gia-han-da-ky"
                 accept="application/pdf,image/jpeg,image/png,image/webp"
                 disabled={locked}
                 value={signedDocumentFile ? [signedDocumentFile] : []}

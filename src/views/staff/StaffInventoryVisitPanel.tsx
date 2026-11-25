@@ -59,7 +59,7 @@ export default function StaffInventoryVisitPanel({ item, now, busy, onBusyChange
       }
       let uploadedPhotoId = photoId
       if (!uploadedPhotoId && file) {
-        const photo = await uploadCheckInEvidence(checkInId, file, 'CHECK_IN_IDENTITY')
+        const photo = await uploadCheckInEvidence(checkInId, file, 'CHECK_IN_IDENTITY', 'anh-doi-chieu-khach-luc-kiem-ke', item.reservationCode)
         uploadedPhotoId = photo.id
         setPhotoId(uploadedPhotoId)
       }
@@ -86,7 +86,7 @@ export default function StaffInventoryVisitPanel({ item, now, busy, onBusyChange
           <input className="rounded-md border border-stone-300 bg-white p-2" autoComplete="off" maxLength={30}
             value={document} disabled={busy} onChange={event => setDocument(event.target.value)} />
         </label>
-        <label className="grid gap-1">Ảnh khách tại buổi kiểm kê
+        <label className="grid gap-1">Ảnh đối chiếu khách lúc kiểm kê
           <input className="block w-full rounded-lg border border-stone-300 bg-white p-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-stone-100 file:px-3 file:py-2 file:font-medium" type="file" accept="image/jpeg,image/png,image/webp" capture="user" disabled={busy}
             onChange={event => { setFile(event.target.files?.[0]); setPhotoId(undefined) }} />
         </label>
