@@ -1,3 +1,4 @@
+import ProcessingLeaseBoundary from '../../components/ProcessingLeaseBoundary'
 import ReturnPolicyNotice from '../../components/ReturnPolicyNotice'
 import { useReturnRecords } from '../../hooks/useReturnRecords'
 import LocalizedDateInput from '../../components/LocalizedDateInput'
@@ -1286,7 +1287,10 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
           size="2xl"
           title={`Hồ sơ trả kho: ${selectedItem.unitNumber}`}
         >
-          <div className="space-y-5 text-sm">
+          <ProcessingLeaseBoundary target="RETURN" id={selectedItem.id} enabled={isApiAuthenticated() && selectedItem.status !== 'completed'} onAcquired={async () => {
+            const latest = await getReturn('business', selectedItem.id)
+            setSelectedItem(previous => previous ? { ...previous, ...latest, scheduledDate: latest.scheduledDate || previous.scheduledDate, customerPhone: latest.customerPhone || undefined } : null)
+          }}><div className="space-y-5 text-sm">
             <p className="text-sm text-stone-500">{selectedItem.facilityName}</p>
             {/* 1. THANH TIẾN TRÌNH 5 BƯỚC QUY TRÌNH CHUẨN HOÁ */}
             <div className="space-y-3">
@@ -2092,7 +2096,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                 Đóng cửa sổ
               </Button>
             </div>
-          </div>
+          </div></ProcessingLeaseBoundary>
         </Modal>
       )}
 
