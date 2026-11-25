@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { staffCheckInActions, firstBookableCheckInMinute, firstCheckInMinute, submissionCheckInWindow, isCheckInAppointmentAllowed, isCheckInHandoverExpired, plannedCheckInWindow, policyDateInput, policyTimeInput } from './reservationCheckInPolicy'
+import { staffCheckInActions, firstBookableCheckInMinute, firstBookableCheckInSlot, firstCheckInMinute, firstCheckInSlot, submissionCheckInWindow, isCheckInAppointmentAllowed, isCheckInHandoverExpired, plannedCheckInWindow, policyDateInput, policyTimeInput } from './reservationCheckInPolicy'
 
 it('expires handover at midnight in Vietnam on the eighth calendar day', () => {
   const appointment = '2026-11-21T15:00:00+07:00'
@@ -106,4 +106,17 @@ describe('staff intake actions', () => {
     expect(staffCheckInActions({ ...scheduled, checkInStatus: 'setup_completed', intakeAction: 'CONTINUE' },
       at + 10 * 86400_000)).toMatchObject({ canOpen: true, canReject: false, canMarkAbsent: false })
   })
+})
+
+it('rounds check-in slot up to the next 30-minute boundary', () => {
+  const window = plannedCheckInWindow('2026-10-30T14:00:00+07:00', false) // availableAt = 20:15
+  const slot = firstCheckInSlot(window.availableAt)
+  expect(policyTimeInput(slot)).toBe('20:30')
+  expect(isCheckInAppointmentAllowed(slot, window)).toBe(true)
+
+  const exact = new Date('2026-10-30T20:00:00+07:00')
+  expect(policyTimeInput(firstCheckInSlot(exact))).toBe('20:00')
+
+  const subWindow = submissionCheckInWindow(Date.parse('2026-10-30T14:00:00+07:00'), false)
+  expect(policyTimeInput(firstBookableCheckInSlot(subWindow)!)).toBe('20:30')
 })

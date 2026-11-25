@@ -482,7 +482,7 @@ export interface CheckInDocument {
   entityId: string
   status: string
   createdAt: string
-  kind?: 'SIGNED_CONTRACT' | 'PAYMENT_RECEIPT' | 'HANDOVER_EVIDENCE' | 'INVENTORY_EVIDENCE' | 'OTHER'
+  kind?: 'SIGNED_CONTRACT' | 'SIGNED_HANDOVER_RECORD' | 'PAYMENT_RECEIPT' | 'HANDOVER_EVIDENCE' | 'INVENTORY_EVIDENCE' | 'INVENTORY_DECISION_EVIDENCE' | 'IDENTITY_VERIFICATION_PHOTO' | 'OTHER'
 }
 
 export interface ReservationGoodsItem extends GoodsItemInput {
