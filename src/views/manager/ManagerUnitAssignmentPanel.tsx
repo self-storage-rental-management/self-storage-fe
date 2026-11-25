@@ -1,3 +1,4 @@
+import ProcessingLeaseBoundary from '../../components/ProcessingLeaseBoundary'
 import { managerDisplayError } from './managerPresentation'
 import { useEffect, useState } from 'react'
 import { managerStatusLabel, managerUnitTypeLabel } from './managerI18n'
@@ -217,7 +218,14 @@ export default function ManagerUnitAssignmentPanel({ showToast, embedded = false
     </Card>
 
     <Modal size="3xl" open={Boolean(selected)} onClose={() => { if (!submitting) setSelected(null) }} title={flow === 'change' ? 'Đổi kho' : 'Phân kho'}>
-      {selected && <div className="space-y-4">
+      {selected && <ProcessingLeaseBoundary target="ASSIGNMENT" id={selected.reservationId} onAcquired={async () => {
+        const candidates = await listUnitAssignmentCandidates({ page: 0, pageSize: 100, q: selected.reservationCode })
+        const latest = candidates.data.find(item => item.reservationId === selected.reservationId)
+        if (!latest) throw new Error('Hồ sơ không còn chờ phân kho. Đóng cửa sổ và tải lại danh sách.')
+        const available = await listAssignableUnits(latest.reservationId)
+        setSelected(latest); setUnits(available.data); setAvailableUnitCount(available.pagination.totalItems)
+        setStorageUnitId(''); setChangeReason(''); setFlow(latest.assignedStorageUnitId ? 'change' : 'select')
+      }}><div className="space-y-4">
         <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm">
           <p><b>Đặt chỗ:</b> {selected.reservationCode}</p>
           <p><b>Khách hàng:</b> {selected.customerName}</p>
@@ -272,7 +280,7 @@ export default function ManagerUnitAssignmentPanel({ showToast, embedded = false
             {submitting ? 'Đang lưu…' : selected.assignedStorageUnitId ? 'Xác nhận đổi kho' : 'Xác nhận phân kho'}
           </Button>
         </div>
-      </div>}
+      </div></ProcessingLeaseBoundary>}
     </Modal>
   </div>
 }

@@ -1,4 +1,5 @@
 import { recordDisplayCode } from '../../utils/recordDisplayCode'
+import ProcessingLeaseBoundary from '../../components/ProcessingLeaseBoundary'
 import { displayStatusLabel } from '../../presentation/statusLabels'
 import { isApiAuthenticated } from '../../services/authApi'
 import { useReturnRecords } from '../../hooks/useReturnRecords'
@@ -1068,7 +1069,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
         title={'Phân Xử & Giải Quyết Khiếu Nại Quyết Toán'}
       >
         {selectedReturn && (
-          <div className="space-y-4">
+          <ProcessingLeaseBoundary target="RETURN" id={selectedReturn.id} enabled={useApi} onAcquired={async () => { openDisputeReview(returnScreenRecord(await getReturn('manager', selectedReturn.id))) }}><div className="space-y-4">
             <div className="bg-rose-50 border border-rose-200 p-3 rounded-lg text-xs space-y-1.5">
               <p className="font-bold text-rose-900 text-sm">
                 {`Khiếu nại từ khách: ${selectedReturn.customerName}`}
@@ -1192,7 +1193,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                 {'Gửi kết luận cho khách'}
               </Button>
             </div>
-          </div>
+          </div></ProcessingLeaseBoundary>
         )}
       </Modal>
 
@@ -1203,7 +1204,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
         title={'Xác Nhận Hoàn Tiền Cọc Cho Khách'}
       >
         {selectedReturn && (
-          <div className="space-y-4">
+          <ProcessingLeaseBoundary target="RETURN" id={selectedReturn.id} enabled={useApi} onAcquired={async () => { setSelectedReturn(returnScreenRecord(await getReturn('manager', selectedReturn.id))); setRefundConfirmed(false) }}><div className="space-y-4">
             <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl text-xs space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-emerald-800">{'Khách thụ hưởng'}</span>
@@ -1243,7 +1244,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                 {'Xác nhận hoàn cọc'}
               </Button>
             </div>
-          </div>
+          </div></ProcessingLeaseBoundary>
         )}
       </Modal>
 
@@ -1346,7 +1347,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
       {/* 3. Modal Xác Nhận Hoàn Tất Trả Kho */}
       <Modal open={completeModalOpen} onClose={() => { setCompleteModalOpen(false); setCompleteTarget(null) }} title="Xác Nhận Hoàn Tất Hồ Sơ Trả Kho">
         {completeTarget && (
-          <div className="space-y-4">
+          <ProcessingLeaseBoundary target="RETURN" id={completeTarget.id} enabled={useApi} onAcquired={async () => { setCompleteTarget(returnScreenRecord(await getReturn('manager', completeTarget.id))) }}><div className="space-y-4">
             <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 text-xs space-y-2">
               <div className="flex justify-between items-center"><span className="text-stone-500">Mã trả kho:</span><b className="font-mono text-stone-900">{completeTarget.displayCode || recordDisplayCode(completeTarget.id)}</b></div>
               <div className="flex justify-between items-center"><span className="text-stone-500">Gian kho:</span><b className="font-mono text-stone-900">{completeTarget.unitId}</b></div>
@@ -1395,7 +1396,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                 {isAwaitingManagerReview(completeTarget) ? 'Duyệt bảng kê & gửi khách' : 'Xác nhận hoàn tất trả kho'}
               </Button>
             </div>
-          </div>
+          </div></ProcessingLeaseBoundary>
         )}
       </Modal>
 
