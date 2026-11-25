@@ -13,9 +13,10 @@ const MAX_EVIDENCE_FILES = 1
 const MAX_EVIDENCE_SIZE_BYTES = 25 * 1024 * 1024
 const EVIDENCE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
-export default function InventoryResolutionPanel({ item, busy, onRefresh, onOpenReturns, onResolve, onPreview }: {
+export default function InventoryResolutionPanel({ item, busy, onRefresh, onOpenReturns, onResolve, onPreview, onPartialRemoval }: {
   item: CheckInCase; busy: boolean; onRefresh: () => void; onOpenReturns?: () => void
   onPreview?: (assetId: string) => void
+  onPartialRemoval?: () => void
   onResolve?: (request: { decision: AtSiteInventoryDecision; customerPresent: boolean; note?: string; scheduledDate?: string; evidenceReferences?: string[]; resultVersion?: number }) => Promise<void>
 }) {
   const [decision, setDecision] = useState<AtSiteInventoryDecision | ''>('')
@@ -163,6 +164,9 @@ export default function InventoryResolutionPanel({ item, busy, onRefresh, onOpen
         </div>
       </div>}
       <InventoryDecisionSummary decision={item.inventoryDecision} compact={transferring} onPreview={onPreview} onOpenReturns={onOpenReturns} />
+      {partial && onPartialRemoval && <Button type="button" variant="danger" disabled={disabled} onClick={onPartialRemoval}>
+        Xác nhận đã đưa phần hàng dư ra
+      </Button>}
       <div className="flex flex-wrap gap-2 border-t border-stone-200 pt-3">
         {onPreview && Array.from(new Set(report?.evidenceReferences || [])).map(id => <Button key={id} size="sm" variant="outline" onClick={() => onPreview(id)}>Xem bằng chứng kiểm kê</Button>)}
         {returning && onOpenReturns && <Button disabled={busy} onClick={onOpenReturns}>Mở Trả kho & nghiệm thu</Button>}
