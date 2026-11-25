@@ -2088,7 +2088,7 @@ export default function StaffCheckInOperationsPanel({
   }
 
   const workflowForm = handoverTarget && (
-          <ProcessingLeaseBoundary target="CHECK_IN" id={handoverTarget.checkInId!} enabled={!!handoverTarget.checkInId && !customerWaitTarget && handoverTarget.checkInStatus !== 'completed'} onAcquired={async () => {
+          <ProcessingLeaseBoundary target="CHECK_IN" id={handoverTarget.checkInId!} enabled={!!handoverTarget.checkInId && handoverTarget.checkInStatus !== 'completed'} onAcquired={async () => {
             const response = await listCheckIns({ page: 0, pageSize: 100, q: handoverTarget.reservationCode })
             const latest = response.data.find(item => item.checkInId === handoverTarget.checkInId)
             if (!latest) throw new Error('Không còn tìm thấy hồ sơ bàn giao. Đóng cửa sổ và tải lại danh sách.')

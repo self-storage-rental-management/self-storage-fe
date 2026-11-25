@@ -1213,7 +1213,18 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
         >
           <ProcessingLeaseBoundary target="RETURN" id={selectedItem.id} enabled={isApiAuthenticated() && selectedItem.status !== 'completed'} onAcquired={async () => {
             const latest = await getReturn('business', selectedItem.id)
-            setSelectedItem(previous => previous ? { ...previous, ...latest, scheduledDate: latest.scheduledDate || previous.scheduledDate, customerPhone: latest.customerPhone || undefined } : null)
+            setSelectedItem(previous => previous ? {
+              ...previous,
+              ...latest,
+              netRefundAmount: latest.netRefundAmount ?? Number.NaN,
+              amountDueFromCustomer: latest.amountDueFromCustomer ?? Number.NaN,
+              scheduledDate: latest.scheduledDate || previous.scheduledDate,
+              customerPhone: latest.customerPhone || '',
+              customerDecisionNote: latest.customerDecisionNote ?? null,
+              returnedKey: latest.returnedKey ?? null,
+              returnedCard: latest.returnedCard ?? null,
+              returnedLock: latest.returnedLock ?? null,
+            } : null)
           }}><div className="space-y-5 text-sm">
             <p className="text-sm text-stone-500">{selectedItem.facilityName}</p>
             {/* 1. THANH TIẾN TRÌNH 5 BƯỚC QUY TRÌNH CHUẨN HOÁ */}
