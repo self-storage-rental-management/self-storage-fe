@@ -4,6 +4,7 @@ export const PAYMENT_WINDOW_MINUTES = 15
 export const STAFF_REVIEW_HOURS = 6
 export const MANAGER_ASSIGNMENT_HOURS = 6
 export const CHECK_IN_WINDOW_DAYS = 7
+export const CHECK_IN_SLOT_MINUTES = 30
 const VIETNAM_OFFSET_MS = 7 * 60 * 60 * 1000
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -69,6 +70,11 @@ export function firstCheckInMinute(availableAt: Date) {
   return new Date(Math.ceil(availableAt.getTime() / 60_000) * 60_000)
 }
 
+export function firstCheckInSlot(availableAt: Date, slotMinutes = CHECK_IN_SLOT_MINUTES) {
+  const slotMs = slotMinutes * 60_000
+  return new Date(Math.ceil(availableAt.getTime() / slotMs) * slotMs)
+}
+
 // Leave a minute for the create request to reach the server, which checks its own clock.
 export function submissionCheckInWindow(now: number, reviewRequired: boolean) {
   const window = plannedCheckInWindow(now, reviewRequired)
@@ -77,6 +83,14 @@ export function submissionCheckInWindow(now: number, reviewRequired: boolean) {
 
 export function firstBookableCheckInMinute(window: ReturnType<typeof plannedCheckInWindow>) {
   const candidate = firstCheckInMinute(window.availableAt)
+  return candidate <= window.deadlineAt ? candidate : null
+}
+
+export function firstBookableCheckInSlot(
+  window: ReturnType<typeof plannedCheckInWindow>,
+  slotMinutes = CHECK_IN_SLOT_MINUTES,
+) {
+  const candidate = firstCheckInSlot(window.availableAt, slotMinutes)
   return candidate <= window.deadlineAt ? candidate : null
 }
 

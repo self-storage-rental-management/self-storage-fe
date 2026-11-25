@@ -45,7 +45,7 @@ import ReturnSettlementModal from '../../components/ReturnSettlementModal'
 import { isGeneratedDefaultRentalPackageList, resolveRentalPackagesForUnit } from '../../domain/packageRules'
 import { LEGACY_RENEWAL_NOTICE, LEGACY_RENEWAL_HISTORY_NOTICE, legacyRenewalMoney, isLegacyRenewalPayment } from '../../domain/legacyRenewal'
 import LegacyRenewalPaymentRecord from '../rental-api/LegacyRenewalPaymentRecord'
-import { firstBookableCheckInMinute, firstCheckInMinute, submissionCheckInWindow, formatPolicyDateTime, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyTimeInput, PAYMENT_WINDOW_MINUTES, STAFF_REVIEW_HOURS, MANAGER_ASSIGNMENT_HOURS, CHECK_IN_WINDOW_DAYS } from '../../domain/reservationCheckInPolicy'
+import { firstBookableCheckInSlot, firstCheckInSlot, submissionCheckInWindow, formatPolicyDateTime, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyTimeInput, PAYMENT_WINDOW_MINUTES, STAFF_REVIEW_HOURS, MANAGER_ASSIGNMENT_HOURS, CHECK_IN_WINDOW_DAYS } from '../../domain/reservationCheckInPolicy'
 import CustomerSupportChatbot from '../../components/support/CustomerSupportChatbot'
 import CustomerSupportWidget, { type ChatOpenRequest } from '../../components/support/CustomerSupportWidget'
 import { formatHistoryPaymentMethod, invoiceNumberLabel, paymentCurrencyLabel, paymentMethodLabel } from './paymentLabels'
@@ -937,7 +937,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     () => plannedCheckInWindow(bookingStartedAt, hasOtherGoods),
     [bookingStartedAt, hasOtherGoods],
   )
-  const earliestAppointment = firstCheckInMinute(checkInWindow.availableAt)
+  const earliestAppointment = firstCheckInSlot(checkInWindow.availableAt)
   const earliestCheckInDate = policyDateInput(earliestAppointment)
   const earliestCheckInTime = policyTimeInput(earliestAppointment)
   const latestCheckInDate = policyDateInput(checkInWindow.deadlineAt)
@@ -1497,7 +1497,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       return
     }
     const startedAt = preserveSchedule ? bookingStartedAt : Date.now()
-    const suggestedCheckIn = plannedCheckInWindow(startedAt, false).availableAt
+    const suggestedCheckIn = firstCheckInSlot(plannedCheckInWindow(startedAt, false).availableAt)
     setBookingStartedAt(startedAt)
     if (!preserveSchedule) setMoveInDate(policyDateInput(suggestedCheckIn))
     if (!preserveSchedule) setBookingAppointmentTime(policyTimeInput(suggestedCheckIn))
@@ -2098,7 +2098,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       const currentWindow = submissionCheckInWindow(submittedAt, hasOtherGoods)
       const selectedAppointment = new Date(`${moveInDate}T${bookingAppointmentTime}:00+07:00`)
       if (!isCheckInAppointmentAllowed(selectedAppointment, currentWindow)) {
-        const suggested = firstBookableCheckInMinute(currentWindow)
+        const suggested = firstBookableCheckInSlot(currentWindow)
         const message = suggested
           ? `Lịch nhận kho không còn hợp lệ. Bạn có thể nhận kho sớm nhất từ ${formatPolicyDateTime(suggested)}. Vui lòng chọn lại ngày giờ nhận kho, giá và hàng hóa được giữ nguyên.`
           : 'Chưa có giờ nhận kho phù hợp trong thời hạn cho phép. Vui lòng liên hệ cơ sở.'
