@@ -1,3 +1,4 @@
+import ProcessingLeaseBoundary from '../../components/ProcessingLeaseBoundary'
 import ReturnPolicyNotice from '../../components/ReturnPolicyNotice'
 import EmergencyContactsPanel from '../../components/EmergencyContactsPanel'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -12,6 +13,7 @@ import { vietnamDateInput } from '../../utils/vietnamTime'
 import RecoveryReturnSettlement from './RecoveryReturnSettlement'
 import RecoveryTaskLink from '../rental-api/RecoveryTaskLink'
 import {
+  getReturn,
   confirmReturn,
   feeKeys,
   inspectReturn,
@@ -587,7 +589,7 @@ function ReturnWorkspace({
           </div>
 
           {/* Form Actions / 2-Column Inspection */}
-          <ReturnActions
+          <LeasedReturnActions
             role={role}
             record={selectedRecord}
             run={run}
@@ -973,6 +975,16 @@ function getNextStepText(status: ApiReturn['status'], role: ReturnRole, recovery
     completed: 'Hồ sơ trả kho và quyết toán đã hoàn tất.',
   }
   return staffSteps[status] || 'Đang xử lý hồ sơ trả kho.'
+}
+
+function LeasedReturnActions(props: Parameters<typeof ReturnActions>[0]) {
+  const [fresh, setFresh] = useState(props.record)
+  useEffect(() => setFresh(props.record), [props.record])
+  const actionable = props.role === 'staff' ? ['requested', 'scheduled', 'payment_due', 'refund_pending'].includes(fresh.status)
+    : props.role === 'manager' && fresh.status === 'disputed'
+  return <ProcessingLeaseBoundary target="RETURN" id={props.record.id} enabled={actionable && fresh.sourceType !== 'RECOVERY'} onAcquired={async () => {
+    setFresh(await getReturn(props.role, props.record.id))
+  }}><ReturnActions {...props} record={fresh} /></ProcessingLeaseBoundary>
 }
 
 function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLocked, onRecoveryChanged }: { role: ReturnRole; record: ApiReturn; run: (work: () => Promise<ApiReturn>) => Promise<void>; busy: boolean; recoveryLocked: boolean; onRecoveryLocked: (locked: boolean) => void; onRecoveryChanged: () => void }) {

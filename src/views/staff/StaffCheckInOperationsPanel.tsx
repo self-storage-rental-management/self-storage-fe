@@ -1,3 +1,4 @@
+import ProcessingLeaseBoundary from '../../components/ProcessingLeaseBoundary'
 import { validateCccd, normalizeCccd, maskCccd } from '../../domain/cccd'
 import { useEffect, useId, useMemo, useState } from "react"
 
@@ -1539,7 +1540,12 @@ export default function StaffCheckInOperationsPanel({
         size="3xl"
       >
         {handoverTarget && (
-          <div className="space-y-5">
+          <ProcessingLeaseBoundary target="CHECK_IN" id={handoverTarget.checkInId!} enabled={!!handoverTarget.checkInId && !customerWaitTarget && handoverTarget.checkInStatus !== 'completed'} onAcquired={async () => {
+            const response = await listCheckIns({ page: 0, pageSize: 100, q: handoverTarget.reservationCode })
+            const latest = response.data.find(item => item.checkInId === handoverTarget.checkInId)
+            if (!latest) throw new Error('Không còn tìm thấy hồ sơ bàn giao. Đóng cửa sổ và tải lại danh sách.')
+            openHandover(latest)
+          }}><div className="space-y-5">
             <dl className="grid gap-3 rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
               {[
                 ['Mã đơn giữ kho', handoverTarget.reservationCode], ['Mã gian kho bàn giao', handoverTarget.storageUnitCode],
@@ -2335,7 +2341,7 @@ export default function StaffCheckInOperationsPanel({
                 </div>
               )}
             </div>
-          </div>
+          </div></ProcessingLeaseBoundary>
         )}
       </Modal>
 

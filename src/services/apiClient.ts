@@ -1,3 +1,4 @@
+import { clearProcessingLeases, forgetProcessingLease, getProcessingLease, invalidateProcessing, isProcessingViewOpen, notifyProcessing, processingTarget, putProcessingLease, type LocalProcessingLease, type ProcessingView } from './processingLeaseState'
 export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080').replace(/\/+$/, '')
 
 export class ApiClientError extends Error {
@@ -65,6 +66,7 @@ export function getRefreshToken() {
 }
 
 export function clearAuthTokens() {
+  clearProcessingLeases()
   accessToken = null
   refreshToken = null
   try {
@@ -168,7 +170,7 @@ async function refreshAccessToken(): Promise<boolean> {
   return refreshInFlight
 }
 
-export async function apiRequest<T>(path: string, options: RequestInit & { skipAuth?: boolean; timeoutMs?: number } = {}): Promise<T> {
+async function rawApiRequest<T>(path: string, options: RequestInit & { skipAuth?: boolean; timeoutMs?: number } = {}, processingLease?: LocalProcessingLease): Promise<T> {
   const { skipAuth, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, ...requestOptions } = options
 
   // If a protected request is initiated and we don't have an accessToken in memory
@@ -198,13 +200,70 @@ export async function apiRequest<T>(path: string, options: RequestInit & { skipA
   const payload = await readPayload(response)
   if (response.status === 401 && !skipAuth && path !== '/api/auth/refresh') {
     if (await refreshAccessToken()) {
-      return apiRequest<T>(path, options)
+      return rawApiRequest<T>(path, options, processingLease)
     }
     notifyAuthExpired()
   }
-  if (!response.ok) throw responseError(response.status, payload)
+  if (!response.ok) {
+    const failure = responseError(response.status, payload)
+    if (processingLease && (response.status === 401 || response.status === 403 || (isRecord(failure.details) && failure.details.processingConflict))) invalidateProcessing(processingLease)
+    throw failure
+  }
+  if (processingLease) {
+    const revision = response.headers.get('X-Processing-Version')
+    const stamp = response.headers.get('X-Processing-Stamp')
+    const expiresAt = response.headers.get('X-Processing-Expires-At')
+    if (revision !== null && stamp !== null && Number.isSafeInteger(Number(revision))) {
+      processingLease.view = { ...processingLease.view, revision: Number(revision), sourceStamp: stamp, expiresAt: expiresAt || processingLease.view.expiresAt }
+      notifyProcessing()
+    } else invalidateProcessing(processingLease)
+  }
 
   return payload as T
+}
+
+/** Every protected command carries its lease and observed revision, including shortcuts outside a detail form. */
+export async function apiRequest<T>(path: string, options: RequestInit & { skipAuth?: boolean; timeoutMs?: number } = {}): Promise<T> {
+  const target = options.skipAuth ? null : processingTarget(path, options.method)
+  if (!target) return rawApiRequest<T>(path, options)
+  let lease = getProcessingLease(target.target, target.id)
+  let temporary = false
+  const lockUrl = target ? '/api/processing-locks/' + target.target + '/' + target.id : ''
+  if (!lease) {
+    if (isProcessingViewOpen(target.target, target.id))
+      throw new ApiClientError('Bạn đang chỉ xem hồ sơ. Cần nhận quyền xử lý trước khi lưu thay đổi.', { status: 409, code: 'CONFLICT' })
+    temporary = true
+    const token = crypto.randomUUID()
+    const view = (await rawApiRequest<{ data: ProcessingView }>(lockUrl + '/acquire', { method: 'POST', body: JSON.stringify({ token }) })).data
+    if (!view.owned) throw new ApiClientError(`Hồ sơ đang được ${view.ownerName || 'nhân sự khác'} xử lý. Bạn chỉ có thể xem.`, { status: 409, code: 'CONFLICT' })
+    lease = { target: target.target, id: target.id, token, view, invalid: false, inFlight: false, ready: true }
+    putProcessingLease(lease)
+  }
+  if (!lease.ready) throw new ApiClientError('Đang tải dữ liệu mới của hồ sơ. Vui lòng chờ trước khi lưu.', { status: 409, code: 'CONFLICT' })
+  if (lease.invalid || !lease.view.expiresAt || Date.parse(lease.view.expiresAt) <= Date.now()) {
+    invalidateProcessing(lease)
+    throw new ApiClientError('Quyền xử lý đã hết hạn hoặc hồ sơ đã thay đổi. Đóng và mở lại hồ sơ để tiếp tục.', { status: 409, code: 'CONFLICT' })
+  }
+  if (lease.inFlight) throw new ApiClientError('Một thao tác của hồ sơ đang được gửi. Vui lòng chờ hoàn tất.', { status: 409, code: 'CONFLICT' })
+  lease.inFlight = true
+  notifyProcessing()
+  const headers = new Headers(options.headers)
+  headers.set('X-Processing-Token', lease.token)
+  headers.set('X-Processing-Version', String(lease.view.revision))
+  headers.set('X-Processing-Stamp', lease.view.sourceStamp)
+  try { return await rawApiRequest<T>(path, { ...options, headers }, lease) }
+  catch (failure) {
+    // A timeout can occur after a committed write. Do not adopt a new revision on retry.
+    if (failure instanceof ApiClientError && ['TIMEOUT', 'NETWORK_ERROR'].includes(failure.code)) invalidateProcessing(lease)
+    throw failure
+  } finally {
+    lease.inFlight = false
+    notifyProcessing()
+    if (temporary) {
+      forgetProcessingLease(lease.target, lease.id, lease.token)
+      try { await rawApiRequest(lockUrl + '/release', { method: 'POST', body: JSON.stringify({ token: lease.token }) }) } catch { /* TTL handles lost cleanup. */ }
+    }
+  }
 }
 
 export interface ApiDownload {
