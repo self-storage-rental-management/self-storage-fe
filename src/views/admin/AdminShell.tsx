@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Layout, { getInitialPage, Icon, type NavItem } from '../../components/Layout'
 import type { PermissionKey, User } from '../../types'
 import { useStorageHub } from '../../store/StorageHubContext'
@@ -15,9 +15,8 @@ export default function AdminShell({ user, onLogout }: { user: User; onLogout: (
   const { can } = useStorageHub()
   const apiActor = getAuthenticatedActor()
   const apiPermissions = new Set(normalizeApiPermissions(apiActor?.permissions))
-  const userPermissions = new Set(user.permissions ?? [])
   const hasPermission = (permission: PermissionKey) => isApiAuthenticated()
-    ? apiPermissions.has(permission) || userPermissions.has(permission)
+    ? apiActor?.status === 'ACTIVE' && apiPermissions.has(permission)
     : can(user, permission)
   const navItems: NavItem[] = [
     { id: 'dashboard', label: 'Tổng quan toàn hệ thống', icon: Icon.home, group: 'Tổng quan', permission: 'dashboard:read' as PermissionKey },
@@ -27,12 +26,22 @@ export default function AdminShell({ user, onLogout }: { user: User; onLogout: (
     { id: 'activity', label: 'Nhật ký hoạt động', icon: Icon.log, group: 'Bảo mật & Giám sát', permission: 'audit_logs:read' as PermissionKey },
     { id: 'settings', label: 'Cài đặt hệ thống', icon: Icon.cog, group: 'Hệ thống', permission: 'settings:manage' as PermissionKey },
   ]
-  const [page, setPage] = useState(() => getInitialPage(navItems, 'dashboard'))
+  const firstPermittedPage = navItems.find(item => !item.permission || hasPermission(item.permission))?.id ?? 'profile'
+  const [page, setPage] = useState(() => getInitialPage(navItems, firstPermittedPage))
   const [toast, setToast] = useState<string | null>(null)
+  const toastTimeoutRef = useRef<number | null>(null)
   const showToast = (message: string) => {
     setToast(message)
-    window.setTimeout(() => setToast(null), 3000)
+    if (toastTimeoutRef.current !== null) window.clearTimeout(toastTimeoutRef.current)
+    toastTimeoutRef.current = window.setTimeout(() => {
+      setToast(null)
+      toastTimeoutRef.current = null
+    }, 3000)
   }
+
+  useEffect(() => () => {
+    if (toastTimeoutRef.current !== null) window.clearTimeout(toastTimeoutRef.current)
+  }, [])
 
   return (
     <Layout

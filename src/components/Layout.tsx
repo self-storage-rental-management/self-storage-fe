@@ -563,7 +563,7 @@ export default function Layout({
           )}
           <div className="flex-1" />
 
-          {user.role !== 'customer' && isApiAuthenticated() && (
+          {user.role !== 'customer' && user.role !== 'admin' && isApiAuthenticated() && (
             <button type="button" onClick={() => setWorkflowSlaOpen(true)}
               className="rounded-md px-2 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-100">
               Hạn xử lý
