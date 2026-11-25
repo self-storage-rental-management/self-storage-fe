@@ -6,7 +6,7 @@ import type { ApiReturn } from '../services/returnApi'
 import { EvidenceDownload } from '../views/rental-support-integration/EvidenceControls'
 import { formatHistoryPaymentMethod } from '../views/customer/paymentLabels'
 import type { ReturnCase, StoragePayment } from '../types/storageHub'
-import { recordDisplayCode } from '../utils/recordDisplayCode'
+import { recordDisplayCode, receiptDisplayCode } from '../utils/recordDisplayCode'
 
 export interface ReturnSettlementModalProps {
   open: boolean
@@ -46,6 +46,15 @@ export default function ReturnSettlementModal({
   // Lọc các giao dịch liên quan đến hồ sơ thuê này
   const relatedPayments = apiRecord ? [] : payments.filter(p => p.rentalId === returnCase.rentalId)
   const receipt = apiRecord?.settlementReceipt
+  const caseCode = recordDisplayCode(returnCase.displayCode || returnCase.id)
+  const rentalCode = recordDisplayCode(returnCase.rentalDisplayCode || returnCase.rentalId)
+  const localReference = returnCase.settlementPaymentId || returnCase.refundTransaction?.id
+  const receiptNumber = apiRecord
+    ? receipt && receiptDisplayCode(receipt.receiptCode, receipt.transactionReference, returnCase.id)
+    : caseCode
+  const settlementReference = apiRecord
+    ? receipt?.paymentMethod === 'BANK_TRANSFER' ? receipt.transactionReference : receiptNumber
+    : localReference ? receiptDisplayCode(null, localReference) : caseCode
   const balancedKnown = Number.isFinite(netRefund) && Number.isFinite(amountDue)
   const recorded = isCompleted && (!apiRecord || !!receipt)
   const receiptMethod = receipt?.paymentMethod === 'CASH' ? 'Tiền mặt' : receipt?.paymentMethod === 'BANK_TRANSFER' ? 'Chuyển khoản' : receipt?.paymentMethod === 'DEPOSIT_OFFSET' ? 'Đối trừ cọc' : 'Chưa ghi nhận'
@@ -73,11 +82,11 @@ export default function ReturnSettlementModal({
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 p-4">
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-mono text-sm font-bold text-stone-900">{recordDisplayCode(returnCase.id)}</span>
+              <span className="font-mono text-sm font-bold text-stone-900">{caseCode}</span>
               <span className="text-stone-400">·</span>
               <span className="text-xs text-stone-500">Gian kho: <b className="text-stone-800">{returnCase.unitId}</b></span>
               <span className="text-stone-400">·</span>
-              <span className="text-xs text-stone-500">Hồ sơ: <b className="font-mono text-stone-800">{recordDisplayCode(returnCase.rentalId)}</b></span>
+              <span className="text-xs text-stone-500">Hồ sơ: <b className="font-mono text-stone-800">{rentalCode}</b></span>
             </div>
             <p className="mt-1 text-xs text-stone-600">
               Khách hàng: <b>{returnCase.customerName}</b> {returnCase.customerPhone ? `(${returnCase.customerPhone})` : ''}
@@ -145,7 +154,7 @@ export default function ReturnSettlementModal({
                   <h4 className="text-lg font-bold uppercase tracking-wider text-stone-900">
                     BẢNG TÍNH QUYẾT TOÁN TRẢ KHO
                   </h4>
-                  <p className="mt-0.5 font-mono text-xs text-stone-500">Mã hồ sơ: {recordDisplayCode(returnCase.id)}</p>
+                  <p className="mt-0.5 font-mono text-xs text-stone-500">Mã hồ sơ: {caseCode}</p>
                 </div>
                 <div className="text-right text-xs text-stone-500">
                   <p>Ngày lập: <b>{docDate}</b></p>
@@ -311,7 +320,7 @@ export default function ReturnSettlementModal({
                     </h4>
                   </div>
                   <p className="mt-1 font-mono text-xs text-stone-500">
-                    Số phiếu: {apiRecord ? receipt?.transactionReference || "Chưa có chứng từ thực thu/hoàn" : recordDisplayCode(returnCase.id)}
+                    Số phiếu: {receiptNumber || "Chưa có chứng từ thực thu/hoàn"}
                   </p>
                 </div>
                 <div className="text-right">
@@ -326,7 +335,7 @@ export default function ReturnSettlementModal({
                   <p className="text-xs text-stone-500">Người nộp / thụ hưởng:</p>
                   <p className="font-bold text-stone-900">{returnCase.customerName}</p>
                   <p className="text-xs text-stone-600">Gian kho đối soát: <b className="font-mono">{returnCase.unitId}</b></p>
-                  <p className="text-xs text-stone-600">Mã hồ sơ: <b className="font-mono">{recordDisplayCode(returnCase.rentalId)}</b></p>
+                  <p className="text-xs text-stone-600">Mã hồ sơ: <b className="font-mono">{rentalCode}</b></p>
                 </div>
 
                 <div className="space-y-2">
@@ -335,7 +344,7 @@ export default function ReturnSettlementModal({
                     Phương thức: <b>{apiRecord ? receiptMethod : "Chuyển khoản liên ngân hàng (VietQR / Napas)"}</b>
                   </p>
                   <p className="text-xs">
-                    Mã đối chiếu GD: <b className="font-mono text-stone-800">{apiRecord ? receipt?.transactionReference || "Chưa ghi nhận" : returnCase.settlementPaymentId || recordDisplayCode(returnCase.refundTransaction?.id, recordDisplayCode(returnCase.id))}</b>
+                    Mã đối chiếu GD: <b className="font-mono text-stone-800">{settlementReference || "Chưa ghi nhận"}</b>
                   </p>
                   <p className="text-xs">
                     Thời gian giao dịch: <b>{apiRecord ? receipt?.recordedAt ? new Date(receipt.recordedAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" }) : "Chưa ghi nhận" : docDate}</b>
@@ -388,7 +397,7 @@ export default function ReturnSettlementModal({
             <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
               <h4 className="font-bold text-stone-900">Lịch Sử Giao Dịch Thuê & Quyết Toán</h4>
               <p className="text-xs text-stone-500">
-                Toàn bộ dòng tiền phát sinh xuyên suốt hồ sơ {recordDisplayCode(returnCase.rentalId)}
+                Toàn bộ dòng tiền phát sinh xuyên suốt hồ sơ {rentalCode}
               </p>
 
               <div className="mt-3">
@@ -408,7 +417,7 @@ export default function ReturnSettlementModal({
                     {!apiRecord && <Tr>
                       <Td className="text-xs text-stone-500">{docDate}</Td>
                       <Td className="font-semibold text-stone-800">Tiền cọc đảm bảo thuê</Td>
-                      <Td className="font-mono text-xs text-stone-500">{recordDisplayCode(returnCase.rentalId)}</Td>
+                      <Td className="font-mono text-xs text-stone-500">{rentalCode}</Td>
                       <Td className="text-xs">{apiRecord ? receiptMethod : 'Chuyển khoản'}</Td>
                       <Td className="text-right font-semibold text-stone-800">+{formatVnd(deposit)}</Td>
                       <Td><Badge variant="success">Đã thanh toán</Badge></Td>
@@ -430,7 +439,7 @@ export default function ReturnSettlementModal({
                             INITIAL_RENT: 'Tiền thuê ban đầu',
                           } as Record<string, string>)[String(p.type)] || 'Giao dịch khác'}
                         </Td>
-                        <Td className="font-mono text-xs text-stone-500">{p.transactionReference || p.id}</Td>
+                        <Td className="font-mono text-xs text-stone-500">{receiptDisplayCode(null, p.transactionReference, p.id)}</Td>
                         <Td className="text-xs">{formatHistoryPaymentMethod(p.paymentMethod)}</Td>
                         <Td className="text-right font-semibold text-stone-800">{formatVnd(p.amount)}</Td>
                         <Td><Badge variant={p.status === 'PAID' ? 'success' : 'warning'}>{displayStatusLabel(p.status)}</Badge></Td>
@@ -444,7 +453,7 @@ export default function ReturnSettlementModal({
                         {netRefund > 0 ? 'Hoàn cọc tất toán trả kho' : amountDue > 0 ? 'Thu bổ sung quyết toán' : 'Tất toán hợp đồng'}
                       </Td>
                       <Td className="font-mono text-xs text-stone-500">
-                        {apiRecord ? receipt?.transactionReference || "Chưa ghi nhận" : returnCase.settlementPaymentId || recordDisplayCode(returnCase.id)}
+                        {settlementReference || "Chưa ghi nhận"}
                       </Td>
                       <Td className="text-xs">{apiRecord ? receiptMethod : 'Chuyển khoản'}</Td>
                       <Td className={`text-right font-bold ${netRefund > 0 ? 'text-emerald-700' : amountDue > 0 ? 'text-rose-700' : 'text-stone-800'}`}>

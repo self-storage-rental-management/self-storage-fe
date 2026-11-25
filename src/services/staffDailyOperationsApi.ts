@@ -20,6 +20,7 @@ export type StaffDailyOperationPriority = "high" | "medium" | "low"
 export type StaffDailyOperationPage = "reservations" | "checkin" | "return" | "support" | "tasks"
 
 export interface StaffDailyOperation {
+  displayCode?: string | null
   id: string
   title: string
   customer: string
@@ -89,6 +90,7 @@ export const checkInTask = (item: CheckInCase): StaffDailyOperation => {
   const overdue = Boolean(dueAt && new Date(dueAt).getTime() <= Date.now())
   return {
     id: `checkin-${item.checkInId || item.reservationId}`,
+    displayCode: item.reservationCode,
     title: receiptWaiting ? `Chờ xác nhận nhận kho ${item.reservationCode || item.storageUnitCode}` : `Nhận kho & bàn giao ${item.reservationCode || item.storageUnitCode}`,
     customer: item.customerName,
     time: dueAt || "",
@@ -106,6 +108,7 @@ const returnTask = (item: ApiReturn): StaffDailyOperation => {
   const isOverdue = item.scheduledDate ? item.scheduledDate < today : false
   return {
     id: `return-${item.id}`,
+    displayCode: item.displayCode,
     title: `Trả kho ${item.unitNumber}`,
     customer: item.customerName,
     time: item.scheduledDate,
@@ -133,6 +136,7 @@ const supportTask = (item: SupportTicket): StaffDailyOperation => {
     item.sla?.nextUpdateDueAt || item.sla?.firstReplyDueAt || item.createdAt
   return {
     id: `support-${item.id}`,
+    displayCode: item.displayCode,
     title: `Xử lý hỗ trợ ${item.subject}`,
     customer: item.customerName?.trim() || "Chưa có tên khách hàng",
     time: item.assignedAt || item.createdAt,
@@ -145,6 +149,7 @@ const supportTask = (item: SupportTicket): StaffDailyOperation => {
 
 const maintenanceTask = (item: MaintenanceTaskApi): StaffDailyOperation => ({
   id: `maintenance-${item.id}`,
+    displayCode: item.displayCode,
   title: formatMaintenanceTaskTitle(item),
   customer: item.customerName?.trim() || "-",
   time: item.dueAt || item.createdAt,
@@ -156,6 +161,7 @@ const maintenanceTask = (item: MaintenanceTaskApi): StaffDailyOperation => ({
 
 const reviewTask = (item: ReservationReview): StaffDailyOperation => ({
   id: `review-${item.reservationId}`,
+    displayCode: item.reservationCode,
   title: `Duyệt hàng hóa ${item.reservationCode}`,
   customer: item.customerEmail,
   time: item.reviewDueAt || item.startDate,

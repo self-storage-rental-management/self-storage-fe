@@ -1,3 +1,4 @@
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import { VIETNAM_TIME_ZONE, parseVietnamDate, vietnamDate } from '../../utils/vietnamTime'
 import LocalizedDateInput from '../../components/LocalizedDateInput'
 import { useEffect, useState } from "react"
@@ -155,7 +156,7 @@ export default function StaffSupportPanel({
           <Tbody>
             {pagination.items.map((item) => (
               <Tr key={item.id}>
-                <Td className="font-mono">{item.id}</Td>
+                <Td className="font-mono">{recordDisplayCode(item.id)}</Td>
                 <Td>
                   <b>{item.customer}</b>
                   <br />

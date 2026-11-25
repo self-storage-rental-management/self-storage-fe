@@ -5,6 +5,7 @@ import type { ApiReturn } from './returnApi'
 export function returnScreenRecord(record: ApiReturn): ReturnCase {
   const vnd = (value: number | null) => value == null ? Number.NaN : value
   return {
+    displayCode: record.displayCode, rentalDisplayCode: record.rentalDisplayCode,
     id: record.id, rentalId: record.rentalId, unitId: record.unitNumber,
     facilityId: record.facilityId, facilityName: record.facilityName,
     customerId: record.customerId, customerName: record.customerName,
