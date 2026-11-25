@@ -1,3 +1,4 @@
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import LocalizedDateInput from '../../components/LocalizedDateInput'
 import { useState } from "react"
 import { Button } from "../../components/ui"
@@ -93,7 +94,7 @@ export function InventoryRentalSummary({
       {rentals.map((r) => (
         <div key={r.id}>
           <p className="font-semibold">{r.customer.fullName}</p>
-          <p className="break-all text-xs text-stone-500">Hồ sơ thuê: {r.id}</p>
+          <p className="break-all text-xs text-stone-500">Hồ sơ thuê: {r.displayCode || recordDisplayCode(r.id)}</p>
           <p className="text-xs text-stone-500">{rentalLabels[r.status]}</p>
           {detailed && (
             <p className="text-xs text-stone-500">

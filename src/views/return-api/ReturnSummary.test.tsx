@@ -11,7 +11,8 @@ describe('Return summary', () => {
     expect(html).toContain('20/10/2026')
     expect(html).toContain('Đã yêu cầu trả kho')
     expect(html).toContain('10.000.000')
-    expect(html).toContain('Chưa xác định')
+    expect(html).toContain('sẽ được xác định sau nghiệm thu')
+    expect(html).not.toContain('Khách cần đóng thêm')
   })
   it('preserves settlement blocker warning instead of implying final payment', () => {
     const html = renderToStaticMarkup(<ReturnSummary record={{ ...record, settlementBlocker: 'Đơn cũ thiếu điều khoản setup, cần đối soát thủ công.' }} />)
@@ -30,20 +31,20 @@ describe('Return summary', () => {
     expect(html).not.toContain('Phí chấm dứt sớm một lần')
   })
   it('separates inventory mismatch pricing from a normal return', () => {
-    const html = renderToStaticMarkup(<ReturnSummary record={{ ...record, returnType: 'INVENTORY_MISMATCH', earlyTerminationPolicy: {
+    const html = renderToStaticMarkup(<ReturnSummary record={{ ...record, status: 'awaiting_business_review', inspectedAt: '2026-10-30T00:00:00Z', returnType: 'INVENTORY_MISMATCH', earlyTerminationPolicy: {
       type: 'GOODS_MOVED_IN', earlyTerminationFee: 0, billableSetupDays: 2,
       usedGoodsCharge: 200000, totalRentalCharge: 200000, rentalRefundAmount: 5800000, noticeDays: 0,
     }, setupExitRequested: true, setupEarlyExit: true, rentalRefundCredit: 5800000, earlyTerminationFee: 0 }} />)
     expect(html).toContain('Đơn trả kho do kiểm kê sai lệch')
     expect(html).toContain('Tính tiền theo số ngày sử dụng thực tế (Đơn giá tháng × Số ngày / 30).')
-    expect(html).toContain('Khách buộc chọn ngày trả kho trước hạn cuối 1 ngày')
+    expect(html).toContain('Khách có thể hẹn đến hết ngày cuối')
     expect(html).toContain('5.800.000')
     expect(html).not.toContain('Phí chấm dứt sớm một lần')
   })
 
   it('keeps the fixed fee visible for a normal setup return', () => {
     const html = renderToStaticMarkup(<ReturnSummary record={{ ...record, setupExitRequested: true,
-      setupEarlyExit: true, rentalRefundCredit: 5800000, earlyTerminationFee: 5500000 }} />)
+      status: 'awaiting_customer_confirmation', inspectedAt: '2026-10-30T00:00:00Z', setupEarlyExit: true, rentalRefundCredit: 5800000, earlyTerminationFee: 5500000 }} />)
     expect(html).toContain('Phí chấm dứt sớm một lần')
     expect(html).toContain('5.500.000')
   })

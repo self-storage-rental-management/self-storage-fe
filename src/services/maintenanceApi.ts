@@ -7,6 +7,8 @@ export type MaintenanceTaskType = 'maintenance' | 'inventory_check'
 export type StorageUnitStatus = 'available' | 'reserved' | 'occupied' | 'maintenance' | 'held' | 'assigned'
 
 export interface MaintenanceTaskApi {
+  unitReadinessCheck?: boolean
+  displayCode?: string | null
   id: string
   facilityId: string
   facilityName: string

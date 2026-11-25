@@ -4,7 +4,7 @@ export interface CashflowReport {
   facilityId: string; from: string; to: string; snapshotAt: string; completeness: 'RECORDED' | 'PARTIAL'
   collected: number; refunded: number; netRetained: number; pendingRefund: number; securityDepositHeld: number | null
   monthly: { month: string; collected: number; refunded: number; net: number }[]
-  settlements: { id: string; reservationCode: string; customerName: string; status: string; reason: string; deposit: number | null; rentalCredit: number | null; deductions: number | null; refund: number; paidAt: string | null; reference: string | null; payoutRecorded: boolean }[]
+  settlements: { id: string; reservationCode: string; customerName: string; status: string; reason: string; deposit: number | null; rentalCredit: number | null; deductions: number | null; refund: number; paidAt: string | null; reference: string | null; receiptCode?: string | null; payoutRecorded: boolean }[]
   warnings: string[]
 }
 

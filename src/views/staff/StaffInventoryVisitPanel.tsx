@@ -5,15 +5,13 @@ import { formatCustomerDateTime } from '../../i18n/customerDate'
 import { userFacingError } from '../../presentation/userFacingError'
 import { recordInventoryArrival, uploadCheckInEvidence, verifyInventoryIdentity, type CheckInCase } from '../../services/checkInApi'
 
-export default function StaffInventoryVisitPanel({ item, now, busy, onBusyChange, onSaved, onPreview, noShowDisabled, onNoShow }: {
+export default function StaffInventoryVisitPanel({ item, now, busy, onBusyChange, onSaved, onPreview }: {
   item: CheckInCase
   now: number
   busy: boolean
   onBusyChange: (value: boolean) => void
   onSaved: (updated: CheckInCase) => void
   onPreview: (photoId: string) => void
-  noShowDisabled?: boolean
-  onNoShow?: () => void
 }) {
   const declaredIdentityDocument = item.identityDocumentNumber?.trim() || ''
   const [document, setDocument] = useState(declaredIdentityDocument)
@@ -98,7 +96,6 @@ export default function StaffInventoryVisitPanel({ item, now, busy, onBusyChange
       <div className="flex flex-wrap gap-2">
         <Button type="button" size="sm" disabled={busy || expired || !visit?.appointmentAt || !item.checkInId || !document.trim() || !present || (!file && !photoId)}
           onClick={() => void verify()}>{busy ? 'Đang lưu…' : 'Xác minh người đặt kho'}</Button>
-        {onNoShow && <Button type="button" size="sm" variant="danger" disabled={busy || noShowDisabled} title={noShowDisabled ? 'Chỉ có thể đánh dấu khách không đến khi hồ sơ đang chờ bàn giao.' : undefined} onClick={onNoShow}>Khách không đến</Button>}
       </div>
       </div>}
     {error && <p className="text-red-800" role="alert">{error}</p>}

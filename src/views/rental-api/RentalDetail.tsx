@@ -3,7 +3,7 @@ import InventoryDecisionSummary from '../../components/InventoryDecisionSummary'
 import { displayStatusLabel } from '../../presentation/statusLabels'
 import { invoiceNumberLabel } from '../customer/paymentLabels'
 import { useManagerPresentation } from "../manager/managerPresentation"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import RenewalRiskNotice from "./RenewalRiskNotice"
 import RentalHandoverFiles from "./RentalHandoverFiles"
 import { Badge, Button, Card, Modal } from "../../components/ui"
@@ -19,6 +19,9 @@ import InventoryAppointmentPanel from "../customer/InventoryAppointmentPanel"
 import IntakeWorkflowPanel from "../../components/IntakeWorkflowPanel"
 import { formatCustomerDateTime } from "../../i18n/customerDate"
 import { listReturns, type ApiReturn } from "../../services/returnApi"
+import { CustomerClearance } from '../return-api/ReturnClearance'
+import { getAuthenticatedActor } from '../../services/authApi'
+import { getReturn, returnError } from '../../services/returnApi'
 import { ReturnSummary } from "../return-api/ReturnApiPanel"
 import { userFacingError } from "../../presentation/userFacingError"
 import FilePreviewDialog from "../../components/FilePreviewDialog"
@@ -107,6 +110,24 @@ export default function RentalDetail({
   const [inventoryActionMessage, setInventoryActionMessage] = useState('')
   const [inventoryActionError, setInventoryActionError] = useState('')
   const [activeReturnCase, setActiveReturnCase] = useState<ApiReturn>()
+  const clearanceLock = useRef(false)
+  const [clearanceBusy, setClearanceBusy] = useState(false)
+  const [clearanceError, setClearanceError] = useState('')
+  async function updateClearance(work: () => Promise<ApiReturn>) {
+    if (clearanceLock.current || !activeReturnCase) return
+    clearanceLock.current = true
+    setClearanceBusy(true)
+    setClearanceError('')
+    try {
+      setActiveReturnCase(await work())
+    } catch (error) {
+      setClearanceError(returnError(error))
+      try { setActiveReturnCase(await getReturn('customer', activeReturnCase.id)) } catch { /* Keep the action error visible. */ }
+    } finally {
+      clearanceLock.current = false
+      setClearanceBusy(false)
+    }
+  }
   const isReturningRental = ['return_requested', 'return_inspection', 'closing'].includes(rental.status)
   const inventoryReservationId = role === 'customer'
     ? rental.reservationId : null
@@ -261,7 +282,12 @@ export default function RentalDetail({
             <Badge variant="warning">{copy(rentalStatusLabel(rental))}</Badge>
           </div>
           {activeReturnCase ? (
-            <ReturnSummary record={activeReturnCase} hideHeader />
+            <>
+              <ReturnSummary record={activeReturnCase} hideHeader />
+              {role === 'customer' && activeReturnCase.sourceType !== 'RECOVERY' && <CustomerClearance
+                record={activeReturnCase} ownerId={getAuthenticatedActor()?.id} busy={clearanceBusy} run={updateClearance} />}
+              {clearanceError && <p role="alert" className="text-sm text-red-800">{clearanceError}</p>}
+            </>
           ) : (
             <p className="text-sm text-amber-900">Hồ sơ đã chuyển sang trả kho. Vui lòng mở mục <b>Trả kho</b> để theo dõi lịch trả, nghiệm thu và bảng kê quyết toán.</p>
           )}

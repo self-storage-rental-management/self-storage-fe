@@ -1,7 +1,8 @@
+import { CustomerClearance } from '../views/return-api/ReturnClearance'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { setAccessToken, clearAuthTokens } from './apiClient'
-import { completeRefund, recordReturnSettlement, isApiReturn, requestReturn, listReturns, getReturn, inspectReturn, reviewDispute, confirmReturn, paySettlement, returnError, uploadReturnEvidence, type ApiReturn } from './returnApi'
+import { setCustomerClearance, completeRefund, recordReturnSettlement, isApiReturn, requestReturn, listReturns, getReturn, inspectReturn, reviewDispute, confirmReturn, paySettlement, returnError, uploadReturnEvidence, type ApiReturn } from './returnApi'
 import ReturnApiPanel, { ReturnSummary } from '../views/return-api/ReturnApiPanel'
 import { ids, operationsActor } from '../../tests/rentalOperationsApiFixtures'
 import type { ApiActor } from './authApi'
@@ -49,6 +50,20 @@ describe('real Return transport and unknown settlement presentation', () => {
     expect(fetch.mock.calls[0][0]).toContain(`/api/customer/rentals/${ids.rental}/return-request`)
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ scheduledDate: '2026-10-25', notes: 'TEST request' })
     expect(new Headers(fetch.mock.calls[0][1].headers).get('Authorization')).toBe('Bearer TEST-token')
+  })
+  it('restores the clearance time and revoke action from the owner detail response', async () => {
+    const cleared: ApiReturn = { ...record, status: 'scheduled', customerClearedAt: '2026-11-25T01:00:00Z', clearanceRevision: 2 }
+    const fetch = respond({ data: cleared })
+    await setCustomerClearance({ ...cleared, customerClearedAt: null }, true)
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ cleared: true, clearanceRevision: 2 })
+    respond({ data: cleared })
+    const loaded = await getReturn('customer', cleared.id)
+    const html = renderToStaticMarkup(<CustomerClearance record={loaded} busy={false} run={vi.fn()} ownerId={ids.customer} />)
+    expect(html).toContain('Thu hồi xác nhận dọn kho')
+    expect(html).toContain('2026-11-25T01:00:00Z')
+    const inspected = renderToStaticMarkup(<CustomerClearance record={{ ...loaded, status: 'payment_due', customerClearedAt: null }} busy={false} run={vi.fn()} ownerId={ids.customer} />)
+    expect(inspected).toContain('aria-current="step"')
+    expect(inspected).not.toContain('<button')
   })
   it('reads paginated ownership-bound rows and detail', async () => {
     respond({ data: [record], pagination: { page: 0, pageSize: 20, totalItems: 1, totalPages: 1, sort: 'createdAt: DESC' }, correlationId: 'test' })
@@ -135,7 +150,7 @@ describe('real Return transport and unknown settlement presentation', () => {
     await recordReturnSettlement(ids.event, proof, 'same-refund-command')
     expect(fetch.mock.calls[0][0]).toContain(`/api/staff/returns/${ids.event}/settlement-receipts`)
     expect(new Headers(fetch.mock.calls[0][1].headers).get('Idempotency-Key')).toBe('same-refund-command')
-    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual(proof)
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ ...proof, transactionReference: '' })
   })
   it('does not send a payout with missing confirmation or invalid saved evidence', async () => {
     state.actor = operationsActor('staff')

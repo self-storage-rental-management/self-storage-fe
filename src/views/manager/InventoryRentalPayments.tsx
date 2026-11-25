@@ -1,3 +1,4 @@
+import { recordDisplayCode, receiptDisplayCode, internalPaymentReference } from '../../utils/recordDisplayCode'
 import { useState } from 'react'
 import { Badge, Button } from '../../components/ui'
 import { getAuthenticatedActor } from '../../services/authApi'
@@ -12,11 +13,11 @@ const statuses = { PENDING: 'Chờ thanh toán', PROCESSING: 'Đang xử lý', P
 const purpose = (p: RentalPaymentReceipt) => p.purpose==='RENEWAL' ? 'Thanh toán gia hạn' : p.purpose==='RENTAL_BALANCE' ? p.renewalId ? 'Thanh toán khi ký gia hạn' : 'Thanh toán khi nhận kho' : p.purpose==='MONTHLY_RENT' ? 'Tiền thuê tháng' : 'Đặt cọc giữ chỗ'
 function Receipt({ payment: p }: { payment: RentalPaymentReceipt }) {
   const verified = ['VERIFIED','SANDBOX'].includes(p.verification)
-  return <PaymentReceiptCard title="Biên lai thanh toán" reference={p.renewalId || p.rentalId}
+  return <PaymentReceiptCard title="Biên lai thanh toán" reference={receiptDisplayCode(p.receiptCode, p.transactionReference, p.paymentId)}
     confirmed={verified} status={p.verification==='SIMULATED' ? 'Giao dịch mô phỏng' : verified ? 'Đã xác nhận' : 'Cần đối soát'}
     fields={[
-      ['Mã phiếu thu',p.receiptCode || 'Chưa cấp'],['Mã giao dịch StorageHub',p.paymentId],
-      ['Mã tham chiếu thanh toán',p.transactionReference || '-'],['Mã giao dịch thanh toán',p.gatewayTransactionNo || '-'],['Hồ sơ thuê',p.rentalId],
+      ['Mã phiếu thu',p.receiptCode || 'Chưa cấp'],
+      ['Mã tham chiếu thanh toán',internalPaymentReference(p.transactionReference) ? '-' : p.transactionReference || '-'],['Mã giao dịch thanh toán',p.gatewayTransactionNo || '-'],['Hồ sơ thuê',p.rentalDisplayCode || recordDisplayCode(p.rentalId)],
       ['Thời điểm ghi nhận thanh toán',rentalDate(p.paidAt)],['Thời điểm StorageHub xử lý',rentalDate(p.processedAt)],
       ['Phương thức thanh toán',paymentMethodLabel(p.paymentMethod)],['Người ghi nhận',p.initiatedByName],
       ['Nội dung',purpose(p)],['Số tiền',formatVndAmount(p.amount)],['Tiền tệ',paymentCurrencyLabel(p.currency)],

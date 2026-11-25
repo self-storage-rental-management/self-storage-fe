@@ -1,3 +1,4 @@
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import { useCallback, useEffect, useState } from 'react'
 import { Button } from '../../components/ui'
 import { getAuthenticatedActor } from '../../services/authApi'
@@ -80,14 +81,14 @@ export default function BusinessRefundRequestsPanel({ refreshVersion = 0 }: { re
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="font-semibold text-stone-900">{formatVndAmount(row.amount)}</p>
-                <p className="mt-1 text-xs text-stone-500">Yêu cầu lúc {new Date(row.createdAt).toLocaleString('vi-VN')} · {row.paymentId ? `Giao dịch ${row.paymentId}` : 'Chưa có giao dịch'}</p>
+                <p className="mt-1 text-xs text-stone-500">Yêu cầu lúc {new Date(row.createdAt).toLocaleString('vi-VN')} · {row.paymentId ? `Giao dịch ${row.paymentReceiptCode || recordDisplayCode(row.paymentId)}` : 'Chưa có giao dịch'}</p>
               </div>
               <Button size="sm" disabled={busyId !== null} onClick={() => void approve(row)}>
                 {busyId === row.id ? 'Đang xử lý…' : 'Duyệt hoàn qua VNPay'}
               </Button>
             </div>
             <p className="mt-2 whitespace-pre-wrap text-sm text-stone-700">{row.reason}</p>
-            <p className="mt-2 text-xs text-stone-500">Yêu cầu {row.id} · Người tạo {row.requestedBy ?? 'Hệ thống'}</p>
+            <p className="mt-2 text-xs text-stone-500">Yêu cầu {row.displayCode || recordDisplayCode(row.id)} · Người tạo {row.requestedByName || (row.requestedBy ? 'Nhân viên' : 'Hệ thống')}</p>
           </article>
         ))}
       </div>

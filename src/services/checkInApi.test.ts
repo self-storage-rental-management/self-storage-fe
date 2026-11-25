@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { clearAuthTokens } from './apiClient'
-import { checkInEvidenceAssetIds, completeCheckIn, completeCheckInSetup, confirmCheckInPayment, downloadCheckInEvidence, listCheckIns, listStaffAccessCredentials, markCheckInNoShow, recordInventoryArrival, rejectCheckIn, reissueAccessCredential, scheduleCheckIn, signCheckInContract, startCheckInSetup, uploadCheckInEvidence, verifyCheckInIdentity, verifyInventoryIdentity } from './checkInApi'
+import { checkInEvidenceAssetIds, completeCheckIn, completeCheckInSetup, confirmCheckInPayment, downloadCheckInEvidence, listCheckIns, listStaffAccessCredentials, recordCheckInArrival, recordInventoryArrival, rejectCheckIn, reissueAccessCredential, scheduleCheckIn, signCheckInContract, startCheckInSetup, uploadCheckInEvidence, verifyCheckInIdentity, verifyInventoryIdentity } from './checkInApi'
 
 const responseCase = {
   checkInId: 'checkin-1',
@@ -89,7 +89,7 @@ describe('checkInApi', () => {
     })
   })
 
-  it('completes handover and supports no-show', async () => {
+  it('records arrival and completes handover', async () => {
     const inventoryLines = [
       { goodsItemId: 'goods-1', actualQuantity: 2, condition: 'INTACT' as const, note: null,
         actualCategoryId: 'category-1', actualMaterialId: 'material-1',
@@ -130,7 +130,6 @@ describe('checkInApi', () => {
     }
 
     const completed = await completeCheckIn('checkin-1', request)
-    await markCheckInNoShow('checkin-1', 'Khách không đến')
 
     expect(fetchMock.mock.calls[0][0]).toContain('/checkin-1/complete')
     expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual(expect.objectContaining({
@@ -138,7 +137,9 @@ describe('checkInApi', () => {
       goodsMaterial: 'Gỗ',
     }))
     expect(completed.handover?.inventoryLines).toEqual(inventoryLines)
-    expect(fetchMock.mock.calls[1][0]).toContain('/checkin-1/no-show')
+    await recordCheckInArrival('checkin-1')
+    expect(fetchMock.mock.calls[1][0]).toContain('/checkin-1/arrival')
+    expect(fetchMock.mock.calls[1][1]?.body).toBeUndefined()
   })
 
   it('connects every persisted check-in workflow transition', async () => {
