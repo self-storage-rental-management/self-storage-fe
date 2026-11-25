@@ -1,4 +1,5 @@
 import StaffRecordDocuments from './StaffRecordDocuments'
+import IntakeWorkflowPanel from '../../components/IntakeWorkflowPanel'
 import { intakeDecisionLabels } from '../../services/inventoryDecision'
 import InventoryResolutionPanel from './InventoryResolutionPanel'
 import InventoryReviewDetails from './InventoryReviewDetails'
@@ -1849,9 +1850,7 @@ export default function StaffCheckInOperationsPanel({
       + (item.checkInStatus === "completed" ? 3 : 0)
     const actionLayoutClass = actionButtonCount === 1
       ? "flex max-w-md flex-wrap items-center justify-center"
-      : actionButtonCount === 3
-        ? "grid max-w-[31rem] grid-cols-3"
-        : "grid max-w-[25rem] grid-cols-2"
+      : "grid max-w-[25rem] grid-cols-2"
     const actionButtonClass = `${checkInActionButtonBaseClass} ${actionButtonCount === 1 ? "w-48" : "w-full"}`
     return (
     <Tr key={item.reservationId} title={item.customerName ? `Khách hàng: ${item.customerName}` : undefined}>
@@ -1922,7 +1921,7 @@ export default function StaffCheckInOperationsPanel({
                 disabled={submitting || !actions.canOpen}
                 onClick={() => beginHandover(item)}
               >
-                {stepForCheckIn(item) === 6 ? "Xem tiến trình bàn giao" : actions.label}
+                {item.checkInStatus === "setup_in_progress" || stepForCheckIn(item) === 6 ? "Xem tiến trình bàn giao" : actions.label}
               </Button>
               {actions.canReject && <Button
                 className={actionButtonClass}
@@ -2490,6 +2489,16 @@ export default function StaffCheckInOperationsPanel({
               }}
               onPreview={photoId => void previewEvidenceFile(photoId)}
             />}
+            {inventoryMode && handoverTarget.reservationId && inventoryStage === 1 && (
+              <IntakeWorkflowPanel
+                reservationId={handoverTarget.reservationId}
+                role="STAFF"
+                mode="staff-visit"
+                checkInId={handoverTarget.checkInId}
+                statusSignal={handoverTarget.checkInStatus}
+                onUpdated={refresh}
+              />
+            )}
 
             {inventoryMode && handoverTarget.inventoryVisit?.identityVerifiedAt && (
               <div hidden={inventoryStage !== 2}>

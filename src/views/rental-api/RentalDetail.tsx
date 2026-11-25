@@ -15,7 +15,6 @@ import { downloadCheckInEvidence, type CheckInInventoryLine } from "../../servic
 import { confirmCustomerRentalStart, extendCustomerInventoryReturnWindow, getCustomerReservation, markCustomerPreparationComplete, previewCustomerRentalStart, resolveCustomerInventory, type CustomerReservationDetail, type RentalStartConfirmation } from "../../services/customerReservationApi"
 import { updateReturnRequest } from "../../services/returnApi"
 import { InventoryLineInspectionResult, InventoryResolutionNotice, PackagingInspectionResult } from "../customer/CustomerReservationCard"
-import InventoryAppointmentPanel from "../customer/InventoryAppointmentPanel"
 import IntakeWorkflowPanel from "../../components/IntakeWorkflowPanel"
 import { formatCustomerDateTime } from "../../i18n/customerDate"
 import { listReturns, type ApiReturn } from "../../services/returnApi"
@@ -328,20 +327,21 @@ export default function RentalDetail({
             <div>
               <dt>Đưa hàng vào kho</dt>
               <dd className="space-y-3">
+                <IntakeWorkflowPanel
+                  reservationId={rental.reservationId}
+                  role="CUSTOMER"
+                  mode="setup"
+                  statusSignal={`${rental.moveInCompletedAt || rental.status}-${inventoryReload}`}
+                  hideCompleteSetupButton
+                />
                 <div className="rounded-lg border border-violet-300 bg-violet-50 p-3 text-violet-950">
                   <p className="text-sm font-bold">Bạn đã đưa hàng vào kho xong?</p>
-                  <p className="mt-1 text-xs leading-5">Xác nhận đã đưa hàng vào thành công để mở lịch chọn ngày hẹn kiểm kê gửi cho nhân viên.</p>
+                  <p className="mt-1 text-xs leading-5">Xác nhận sau khi đã sắp xếp hàng hóa vào kho xong để nhân viên tiếp nhận kiểm kê.</p>
                   <Button className="mt-2" size="sm" disabled={preparationSubmitting} onClick={() => void reportPreparationComplete()}>
                     {preparationSubmitting ? 'Đang gửi…' : 'Xác nhận đã đưa hàng vào thành công'}
                   </Button>
                   {preparationError && <p role="alert" className="mt-2 text-xs text-red-700">{preparationError}</p>}
                 </div>
-                <IntakeWorkflowPanel
-                  reservationId={rental.reservationId}
-                  role="CUSTOMER"
-                  statusSignal={rental.moveInCompletedAt || rental.status}
-                  onUpdated={onRentalStartConfirmed}
-                />
               </dd>
             </div>
           )}
@@ -368,9 +368,8 @@ export default function RentalDetail({
           </div> : (rental.inventoryPending || (role === 'customer' && Boolean(inventoryDetail?.inventoryDecision || inventoryDetail?.inventoryResolutionStatus === 'RETURN_REQUESTED'))) && <div>
             <dt>Kiểm kê đầu vào</dt>
             <dd className="space-y-3">{role === 'customer' && inventoryDetail?.reservation.id === rental.reservationId
-              && (inventoryDetail.inventoryFinalDeadlineAt || inventoryDetail.setupCompletedAt || inventoryDetail.inventoryDecision || (inventoryDetail.inventoryResolutionStatus && inventoryDetail.inventoryResolutionStatus !== 'NOT_STARTED')) ? (
+              && (inventoryDetail.inventoryDecision || (inventoryDetail.inventoryResolutionStatus && inventoryDetail.inventoryResolutionStatus !== 'NOT_STARTED')) ? (
                 <>
-                  {!isReturningRental && inventoryDetail.inventoryFinalDeadlineAt && <InventoryAppointmentPanel detail={inventoryDetail} now={now} onSaved={setInventoryDetail} />}
                   <InventoryResolutionNotice
                     detail={inventoryDetail}
                     now={now}
@@ -400,8 +399,21 @@ export default function RentalDetail({
               ) : <>
               <Badge variant="warning">Chưa kiểm kê</Badge>
               <p className="mt-2 text-xs leading-5 text-stone-500">Kỳ thuê vẫn tính theo mốc đã bàn giao, hồ sơ kiểm kê cần được hoàn tất trước hạn xử lý.</p>
-              {rental.inventoryDueAt && <p className="mt-1 text-xs text-stone-500">Mốc nhắc kiểm kê: {new Date(rental.inventoryDueAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</p>}
-              {rental.inventoryFinalDeadlineAt && <p className={`mt-1 text-xs font-bold ${new Date(rental.inventoryFinalDeadlineAt).getTime() <= now ? 'text-red-700' : 'text-stone-700'}`}>{new Date(rental.inventoryFinalDeadlineAt).getTime() <= now ? 'Đã quá hạn kiểm kê' : 'Hạn hoàn tất kiểm kê'}: {new Date(rental.inventoryFinalDeadlineAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</p>}
+              {role === 'customer' && !isReturningRental && rental.reservationId ? (
+                <IntakeWorkflowPanel
+                  reservationId={rental.reservationId}
+                  role="CUSTOMER"
+                  mode="inspection"
+                  statusSignal={`${rental.moveInCompletedAt || rental.status}-${inventoryReload}`}
+                  hideCompleteSetupButton
+                  onUpdated={() => { setInventoryReload(v => v + 1); onRentalStartConfirmed?.() }}
+                />
+              ) : (
+                <>
+                  {rental.inventoryDueAt && <p className="mt-1 text-xs text-stone-500">Mốc nhắc kiểm kê: {new Date(rental.inventoryDueAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</p>}
+                  {rental.inventoryFinalDeadlineAt && <p className={`mt-1 text-xs font-bold ${new Date(rental.inventoryFinalDeadlineAt).getTime() <= now ? 'text-red-700' : 'text-stone-700'}`}>{new Date(rental.inventoryFinalDeadlineAt).getTime() <= now ? 'Đã quá hạn đến kiểm kê' : 'Hạn đến kiểm kê'}: {new Date(rental.inventoryFinalDeadlineAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</p>}
+                </>
+              )}
               {inventoryReadError && <div className="mt-2">
                 <p role="alert" className="text-xs text-red-700">{inventoryReadError}</p>
                 <Button size="sm" variant="outline" onClick={() => setInventoryReload(value => value + 1)}>Tải lại lịch kiểm kê</Button>
