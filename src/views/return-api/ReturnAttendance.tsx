@@ -43,9 +43,12 @@ export default function ReturnAttendance({ record, role, editable, onChanged }: 
     }
   }
 
-  if (!attendance || !['requested', 'scheduled'].includes(record.status)) return null
+  if (!attendance || record.sourceType === 'RECOVERY' || !['requested', 'scheduled'].includes(record.status)) return null
   const pendingReview = attendance.reviewAccepted == null && !!attendance.reviewStartsAt && now >= Date.parse(attendance.reviewStartsAt)
-  const beforeDeadline = !!record.inventoryRemovalDeadlineAt && now < Date.parse(record.inventoryRemovalDeadlineAt)
+  const arrivalDeadline = record.returnType === 'INVENTORY_MISMATCH'
+    ? record.inventoryRemovalDeadlineAt
+    : record.recoveryEligibleAt
+  const beforeDeadline = !arrivalDeadline || now < Date.parse(arrivalDeadline)
 
   async function submit(action: () => Promise<ApiReturn>) {
     if (lock.current) return
