@@ -387,7 +387,7 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
     // 3. Kiểm tra thay đổi trạng thái
     const statusChanged = toUiStatus(selected.status) !== form.status
     if (statusChanged) {
-      currentAccount = await updateAdminUserStatus(selected.id, toApiStatus(form.status))
+      currentAccount = await updateAdminUserStatus(selected.id, toApiStatus(form.status), `Quản trị viên cập nhật trạng thái thành ${form.status}.`)
       changes.push('trạng thái')
     }
 
@@ -424,7 +424,7 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
       const nextStatus = confirmStatusModal.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE'
       const updated = isLocked
         ? await unlockAdminUser(confirmStatusModal.id)
-        : await updateAdminUserStatus(confirmStatusModal.id, nextStatus)
+        : await updateAdminUserStatus(confirmStatusModal.id, nextStatus, nextStatus === 'ACTIVE' ? 'Quản trị viên mở khóa tài khoản.' : 'Quản trị viên tạm khóa tài khoản.')
       replaceAccount(updated)
       showToast(
         nextStatus === 'ACTIVE'

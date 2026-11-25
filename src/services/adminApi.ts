@@ -287,10 +287,10 @@ export async function updateAdminUserFacilities(id: string, facilityScopes: Reco
   return readData<AdminApiUser>(response)
 }
 
-export async function updateAdminUserStatus(id: string, status: ApiUserStatus) {
+export async function updateAdminUserStatus(id: string, status: ApiUserStatus, reason?: string) {
   const response = await apiRequest<ApiEnvelope<AdminApiUser>>(`/api/admin/users/${encodeURIComponent(id)}/status`, {
     method: 'PATCH',
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status, reason }),
   })
   return readData<AdminApiUser>(response)
 }

@@ -29,7 +29,7 @@ function stateLabel(log: AdminApiActivityLog) {
 
 function actionGroup(log: AdminApiActivityLog) {
   if (log.action.startsWith('ADMIN_ROLE') || log.entityType === 'Role') return 'Quyền & vai trò'
-  if (log.action.startsWith('SESSION') || log.action.startsWith('ADMIN_SESSION') || log.action === 'INVALID_CREDENTIALS') return 'Phiên & bảo mật'
+  if (log.action.startsWith('SESSION') || log.action.startsWith('ADMIN_SESSION') || log.action.startsWith('ACCOUNT_') || log.action.startsWith('PROCESSING_LEASE') || log.action === 'INVALID_CREDENTIALS') return 'Phiên & bảo mật'
   if (log.action.includes('SETTING') || log.action.startsWith('BUSINESS_CONFIG')) return 'Cấu hình hệ thống'
   if (log.entityType === 'User' || log.action.startsWith('USER_') || log.action.startsWith('PASSWORD_')) return 'Tài khoản'
   return 'Nghiệp vụ'
@@ -37,14 +37,14 @@ function actionGroup(log: AdminApiActivityLog) {
 
 function actionGroupKey(log: AdminApiActivityLog) {
   if (log.action.startsWith('ADMIN_ROLE') || log.entityType === 'Role') return 'roles'
-  if (log.action.startsWith('SESSION') || log.action.startsWith('ADMIN_SESSION') || log.action === 'INVALID_CREDENTIALS') return 'security'
+  if (log.action.startsWith('SESSION') || log.action.startsWith('ADMIN_SESSION') || log.action.startsWith('ACCOUNT_') || log.action.startsWith('PROCESSING_LEASE') || log.action === 'INVALID_CREDENTIALS') return 'security'
   if (log.action.includes('SETTING') || log.action.startsWith('BUSINESS_CONFIG')) return 'settings'
   if (log.entityType === 'User' || log.action.startsWith('USER_') || log.action.startsWith('PASSWORD_')) return 'accounts'
   return 'operations'
 }
 
 function severity(log: AdminApiActivityLog): 'success' | 'info' | 'warning' | 'error' {
-  if (log.action === 'INVALID_CREDENTIALS' || log.action.includes('FAILED') || log.action.includes('DENIED')) return 'error'
+  if (log.action === 'INVALID_CREDENTIALS' || log.action.startsWith('ACCOUNT_LOCKED') || log.action.includes('FAILED') || log.action.includes('DENIED')) return 'error'
   if (log.action.includes('ROLE_PERMISSIONS') || log.action.includes('SETTING') || log.action.includes('STATUS_CHANGED') || log.action.includes('REVOKED')) return 'warning'
   if (log.action.includes('CREATED') || log.action.includes('REGISTERED') || log.action.includes('VERIFIED')) return 'success'
   return 'info'
