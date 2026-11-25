@@ -336,7 +336,9 @@ export default function Layout({
   }
 
   const allNotificationsMap = new Map<string, LayoutNotification>()
-  bellActionNotifications.forEach(n => allNotificationsMap.set(n.id, n))
+  bellActionNotifications.filter(n => !(n+    user.role === 'manager' && n.page === 'returns' &&
+    n.message === 'Vui lòng tạo yêu cầu tại màn hình Bảo trì bằng gian kho thực tế, không tạo phiếu cục bộ cho hồ sơ từ hệ thống.'
+  )).forEach(n => allNotificationsMap.set(n.id, n))
   ;(suppliedNotifications ?? []).forEach(n => {
     if (!allNotificationsMap.has(n.id)) allNotificationsMap.set(n.id, n)
   })

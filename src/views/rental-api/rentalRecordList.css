@@ -18,6 +18,10 @@
   text-align: right;
 }
 
+.rental-record-head > :nth-child(6) {
+  text-align: center;
+}
+
 .rental-record-label {
   display: none;
 }
