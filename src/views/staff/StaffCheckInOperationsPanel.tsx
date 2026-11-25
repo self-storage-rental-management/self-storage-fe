@@ -1656,6 +1656,10 @@ export default function StaffCheckInOperationsPanel({
 
       setNoShowTarget(null)
 
+      setError(null)
+      setFieldErrors({})
+      setHandoverTarget(null)
+
       refresh()
     } catch (reason) {
       fail(reason, "Không thể đánh dấu khách không đến.")
@@ -1739,7 +1743,7 @@ export default function StaffCheckInOperationsPanel({
         ? String(item.handoverRecord.palletCount)
         : item.equipment?.palletCount != null
           ? String(item.equipment.palletCount)
-          : ""
+          : "100"
     )
 
     setPaymentMethod("CASH")
@@ -1839,7 +1843,7 @@ export default function StaffCheckInOperationsPanel({
     const showsOngoingActions = group === "ONGOING" && item.checkInStatus !== "completed"
     const showsDetailAction = ["handover_pending_receipt", "setup_in_progress", "setup_completed"].includes(item.checkInStatus || "")
     const actionButtonCount = 1
-      + (showsOngoingActions ? 2 : 0)
+      + (showsOngoingActions ? 1 : 0)
       + (showsOngoingActions && actions.canReject ? 1 : 0)
       + (showsDetailAction ? 1 : 0)
       + (item.checkInStatus === "completed" ? 3 : 0)
@@ -1929,18 +1933,6 @@ export default function StaffCheckInOperationsPanel({
               >
                 Từ chối nhận kho
               </Button>}
-              <Button
-                className={actionButtonClass}
-                size="sm"
-                variant="danger"
-                disabled={submitting || !actions.canMarkAbsent}
-                onClick={() => {
-                  setNoShowTarget(item)
-                  setNoShowReason("")
-                }}
-              >
-                Khách không đến
-              </Button>
             </>
           )}
           {showsDetailAction && (
@@ -2283,6 +2275,7 @@ export default function StaffCheckInOperationsPanel({
                         }}
                         placeholder="Ví dụ: 6"
                       />
+                      <p className="text-xs text-stone-600 sm:col-span-2">Số tấm kê được gợi ý khi chưa có cấu hình. Vui lòng kiểm đếm thực tế và điều chỉnh trước khi xác nhận bàn giao.</p>
                     </div>
                   </div>
 
@@ -2485,6 +2478,8 @@ export default function StaffCheckInOperationsPanel({
             {inventoryMode && handoverTarget.checkInStatus !== 'setup_in_progress' && inventoryStage === 1 && <StaffInventoryVisitPanel
               key={handoverTarget.checkInId ?? handoverTarget.reservationId}
               item={handoverTarget} now={now} busy={submitting} onBusyChange={setSubmitting}
+              noShowDisabled={!staffCheckInActions(handoverTarget, now).canMarkAbsent}
+              onNoShow={() => { setError(null); setNoShowTarget(handoverTarget); setNoShowReason("") }}
               onSaved={updated => {
                 setHandoverTarget(updated)
                 if (updated.inventoryVisit?.identityVerifiedAt) {
@@ -3061,6 +3056,7 @@ export default function StaffCheckInOperationsPanel({
                 </div>
               ) : handoverStep < 6 ? (
                 <div className="flex flex-wrap items-center justify-end gap-3">
+                  {handoverStep === 1 && <Button variant="danger" disabled={submitting || !staffCheckInActions(handoverTarget, now).canMarkAbsent} onClick={() => { setError(null); setNoShowTarget(handoverTarget); setNoShowReason("") }}>Khách không đến</Button>}
                   {handoverStep > 1 && (
                     <Button
                       variant="outline"

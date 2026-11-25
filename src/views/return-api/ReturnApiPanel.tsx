@@ -569,17 +569,6 @@ function ReturnWorkspace({
           {/* Header Bar */}
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 pb-4">
             <div className="flex flex-wrap items-center gap-2.5">
-              {!rentalId && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setSelectedRecordId(null)}
-                  className="font-semibold text-xs border-stone-300 text-stone-700 hover:bg-stone-50"
-                >
-                  ← Quay lại danh sách hồ sơ
-                </Button>
-              )}
               <span className="font-mono font-extrabold text-stone-900 text-sm sm:text-base bg-stone-100 px-3 py-1 rounded-lg border border-stone-200">
                 {selectedRecord.unitNumber}
               </span>
@@ -614,21 +603,30 @@ function ReturnWorkspace({
               </span>
             </div>
 
+            <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+            {!rentalId && (
+              <Button type="button" size="sm" variant="outline" onClick={() => setSelectedRecordId(null)} className="font-semibold text-xs border-stone-300 text-stone-700 hover:bg-stone-50">
+                ← Quay lại danh sách hồ sơ
+              </Button>
+            )}
             {role !== 'customer' && (
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
                 onClick={() => setEmergencyModalOpen(true)}
-                className="ml-auto shrink-0 text-xs font-semibold text-stone-700 border-stone-300 bg-white hover:bg-stone-50"
+                className="shrink-0 text-xs font-semibold text-stone-700 border-stone-300 bg-white hover:bg-stone-50"
               >
                 Liên hệ khẩn cấp
               </Button>
             )}
+            </div>
           </div>
 
+          {feedback && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{feedback}</p>}
           {/* Form Actions / 2-Column Inspection */}
           <ReturnActions
+            key={selectedRecord.id}
             role={role}
             record={selectedRecord}
             run={run}
@@ -991,7 +989,7 @@ function DamagePricingSelector({
               Số lượng ({price?.unit ?? 'đơn vị'})
               <input
                 type="number"
-                min="0.01"
+                min={price?.unit === 'm²' ? '0.01' : '1'}
                 step={price?.unit === 'm²' ? '0.01' : '1'}
                 value={item.quantity}
                 disabled={disabled}
@@ -1064,6 +1062,8 @@ function getNextStepText(status: ApiReturn['status'], role: ReturnRole, recovery
 
 function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLocked, onRecoveryChanged }: { role: ReturnRole; record: ApiReturn; run: (work: () => Promise<ApiReturn>) => Promise<void>; busy: boolean; recoveryLocked: boolean; onRecoveryLocked: (locked: boolean) => void; onRecoveryChanged: () => void }) {
   const id = record.id
+  const [acceptedSettlement, setAcceptedSettlement] = useState(false)
+  const [confirmationError, setConfirmationError] = useState('')
   const actor = getAuthenticatedActor()
   const [note, setNote] = useState(record.inspectionNotes || record.staffNotes || '')
   const [fees, setFees] = useState<ReturnFees>({ damageFee: 0, cleaningFee: 0, lostItemFee: 0, overdueFee: 0, outstandingFee: 0 })
@@ -1800,14 +1800,16 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       )}
       {recovery && (role === 'staff' || role === 'manager') && record.recoveryTaskId && <RecoveryTaskLink role={role} taskId={record.recoveryTaskId} facilityId={record.facilityId} disabled={busy || recoveryLocked} onChanged={onRecoveryChanged} />}
       {write && recovery && role === 'staff' && ['payment_due', 'refund_pending'].includes(record.status) && <RecoveryReturnSettlement role={role} record={record} busy={busy} onLocked={onRecoveryLocked} onChanged={onRecoveryChanged} />}
-      {role === 'customer' && record.status === 'awaiting_customer_confirmation' && (
+      {role === 'customer' && (record.status === 'awaiting_customer_confirmation' || acceptedSettlement || (record.customerConfirmed && record.status !== 'disputed')) && (
         <div className="space-y-2">
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900">
-            <b>Thời hạn phản hồi:</b> Quý khách vui lòng kiểm tra biên bản và phản hồi trong vòng 72 giờ. Sau thời gian này, hệ thống sẽ tự động chốt quyết toán theo biên bản nghiệm thu.
-          </div>
+          {confirmationError && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{confirmationError}</p>}
+          {(acceptedSettlement || (record.customerConfirmed && record.status !== 'disputed')) && <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">Đã gửi xác nhận đồng ý quyết toán thành công.</p>}
+          {!acceptedSettlement && !(record.customerConfirmed && record.status !== 'disputed') && <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900">
+            Vui lòng kiểm tra biên bản và đồng ý quyết toán hoặc gửi yêu cầu xem xét lại.
+          </div>}
           <div className="flex gap-2">
-            <Button disabled={busy || !note.trim()} onClick={() => void run(() => confirmReturn(id, 'disputed', note))}>Yêu cầu xem xét lại</Button>
-            <Button disabled={busy || !!record.settlementBlocker || record.netRefundAmount === null || record.amountDueFromCustomer === null} onClick={() => void run(() => confirmReturn(id, 'accepted', note))}>Đồng ý quyết toán</Button>
+            <Button disabled={busy || acceptedSettlement || (record.customerConfirmed && record.status !== 'disputed') || !note.trim()} onClick={() => void run(() => confirmReturn(id, 'disputed', note))}>Yêu cầu xem xét lại</Button>
+            <Button disabled={busy || acceptedSettlement || (record.customerConfirmed && record.status !== 'disputed') || !!record.settlementBlocker || record.netRefundAmount === null || record.amountDueFromCustomer === null} onClick={() => { setConfirmationError(''); void run(async () => { try { const result = await confirmReturn(id, 'accepted', note); setAcceptedSettlement(true); return result } catch (error) { setConfirmationError(returnError(error)); throw error } }) }}>{acceptedSettlement || (record.customerConfirmed && record.status !== 'disputed') ? 'Đã đồng ý quyết toán' : 'Đồng ý quyết toán'}</Button>
           </div>
         </div>
       )}
