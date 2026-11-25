@@ -580,7 +580,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
     }
   }
   const documentAvailable = ['CONFIRMED', 'UNIT_RESERVED', 'READY_FOR_CHECKIN', 'AWAITING_CUSTOMER_RECEIPT', 'COMPLETED'].includes(r.status)
-  const handoverDocumentsAvailable = ['AWAITING_CUSTOMER_RECEIPT', 'COMPLETED'].includes(r.status)
+  const handoverDocumentsAvailable = ['AWAITING_CUSTOMER_RECEIPT', 'PREPARING', 'COMPLETED'].includes(r.status)
   const saveAppointment = async () => {
     if (!appointmentInput || busy) return
     const [appointmentDate = '', appointmentTime = ''] = appointmentInput.split('T')
@@ -909,16 +909,29 @@ export default function CustomerReservationCard({ user, reservation: r, facility
       <div className="space-y-4 py-1">
         <p className="text-sm text-stone-600">Các tệp được nhân viên tải lên khi hoàn tất bàn giao kho.</p>
         <div className="space-y-2.5">
-          {handoverDocuments.map((document, index) => {
-            const isSignedContract = document.originalName.toLowerCase().startsWith('hop-dong-da-ky-') || index === 0
+          {handoverDocuments.map((document) => {
+            const kind = document.kind ?? (document.originalName.toLowerCase().startsWith('hop-dong-da-ky-') ? 'SIGNED_CONTRACT' : 'OTHER')
+            const badge = kind === 'SIGNED_CONTRACT'
+              ? { label: 'Hợp đồng đã ký', cls: 'bg-amber-100 text-amber-900' }
+              : kind === 'SIGNED_HANDOVER_RECORD'
+              ? { label: 'Biên bản bàn giao đã ký', cls: 'bg-orange-100 text-orange-900' }
+              : kind === 'PAYMENT_RECEIPT'
+              ? { label: 'Biên lai thanh toán', cls: 'bg-emerald-100 text-emerald-900' }
+              : kind === 'HANDOVER_EVIDENCE'
+              ? { label: 'Bằng chứng kho trống (bàn giao)', cls: 'bg-blue-100 text-blue-900' }
+              : kind === 'INVENTORY_EVIDENCE'
+              ? { label: 'Bằng chứng kiểm kê hàng hóa', cls: 'bg-purple-100 text-purple-900' }
+              : kind === 'INVENTORY_DECISION_EVIDENCE'
+              ? { label: 'Biên bản xác nhận phương án kiểm kê', cls: 'bg-indigo-100 text-indigo-900' }
+              : kind === 'IDENTITY_VERIFICATION_PHOTO'
+              ? { label: 'Ảnh xác minh danh tính', cls: 'bg-teal-100 text-teal-900' }
+              : { label: 'Tài liệu đính kèm khác', cls: 'bg-stone-200 text-stone-800' }
             return (
               <div key={document.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50/80 p-3.5 hover:bg-stone-50 transition-colors">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold ${
-                      isSignedContract ? 'bg-amber-100 text-amber-900' : 'bg-blue-100 text-blue-900'
-                    }`}>
-                      {isSignedContract ? 'Hợp đồng đã ký' : 'Bằng chứng bàn giao'}
+                    <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold ${badge.cls}`}>
+                      {badge.label}
                     </span>
                   </div>
                   <p className="mt-1 font-mono text-xs text-stone-700 break-all leading-relaxed">

@@ -20,7 +20,7 @@ export default function BookingArrivalDetails(p: Props) {
     if (day > p.maxDate) break
     dates.push(day); cursor.setUTCDate(cursor.getUTCDate() + 1)
   }
-  const times = Array.from(new Set([...Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, '0')}:${i % 2 ? '30' : '00'}`), p.time, p.earliestTime])).filter(Boolean).sort()
+  const times = Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, '0')}:${i % 2 ? '30' : '00'}`)
   const changeDate = (date: string) => {
     p.onDate(date)
     if (!p.isAllowed(date, p.time)) {
