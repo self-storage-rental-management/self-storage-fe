@@ -1,3 +1,4 @@
+import { displayStatusLabel } from './statusLabels'
 import { createElement } from 'react'
 
 const bracketedStatusLabels = {
@@ -18,6 +19,10 @@ const statusLabelContainers = new Set(['div', 'span', 'p', 'li', 'td', 'th', 'dd
 /** Normalize display text without changing stored values or request payloads. */
 export function displayText(value: string): string {
   return value
+    .replace(/\b(PAYMENT_PAID|EMAIL_VERIFIED|UNIT_RESERVED|EXPIRED|APPROVED|REJECTED|CANCELLED|CONTRACT_SIGNED|READY_FOR_CHECKIN)\s*·/g, (_, code: string) => {
+      const special: Record<string, string> = { PAYMENT_PAID: 'Đã thanh toán', EMAIL_VERIFIED: 'Đã xác minh thư điện tử' }
+      return `${special[code] ?? displayStatusLabel(code)} ·`
+    })
     .replace(/\s*\u003b\s*/g, ', ')
     .replace(/,\s*([.!?])/g, '$1')
     .replace(/\[(preserved|reserved|published)\]/gi, (_, status: string) =>

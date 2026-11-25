@@ -1,3 +1,4 @@
+import { displayStatusLabel } from '../../presentation/statusLabels'
 import { formatCustomerDateTime } from '../../i18n/customerDate'
 import { formatVndAmount as formatVnd } from '../../i18n/currency'
 import type { ReservationPaymentResult } from '../../services/customerReservationApi'
@@ -33,7 +34,7 @@ export default function ReservationReceipt({ payment, reservationCode }: { payme
       ['Phương thức thanh toán', paymentMethodLabel(payment.paymentMethod, !isRemainingRental)],
       ['Người ghi nhận', payment.initiatedByName || '-'],
       ['Nội dung', isRemainingRental ? 'Thanh toán phần còn lại khi nhận kho' : accepted ? 'Thanh toán trước 20% (giữ chỗ) đã được đơn xác nhận' : 'Giao dịch thanh toán trước 20% (giữ chỗ) cần đối soát'], ['Số tiền', formatVnd(payment.amount)], ['Tiền tệ', paymentCurrencyLabel(payment.currency)],
-      ['Số hóa đơn', invoiceNumberLabel(payment.invoiceNumber)], ['Trạng thái hóa đơn', payment.invoiceStatus || 'DRAFT'],
+      ['Số hóa đơn', invoiceNumberLabel(payment.invoiceNumber)], ['Trạng thái hóa đơn', displayStatusLabel(payment.invoiceStatus || 'DRAFT')],
       ['Ngày phát hành hóa đơn', payment.invoiceIssuedAt ? formatCustomerDateTime(new Date(payment.invoiceIssuedAt)) : '-'],
     ]}
     footer={isRemainingRental || accepted ? 'Biên lai được lưu cùng đơn giữ kho để đối chiếu thanh toán.' : 'Hệ thống đã ghi nhận giao dịch, trạng thái đơn cần được kiểm tra trước khi tính là khoản trả trước được chấp nhận.'} />

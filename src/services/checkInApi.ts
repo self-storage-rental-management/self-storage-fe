@@ -97,6 +97,10 @@ export interface CheckInCase {
   customerReceiptConfirmedAt?: string | null
   facilityAddress?: string | null
   inventoryReturnWindowDays?: number | null
+  inventoryRemovalPublishedAt?: string | null
+  inventoryRemovalDeadlineAt?: string | null
+  inventoryReturnLastReminderAt?: string | null
+  equipment?: { rackCount: number; frameCount: number; palletCount: number | null }
   intakeAction: 'START' | 'CONTINUE' | 'NONE'
   declaredGoodsLines?: {
     id: string
@@ -331,7 +335,7 @@ function assertPage(payload: unknown): CheckInPage {
 
 function assertCaseStatus(value: CheckInCase): CheckInCase {
   if (!value || !isReservationStatus(value.reservationStatus) || (value.checkInStatus !== null && !isCheckInStatus(value.checkInStatus))) {
-    throw new ApiClientError('Trạng thái check-in hoặc reservation không đúng contract.', { code: 'INVALID_API_RESPONSE' })
+    throw new ApiClientError('Trạng thái nhận kho hoặc đặt kho không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
   }
   return value
 }
@@ -348,7 +352,7 @@ function assertPaymentEnvelope(payload: unknown): CheckInPayment {
     throw new ApiClientError('Chưa tải được thông tin. Vui lòng thử lại.', { code: 'INVALID_API_RESPONSE' })
   }
   const payment = (payload as ApiEnvelope<CheckInPayment>).data
-  if (!payment || !isPaymentStatus(payment.status)) throw new ApiClientError('Trạng thái payment không đúng contract.', { code: 'INVALID_API_RESPONSE' })
+  if (!payment || !isPaymentStatus(payment.status)) throw new ApiClientError('Trạng thái thanh toán không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
   return payment
 }
 
@@ -743,4 +747,9 @@ export type AtSiteInventoryDecision = 'REQUEST_TRANSFER' | 'ACCEPT_FULL' | 'CANC
 export async function resolveInventoryAtSite(checkInId: string, request: { decision: AtSiteInventoryDecision; customerPresent: boolean; note?: string; scheduledDate?: string; evidenceReferences?: string[]; resultVersion?: number }) {
   return assertEnvelope(await apiRequest<unknown>(`/api/staff/check-ins/${encodeURIComponent(checkInId)}/inventory-resolution-at-site`,
     { method: 'POST', body: JSON.stringify(request) }))
+}
+
+export async function sendInventoryReturnReminder(checkInId: string) {
+  return assertEnvelope(await apiRequest<unknown>(`/api/staff/check-ins/${encodeURIComponent(checkInId)}/inventory-return-reminder`,
+    { method: 'POST' }))
 }

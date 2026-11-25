@@ -94,7 +94,7 @@ export const checkInTask = (item: CheckInCase): StaffDailyOperation => {
     time: dueAt || "",
     dueAt: dueAt || new Date().toISOString(),
     sla: receiptWaiting
-      ? overdue ? "Đã quá hạn xác nhận nhận kho" : "Chờ Customer xác nhận nhận kho"
+      ? overdue ? "Đã quá hạn xác nhận nhận kho" : "Chờ Khách hàng xác nhận nhận kho"
       : item.checkInStatus === "scheduled" ? "" : "Cần tiếp nhận",
     priority: receiptWaiting || item.checkInStatus !== "scheduled" ? "high" : "medium",
     page: "checkin",

@@ -98,7 +98,7 @@ export const ROLE_NOTIFICATION_CONFIGS: Record<Role, RoleNotificationConfig> = {
   admin: {
     roleTitle: 'Quản Trị Viên Hệ Thống',
     title: 'Kênh Giám Sát & An Ninh Toàn Hệ Thống',
-    subtitle: 'Cấu hình cảnh báo an ninh hạ tầng, audit log bảo mật và giám sát dịch vụ toàn nền tảng StorageHub.',
+    subtitle: 'Cấu hình cảnh báo an ninh hạ tầng, nhật ký hoạt động bảo mật và giám sát dịch vụ toàn nền tảng StorageHub.',
     channels: [
       {
         id: 'admin_security_threats',
@@ -1120,10 +1120,10 @@ setSavingProfile(true)
           <SectionTitle title="Mã xác nhận phê duyệt" description="Xác nhận riêng cho các thao tác nhạy cảm về giá và chính sách." />
           <div className="flex items-center justify-between gap-3 rounded-xl border border-dashed border-stone-300 bg-stone-50 p-4">
             <div>
-              <p className="font-semibold text-stone-800">Approval PIN</p>
+              <p className="font-semibold text-stone-800">Mã PIN phê duyệt</p>
               <p className="mt-1 text-xs text-stone-600">Chưa thiết lập mã xác nhận.</p>
             </div>
-            <Button variant="outline" size="sm" onClick={() => showToast('Approval PIN chưa được bật.')}>Thiết lập</Button>
+            <Button variant="outline" size="sm" onClick={() => showToast('Mã PIN phê duyệt chưa được bật.')}>Thiết lập</Button>
           </div>
         </Card>
       </div>
@@ -1310,7 +1310,7 @@ setSavingProfile(true)
             {isInternal && (
               <Card className="p-5 bg-[#fbfaf6] border-stone-200">
                 <h3 className="font-semibold text-stone-900 mb-2 text-sm">Thông tin tổ chức</h3>
-                <p className="text-xs text-stone-600 leading-relaxed">Vai trò và cơ sở của tài khoản do công ty cấp. Mọi thay đổi cần Admin/HR duyệt và lưu audit log.</p>
+                <p className="text-xs text-stone-600 leading-relaxed">Vai trò và cơ sở của tài khoản do công ty cấp. Mọi thay đổi cần Admin/HR duyệt và lưu nhật ký hoạt động.</p>
                 {apiMode ? (
                   <p className="mt-3 text-xs text-stone-500">Vui lòng liên hệ Quản trị viên hoặc HR để điều chỉnh vai trò / phạm vi cơ sở.</p>
                 ) : (
@@ -1542,7 +1542,7 @@ setSavingProfile(true)
       <Modal open={requestModalOpen && isInternal} onClose={() => setRequestModalOpen(false)} title="Gửi yêu cầu chỉnh sửa hồ sơ">
         <div className="space-y-5">
           <p className="text-xs text-stone-600 leading-relaxed">
-            Chọn các hạng mục thông tin cần điều chỉnh. Đề xuất sẽ được chuyển trực tiếp đến bộ phận Quản Trị & Nhân Sự (Admin/HR) xem xét, phê duyệt và lưu nhật ký kiểm toán (audit log).
+            Chọn các hạng mục thông tin cần điều chỉnh. Đề xuất sẽ được chuyển trực tiếp đến bộ phận Quản Trị & Nhân Sự (Admin/HR) xem xét, phê duyệt và lưu nhật ký kiểm toán (nhật ký hoạt động).
           </p>
 
           <div>

@@ -85,7 +85,7 @@ const checklistLabels: Array<[keyof CheckInChecklist, string]> = [
 
   ["measurementVerified", "Đã đo và đối chiếu hàng hóa thực tế"],
 
-  ["unitWalkthrough", "Đã bàn giao kho trống cho khách hàng"],
+  ["unitWalkthrough", "Đã bàn giao kho trống, đối chiếu đủ khung và tấm kê với khách hàng"],
 
   ["conditionRecorded", "Đã ghi nhận tình trạng hàng hóa"],
 
@@ -1810,8 +1810,20 @@ export default function StaffCheckInOperationsPanel({
 
     setLockChecked(false)
     setKeyLockReference(item.lockReference || "")
-    setHandoverRackCount(item.handoverRecord?.rackCount != null ? String(item.handoverRecord.rackCount) : "")
-    setHandoverPalletCount(item.handoverRecord?.palletCount != null ? String(item.handoverRecord.palletCount) : "")
+    setHandoverRackCount(
+      item.handoverRecord?.rackCount != null
+        ? String(item.handoverRecord.rackCount)
+        : item.equipment?.rackCount != null
+          ? String(item.equipment.rackCount)
+          : ""
+    )
+    setHandoverPalletCount(
+      item.handoverRecord?.palletCount != null
+        ? String(item.handoverRecord.palletCount)
+        : item.equipment?.palletCount != null
+          ? String(item.equipment.palletCount)
+          : ""
+    )
 
     setPaymentMethod("CASH")
 
@@ -2267,6 +2279,9 @@ export default function StaffCheckInOperationsPanel({
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 pb-3">
                     <div>
                       <p className="text-base font-bold text-amber-950">Bàn giao gian kho trống & Kích hoạt quyền ra vào</p>
+                      <p className="mt-2 text-sm font-semibold">Thiết bị bàn giao: {handoverTarget.equipment?.palletCount != null
+                        ? <>{handoverTarget.equipment.rackCount} bộ kệ / {handoverTarget.equipment.frameCount} khung và {handoverTarget.equipment.palletCount} tấm kê. Đếm và xác nhận cùng khách; khi trả kho phải thu hồi đủ tấm kê.</>
+                        : 'Chưa có cấu hình thiết bị trong hồ sơ; cần đối soát trước khi bàn giao.'}</p>
                       <p className="text-xs text-amber-800 mt-0.5">Tiến hành dẫn khách kiểm tra kho thực tế, bàn giao mã mở khóa và xác nhận hiện trạng ban đầu.</p>
                     </div>
                   </div>
@@ -3083,8 +3098,6 @@ export default function StaffCheckInOperationsPanel({
                     evidence={<div className="flex flex-wrap gap-2">{evidenceFiles.map((file, index) => <span key={index} className="rounded border bg-stone-50 px-3 py-2">{file.name}</span>)}{checkInEvidenceAssetIds(evidenceReferences).filter(id => !checkInEvidenceAssetIds(parseEmptyStorageHandover(handoverTarget.readinessNote).evidenceReferences).includes(id)).map((id, index) => <Button key={id} size="sm" variant="outline" onClick={() => void previewEvidenceFile(id)}>Xem bằng chứng {index + 1}</Button>)}</div>}
                   />
                   {!inventoryPublished && <p className="text-sm text-amber-900">Đã lưu hàng hóa kiểm kê. Tiếp tục để hệ thống kiểm tra sức chứa chính thức và ghi nhận phương án trực tiếp tại cơ sở.</p>}
-                  {inventoryPublished && handoverTarget.inventoryMismatchSummary && <p className="text-sm">{handoverTarget.inventoryMismatchSummary}</p>}
-                  {inventoryPublished && <p role="status" className="font-semibold text-blue-800">Đã lưu kết quả · {["PENDING_CUSTOMER", "PENDING_STAFF_RESOLUTION"].includes(handoverTarget.inventoryResolutionStatus || "") ? "Đang chờ Staff ghi nhận phương án tại cơ sở." : handoverTarget.inventoryDecision ? intakeDecisionLabels[handoverTarget.inventoryDecision.outcome] : staffCheckInStatusLabel(handoverTarget.checkInStatus, handoverTarget.reservationStatus)}</p>}
                 </InventoryResultNotice>
               })()}
             </div>}

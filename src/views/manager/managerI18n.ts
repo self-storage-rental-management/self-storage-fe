@@ -42,7 +42,7 @@ const statusLabels: Record<string, BilingualLabel> = {
   closing: labels('Closing', 'Đang tất toán'),
   requested: labels('Requested', 'Đã yêu cầu'),
   inspected: labels('Inspected', 'Đã nghiệm thu'),
-  awaiting_business_review: labels('Awaiting settlement approval', 'Chờ Manager duyệt quyết toán'),
+  awaiting_business_review: labels('Awaiting settlement approval', 'Chờ Quản lý duyệt quyết toán'),
   disputed: labels('Disputed - Needs BO Resolution', 'Đang khiếu nại - Cần bộ phận vận hành giải quyết'),
   refund_pending: labels('Refund pending', 'Chờ hoàn tiền'),
   payment_due: labels('Payment due', 'Chờ thanh toán'),
@@ -188,7 +188,7 @@ const entities: Record<string, BilingualLabel> = {
 
 function labelFrom(map: Record<string, BilingualLabel>, value: string, lang: Language) {
   if (!value) return lang === 'vi' ? 'Chưa ghi nhận' : 'Not recorded'
-  return map[value]?.[lang] || (lang === 'vi' ? 'Chưa phân loại' : value.replace(/_/g, ' '))
+  return (map[value] ?? map[value.toLowerCase()] ?? map[value.toUpperCase()])?.[lang] || (lang === 'vi' ? 'Chưa phân loại' : value.replace(/_/g, ' '))
 }
 
 export const managerStatusLabel = (value: string, lang: Language) => labelFrom(statusLabels, value, lang)
