@@ -8,6 +8,7 @@ import { PACKAGING_METHOD_OPTIONS } from '../../domain/packagingMethods'
 import InventoryFieldDifference from './InventoryFieldDifference'
 import InventoryResultNotice from './InventoryResultNotice'
 import { getGoodsCatalog, type GoodsCatalog } from '../../services/customerReservationApi'
+import ProcessingLeaseBoundary from '../../components/ProcessingLeaseBoundary'
 import { validateCccd, normalizeCccd, maskCccd } from '../../domain/cccd'
 import { normalizeRentalIdentity, validateRentalIdentity } from '../../domain/rentalIdentity'
 import StaffInventoryVisitPanel from './StaffInventoryVisitPanel'
@@ -2087,7 +2088,12 @@ export default function StaffCheckInOperationsPanel({
   }
 
   const workflowForm = handoverTarget && (
-          <div className="space-y-5">
+          <ProcessingLeaseBoundary target="CHECK_IN" id={handoverTarget.checkInId!} enabled={!!handoverTarget.checkInId && !customerWaitTarget && handoverTarget.checkInStatus !== 'completed'} onAcquired={async () => {
+            const response = await listCheckIns({ page: 0, pageSize: 100, q: handoverTarget.reservationCode })
+            const latest = response.data.find(item => item.checkInId === handoverTarget.checkInId)
+            if (!latest) throw new Error('Không còn tìm thấy hồ sơ bàn giao. Đóng cửa sổ và tải lại danh sách.')
+            openHandover(latest)
+          }}><div className="space-y-5">
             <dl className="grid gap-3 rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
               {[
                 ['Mã đơn giữ kho', handoverTarget.reservationCode], ['Mã gian kho bàn giao', handoverTarget.storageUnitCode],
@@ -3298,7 +3304,7 @@ export default function StaffCheckInOperationsPanel({
                 </div>
               )}
             </div>
-          </div>
+          </div></ProcessingLeaseBoundary>
         )
 
   return (
