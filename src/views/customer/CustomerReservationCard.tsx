@@ -9,11 +9,10 @@ import { useEffect, useRef, useState } from 'react'
 import { Button, Card, Modal } from '../../components/ui'
 import VietnameseDateInput from '../../components/VietnameseDateInput'
 import { formatVndAmount as formatVnd } from '../../i18n/currency'
-import { confirmCustomerReceipt, downloadBookingDocument, downloadCustomerCheckInDocument, downloadCustomerReservationGoodsImage, generateBookingDocument, getCustomerCheckInDocuments, getCustomerReservation, markCustomerPreparationComplete, resolveCustomerInventory, setCustomerCheckInAppointment, updateSetupGoods, type BookingDocument, type CheckInDocument, type CustomerFacility, type CustomerReservation, type CustomerReservationDetail, type CustomerUnitType, type GoodsItemInput, type ReservationPaymentResult } from '../../services/customerReservationApi'
+import { confirmCustomerReceipt, downloadBookingDocument, downloadCustomerCheckInDocument, downloadCustomerReservationGoodsImage, generateBookingDocument, getCustomerCheckInDocuments, getCustomerReservation, markCustomerPreparationComplete, resolveCustomerInventory, setCustomerCheckInAppointment, updateSetupGoods, type BookingDocument, type CheckInDocument, type CustomerFacility, type CustomerReservation, type CustomerReservationDetail, type CustomerUnitType, type GoodsItemInput } from '../../services/customerReservationApi'
 import { goodsReviewLabels, paymentCountdown, reservationProgress, reservationStatusLabels } from './reservationPresentation'
 import CustomerPaymentComplaint from './CustomerPaymentComplaint'
 import CustomerReservationPayment from './CustomerReservationPayment'
-import ReservationReceipt from './ReservationReceipt'
 import { paymentMethodLabel } from './paymentLabels'
 import { formatPolicyDateTime, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyDateTimeInput, policyTimeInput, STAFF_REVIEW_HOURS } from '../../domain/reservationCheckInPolicy'
 import ReservationQuoteSummary from './ReservationQuoteSummary'
@@ -391,7 +390,6 @@ export default function CustomerReservationCard({ user, reservation: r, facility
   const [bookingPdfUrl, setBookingPdfUrl] = useState<string | null>(null)
   const [handoverDocuments, setHandoverDocuments] = useState<CheckInDocument[]>([])
   const [handoverDocumentsOpen, setHandoverDocumentsOpen] = useState(false)
-  const [paymentReceipt, setPaymentReceipt] = useState<ReservationPaymentResult | null>(null)
   const [appointmentInput, setAppointmentInput] = useState(() => localDateTimeInput(r.appointmentAt))
   const [appointmentErrors, setAppointmentErrors] = useState<{ date?: string; time?: string }>({})
   const [savedAppointmentAt, setSavedAppointmentAt] = useState(r.appointmentAt)
@@ -731,7 +729,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
             <p role="timer" className="mt-1 text-xl font-extrabold tabular-nums">{countdown.text}</p>
             <p className="mt-1">Nhân viên duyệt trong tối đa {STAFF_REVIEW_HOURS} giờ từ khi gửi đơn. Sau khi được duyệt, bạn có thể thanh toán cọc.</p>
           </div>}
-          <CustomerReservationPayment reservation={r} facilityName={displayedFacilityName} unitTypeName={displayedUnitTypeName} paymentStartedAt={detail?.paymentStartedAt} paymentExpiresAt={detail?.paymentExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />
+          <CustomerReservationPayment reservation={r} facilityName={displayedFacilityName} unitTypeName={displayedUnitTypeName} paymentStartedAt={detail?.paymentStartedAt} paymentExpiresAt={detail?.paymentExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} remainingPayment={remainingPayment} />
           {r.status === 'AWAITING_CUSTOMER_RECEIPT' && <div className={`rounded-lg border p-3 text-right text-xs ${receiptCountdown.expired ? 'border-red-400 bg-red-50 text-red-950' : receiptCountdown.urgent ? 'border-red-300 bg-red-50/70 text-red-950' : 'border-amber-300 bg-amber-50 text-amber-950'}`}>
             <p className="font-bold">Nhân viên đã hoàn tất bàn giao kho trống</p>
             <p className="mt-1">Vui lòng kiểm tra kho và mã ra vào, sau đó xác nhận đã nhận kho để bắt đầu thời gian chuẩn bị.</p>
@@ -743,7 +741,6 @@ export default function CustomerReservationCard({ user, reservation: r, facility
           </div>}
           {documentAvailable && <Button variant="outline" size="sm" className="reservation-action reservation-action-document min-h-10 w-full justify-center" disabled={busy} onClick={() => void prepareBookingDocument()}>{busy ? 'Đang chuẩn bị…' : 'Xem phiếu giữ kho'}</Button>}
           {handoverDocumentsAvailable && <Button variant="outline" size="sm" className="min-h-10 w-full justify-center" disabled={busy} onClick={() => void loadHandoverDocuments()}>{busy ? 'Đang tải…' : 'Xem hợp đồng đã ký'}</Button>}
-          {remainingPayment && <Button variant="outline" size="sm" className="min-h-10 w-full justify-center" onClick={() => setPaymentReceipt(remainingPayment)}>Xem biên lai tiền thuê còn lại</Button>}
           {onRequestSupport && <Button type="button" variant="outline" size="sm" className="min-h-10 w-full justify-center" onClick={onRequestSupport}>Hỗ trợ đơn này</Button>}
           {['PAYMENT_GRACE', 'PAYMENT_REVIEW'].includes(r.status) && <CustomerPaymentComplaint reservation={r} complaintExpiresAt={detail?.complaintExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />}
           {APPOINTMENT_EDITABLE_STATUSES.some(status => status === r.status) && <Button variant="ghost" size="sm" className="reservation-action reservation-action-cancel" onClick={() => setCancelConfirmOpen(true)}>Hủy giữ kho</Button>}
@@ -838,7 +835,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
               onChange={event => { setAppointmentInput(`${appointmentInput.split('T')[0] || ''}T${event.target.value}`); setAppointmentErrors(current => ({ ...current, time: undefined })); setMessage(null) }} />{appointmentErrors.time && <p className="mt-1 text-xs text-red-700">{appointmentErrors.time}</p>}</label>
           </div>
           <Button size="sm" disabled={!appointmentInput || busy} onClick={() => void saveAppointment()}>{busy ? 'Đang lưu…' : r.appointmentAt ? 'Đổi lịch nhận kho' : 'Lưu lịch nhận kho'}</Button>
-          <span className="basis-full text-[11px]">Bạn có thể nhận kho từ {formatPolicyDateTime(appointmentWindow.availableAt)} đến {formatPolicyDateTime(appointmentWindow.deadlineAt)}. Kỳ thuê có tính tiền bắt đầu sau thời gian chuẩn bị miễn phí, tính từ ngày bàn giao thực tế. Trước bàn giao, ngày bắt đầu và kết thúc chỉ là dự kiến. Mọi thay đổi lịch sẽ được thông báo cho nhân viên tại cơ sở.</span>
+          <span className="basis-full text-[11px]">Bạn có thể nhận kho từ {formatPolicyDateTime(appointmentWindow.availableAt)} đến {formatPolicyDateTime(appointmentWindow.deadlineAt)}. Kỳ thuê có tính tiền bắt đầu sau thời gian chuẩn bị miễn phí, tính từ ngày khách chọn nhận kho. Trước khi bàn giao, ngày bắt đầu và kết thúc sẽ được tính lại theo lịch đã chọn. Mọi thay đổi lịch sẽ được thông báo cho nhân viên tại cơ sở.</span>
           {message && <p role="status" className="basis-full rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{message}</p>}
         </div>}
         {progress !== null && <div className="mt-4 border-t border-stone-200 pt-4">
@@ -858,7 +855,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
             {remainingPayment && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-950">
               <p className="font-bold">Biên lai thanh toán phần còn lại</p>
               <p className="mt-1">Đã ghi nhận {formatVnd(remainingPayment.amount)} bằng {remainingPayment.paymentMethod ? paymentMethodLabel(remainingPayment.paymentMethod) : 'phương thức tại quầy'}.</p>
-              <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => setPaymentReceipt(remainingPayment)}>Xem biên lai tiền thuê còn lại</Button>
+              <p className="mt-2 text-[11px] text-emerald-800">Mở nút “Xem biên lai thanh toán” ở phần đầu đơn để chọn biên lai cần xem.</p>
             </div>}
       </section>
       </div>
@@ -942,9 +939,6 @@ export default function CustomerReservationCard({ user, reservation: r, facility
           </p>
         )}
       </div>
-    </Modal>
-    <Modal size="2xl" open={Boolean(paymentReceipt)} onClose={() => setPaymentReceipt(null)} title="Biên lai tiền thuê còn lại">
-      {paymentReceipt && <div className="w-full min-w-0"><ReservationReceipt payment={paymentReceipt} reservationCode={r.reservationCode} /></div>}
     </Modal>
     <Modal open={cancelConfirmOpen} onClose={() => setCancelConfirmOpen(false)} title="Xác nhận hủy giữ kho" closeLabel="Đóng xác nhận hủy">
       <div className="space-y-5">

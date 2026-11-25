@@ -1271,10 +1271,20 @@ export default function StaffCheckInOperationsPanel({
         if (!Number.isInteger(quantity) || quantity < 0 || quantity > 2147483647) {
           errors[`${field}-quantity`] = "Nhập số kiện nguyên từ 0 trở lên"
         }
-        if (quantity > 0 && (!measured || !Number.isFinite(comparison.volume))) {
-          errors[`${field}-measurements`] = "Nhập đủ kích thước và khối lượng thực tế của dòng hàng"
+        if (quantity !== 0) {
+          const measurements = [
+            ["lengthCm", entry.lengthCm, "Chiều dài thực tế"],
+            ["widthCm", entry.widthCm, "Chiều rộng thực tế"],
+            ["heightCm", entry.heightCm, "Chiều cao thực tế"],
+            ["weightKg", quantity > 0 ? String(Number(entry.weightKg) / quantity) : "", "Nặng/kiện"],
+          ] as const
+          for (const [measurementKey, value, label] of measurements) {
+            if (!Number.isFinite(Number(value)) || Number(value) < 0.01) {
+              errors[`${field}-${measurementKey}`] = `${label} phải từ 0,01 trở lên`
+            }
+          }
         }
-        if (quantity > 0 && line.catalogCategoryId && !entry.catalogCategoryId) {
+        if (quantity !== 0 && !entry.catalogCategoryId) {
           errors[`${field}-category`] = "Chọn loại hàng thực tế từ danh mục"
         }
         if (!entry.condition || (quantity === 0) !== (entry.condition === "NOT_PRESENT")) {
@@ -1283,7 +1293,7 @@ export default function StaffCheckInOperationsPanel({
         if (entry.condition === "DAMAGED" && !entry.note.trim()) {
           errors[`${field}-note`] = "Vui lòng mô tả tình trạng hư hỏng của dòng hàng."
         }
-        if (quantity > 0 && inventoryCatalog?.categories.find(category => category.id === entry.catalogCategoryId)?.custom && !entry.customGoodsName?.trim()) errors[`${field}-name`] = "Vui lòng nhập tên hàng hóa khác."
+        if (quantity !== 0 && inventoryCatalog?.categories.find(category => category.id === entry.catalogCategoryId)?.custom && !entry.customGoodsName?.trim()) errors[`${field}-name`] = "Vui lòng nhập tên hàng hóa khác."
         if (!entry.checked) {
           errors[`${field}-checked`] = "Xác nhận đã đối chiếu dòng hàng"
         }
@@ -2688,10 +2698,9 @@ export default function StaffCheckInOperationsPanel({
                               const unitWeight = Number(entry.quantity) > 0 ? Number(entry.weightKg) / Number(entry.quantity) : line.weightPerPackageKg || 0
                               updateInventoryLine(line, { quantity, weightKg: String(unitWeight * Number(quantity)), condition: Number(quantity) === 0 ? "NOT_PRESENT" : entry.condition === "NOT_PRESENT" ? "" : entry.condition })
                             }} /><InventoryFieldDifference actual={entry.quantity} declared={line.quantity} unit="kiện" /></div>
-                            {inventoryDimensions.map(([field, label]) => <div key={field}><Input label={label.replace("Dài thực tế", "Chiều dài").replace("Rộng thực tế", "Chiều rộng").replace("Cao thực tế", "Chiều cao") + " *"} type="number" min="0.01" step="any" value={entry[field]} disabled={absent} onChange={event => updateInventoryLine(line, { [field]: event.target.value })} /><InventoryFieldDifference actual={entry[field]} declared={line[field]} unit="cm" tolerance={0.01} disabled={absent} /></div>)}
-                            <div><Input label="Nặng/kiện (kg) *" type="number" min="0.01" step="any" disabled={absent} value={absent ? "" : String(Number(entry.weightKg) / Number(entry.quantity) || "")} onChange={event => updateInventoryLine(line, { weightKg: String(Number(event.target.value) * Number(entry.quantity)) })} /><InventoryFieldDifference actual={Number(entry.quantity) > 0 ? Number(entry.weightKg) / Number(entry.quantity) : null} declared={line.weightPerPackageKg} unit="kg/kiện" tolerance={0.1} disabled={absent} /></div>
+                            {inventoryDimensions.map(([field, label]) => <div key={field}><Input label={label.replace("Dài thực tế", "Chiều dài").replace("Rộng thực tế", "Chiều rộng").replace("Cao thực tế", "Chiều cao") + " *"} error={fieldErrors[`${errorKey}-${field}`]} type="number" min="0.01" step="any" value={entry[field]} disabled={absent} onChange={event => updateInventoryLine(line, { [field]: event.target.value })} /><InventoryFieldDifference actual={entry[field]} declared={line[field]} unit="cm" tolerance={0.01} disabled={absent} /></div>)}
+                            <div><Input label="Nặng/kiện (kg) *" error={fieldErrors[`${errorKey}-weightKg`]} type="number" min="0.01" step="any" disabled={absent} value={absent ? "" : String(Number(entry.weightKg) / Number(entry.quantity) || "")} onChange={event => updateInventoryLine(line, { weightKg: String(Number(event.target.value) * Number(entry.quantity)) })} /><InventoryFieldDifference actual={Number(entry.quantity) > 0 ? Number(entry.weightKg) / Number(entry.quantity) : null} declared={line.weightPerPackageKg} unit="kg/kiện" tolerance={0.1} disabled={absent} /></div>
                           </div>
-                          {fieldErrors[`${errorKey}-measurements`] && <p className="text-xs text-red-700">{fieldErrors[`${errorKey}-measurements`]}</p>}
                           <div className="space-y-4 border-t border-stone-200 pt-4">
                             {(['fragile', 'stackable', 'allowHorizontalPlacement'] as const).map((key, i) => <fieldset key={key}>
                               <legend className="text-sm font-medium text-stone-700">{['Hàng dễ bể / dễ vỡ? *', 'Hàng có được phép xếp chồng không? *', 'Được phép xoay và đặt nằm ngang? *'][i]}</legend>
@@ -3032,10 +3041,11 @@ export default function StaffCheckInOperationsPanel({
                         {handoverTarget?.inventoryMismatchSummary && handoverTarget.inventoryResolutionStatus && handoverTarget.inventoryResolutionStatus !== "NOT_STARTED" && <p className="mt-3 border-t border-black/10 pt-3 text-xs text-stone-700"><b>Kết quả lần kiểm kê gần nhất:</b> {handoverTarget.inventoryMismatchSummary}</p>}
                       </section>
                     )}
-                    <label className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-                      <input type="checkbox" className="mt-1" checked={inventoryReviewConfirmed} disabled={submitting || isReviewingCompletedStep || !inventoryLinesComplete} onChange={event => setConfirmedInventoryReview(event.target.checked ? inventoryReviewKey : null)} />
+                    <label className={`flex items-start gap-3 rounded-xl border p-4 text-sm text-amber-950 ${fieldErrors.inventoryReview ? "border-red-400 bg-red-50" : "border-amber-300 bg-amber-50"}`}>
+                      <input type="checkbox" className="mt-1" checked={inventoryReviewConfirmed} disabled={submitting || isReviewingCompletedStep || !inventoryLinesComplete} onChange={event => { clearFieldError("inventoryReview"); setConfirmedInventoryReview(event.target.checked ? inventoryReviewKey : null) }} />
                       <span><b>Xác nhận hàng hóa kiểm kê</b><span className="mt-1 block">Đã đối chiếu hàng thực tế, các chênh lệch và kết quả sức chứa bên trên. Tôi xác nhận số liệu kiểm kê để tiếp tục gửi kết quả.</span></span>
                     </label>
+                    {fieldErrors.inventoryReview && <p className="text-xs font-medium text-red-700">{fieldErrors.inventoryReview}</p>}
                 </>}
                 {isReviewingCompletedStep && handoverTarget.handover?.evidenceReferences.length ? <p className="text-xs text-stone-600">Đã lưu {handoverTarget.handover.evidenceReferences.length} tệp bằng chứng kiểm kê trong biên bản.</p> : null}
               </div>
@@ -3048,9 +3058,9 @@ export default function StaffCheckInOperationsPanel({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <div className="flex-1 font-medium">
-                  <span>{error}</span>
+                  {error !== "Một số trường thông tin chưa hợp lệ. Vui lòng kiểm tra các trường được đánh dấu đỏ bên dưới." && <span>{error}</span>}
                   {Object.keys(fieldErrors).length > 0 && (
-                    <ul className="mt-1 list-disc list-inside space-y-0.5 text-xs text-red-700">
+                    <ul className={`${error !== "Một số trường thông tin chưa hợp lệ. Vui lòng kiểm tra các trường được đánh dấu đỏ bên dưới." ? "mt-1 " : ""}list-disc list-inside space-y-0.5 text-xs text-red-700`}>
                       {Object.entries(fieldErrors).map(([key, msg]) => (
                         <li key={key}>{msg}</li>
                       ))}
@@ -3127,7 +3137,7 @@ export default function StaffCheckInOperationsPanel({
                     <>
                       {inventoryStage === 1 && <Button disabled={submitting || handoverTarget.checkInStatus === 'setup_in_progress' || !handoverTarget.inventoryVisit?.identityVerifiedAt} onClick={() => advanceInventoryStage(2)}>Tiếp tục kiểm kê hàng hóa</Button>}
                       {inventoryStage === 2 && inventoryStageReadOnly && <Button onClick={() => advanceInventoryStage(4)}>Xem lại kết quả kiểm kê</Button>}
-                      {inventoryStage === 2 && !inventoryStageReadOnly && <Button disabled={submitting || !inventoryLinesComplete || (lineInventory && !inventoryReviewConfirmed) || !actualPackagingMethod.trim() || !packagingCondition || (packagingNoteRequired && !handoverNotes.trim()) || (!evidenceFiles.length && !evidenceReferences.length) || (measurementVariance && !effectiveVarianceReason.trim())} onClick={() => void submitHandover()}>{submitting ? "Đang lưu kiểm kê…" : "Xác nhận hàng hóa kiểm kê"}</Button>}
+                      {inventoryStage === 2 && !inventoryStageReadOnly && <Button disabled={submitting} onClick={() => void submitHandover()}>{submitting ? "Đang lưu kiểm kê…" : "Xác nhận hàng hóa kiểm kê"}</Button>}
                       {inventoryStage === 3 && !inventoryPublished && <Button disabled={submitting || (lineInventory && !inventoryReviewConfirmed) || Boolean(handoverTarget.inventoryFinalDeadlineAt && Date.parse(handoverTarget.inventoryFinalDeadlineAt) <= now)} onClick={() => void continueInventoryResolution()}>{submitting ? "Đang kiểm tra sức chứa…" : "Tiếp tục đến kết quả tiếp nhận"}</Button>}
                       {inventoryStage === 3 && inventoryPublished && <Button onClick={() => advanceInventoryStage(4)}>Xem kết quả tiếp nhận</Button>}
                     </>

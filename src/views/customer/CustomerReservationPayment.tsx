@@ -14,10 +14,11 @@ import {
   type ReservationPaymentResult,
 } from '../../services/customerReservationApi'
 import { paymentCountdown, paymentCountdownUrgency } from './reservationPresentation'
-import ReservationReceipt from './ReservationReceipt'
+import ReservationReceipt, { reservationPaymentReceiptExport } from './ReservationReceipt'
 import ReservationQuoteSummary from './ReservationQuoteSummary'
 import { bookingDepositAccepted } from './paymentPresentation'
 import { rentalEndDateForDisplay } from '../../domain/rentalTimeline'
+import { downloadPaymentReceipt } from '../../utils/downloadPaymentReceipt'
 import type { User } from '../../types'
 
 function displayValue(value?: string | null) {
@@ -46,13 +47,15 @@ interface Props {
   now: number
   onMessage: (message: string) => void
   onRefresh: () => Promise<void>
+  remainingPayment?: ReservationPaymentResult | null
 }
 
-export default function CustomerReservationPayment({ user, reservation, facilityName, unitTypeName, paymentExpiresAt, now, onMessage, onRefresh }: Props) {
+export default function CustomerReservationPayment({ user, reservation, facilityName, unitTypeName, paymentExpiresAt, now, onMessage, onRefresh, remainingPayment = null }: Props) {
   const [payment, setPayment] = useState<ReservationPaymentResult | null>(null)
   const [payOpen, setPayOpen] = useState(false)
   const [confirmModalOpen, setConfirmModalOpen] = useState(false)
   const [receiptOpen, setReceiptOpen] = useState(false)
+  const [receiptSection, setReceiptSection] = useState<'deposit' | 'remaining'>('deposit')
   const [returnFailure, setReturnFailure] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [acceptedNoRefund, setAcceptedNoRefund] = useState(false)
@@ -155,6 +158,13 @@ export default function CustomerReservationPayment({ user, reservation, facility
 
   const urgency = paymentCountdownUrgency(paymentExpiresAt || reservation.holdExpiresAt, now)
   const timerTone = urgency === 'danger' ? 'bg-red-700 text-white' : urgency === 'warning' ? 'border border-amber-300 bg-amber-50 text-amber-950' : 'border border-stone-200 bg-stone-50 text-stone-800'
+  const depositReceiptAvailable = payment?.paymentStatus === 'PAID'
+  const remainingReceiptAvailable = Boolean(remainingPayment)
+  const openReceipts = () => {
+    setReceiptSection(depositReceiptAvailable ? 'deposit' : 'remaining')
+    setReceiptOpen(true)
+  }
+  const selectedReceipt = receiptSection === 'deposit' ? payment : remainingPayment
   if (!snapshot) return <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{MISSING_RESERVATION_SNAPSHOT}</p>
   return <>
     {reservation.status === 'AWAITING_PAYMENT' && <div className={`rounded-lg p-3 text-right text-xs ${timerTone}`}>
@@ -174,7 +184,7 @@ export default function CustomerReservationPayment({ user, reservation, facility
         setAcceptedNoRefund(false); setPayOpen(true)
       }}>Thanh toán đặt cọc giữ chỗ</Button>
     </div>}
-    {payment?.paymentStatus === 'PAID' && <Button variant="outline" size="sm" className="reservation-action reservation-action-receipt min-h-10 w-full justify-center" onClick={() => setReceiptOpen(true)}>{bookingDepositAccepted(payment) ? 'Xem biên lai tiền cọc giữ chỗ' : 'Xem giao dịch cọc cần đối soát'}</Button>}
+    {(depositReceiptAvailable || remainingReceiptAvailable) && <Button variant="outline" size="sm" className="reservation-action reservation-action-receipt min-h-10 w-full justify-center" onClick={openReceipts}>Xem biên lai thanh toán</Button>}
     <Modal size="2xl" open={payOpen} onClose={() => { if (!busy) { setPayOpen(false); setConfirmModalOpen(false); setAcceptedNoRefund(false) } }} title="Thanh toán trước 20% (giữ chỗ)">
       <div className="space-y-4">
         <div className="grid gap-1 text-sm"><p>Đơn giữ kho: <b>{reservation.reservationCode}</b></p><p>Cơ sở: <b>{facilityName}</b></p><p>Loại kho: <b>{unitTypeName}</b></p><p>{reservation.rentalPeriodConfirmed ? 'Kỳ thuê đã chốt:' : 'Kỳ thuê dự kiến sau thời gian chuẩn bị:'} <b>{snapshot.startDate.split('-').reverse().join('/')} đến {rentalEndDateForDisplay(snapshot.endDate).split('-').reverse().join('/')}</b></p></div>
@@ -258,8 +268,24 @@ export default function CustomerReservationPayment({ user, reservation, facility
         </div>
       </div>
     </Modal>
-    <Modal size="3xl" open={receiptOpen} onClose={() => setReceiptOpen(false)} title={payment && bookingDepositAccepted(payment) ? 'Biên lai tiền cọc giữ chỗ' : 'Chi tiết giao dịch cọc'}>
-      {payment && <div className="w-full min-w-0"><ReservationReceipt payment={payment} reservationCode={reservation.reservationCode} /></div>}
+    <Modal size="3xl" open={receiptOpen} onClose={() => setReceiptOpen(false)} title="Biên lai thanh toán">
+      <div className="space-y-4">
+        <div role="tablist" aria-label="Chọn loại biên lai" className="grid gap-2 sm:grid-cols-2">
+          <button type="button" role="tab" aria-selected={receiptSection === 'deposit'} disabled={!depositReceiptAvailable} onClick={() => setReceiptSection('deposit')} className={`rounded-lg border px-4 py-3 text-left text-sm transition ${receiptSection === 'deposit' ? 'border-emerald-600 bg-emerald-50 text-emerald-950 ring-1 ring-emerald-300' : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50'} ${!depositReceiptAvailable ? 'cursor-not-allowed opacity-50' : ''}`}>
+            <span className="block font-bold">Biên lai tiền cọc giữ chỗ</span>
+            <span className="mt-1 block text-xs">{depositReceiptAvailable ? 'Khoản trả trước 20% đã ghi nhận' : 'Chưa có biên lai'}</span>
+          </button>
+          <button type="button" role="tab" aria-selected={receiptSection === 'remaining'} disabled={!remainingReceiptAvailable} onClick={() => setReceiptSection('remaining')} className={`rounded-lg border px-4 py-3 text-left text-sm transition ${receiptSection === 'remaining' ? 'border-emerald-600 bg-emerald-50 text-emerald-950 ring-1 ring-emerald-300' : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50'} ${!remainingReceiptAvailable ? 'cursor-not-allowed opacity-50' : ''}`}>
+            <span className="block font-bold">Biên lai tiền thuê còn lại</span>
+            <span className="mt-1 block text-xs">{remainingReceiptAvailable ? 'Khoản thanh toán khi nhận kho' : 'Chưa có biên lai'}</span>
+          </button>
+        </div>
+        {receiptSection === 'deposit' && payment && <div role="tabpanel" className="w-full min-w-0"><ReservationReceipt payment={payment} reservationCode={reservation.reservationCode} /></div>}
+        {receiptSection === 'remaining' && remainingPayment && <div role="tabpanel" className="w-full min-w-0"><ReservationReceipt payment={remainingPayment} reservationCode={reservation.reservationCode} /></div>}
+        {selectedReceipt?.paymentStatus === 'PAID' && <div className="flex justify-end border-t border-stone-200 pt-4">
+          <Button type="button" variant="outline" onClick={() => downloadPaymentReceipt(reservationPaymentReceiptExport(selectedReceipt, reservation.reservationCode))}>Tải biên lai xuống</Button>
+        </div>}
+      </div>
     </Modal>
     <Modal open={returnFailure !== null} onClose={() => setReturnFailure(null)} title="Kết quả thanh toán VNPay">
       <div className="space-y-4">
