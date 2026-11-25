@@ -1,7 +1,6 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Avatar } from './ui'
 import BrandLogo from './BrandLogo'
-import WorkflowSlaPanel from './WorkflowSlaPanel'
 import type { PermissionKey, User, Role } from '../types'
 import { isApiAuthenticated } from '../services/authApi'
 import { markAllNotificationsRead } from '../services/notificationApi'
@@ -121,7 +120,6 @@ export default function Layout({
   const visibleNavItems = canAccess ? navItems.filter(item => !item.permission || canAccess(item.permission)) : navItems
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
-  const [workflowSlaOpen, setWorkflowSlaOpen] = useState(false)
   const [notificationActionError, setNotificationActionError] = useState('')
   const notificationAreaRef = useRef<HTMLDivElement>(null)
   const contentScrollRef = useRef<HTMLElement>(null)
@@ -564,14 +562,6 @@ export default function Layout({
             </div>
           )}
           <div className="flex-1" />
-
-          {user.role !== 'customer' && isApiAuthenticated() && (
-            <button type="button" onClick={() => setWorkflowSlaOpen(true)}
-              className="rounded-md px-2 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-100">
-              Hạn xử lý
-            </button>
-          )}
-          {workflowSlaOpen && <WorkflowSlaPanel key={user.id} onClose={() => setWorkflowSlaOpen(false)} />}
 
           {/* Notifications */}
             <div className="relative" ref={notificationAreaRef}>
