@@ -63,6 +63,7 @@ import {
 } from "../../components/ui"
 
 import {
+  compareCheckInSchedule,
   extractStaffFieldErrors,
   formatStaffDateTime,
   parseEmptyStorageHandover,
@@ -3572,7 +3573,7 @@ export default function StaffCheckInOperationsPanel({
         title="Xem biên bản"
         size="xl"
       >
-        {false && detailTarget?.handover && (
+        {detailTarget && false && ((detailTarget: CheckInCase & { handover: NonNullable<CheckInCase["handover"]> }) => (
           <div className="space-y-4 text-sm">
             {detailTarget.inventoryVisit?.identityVerifiedAt && <StaffInventoryVisitPanel
               key={detailTarget.checkInId ?? detailTarget.reservationId} item={detailTarget} now={now} busy={submitting}
@@ -3581,7 +3582,7 @@ export default function StaffCheckInOperationsPanel({
             {!!detailTarget.handover.inventoryLines?.length && (
               <section className="divide-y divide-stone-200 rounded-lg border border-stone-200">
                 <h3 className="px-3 py-2 font-semibold">Kết quả kiểm kê từng dòng hàng</h3>
-                {detailTarget.handover.inventoryLines.map((line, index) => {
+                {detailTarget.handover.inventoryLines!.map((line, index) => {
                   const declared = detailTarget.declaredGoodsLines?.find(item => item.id === line.goodsItemId)
                   const condition = { INTACT: "Nguyên vẹn", DAMAGED: "Có hư hỏng", NOT_PRESENT: "Không có kiện nào" }[line.condition]
                   return (
@@ -3810,7 +3811,7 @@ export default function StaffCheckInOperationsPanel({
               </Button>
             </div>
           </div>
-        )}
+        ))(detailTarget as CheckInCase & { handover: NonNullable<CheckInCase["handover"]> })}
         {detailTarget && !detailTarget.handover && (
           <div className="space-y-4">
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
