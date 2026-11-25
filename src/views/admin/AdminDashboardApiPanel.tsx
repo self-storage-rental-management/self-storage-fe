@@ -4,6 +4,7 @@ import { getAdminDashboard, type AdminApiDashboard } from '../../services/adminA
 import type { ApiRoleCode } from '../../services/authApi'
 import type { Role } from '../../types'
 import { RefreshIcon, roleColors, roleLabels } from './adminPanelTypes'
+import { activityActionLabel, activityEntityLabel } from './adminActivityLocalization'
 
 const ROLE_ORDER: ApiRoleCode[] = ['ADMIN', 'BUSINESS', 'MANAGER', 'STAFF', 'CUSTOMER']
 
@@ -105,7 +106,7 @@ export default function AdminDashboardApiPanel() {
             <Thead><Tr><Th>Tài khoản</Th><Th>Lý do</Th><Th>Thời điểm</Th></Tr></Thead>
             <Tbody>{dashboard.recentLoginFailures.length ? dashboard.recentLoginFailures.map(item => <Tr key={item.id}>
               <Td><span className="font-medium text-stone-800">{item.email}</span></Td>
-              <Td>{item.failureReason || 'Đăng nhập thất bại'}</Td>
+              <Td>{item.failureReason ? activityActionLabel(item.failureReason) : 'Đăng nhập thất bại'}</Td>
               <Td className="whitespace-nowrap text-xs">{formatDateTime(item.occurredAt)}</Td>
             </Tr>) : <Tr><Td colSpan={3} className="py-8 text-center text-stone-500">Chưa có đăng nhập thất bại gần đây.</Td></Tr>}</Tbody>
           </Table>
@@ -119,7 +120,7 @@ export default function AdminDashboardApiPanel() {
           <Table>
             <Thead><Tr><Th>Sự kiện</Th><Th>Người thực hiện</Th><Th>Thời điểm</Th></Tr></Thead>
             <Tbody>{dashboard.recentSecurityEvents.length ? dashboard.recentSecurityEvents.map(item => <Tr key={item.id}>
-              <Td><span className="font-medium text-stone-800">{item.action}</span><span className="mt-0.5 block text-xs text-stone-500">{item.entityType} · {item.entityId}</span></Td>
+              <Td><span className="font-medium text-stone-800">{activityActionLabel(item.action)}</span><span className="mt-0.5 block text-xs text-stone-500">{activityEntityLabel(item.entityType)} · {item.entityId}</span></Td>
               <Td>{item.actorName}</Td>
               <Td className="whitespace-nowrap text-xs">{formatDateTime(item.createdAt)}</Td>
             </Tr>) : <Tr><Td colSpan={3} className="py-8 text-center text-stone-500">Chưa có sự kiện an ninh gần đây.</Td></Tr>}</Tbody>
