@@ -76,7 +76,9 @@ describe('real Return transport and unknown settlement presentation', () => {
   })
   it('keeps the backend rejection of a customer-declared settlement payment', async () => {
     const fetch = respond({ error: { message: 'Vui lòng thanh toán tại cơ sở.', code: 'CONFLICT' } }, 409)
-    await expect(paySettlement(ids.event, 'CASH', 'Khách tự khai đã thanh toán')).rejects.toThrow('thanh toán tại cơ sở')
+    await expect(paySettlement(ids.event, 'CASH', 'Khách tự khai đã thanh toán')).rejects.toMatchObject({
+      diagnosticMessage: expect.stringContaining('thanh toán tại cơ sở'),
+    })
     expect(fetch.mock.calls[0][0]).toContain(`/api/customer/returns/${ids.event}/pay-settlement`)
   })
   it('sends inspection with explicit deductions and returned-access items', async () => {

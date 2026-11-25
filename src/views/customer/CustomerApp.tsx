@@ -2878,10 +2878,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 <Card id={`customer-record-${hold.id}`} tabIndex={-1} className={`p-6 border-l-4 ${holdInactive ? 'inactive-record-card border-l-stone-300 bg-white text-stone-500' : 'border-l-amber-500'} ${focusedNotificationTarget === hold.id ? 'notification-target-reveal' : ''}`}>
                   <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_240px]">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-amber-700">{hold.id}</span>
-                        {badgeFor(hold.status)}
-                        {hold.payment.status === 'paid' && <span className="rounded bg-emerald-700 px-2.5 py-1 text-xs font-bold text-white">{'Đã khoản trả trước 20% (giữ chỗ) 20%'}</span>}
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <span className="text-xs font-bold text-amber-700">{hold.id}</span>
+                          {hold.payment.status === 'paid' && <span className="rounded bg-emerald-700 px-2.5 py-1 text-xs font-bold text-white">{'Đã khoản trả trước 20% (giữ chỗ) 20%'}</span>}
+                        </div>
+                        <div className="shrink-0">{badgeFor(hold.status)}</div>
                       </div>
                       <h2 className="mt-1 text-lg font-bold text-stone-900">
                         {unitTypeLabel(hold.unitTypeName || hold.unitId)} · {hold.facilityName}

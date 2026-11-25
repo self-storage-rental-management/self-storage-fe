@@ -316,10 +316,11 @@ export default function RentalDetail({
             <dt>Hạn chuẩn bị (Miễn phí)</dt>
             <dd className="space-y-3">
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-lg border border-stone-200 bg-stone-50 p-3"><p className="text-xs text-stone-500">Bàn giao thực tế</p><p className="mt-1 font-semibold">{rentalDate(vietnamDateInput(rental.setupStartedAt))}</p><p className="mt-1 text-xs text-stone-500">{new Date(rental.setupStartedAt).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })}</p></div>
-                <div className="rounded-lg border border-stone-200 bg-stone-50 p-3"><p className="text-xs text-stone-500">Kết thúc thời gian miễn phí</p><p className="mt-1 font-semibold">{rentalDate(rental.setupEndsAt)}</p><p className="mt-1 text-xs text-stone-500">{new Date(rental.setupEndsAt).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })}</p></div>
+                <div className="rounded-lg border border-stone-200 bg-stone-50 p-3"><p className="text-xs text-stone-500">Ngày nhận kho theo lịch khách chọn</p><p className="mt-1 font-semibold">{rentalDate(rental.setupStartedAt)}</p></div>
+                <div className="rounded-lg border border-stone-200 bg-stone-50 p-3"><p className="text-xs text-stone-500">Kết thúc chuẩn bị miễn phí</p><p className="mt-1 font-semibold">{rentalDate(rental.setupEndsAt)}</p></div>
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3"><span className="text-sm text-emerald-800">Bắt đầu kỳ thuê có tính tiền</span><span className="font-bold text-emerald-900">{rentalDate(rental.startDate)}</span></div>
+              <p className="border-t border-stone-100 pt-3 text-xs text-stone-500">Ngày tính tiền = ngày khách chọn nhận kho + số ngày chuẩn bị miễn phí theo gói thuê.</p>
               {rental.moveInCompletedAt && <p className="border-t border-stone-100 pt-3 text-xs text-stone-500">Đã báo hoàn tất chuẩn bị lúc {new Date(rental.moveInCompletedAt).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })} ngày {rentalDate(vietnamDateInput(rental.moveInCompletedAt))}</p>}
             </dd>
           </div>}
@@ -399,7 +400,7 @@ export default function RentalDetail({
                 </>
               ) : <>
               <Badge variant="warning">Chưa kiểm kê</Badge>
-              <p className="mt-2 text-xs leading-5 text-stone-500">Kỳ thuê vẫn tính theo mốc đã bàn giao, hồ sơ kiểm kê cần được hoàn tất trước hạn xử lý.</p>
+              <p className="mt-2 text-xs leading-5 text-stone-500">Kỳ thuê vẫn tính theo ngày khách chọn nhận kho cộng số ngày chuẩn bị miễn phí, hồ sơ kiểm kê cần được hoàn tất trước hạn xử lý.</p>
               {rental.inventoryDueAt && <p className="mt-1 text-xs text-stone-500">Mốc nhắc kiểm kê: {new Date(rental.inventoryDueAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</p>}
               {rental.inventoryFinalDeadlineAt && <p className={`mt-1 text-xs font-bold ${new Date(rental.inventoryFinalDeadlineAt).getTime() <= now ? 'text-red-700' : 'text-stone-700'}`}>{new Date(rental.inventoryFinalDeadlineAt).getTime() <= now ? 'Đã quá hạn kiểm kê' : 'Hạn hoàn tất kiểm kê'}: {new Date(rental.inventoryFinalDeadlineAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</p>}
               {inventoryReadError && <div className="mt-2">
