@@ -34,9 +34,9 @@ describe('Return summary', () => {
       type: 'GOODS_MOVED_IN', earlyTerminationFee: 0, billableSetupDays: 2,
       usedGoodsCharge: 200000, totalRentalCharge: 200000, rentalRefundAmount: 5800000, noticeDays: 0,
     }, setupExitRequested: true, setupEarlyExit: true, rentalRefundCredit: 5800000, earlyTerminationFee: 0 }} />)
-    expect(html).toContain('Trả kho do hàng hóa sai khai báo')
-    expect(html).toContain('Tính tiền từ ngày xác nhận nhận kho đến ngày hẹn trả kho dự kiến.')
-    expect(html).toContain('Quản lý cơ sở lập quyết toán, khách xác nhận trước khi hoàn tiền hoặc thu thêm.')
+    expect(html).toContain('Đơn trả kho do kiểm kê sai lệch')
+    expect(html).toContain('Tính tiền theo số ngày sử dụng thực tế (Đơn giá tháng × Số ngày / 30).')
+    expect(html).toContain('Khách buộc chọn ngày trả kho trước hạn cuối 1 ngày')
     expect(html).toContain('5.800.000')
     expect(html).not.toContain('Phí chấm dứt sớm một lần')
   })

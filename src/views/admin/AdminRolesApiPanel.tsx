@@ -24,7 +24,7 @@ const roleKey = (code: InternalRoleCode) => code.toLowerCase() as Role
 const roleDescription: Record<InternalRoleCode, string> = {
   ADMIN: 'Quản trị tài khoản, vai trò, cài đặt, kiểm toán và tổng quan toàn hệ thống.',
   MANAGER: 'Phê duyệt, điều phối vận hành, chính sách và báo cáo.',
-  STAFF: 'Rà soát đặt chỗ, check-in và bàn giao cho khách hàng.',
+  STAFF: 'Rà soát đặt chỗ, nhận kho và bàn giao cho khách hàng.',
   BUSINESS: 'Theo dõi cơ hội, hợp đồng và thông tin thương mại.',
 }
 

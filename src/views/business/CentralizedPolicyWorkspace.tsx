@@ -670,10 +670,10 @@ export default function CentralizedPolicyWorkspace({ user, lang = 'vi', initialP
                       <h4 className="font-bold text-slate-900 text-sm">Gia Hạn Trực Tuyến</h4>
                     </div>
                     <p className="text-xs text-stone-600 leading-relaxed max-w-3xl">
-                      Khách hàng được chủ động gia hạn hợp đồng trực tiếp trên Customer Portal. Giao diện Customer và phân hệ BO dùng chung 100% dữ liệu chính sách tập trung theo thời gian thực.
+                      Khách hàng được chủ động gia hạn hợp đồng trực tiếp trên cổng khách hàng. Giao diện Khách hàng và phân hệ BO dùng chung 100% dữ liệu chính sách tập trung theo thời gian thực.
                     </p>
                     <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                      <span className="text-[10px] px-2 py-0.5 rounded font-medium bg-stone-100 text-stone-700">Customer Portal tự phục vụ</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded font-medium bg-stone-100 text-stone-700">cổng khách hàng tự phục vụ</span>
                       <span className="text-[10px] px-2 py-0.5 rounded font-medium bg-stone-100 text-stone-700">Dùng chung dữ liệu BO</span>
                       <span className="text-[10px] px-2 py-0.5 rounded font-medium bg-stone-100 text-stone-700">Tự động cập nhật hợp đồng</span>
                     </div>
@@ -681,7 +681,7 @@ export default function CentralizedPolicyWorkspace({ user, lang = 'vi', initialP
                 </div>
 
                 <div className="flex md:flex-col items-center md:items-end justify-between shrink-0 border-t md:border-t-0 pt-2 md:pt-0 border-stone-100">
-                  <Badge variant="success">Customer Portal</Badge>
+                  <Badge variant="success">Cổng khách hàng</Badge>
                   <span className="text-[11px] text-stone-500 mt-1">Trực tuyến 24/7</span>
                 </div>
               </div>
@@ -938,7 +938,7 @@ export default function CentralizedPolicyWorkspace({ user, lang = 'vi', initialP
                       onChange={(e) => handleFieldChange('allowEarlyRenewal', e.target.checked)}
                       className="w-4 h-4 text-amber-600 rounded"
                     />
-                    Cho phép khách hàng thực hiện gia hạn trực tuyến trên Customer Portal
+                    Cho phép khách hàng thực hiện gia hạn trực tuyến trên cổng khách hàng
                   </label>
                 </div>
               </div>

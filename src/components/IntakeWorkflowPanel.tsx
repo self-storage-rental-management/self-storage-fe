@@ -27,8 +27,8 @@ function vietnamDateTimeInput(timestamp: number) {
   return `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}`
 }
 
-export default function IntakeWorkflowPanel({ reservationId, role, checkInId, statusSignal }: {
-  reservationId: string; role: 'CUSTOMER' | 'STAFF' | 'MANAGER'; checkInId?: string | null; statusSignal?: string | null
+export default function IntakeWorkflowPanel({ reservationId, role, checkInId, statusSignal, onUpdated }: {
+  reservationId: string; role: 'CUSTOMER' | 'STAFF' | 'MANAGER'; checkInId?: string | null; statusSignal?: string | null; onUpdated?: () => void
 }) {
   const [state, setState] = useState<State | null>(null)
   const [at, setAt] = useState('')
@@ -61,6 +61,7 @@ export default function IntakeWorkflowPanel({ reservationId, role, checkInId, st
         action, at: needsDate ? new Date(`${at}:00+07:00`).toISOString() : undefined, reason, documentNumber: document, photoId, extensionDays: extensionDays ? Number(extensionDays) : undefined,
       }) })
       setState(result.data)
+      onUpdated?.()
     } catch {
       setError('Chưa thể cập nhật. Vui lòng kiểm tra thời hạn, số lượt còn lại, lịch hẹn và thông tin xác minh.')
     } finally { setBusy(false) }
@@ -81,7 +82,7 @@ export default function IntakeWorkflowPanel({ reservationId, role, checkInId, st
     {state.resultConfirmationDueAt && <p>Vui lòng xác nhận hoặc góp ý về kết quả trong 48 giờ. Sau thời hạn này, hệ thống không tự xác nhận thay bạn.</p>}
     {role === 'MANAGER' && state.setupExtensionDays == null && !state.readyAt && <label className="block">Số ngày tối đa mỗi lần dời hạn<input className="ml-2 rounded border p-2" type="number" min="1" step="1" value={extensionDays} onChange={e => setExtensionDays(e.target.value)} /></label>}
     {(role === 'MANAGER' || role === 'CUSTOMER') && <label className="block">Ngày giờ mới theo giờ Việt Nam<input className="mt-1 block rounded border p-2" type="datetime-local" min={minimumDateTime} value={at} onChange={e => setAt(e.target.value)} /></label>}
-    {role === 'CUSTOMER' && <div className="flex flex-wrap gap-2">{!state.readyAt && button('EXTEND_SETUP', 'Dời hạn chuẩn bị hàng', (state.setupExtensionCount ?? 0) >= 2 || !state.setupDeadlineAt || selectedDateTimeIsPast)}{state.readyAt && !state.arrivedAt && button('APPOINTMENT', 'Xác nhận lịch kiểm kê', selectedDateTimeIsPast)}</div>}
+    {role === 'CUSTOMER' && <div className="flex flex-wrap gap-2">{!state.readyAt && button('EXTEND_SETUP', 'Dời hạn chuẩn bị hàng', (state.setupExtensionCount ?? 0) >= 2 || !state.setupDeadlineAt || (remaining != null && remaining <= 0) || selectedDateTimeIsPast)}{state.readyAt && !state.arrivedAt && button('APPOINTMENT', 'Xác nhận lịch kiểm kê', selectedDateTimeIsPast)}</div>}
     {role === 'STAFF' && state.readyAt && <div className="space-y-2">
       {!state.arrivedAt && button('ARRIVAL', 'Ghi nhận khách đã đến')}
       {state.arrivedAt && !state.identityVerifiedAt && <><label className="block">CCCD hoặc hộ chiếu<input className="ml-2 rounded border p-2" value={document} onChange={e => setDocument(e.target.value)} /></label><label className="block">Ảnh tại buổi kiểm kê<input type="file" accept="image/*" capture="user" onChange={e => setPhoto(e.target.files?.[0] || null)} /></label>{button('VERIFY', 'Xác minh chính chủ')}</>}

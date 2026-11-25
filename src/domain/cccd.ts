@@ -11,7 +11,7 @@ export function validateCccd(raw: string): { ok: boolean; error?: string; warnin
   const year = Number(new Intl.DateTimeFormat('en', { year: 'numeric', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date()))
   if (birthYear > year) return { ok: false, error: 'Năm sinh trong CCCD ở tương lai.' }
   if (year - birthYear < 18) return { ok: false, error: 'Người thuê phải đủ 18 tuổi.' }
-  return { ok: true, warning: year - birthYear === 18 ? 'Bạn thuộc năm vừa đủ 18 tuổi. Staff cần đối chiếu ngày sinh trên giấy tờ gốc khi nhận kho.' : undefined }
+  return { ok: true, warning: year - birthYear === 18 ? 'Bạn thuộc năm vừa đủ 18 tuổi. Nhân viên cần đối chiếu ngày sinh trên giấy tờ gốc khi nhận kho.' : undefined }
 }
 export const maskCccd = (raw: string) => {
   const value = normalizeCccd(raw)

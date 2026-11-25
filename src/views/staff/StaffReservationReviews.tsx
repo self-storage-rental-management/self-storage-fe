@@ -1,3 +1,4 @@
+import { displayStatusLabel } from '../../presentation/statusLabels'
 import { useEffect, useState } from "react"
 
 import { Badge, Button, Card, Input, SectionHeader, Select } from "../../components/ui"
@@ -387,7 +388,7 @@ export default function StaffReservationReviews({
               <p className="text-xs text-stone-500">{row.unitTypeName} · Gian kho: {row.assignedUnitCode || "Chưa phân"}</p>
             </div>
             <div className="text-right">
-              <Badge variant="info">{activeStatusLabels[row.status] || row.status}</Badge>
+              <Badge variant="info">{activeStatusLabels[row.status] || displayStatusLabel(row.status)}</Badge>
               <p className="mt-2 text-xs text-stone-600">Lịch nhận kho: <b>{row.appointmentAt ? formatStaffDateTime(row.appointmentAt) : "Chưa chọn lịch"}</b></p>
               <p className="text-xs text-stone-500">Kỳ thuê: {formatStaffDate(row.startDate)} → {formatStaffDate(row.endDate)}</p>
             </div>

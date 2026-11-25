@@ -90,7 +90,7 @@ export function ReservationPreparationNotice({ checkInStatus, submitting, onRead
             <>
               <p className="mt-1">Sau khi sắp xếp hàng hóa xong, nhấn nút để báo nhân viên có thể kiểm kê.</p>
               <Button type="button" className="mt-2" size="sm" disabled={submitting} onClick={onReady}>
-                {submitting ? 'Đang gửi…' : 'Đã setup xong'}
+                {submitting ? 'Đang gửi…' : 'Đã chuẩn bị xong'}
               </Button>
             </>
           )}
@@ -127,12 +127,13 @@ function inventoryComparison(value: string | null | undefined) {
   }
 }
 
-export function InventoryResolutionNotice({ detail, now, submitting, onResolve, onExtendReturnWindow, onOpenReturns }: {
+export function InventoryResolutionNotice({ detail, now, submitting, onResolve, onExtendReturnWindow, onScheduleReturnDate, onOpenReturns }: {
   detail: CustomerReservationDetail
   now: number
   submitting: boolean
   onOpenReturns?: () => void
   onExtendReturnWindow?: () => void
+  onScheduleReturnDate?: (returnCaseId: string, scheduledDate: string, note: string) => Promise<void>
   onResolve: (decision: 'ACCEPT_FULL' | 'CANCEL_AND_RETURN', scheduledDate?: string) => void
 }) {
   const resultConfirmationDeadline = detail.inventoryResultPublishedAt
@@ -150,26 +151,71 @@ export function InventoryResolutionNotice({ detail, now, submitting, onResolve, 
       : resultConfirmationDeadlineIso || detail.inventoryFinalDeadlineAt
   const activeCountdown = inventoryDeadlineText(activeDeadline, now)
   const hasVariance = Boolean(detail.inventoryMismatchSummary) || !detail.inventoryFullFit
-  const comparison = inventoryComparison(detail.inventoryMismatchJson)
-  const displayValue = (value: unknown) => value == null || value === '' ? 'Chưa ghi nhận' : String(value)
   const today = policyDateInput(new Date())
+  const tomorrow = policyDateInput(new Date(Date.now() + 86_400_000))
   const removalFirst = detail.inventoryRemovalPublishedAt
-    ? policyDateInput(new Date(new Date(detail.inventoryRemovalPublishedAt).getTime() + 86_400_000)) : today
-  const removalLast = detail.inventoryRemovalDeadlineAt
-    ? policyDateInput(new Date(new Date(detail.inventoryRemovalDeadlineAt).getTime() - 1)) : undefined
-  const minReturnDate = removalFirst > today ? removalFirst : today
+    ? policyDateInput(new Date(new Date(detail.inventoryRemovalPublishedAt).getTime() + 86_400_000)) : tomorrow
   const removalDeadline = detail.inventoryRemovalDeadlineAt
   const removalDeadlineMs = removalDeadline ? Date.parse(removalDeadline) : null
-  const maxReturnDate = removalDeadlineMs == null ? undefined : policyDateInput(new Date(removalDeadlineMs - 1))
+  const removalLastDay = removalDeadlineMs != null
+    ? policyDateInput(new Date(removalDeadlineMs - 1)) : undefined
+  const removalLast = removalDeadlineMs != null
+    ? (() => {
+        const oneDayBefore = policyDateInput(new Date(removalDeadlineMs - 86_400_000 - 1))
+        return oneDayBefore >= removalFirst ? oneDayBefore : removalLastDay
+      })()
+    : undefined
+  const minReturnDate = removalFirst > tomorrow ? removalFirst : tomorrow
+  const maxReturnDate = removalLast
   const inventoryExpired = Boolean(detail.inventoryEscalatedAt)
     || Boolean(detail.inventoryFinalDeadlineAt && Date.parse(detail.inventoryFinalDeadlineAt) <= now)
     || (removalDeadlineMs != null && removalDeadlineMs <= now)
   const canPlanReturn = !detail.inventoryEscalatedAt
     && (removalDeadlineMs == null ? !inventoryExpired : now < removalDeadlineMs)
-  const [returnDate, setReturnDate] = useState(today)
+  const [returnDate, setReturnDate] = useState('')
   const [returnPlannerOpen, setReturnPlannerOpen] = useState(false)
   const [returnDateError, setReturnDateError] = useState('')
-  if (detail.inventoryDecision) return <InventoryDecisionSummary decision={detail.inventoryDecision} onOpenReturns={onOpenReturns} />
+  if (detail.inventoryDecision) {
+    const decisionReturnCaseId = detail.inventoryDecision.returnCaseId || detail.reservation.setupReturnCaseId
+    const canScheduleDecisionReturn = Boolean(
+      onScheduleReturnDate
+      && decisionReturnCaseId
+      && ['requested', 'scheduled'].includes(detail.inventoryDecision.returnStatus || '')
+      && canPlanReturn,
+    )
+    return (
+      <div className="space-y-3">
+        <InventoryDecisionSummary decision={detail.inventoryDecision} onOpenReturns={onOpenReturns} />
+        {canScheduleDecisionReturn && decisionReturnCaseId && !onOpenReturns && (
+          <div className="space-y-3 rounded-lg border border-red-300 bg-white p-3 text-left text-xs">
+            <p className="font-bold text-red-950">Chọn / đổi ngày hẹn trả kho dự kiến</p>
+            {activeDeadline && <p className="font-semibold text-red-900">{activeCountdown || 'Hạn xử lý'} · {formatCustomerDateTime(new Date(activeDeadline))}</p>}
+            <VietnameseDateInput label="Ngày hẹn trả kho" value={returnDate} min={minReturnDate} max={removalLast} onChange={(value) => { setReturnDate(value); setReturnDateError('') }} />
+            {removalLast && <p className="font-semibold text-stone-700">Hạn chọn lịch trả kho: đến hết {formatDisplayDate(removalLast)}. Đổi lịch không tự kéo dài hạn này.</p>}
+            <p className="text-xs font-medium text-red-900">Khách buộc chọn ngày trả kho trước hạn cuối 1 ngày để đảm bảo quản lý quyết toán và giải quyết yêu cầu nếu khách muốn quyết toán lại.</p>
+            {returnDateError && <p role="alert" className="font-semibold text-red-700">{returnDateError}</p>}
+            <div className="flex justify-end">
+              <Button
+                size="sm"
+                variant="danger"
+                disabled={submitting || !returnDate}
+                onClick={() => {
+                  if (!returnDate || returnDate < minReturnDate || (removalLast && returnDate > removalLast)) {
+                    setReturnDateError('Ngày hẹn trả kho phải sau ngày tạo đơn ít nhất 1 ngày và trước hạn cuối 1 ngày.')
+                    return
+                  }
+                  setReturnDateError('')
+                  void onScheduleReturnDate!(decisionReturnCaseId, returnDate, detail.inventoryDecision?.note || 'Khách hẹn ngày trả kho.')
+                }}
+              >
+                {submitting ? 'Đang lưu…' : 'Lưu ngày hẹn trả kho'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
   if (partialAccepted && detail.checkInStatus === 'completed') return <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-950">Đã hoàn tất kiểm kê theo phương án tiếp nhận trước đây.</p>
   if (detail.inventoryResolutionStatus === 'TRANSFER_REQUESTED') return <p role="status" className="rounded-lg bg-blue-50 p-3 text-sm text-blue-950">Cơ sở đã nhận yêu cầu thu xếp chuyển hàng. Bạn có thể theo dõi tại mục hỗ trợ.</p>
   if (!['PENDING_CUSTOMER', 'PARTIAL_ACCEPTED', 'RETURN_REQUESTED'].includes(detail.inventoryResolutionStatus || '')) return null
@@ -190,24 +236,7 @@ export function InventoryResolutionNotice({ detail, now, submitting, onResolve, 
         : returnRequested
           ? 'Cơ sở đã tiếp nhận yêu cầu trả kho. Nếu lỡ lịch hẹn, bạn vẫn có thể đổi lịch trong hạn trả hàng. Hết hạn, hồ sơ chuyển sang chờ thu hồi.'
         : hasVariance ? `Nhân viên đã ghi nhận sai lệch giữa hàng thực tế và thông tin đặt kho. ${detail.inventoryMismatchSummary || 'Vui lòng chọn phương án xử lý.'}` : 'Hàng hóa đã được kiểm kê và phù hợp với khai báo. Vui lòng xem và xác nhận kết quả.'}</p>
-      {returnRequested && detail.reservation.setupReturnScheduledDate && <p className="mt-1 font-semibold">Ngày hẹn trả kho: {formatDisplayDate(detail.reservation.setupReturnScheduledDate)}</p>}
       {detail.inventoryFullFit && detail.inventorySuggestedPackageCount != null && <p className="mt-1">Số kiện có thể tiếp nhận theo phương án xếp: <b>{detail.inventorySuggestedPackageCount}</b></p>}
-      {comparison && (
-        <div className="mt-2 grid gap-2 rounded-lg border border-red-200 bg-white/70 p-2 sm:grid-cols-2">
-          <div><p className="font-semibold">Thông tin đã khai báo</p><p>Số kiện: {displayValue(comparison.declared?.packageCount)} · Khối lượng: {displayValue(comparison.declared?.weightKg)} kg · Thể tích: {displayValue(comparison.declared?.volumeM3)} m³</p><p>Loại hàng: {Array.isArray(comparison.declared?.category) ? comparison.declared?.category.join(', ') || 'Chưa ghi nhận' : displayValue(comparison.declared?.category)}</p><p>Chất liệu chính: {Array.isArray(comparison.declared?.material) ? comparison.declared?.material.join(', ') || 'Chưa ghi nhận' : displayValue(comparison.declared?.material)}</p></div>
-          <div><p className="font-semibold">Thông tin kiểm kê thực tế</p><p>Số kiện: {displayValue(comparison.actual?.packageCount)} · Khối lượng: {displayValue(comparison.actual?.weightKg)} kg · Thể tích: {displayValue(comparison.actual?.volumeM3)} m³</p><p>Loại hàng: {displayValue(comparison.actual?.category)}</p><p>Chất liệu chính: {displayValue(comparison.actual?.material)}</p></div>
-        </div>
-      )}
-      {!partialAccepted && (returnPlannerOpen || returnRequested) && <div className="mt-2 rounded-lg border border-orange-300 bg-orange-50 p-3 text-orange-950">
-        <p className="font-bold">Trả kho do hàng hóa sai khai báo</p>
-        <ul className="mt-1 list-disc space-y-1 pl-5">
-          <li>Tính tiền theo ngày lịch từ ngày nhận kho đến ngày bàn giao kho trống, tính cả hai ngày. Không cộng ngày cơ sở chậm thu hồi sau hạn trả hàng.</li>
-          <li>Tiền sử dụng = đơn giá tháng × số ngày / 30, khấu trừ vào tiền đã đóng. Không thu phí chấm dứt sớm cố định.</li>
-          <li>Quản lý cơ sở duyệt bảng kê, khách xác nhận trước khi hoàn tiền hoặc thu thêm.</li>
-        </ul>
-        {detail.reservation.monthlyPrice != null && <p className="mt-1 font-semibold">Đơn giá tham chiếu: {formatVnd(detail.reservation.monthlyPrice)} / tháng.</p>}
-      </div>}
-      {activeDeadline && <p className="mt-1 font-bold">{activeCountdown || 'Hạn xử lý'} · {formatCustomerDateTime(new Date(activeDeadline))}</p>}
       {(detail.inventoryReturnExtensionCount ?? 0) > 0 && <p className="mt-1 font-semibold">Đã kéo dài thời gian trả kho: {detail.inventoryReturnExtensionCount} lần.</p>}
       {!partialAccepted && !returnRequested && !returnPlannerOpen && <div className="mt-3 flex flex-wrap justify-end gap-2">
         {detail.inventoryFullFit && <Button size="sm" disabled={submitting} onClick={() => onResolve('ACCEPT_FULL')}>Nhận toàn bộ hàng</Button>}
@@ -216,15 +245,11 @@ export function InventoryResolutionNotice({ detail, now, submitting, onResolve, 
         )}
         {!detail.inventoryFullFit && <Button size="sm" variant="danger" disabled={submitting || !canPlanReturn} onClick={() => { setReturnPlannerOpen(true) }}>Tạo yêu cầu trả kho ngay</Button>}
       </div>}
-      {returnRequested && detail.inventoryReturnCanExtend && onExtendReturnWindow && (
-        <div className="mt-3 flex flex-wrap justify-end gap-2">
-          <Button size="sm" variant="outline" disabled={submitting} onClick={onExtendReturnWindow}>Yêu cầu kéo dài thời gian</Button>
-        </div>
-      )}
       {!partialAccepted && !returnRequested && returnPlannerOpen && <div className="mt-3 space-y-3 rounded-lg border border-red-300 bg-white p-3">
         <p className="font-bold text-red-950">Chọn ngày trả kho dự kiến</p>
         <VietnameseDateInput label="Ngày hẹn trả kho" value={returnDate} min={minReturnDate} max={removalLast} onChange={(value) => { setReturnDate(value); setReturnDateError('') }} />
-        {removalLast && <p className="font-semibold">Hạn cuối trả hàng hiện tại: {formatDisplayDate(removalLast)}. Đổi lịch không tự kéo dài hạn này.</p>}
+        {removalLast && <p className="font-semibold">Hạn chọn lịch trả kho: đến hết {formatDisplayDate(removalLast)}. Đổi lịch không tự kéo dài hạn này.</p>}
+        <p className="text-xs font-medium text-red-900">Khách buộc chọn ngày trả kho trước hạn cuối 1 ngày để đảm bảo quản lý quyết toán và giải quyết yêu cầu nếu khách muốn quyết toán lại.</p>
         {returnDateError && <p role="alert" className="font-semibold text-red-700">{returnDateError}</p>}
         <p className="text-red-950">Ngày chọn là lịch hẹn bàn giao. Tiền dự kiến có thể thay đổi theo ngày bàn giao thực tế nhưng không cộng ngày cơ sở chậm thu hồi sau hạn. Bạn được xem và xác nhận bảng kê trước khi hoàn tiền hoặc thu thêm.</p>
         <div className="flex flex-wrap justify-end gap-2">
@@ -751,7 +776,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
                   ? ` · ${displayedUnitType.rackLengthM.toLocaleString('vi-VN', { maximumFractionDigits: 3 })} × ${displayedUnitType.rackWidthM.toLocaleString('vi-VN', { maximumFractionDigits: 3 })} × ${displayedUnitType.rackHeightM.toLocaleString('vi-VN', { maximumFractionDigits: 3 })} m/khung` : ''}</p>}
                 {displayedUnitType.maxLoadKg != null && <p><b>Tải trọng:</b> {displayedUnitType.maxLoadKg.toLocaleString('vi-VN')} kg</p>}
               </>}
-              {r.assignedUnitCode && <p><b>Gian kho đã phân:</b> {r.assignedUnitCode}{r.assignedUnitStatus ? ` (${r.assignedUnitStatus})` : ''}</p>}
+              {r.assignedUnitCode && <p><b>Gian kho đã phân:</b> {r.assignedUnitCode}</p>}
               {detail?.lockReference && (
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-left">
                   <span className="font-semibold text-amber-950">Mã ổ khóa đã bàn giao</span>

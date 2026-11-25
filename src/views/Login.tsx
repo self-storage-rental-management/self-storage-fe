@@ -407,7 +407,7 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
     } catch (registrationError) {
       setCaptcha(null); setCaptchaVersion(value => value + 1)
       setNotice('')
-      const formatted = formatAuthError(registrationError, 'Không thể tạo tài khoản Customer.')
+      const formatted = formatAuthError(registrationError, 'Không thể tạo tài khoản Khách hàng.')
       setError(formatted)
     } finally {
       setIsSubmitting(false)
