@@ -1,3 +1,4 @@
+import { receiptDisplayCode } from '../../utils/recordDisplayCode'
 import ReturnPolicyNotice from '../../components/ReturnPolicyNotice'
 import { useReturnRecords } from '../../hooks/useReturnRecords'
 import LocalizedDateInput from '../../components/LocalizedDateInput'
@@ -338,12 +339,6 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
   const [newRentalId, setNewRentalId] = useState('')
   const [newScheduledDate, setNewScheduledDate] = useState(() => new Date(Date.now() + 86400000 * 3).toISOString().slice(0, 10))
   const [newNotes, setNewNotes] = useState('Hết hạn hợp đồng, đề nghị nghiệm thu đúng hẹn để nhận lại tiền cọc.')
-
-  // Modal Demo Auto-runner
-  const [demoModalOpen, setDemoModalOpen] = useState(false)
-  const [demoStep, setDemoStep] = useState(0)
-  const [demoRunning, setDemoRunning] = useState(false)
-  const [demoLogs, setDemoLogs] = useState<string[]>([])
 
   // Lưu cache local state
   const saveLocalState = (items: typeof localReturns) => {
@@ -748,7 +743,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
       setFeedback('Ban điều hành phê duyệt và giám sát. Nhân viên ghi nhận khoản thu hoặc hoàn tiền kèm biên lai.')
       return
     }
-    if (useApi && !refundReference.trim()) {
+    if (useApi && refundMethod === 'BANK_TRANSFER' && !refundReference.trim()) {
       setFeedback('Vui lòng nhập mã giao dịch hoàn tiền thực tế trước khi hoàn tất hồ sơ.')
       return
     }
@@ -771,7 +766,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
         }
         const proof = {
           amount: selectedItem.netRefundAmount!,
-          transactionReference: refundReference.trim(),
+          transactionReference: refundMethod === 'BANK_TRANSFER' ? refundReference.trim() : '',
           paymentMethod: refundMethod,
           receiptFileId,
           confirmed: refundConfirmed,
@@ -930,77 +925,6 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
     } finally {
       setSubmitting(false)
     }
-  }
-
-  // 7. Thao tác: Chạy Demo toàn trình tự động 5 bước (Automated E2E Flow Runner)
-  const runAutomatedDemo = async () => {
-    if (useApi) return
-    setDemoRunning(true)
-    setDemoLogs([])
-    setDemoStep(1)
-
-    const addLog = (msg: string) => {
-      setDemoLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`])
-    }
-
-    addLog('BẮT ĐẦU DEMO QUY TRÌNH TOÀN TRÌNH: TRẢ KHO & QUYẾT TOÁN CỌC (STORAGEHUB)')
-
-    // Bước 1
-    await new Promise((r) => setTimeout(r, 1200))
-    addLog('1. Khách hàng tạo yêu cầu trả kho cho gian HCM-Q1-M-001 (Cọc: 9,500,000 ₫, Hẹn trả: 2026-10-18)')
-    setDemoStep(2)
-
-    // Bước 2
-    await new Promise((r) => setTimeout(r, 1500))
-    addLog('2. Nhân viên nghiệm thu: Thu đủ chìa & thẻ, phát hiện xước sàn (-200k), vệ sinh bụi (-100k) -> Tổng trừ: 300,000 ₫')
-    setDemoStep(3)
-
-    // Bước 3
-    await new Promise((r) => setTimeout(r, 1600))
-    addLog('3. Khách hàng xem biên bản: Không đồng ý phí vệ sinh 100k, gửi khiếu nại lên Ban Điều Hành -> Trạng thái: DISPUTED')
-    setDemoStep(4)
-
-    // Bước 4
-    await new Promise((r) => setTimeout(r, 1800))
-    addLog('4. Ban Điều Hành (BO) thẩm định: Miễn giảm 100% phí vệ sinh (100k -> 0k). Tái quyết toán: Hoàn cọc 9,300,000 ₫ -> Trạng thái: REFUND_PENDING')
-    setDemoStep(5)
-
-    // Bước 5
-    await new Promise((r) => setTimeout(r, 1800))
-    addLog('5. Kế toán giải ngân hoàn tiền cọc 9,300,000 ₫ qua VNPay (Mã GD: VNPAY-REFUND-20261017) -> Hợp đồng thanh lý thành công, Gian kho chuyển sang AVAILABLE!')
-
-    // Cập nhật demo record vào danh sách
-    const demoRecord = {
-      id: `demo-e2e-${Date.now()}`,
-      rentalId: 'demo-rental-q1',
-      unitNumber: 'HCM-Q1-M-001 (Demo E2E)',
-      facilityName: 'Kho Việt - Cơ sở Quận 1',
-      customerName: 'Demo Khách Hàng Toàn Trình',
-      customerPhone: '0901 888 999',
-      scheduledDate: new Date().toISOString().slice(0, 10),
-      status: 'completed',
-      depositAmount: 9500000,
-      totalDeductions: 200000,
-      netRefundAmount: 9300000,
-      amountDueFromCustomer: 0,
-      damageFee: 200000,
-      cleaningFee: 0,
-      lostItemFee: 0,
-      overdueFee: 0,
-      outstandingFee: 0,
-      returnedKey: true,
-      returnedCard: true,
-      returnedLock: true,
-      inspectionNotes: 'Sàn kho xước nhẹ, đã làm sạch. BO đã duyệt miễn phí vệ sinh.',
-      customerDecisionNote: 'Tôi khiếu nại phí vệ sinh vì đã dọn dẹp trước đó.',
-      managerResolutionNote: 'BO đồng ý miễn phí vệ sinh 100k. Đã chuyển hoàn 9,300,000 ₫ cho khách.',
-      proposedUnitStatus: 'available' as const,
-      settlementPaymentId: 'VNPAY-REFUND-20261017-OK',
-      completedAt: new Date().toLocaleString('vi-VN'),
-    }
-
-    saveLocalState([demoRecord, ...localReturns])
-    setDemoRunning(false)
   }
 
   // 8. Nạp lại bộ dữ liệu mẫu chuẩn (Reset/Seed demo)
@@ -1676,7 +1600,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                   <section className="rounded-xl border border-stone-200 bg-white p-4">
                     <h4 className="text-sm font-semibold text-stone-900">Chứng từ quyết toán</h4>
                     <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2">
-                      <div className="min-w-0"><dt className="text-stone-500">Mã giao dịch giải ngân</dt><dd className="mt-1 break-all font-medium text-stone-800">{selectedItem.settlementPaymentId}</dd></div>
+                      <div className="min-w-0"><dt className="text-stone-500">Mã phiếu hoặc giao dịch giải ngân</dt><dd className="mt-1 break-all font-medium text-stone-800">{receiptDisplayCode(selectedItem.settlementReceipt?.receiptCode, selectedItem.settlementPaymentId)}</dd></div>
                       {selectedItem.completedAt && <div><dt className="text-stone-500">Thời điểm hoàn tất</dt><dd className="mt-1 font-medium text-stone-800">{Number.isNaN(Date.parse(selectedItem.completedAt)) ? selectedItem.completedAt : new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(selectedItem.completedAt))}</dd></div>}
                     </dl>
                   </section>
@@ -1980,9 +1904,10 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                   </span>
                 </div>
 
-                <div>
+                {useApi && <label className="block text-xs font-bold text-stone-700">Phương thức hoàn tiền<select className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-normal" value={refundMethod} disabled={submitting} onChange={event => { setRefundMethod(event.target.value as 'CASH' | 'BANK_TRANSFER'); setRefundConfirmed(false) }}><option value="BANK_TRANSFER">Chuyển khoản</option><option value="CASH">Tiền mặt</option></select></label>}
+                {(!useApi || refundMethod === 'BANK_TRANSFER') && <div>
                   <label className="block text-xs font-bold text-stone-700 mb-1">
-                    Mã giao dịch chuyển khoản / biên nhận tiền mặt (*)
+                    Mã giao dịch chuyển khoản
                   </label>
                   <input
                     type="text"
@@ -1990,10 +1915,10 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                     disabled={submitting}
                     maxLength={120}
                     onChange={(e) => { setRefundReference(e.target.value); setRefundConfirmed(false) }}
-                    placeholder="VD: VNPAY-REFUND-992288 hoặc FT261017001"
+                    placeholder="VD: FT261017001"
                     className="w-full px-2.5 py-1.5 border border-stone-300 rounded-lg bg-white text-xs font-mono"
                   />
-                </div>
+                </div>}
 
                 <div>
                   <label className="block text-xs font-bold text-stone-700 mb-1">
@@ -2009,7 +1934,6 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                 </div>
 
                 {useApi && <>
-                  <label className="block text-xs font-bold text-stone-700">Phương thức hoàn tiền<select className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-normal" value={refundMethod} disabled={submitting} onChange={event => { setRefundMethod(event.target.value as 'CASH' | 'BANK_TRANSFER'); setRefundConfirmed(false) }}><option value="BANK_TRANSFER">Chuyển khoản</option><option value="CASH">Tiền mặt</option></select></label>
                   <label className="block text-xs font-bold text-stone-700">Biên lai thực hoàn trả kho (*)<input key={selectedItem.id} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" disabled={submitting} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-normal" onChange={event => { setRefundFile(event.target.files?.[0] ?? null); setRefundConfirmed(false); refundUpload.current = null }} /></label>
                   <label className="flex items-start gap-2 text-xs text-stone-700"><input type="checkbox" className="mt-0.5" checked={refundConfirmed} disabled={submitting || !refundFile} onChange={event => setRefundConfirmed(event.target.checked)} /><span>Tôi xác nhận đã thực hoàn đúng số tiền hiển thị và đã đối chiếu biên lai. Hệ thống chỉ ghi nhận chứng từ, không tự chuyển tiền.</span></label>
                 </>}
@@ -2020,7 +1944,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                   <Button
                     variant="primary"
                     size="sm"
-                    disabled={submitting || (useApi && (!refundFile || !refundConfirmed || !refundReference.trim() || selectedItem.status !== 'refund_pending'))}
+                    disabled={submitting || (useApi && (!refundFile || !refundConfirmed || (refundMethod === 'BANK_TRANSFER' && !refundReference.trim()) || selectedItem.status !== 'refund_pending'))}
                     className="bg-purple-600 hover:bg-purple-700 text-white font-bold cursor-pointer"
                     onClick={handleCompleteRefund}
                   >

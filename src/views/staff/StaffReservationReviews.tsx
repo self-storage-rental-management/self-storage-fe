@@ -260,7 +260,7 @@ export default function StaffReservationReviews({
                 </Badge>
               </div>
               <h3 className="mt-1 break-words font-semibold">{row.customerEmail}</h3>
-              <p className="mt-1 break-words text-xs text-stone-600">Cơ sở: {facilityNames[row.facilityId] || row.facilityId}</p>
+              <p className="mt-1 break-words text-xs text-stone-600">Cơ sở: {facilityNames[row.facilityId] || 'Chưa có tên cơ sở'}</p>
             </div>
             <div className="space-y-1 text-xs text-stone-600 lg:text-right">
               <p>Kỳ thuê: <b className="font-medium text-stone-900">{formatStaffDate(row.startDate)} → {formatStaffDate(row.endDate)}</b></p>
@@ -362,7 +362,7 @@ export default function StaffReservationReviews({
       <div className="border-t border-stone-300 pt-6">
         <SectionHeader
           title="Danh sách kho đang được giữ"
-          subtitle={`Có ${activeTotalItems} đơn đang hoạt động tại cơ sở của bạn. Mặc định ưu tiên lịch nhận kho gần nhất.`}
+          subtitle={`Có ${activeTotalItems} đơn tại cơ sở của bạn. Ưu tiên đơn cần xử lý. Trong cùng nhóm, đơn mới nhất hiện trước.`}
         />
       </div>
       <Card className="p-4">
