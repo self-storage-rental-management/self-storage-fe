@@ -87,7 +87,8 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [sortBy, setSortBy] = useState('priority')
-  const [page, setPage] = useState(1)
+  const [ongoingPage, setOngoingPage] = useState(1)
+  const [completedPage, setCompletedPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [selectedReturn, setSelectedReturn] = useState<ReturnCase | null>(null)
   const [detailModalOpen, setDetailModalOpen] = useState(false)
@@ -182,9 +183,12 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
     const statusPriority: Record<string, number> = { recovery_required: -1, requested: 0, scheduled: 1, inspected: 2, awaiting_business_review: 3, disputed: 4, refund_pending: 5, payment_due: 6, awaiting_customer_confirmation: 7, completed: 8 }
     return (statusPriority[left.status] ?? 99) - (statusPriority[right.status] ?? 99) || managerDateValue(left.requestedAt) - managerDateValue(right.requestedAt)
   })
-  const pagination = paginateManagerItems(filteredReturns, page, pageSize)
+  const returnGroups = [
+    { id: 'ongoing', title: 'Đang diễn ra', rows: filteredReturns.filter(r => r.status !== 'completed'), page: ongoingPage, setPage: setOngoingPage },
+    { id: 'completed', title: 'Đã hoàn tất / đã xử lý', rows: filteredReturns.filter(r => r.status === 'completed'), page: completedPage, setPage: setCompletedPage },
+  ]
 
-  useEffect(() => setPage(1), [returnTab, returnSearch, damageFilter, settlementFilter, dateFrom, dateTo, sortBy, pageSize])
+  useEffect(() => { setOngoingPage(1); setCompletedPage(1) }, [returnTab, returnSearch, damageFilter, settlementFilter, dateFrom, dateTo, sortBy, pageSize])
 
   const openAssignModal = (returnCase: ReturnCase) => {
     setAssignTarget(returnCase)
@@ -600,7 +604,8 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
       )}
 
       {/* Returns Table */}
-      <Card className="manager-return-card overflow-hidden !border-stone-200 !bg-white !shadow-none">
+      {returnGroups.map(group => { const pagination = paginateManagerItems(group.rows, group.page, pageSize); return <Card key={group.id} className="manager-return-card overflow-hidden !border-stone-200 !bg-white !shadow-none">
+        <div className="flex items-center justify-between px-5 py-4"><h2 className="font-bold text-stone-900">{group.title}</h2><span className="text-xs text-stone-500">{group.rows.length} hồ sơ</span></div>
         <Table tableClassName="manager-return-table">
           <Thead>
             <tr>
@@ -615,7 +620,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
             </tr>
           </Thead>
           <Tbody>
-            {filteredReturns.length === 0 ? (
+            {group.rows.length === 0 ? (
               <tr>
                 <td colSpan={8} className="text-center py-12 text-stone-400 text-sm">
                   {'Không có hồ sơ trả kho nào trong danh mục này.'}
@@ -754,17 +759,6 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                           </Button>
                         )}
 
-                        {isDamaged && ret.status !== 'completed' && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="border-amber-500 text-amber-700 hover:bg-amber-50 font-medium whitespace-nowrap"
-                            onClick={() => openMaintenanceModal(ret)}
-                          >
-                            {'Lập bảo trì'}
-                          </Button>
-                        )}
-
 
                         {ret.status === 'disputed' && (
                           <Button
@@ -794,11 +788,6 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                           </Button>
                         )}
 
-                        {ret.status === 'completed' && (
-                          <Button variant="outline" size="sm" className="col-start-2 !border-red-200 !bg-red-50 !text-red-700 hover:!bg-red-100" onClick={() => setDeleteTarget(ret)}>
-                            Xóa
-                          </Button>
-                        )}
                       </div>
                     </Td>
                   </Tr>
@@ -807,8 +796,8 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
             )}
           </Tbody>
         </Table>
-        <ManagerPagination {...pagination} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
-      </Card>
+        <ManagerPagination {...pagination} pageSize={pageSize} onPageChange={group.setPage} onPageSizeChange={setPageSize} />
+      </Card> })}
 
       {/* Return Details Modal */}
       <Modal
@@ -1035,18 +1024,6 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                   }}
                 >
                   {selectedReturn.status === 'scheduled' ? 'Đổi nhân viên nghiệm thu' : 'Giao nhân viên nghiệm thu'}
-                </Button>
-              )}
-              {((selectedReturn.damageClassification && selectedReturn.damageClassification !== 'no_damage') || selectedReturn.proposedUnitStatus === 'maintenance') && selectedReturn.status !== 'completed' && (
-                <Button
-                  variant="outline"
-                  className="border-amber-500 text-amber-700 hover:bg-amber-50"
-                  onClick={() => {
-                    setDetailModalOpen(false)
-                    openMaintenanceModal(selectedReturn)
-                  }}
-                >
-                  Lập phiếu bảo trì
                 </Button>
               )}
               {(
