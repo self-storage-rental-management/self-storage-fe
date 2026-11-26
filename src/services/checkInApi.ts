@@ -425,10 +425,10 @@ export async function completeCheckIn(checkInId: string, request: CompleteCheckI
 
 export type IdentityComparison = 'MATCH' | 'CORRECTABLE' | 'REJECT'
 
-export async function compareCheckInIdentity(checkInId: string, identityDocumentNumber: string): Promise<IdentityComparison> {
+export async function compareCheckInIdentity(checkInId: string, identityDocumentNumber: string, bookingOwnerConfirmed: boolean): Promise<IdentityComparison> {
   const response = await apiRequest<ApiEnvelope<IdentityComparison>>(
     `/api/staff/check-ins/${encodeURIComponent(checkInId)}/identity-comparison`,
-    { method: 'POST', body: JSON.stringify({ identityDocumentNumber }) },
+    { method: 'POST', body: JSON.stringify({ identityDocumentNumber, bookingOwnerConfirmed }) },
   )
   const result = response?.data
   if (result !== 'MATCH' && result !== 'CORRECTABLE' && result !== 'REJECT') {

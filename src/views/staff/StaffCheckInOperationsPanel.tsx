@@ -1521,7 +1521,7 @@ export default function StaffCheckInOperationsPanel({
   }
 
   const checkIdentity = async () => {
-    if (!handoverTarget?.checkInId || !identityDocumentNumber.trim()) return
+    if (!handoverTarget?.checkInId || !bookingOwnerConfirmed || !identityDocumentNumber.trim() || submitting) return
     setError(null)
     setFieldErrors({})
     if (!identityValidation.ok) {
@@ -1530,7 +1530,7 @@ export default function StaffCheckInOperationsPanel({
     }
     setSubmitting(true)
     try {
-      setIdentityComparison(await compareCheckInIdentity(handoverTarget.checkInId, enteredIdentity))
+      setIdentityComparison(await compareCheckInIdentity(handoverTarget.checkInId, enteredIdentity, bookingOwnerConfirmed))
       await refreshHandoverTarget()
     } catch (reason) {
       if (reason instanceof ApiClientError && reason.status === 404
@@ -1580,6 +1580,7 @@ export default function StaffCheckInOperationsPanel({
 
   const submitWorkflowStep = async () => {
     if (!handoverTarget?.checkInId) return
+    if (handoverStep === 1 && (!bookingOwnerConfirmed || !identityCanConfirm)) return
     if (!staffCheckInActions(handoverTarget).canOpen) {
       setError(handoverExpired(handoverTarget) ? handoverDeadlineMessage : "Hồ sơ chưa đủ điều kiện nhận kho.")
       return
@@ -2215,6 +2216,13 @@ export default function StaffCheckInOperationsPanel({
                     }}>Sửa CCCD</Button>}
                   </div>
                 )}
+                {(!isReviewingCompletedStep || editingVerifiedIdentity && !reviewedCorrectionTooLarge) && (
+                  <label className="flex items-start gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm">
+                    <input type="checkbox" checked={bookingOwnerConfirmed} disabled={submitting}
+                      onChange={event => setBookingOwnerConfirmed(event.target.checked)} />
+                    Tôi đã đối chiếu giấy tờ gốc và xác nhận khách là người đặt kho.
+                  </label>
+                )}
                 {identityMismatch && (
                   <div role="status" className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
                     <p className="font-semibold">CCCD trên giấy tờ gốc không khớp với thông tin đã lưu.</p>
@@ -2231,13 +2239,6 @@ export default function StaffCheckInOperationsPanel({
                       <p>Có thể sửa tối đa 3 chữ số. Đối chiếu giấy tờ gốc, xác nhận đúng người đặt kho và ghi căn cứ sửa CCCD.</p>
                     )}
                   </div>
-                )}
-                {(!isReviewingCompletedStep && identityCanConfirm || editingVerifiedIdentity && !reviewedCorrectionTooLarge) && (
-                  <label className="flex items-start gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm">
-                    <input type="checkbox" checked={bookingOwnerConfirmed} disabled={submitting}
-                      onChange={event => setBookingOwnerConfirmed(event.target.checked)} />
-                    Tôi đã đối chiếu giấy tờ gốc và xác nhận khách là người đặt kho.
-                  </label>
                 )}
                 {(!isReviewingCompletedStep && identityCanConfirm || editingVerifiedIdentity) && identityValidation.warning && <label className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm"><input type="checkbox" checked={adulthoodConfirmed} disabled={submitting} onChange={event => setAdulthoodConfirmed(event.target.checked)} />Đã đối chiếu ngày sinh trên giấy tờ gốc và xác nhận khách đã đủ 18 tuổi *</label>}
                 {editingVerifiedIdentity && reviewedCorrectionTooLarge && identityValidation.ok && (
@@ -3261,8 +3262,8 @@ export default function StaffCheckInOperationsPanel({
                     </Button>
                   )}
                   {handoverStep === 1 && needsHandoverArrival ? null : handoverStep === 1 && identityComparison === null ? (
-                    <Button disabled={submitting || !identityDocumentNumber.trim() || !staffCheckInActions(handoverTarget, now).canOpen} onClick={() => void checkIdentity()}>
-                      {submitting ? "Đang kiểm tra…" : "Kiểm tra thông tin"}
+                    <Button disabled={submitting || !bookingOwnerConfirmed || !enteredIdentity || !staffCheckInActions(handoverTarget, now).canOpen} onClick={() => void checkIdentity()}>
+                      {submitting ? "Đang xác minh…" : "Xác minh CCCD"}
                     </Button>
                   ) : (handoverStep !== 1 || identityCanConfirm) && (
                     <Button disabled={submitting || !staffCheckInActions(handoverTarget, now).canOpen ||
