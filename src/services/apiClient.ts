@@ -206,7 +206,10 @@ async function rawApiRequest<T>(path: string, options: RequestInit & { skipAuth?
   }
   if (!response.ok) {
     const failure = responseError(response.status, payload)
-    if (processingLease && (response.status === 401 || response.status === 403 || (isRecord(failure.details) && failure.details.processingConflict))) invalidateProcessing(processingLease)
+    // Only a real lease conflict costs the operator their ownership. A 403 or a business
+    // validation error says this one action is not allowed; it does not mean the record was
+    // taken away, and treating it as such locked the whole screen.
+    if (processingLease && isRecord(failure.details) && failure.details.processingConflict) invalidateProcessing(processingLease)
     throw failure
   }
   if (processingLease) {
@@ -216,7 +219,10 @@ async function rawApiRequest<T>(path: string, options: RequestInit & { skipAuth?
     if (revision !== null && stamp !== null && Number.isSafeInteger(Number(revision))) {
       processingLease.view = { ...processingLease.view, revision: Number(revision), sourceStamp: stamp, expiresAt: expiresAt || processingLease.view.expiresAt }
       notifyProcessing()
-    } else invalidateProcessing(processingLease)
+    }
+    // A successful response without lease headers came from a route that is not lease-guarded.
+    // That does not revoke ownership, so keep the lease and let the next heartbeat reconcile it.
+    // Invalidating here used to strand the operator on "Hồ sơ đã thay đổi" mid-workflow.
   }
 
   return payload as T

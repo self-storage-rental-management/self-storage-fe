@@ -14,7 +14,6 @@ export default function ProcessingLeaseBoundary({ target, id, enabled = true, on
   const [error, setError] = useState('')
   const [pending, setPending] = useState(active)
   const [ready, setReady] = useState(false)
-  const [generation, setGeneration] = useState(0)
   const [attempt, setAttempt] = useState(0)
   const [, render] = useState(0)
   const state = useRef<{ token: string; lease?: LocalProcessingLease; stopped: boolean } | null>(null)
@@ -46,6 +45,9 @@ export default function ProcessingLeaseBoundary({ target, id, enabled = true, on
     state.current = current
     setView(null); setReady(false); setError(''); setPending(true)
     const acquire = async () => {
+      // A same-operator lease that is about to be reclaimed must not be announced as
+      // "someone else is processing". Keep the pending state until the retry settles.
+      let awaitingRetry = false
       try {
         const result = (await apiRequest<{ data: ProcessingView }>(url + '/acquire', { method: 'POST', body: JSON.stringify({ token: current.token }) })).data
         if (current.stopped) {
@@ -55,21 +57,24 @@ export default function ProcessingLeaseBoundary({ target, id, enabled = true, on
         setView(result)
         if (!result.owned && result.ownerId === actorId && retries++ < 2) {
           // StrictMode cleanup may still be releasing the previous mount's distinct token.
+          awaitingRetry = true
           retryTimer = window.setTimeout(() => { if (!current.stopped) void acquire() }, 1000)
         }
         if (result.owned) {
           current.lease = { target, id, token: current.token, view: result, invalid: false, inFlight: false, ready: false }
           putProcessingLease(current.lease)
-          await acquired.current?.()
           if (current.stopped) return
+          // Confirm the data still matches before loading the form. Loading it first meant the
+          // form read stale data and then reported a change on top of it.
           const observed = (await apiRequest<{ data: ProcessingView }>(url, { headers: { 'X-Processing-Token': current.token } })).data
           if (!observed.owned || observed.revision !== result.revision || observed.sourceStamp !== result.sourceStamp)
             throw new Error('Hồ sơ vừa thay đổi trong lúc tải. Đóng và mở lại hồ sơ để lấy dữ liệu mới.')
-          if (!current.stopped) { current.lease.ready = true; notifyProcessing(); setGeneration(n => n + 1); setReady(true) }
+          await acquired.current?.()
+          if (!current.stopped) { current.lease.ready = true; notifyProcessing(); setReady(true) }
         }
       } catch (failure) {
         if (!current.stopped) { setError(failure instanceof Error ? failure.message : 'Không thể nhận quyền xử lý hồ sơ.'); setReady(false); if (current.lease) invalidateProcessing(current.lease) }
-      } finally { if (!current.stopped) setPending(false) }
+      } finally { if (!current.stopped && !awaitingRetry) setPending(false) }
     }
     const renew = async () => {
       if (current.stopped || document.hidden || !current.lease || current.lease.invalid || !readyRef.current) return
@@ -164,7 +169,7 @@ export default function ProcessingLeaseBoundary({ target, id, enabled = true, on
       {view?.expiresAt && <p className="mt-1 text-xs">Quyền xử lý được gia hạn khi màn hình đang hoạt động; tự hết hạn sau 2 phút mất kết nối và tối đa 15 phút mỗi lượt. {idle && 'Đã tạm dừng gia hạn do không có thao tác trong 10 phút.'}</p>}
       {(error || lease?.invalid) && <p className="mt-1 text-xs font-semibold">{error || 'Phiên xử lý đã thay đổi. Đóng và mở lại hồ sơ trước khi tiếp tục.'}</p>}
     </div>
-    <fieldset key={generation} disabled={!owned} onInputCapture={event => {
+    <fieldset disabled={!owned} onInputCapture={event => {
       try {
         const fields = Array.from((event.currentTarget as HTMLElement).querySelectorAll('input,textarea,select')).map((field, index) => {
           const control = field as HTMLInputElement

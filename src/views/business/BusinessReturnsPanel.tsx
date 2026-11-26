@@ -1228,6 +1228,10 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
               lostItemFee: latest.lostItemFee ?? previous.lostItemFee,
               overdueFee: latest.overdueFee ?? previous.overdueFee,
               outstandingFee: latest.outstandingFee ?? previous.outstandingFee,
+              customerDecisionNote: latest.customerDecisionNote ?? null,
+              returnedKey: latest.returnedKey ?? null,
+              returnedCard: latest.returnedCard ?? null,
+              returnedLock: latest.returnedLock ?? null,
             } : null)
           }}><div className="space-y-5 text-sm">
             <p className="text-sm text-stone-500">{selectedItem.facilityName}</p>
