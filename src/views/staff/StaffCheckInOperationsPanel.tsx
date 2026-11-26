@@ -18,6 +18,8 @@ import { ApiClientError } from "../../services/apiClient"
 import { packageVolumeM3 } from '../../domain/reservationCapacity'
 import { inventoryResult } from '../../domain/inventoryResult'
 import { canOpenInventory } from '../../domain/inventoryAccess'
+import { pageAfterRefresh, shouldReplaceVisiblePage } from '../../domain/checkInListPaging'
+import { resolveResumeStep, INSPECTION_STEP, handoverStepForStatus } from '../../domain/staffHandoverPosition'
 import { canReturnToInventoryStage, isInventoryResultReopenable, isInventoryStageReadOnly, INVENTORY_STAGE_LABELS, type InventoryStage } from '../../domain/inventoryStages'
 
 import {
@@ -77,7 +79,7 @@ import {
   staffStorageUnitStatusLabel,
 } from "./staffPresentation"
 import { FilePreviewList } from "./StaffFileUpload"
-import StaffPagination from "./StaffPagination"
+import StaffPagination, { STAFF_PAGE_SIZE } from "./StaffPagination"
 
 const checklistLabels: Array<[keyof CheckInChecklist, string]> = [
   ["identityVerified", "Đã đối chiếu giấy tờ tùy thân"],
@@ -555,12 +557,14 @@ function CheckInWorkList({ group, filters, refreshKey, renderRow }: {
   const [error, setError] = useState("")
   useEffect(() => {
     let active = true
-    setResult(null)
+    // Keep the current rows on screen while refreshing so the list does not blank out and
+    // re-appear on every refresh, which reads as the rows jumping.
     setError("")
-    void listCheckIns({ ...filters, group, page, pageSize: 20 }).then(response => {
+    void listCheckIns({ ...filters, group, page, pageSize: STAFF_PAGE_SIZE }).then(response => {
       if (!active) return
-      if (page > 0 && page >= response.pagination.totalPages) {
-        setPage(Math.max(0, response.pagination.totalPages - 1))
+      const nextPage = pageAfterRefresh(page, response.pagination.totalPages)
+      if (nextPage !== page) {
+        setPage(nextPage)
       } else {
         setResult(response)
       }
@@ -570,6 +574,10 @@ function CheckInWorkList({ group, filters, refreshKey, renderRow }: {
     return () => { active = false }
   }, [filters, group, page, refreshKey])
 
+  // Only a filter or group change resets to the loading state; a background refresh keeps the
+  // rows that are already visible.
+  useEffect(() => { setResult(null) }, [filters, group])
+
   // The customer confirms receipt and reports setup completion on their own portal, so the
   // operator's list must pick those transitions up on its own instead of waiting for a manual
   // reload. Only the list data is replaced; an open form keeps its own state untouched.
@@ -577,8 +585,13 @@ function CheckInWorkList({ group, filters, refreshKey, renderRow }: {
     let active = true
     const poll = async () => {
       try {
-        const response = await listCheckIns({ ...filters, group, page, pageSize: 20 })
-        if (active && page < response.pagination.totalPages) setResult(response)
+        const response = await listCheckIns({ ...filters, group, page, pageSize: STAFF_PAGE_SIZE })
+        if (!active) return
+        // Rows move between the ongoing and processed groups while the operator is reading the
+        // list. Keep the visible page whenever it still exists so the table never empties and
+        // the operator is not moved to another page mid-read.
+        if (shouldReplaceVisiblePage(page, response.pagination.totalPages)) setResult(response)
+        else setPage(pageAfterRefresh(page, response.pagination.totalPages))
       } catch {
         // Keep the last good list; the next poll can recover from a temporary read error.
       }
@@ -629,27 +642,12 @@ function CheckInWorkList({ group, filters, refreshKey, renderRow }: {
             </Table>
           )}
         {totalPages > 1 && (
-          <div className="flex items-center justify-end gap-2 border-t border-stone-200 p-4 text-sm text-stone-500">
-            <span>
-              {totalItems} hồ sơ · Trang {page + 1}/{totalPages}
-            </span>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={page === 0}
-              onClick={() => setPage((value) => value - 1)}
-            >
-              Trước
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={page + 1 >= totalPages}
-              onClick={() => setPage((value) => value + 1)}
-            >
-              Sau
-            </Button>
-          </div>
+          <StaffPagination
+            page={page + 1}
+            pageCount={totalPages}
+            total={totalItems}
+            onPageChange={next => setPage(Math.max(0, next - 1))}
+          />
         )}
       </Card>
     </section>
@@ -880,12 +878,14 @@ export default function StaffCheckInOperationsPanel({
   const lineInventory = declaredLines.length > 0 && (
     handoverTarget?.checkInStatus !== "completed" || Boolean(handoverTarget.handover?.inventoryLines?.some(line => line.measurements))
   )
-  const inventoryRows = declaredLines.map(line => {
+  // Stable identity: this feeds expensive comparisons and effect dependencies, so rebuilding the
+  // array on every render made the open inspection form recompute and flicker.
+  const inventoryRows = useMemo(() => declaredLines.map(line => {
     const entry = inventoryDraft[line.id] ?? (
       handoverTarget?.checkInStatus === "completed" ? emptyInventory : inventoryFromDeclaration(line)
     )
     return { line, entry, comparison: compareInventory(line, entry) }
-  })
+  }), [declaredLines, inventoryDraft, handoverTarget?.checkInStatus])
   const goodsDeclarationVariance = goodsCategoryMatches === false || goodsMaterialMatches === false
     || inventoryRows.some(({ line, entry, comparison }) => comparison.quantity > 0 && inventoryCatalog?.categories.find(category => category.id === entry.catalogCategoryId)?.custom && ((entry.customGoodsName?.trim() || "") !== (line.name || "") || (entry.customMaterial?.trim() || "") !== (line.materialName || "")))
     || inventoryRows.some(({ line, entry, comparison }) => comparison.quantity > 0 && !!line.catalogCategoryId
@@ -1142,7 +1142,13 @@ export default function StaffCheckInOperationsPanel({
       if (!latest) return
 
       setHandoverTarget(latest)
-      setHandoverStep(current => current === 6 && canOpenInventory(latest.checkInStatus, latest.inventoryVisit?.appointmentAt) ? 6 : Math.min(5, stepForCheckIn(latest)))
+      // Manual refresh keeps the operator in the workflow they are looking at.
+      setHandoverStep(current => resolveResumeStep({
+        requestedInspection: inventoryMode,
+        currentlyInInspection: inventoryMode,
+        currentStep: current,
+        status: latest.checkInStatus,
+      }))
     } catch (reason) {
       fail(reason, "Không thể cập nhật trạng thái bàn giao.")
     }
@@ -1171,8 +1177,20 @@ export default function StaffCheckInOperationsPanel({
         if (!active || !latest) return
 
         const previousStatus = handoverTarget.checkInStatus
+        // Every tick returns a fresh object. Replacing state when nothing changed re-renders the
+        // whole form every 3 seconds and makes the open inspection step flicker.
+        if (latest.checkInStatus === previousStatus
+          && latest.inventoryResolutionStatus === handoverTarget.inventoryResolutionStatus
+          && latest.inventoryVisit?.arrivedAt === handoverTarget.inventoryVisit?.arrivedAt
+          && latest.inventoryVisit?.identityVerifiedAt === handoverTarget.inventoryVisit?.identityVerifiedAt) {
+          return
+        }
         setHandoverTarget(latest)
-        setHandoverStep(current => current === 6 && canOpenInventory(latest.checkInStatus, latest.inventoryVisit?.appointmentAt) ? 6 : Math.min(5, stepForCheckIn(latest)))
+        // Polling must not move the operator. Only a real status transition advances the step;
+        // a regular tick that finds the same status leaves the open step untouched.
+        if (latest.checkInStatus !== previousStatus) {
+          setHandoverStep(current => current === 6 && canOpenInventory(latest.checkInStatus, latest.inventoryVisit?.appointmentAt) ? 6 : Math.min(5, stepForCheckIn(latest)))
+        }
         if (previousStatus === "handover_pending_receipt" && latest.checkInStatus === "setup_in_progress") {
           showToast("Khách hàng đã xác nhận nhận kho. Đang chờ khách chuẩn bị hàng để kiểm kê.")
         } else if (previousStatus === "setup_in_progress" && latest.checkInStatus === "setup_completed") {
@@ -1690,7 +1708,10 @@ export default function StaffCheckInOperationsPanel({
       if (updated) {
         setHandoverTarget(updated)
         if (handoverStep === 1) resetIdentityVerificationDraft(updated.identityDocumentNumber || "")
-        setHandoverStep(Math.min(5, stepForCheckIn(updated)))
+        // A finished setup belongs to the inspection workflow, so honour step 6 instead of
+        // clamping it back to the last handover step.
+        const nextStep = handoverStepForStatus(updated.checkInStatus)
+        setHandoverStep(nextStep === INSPECTION_STEP ? nextStep : Math.min(5, nextStep))
       } else {
         setHandoverStep((current) => Math.min(5, current + 1))
       }
@@ -1774,6 +1795,19 @@ export default function StaffCheckInOperationsPanel({
 
   const openHandover = async (item: CheckInCase, inventory = false) => {
     if (inventory && !canOpenInventory(item.checkInStatus, item.inventoryVisit?.appointmentAt)) return
+    // Re-acquiring the processing lease reloads the same case. That must not throw away the
+    // operator's position or the draft they are editing, or the form visibly jumps around.
+    const reopeningSameCase = handoverTarget?.checkInId != null && handoverTarget.checkInId === item.checkInId
+    if (reopeningSameCase) {
+      setHandoverTarget(item)
+      setHandoverStep(current => resolveResumeStep({
+        requestedInspection: inventory,
+        currentlyInInspection: inventoryMode,
+        currentStep: current,
+        status: item.checkInStatus,
+      }))
+      return
+    }
     let draft: Awaited<ReturnType<typeof getInventoryDraft>> | null = null
     const published = Boolean(item.inventoryResolutionStatus && item.inventoryResolutionStatus !== 'NOT_STARTED') || item.checkInStatus === 'completed'
     if (inventory && !published && item.checkInId) {
@@ -2092,7 +2126,9 @@ export default function StaffCheckInOperationsPanel({
             const response = await listCheckIns({ page: 0, pageSize: 100, q: handoverTarget.reservationCode })
             const latest = response.data.find(item => item.checkInId === handoverTarget.checkInId)
             if (!latest) throw new Error('Không còn tìm thấy hồ sơ bàn giao. Đóng cửa sổ và tải lại danh sách.')
-            openHandover(latest)
+            // Refresh the data only. Opening the form again would reset the workflow position and
+            // re-trigger the acquire effect, which made the open case jump.
+            setHandoverTarget(latest)
           }}><div className="space-y-5">
             <dl className="grid gap-3 rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
               {[
@@ -3388,11 +3424,17 @@ export default function StaffCheckInOperationsPanel({
           refreshKey={refreshKey} renderRow={renderRow} />
       ))}
 
-      <Modal open={Boolean(handoverTarget) && !inventoryMode && !rejectTarget} onClose={closeHandover} title="Bàn giao kho và đưa hàng vào" titleAdornment={<HandoverWorkflowHelp />} size="3xl">
-        {!inventoryMode && workflowForm}
-      </Modal>
-      <Modal open={Boolean(handoverTarget) && inventoryMode} onClose={closeHandover} title="Tiến trình kiểm kê hàng hóa" size="3xl">
-        {inventoryMode && workflowForm}
+      {/* One modal for both workflows. Rendering the same form through two separate modals
+          unmounted and remounted ProcessingLeaseBoundary when switching modes, which released
+          and re-acquired the lease and made the open case jump. */}
+      <Modal
+        open={Boolean(handoverTarget) && !rejectTarget}
+        onClose={closeHandover}
+        title={inventoryMode ? "Tiến trình kiểm kê hàng hóa" : "Bàn giao kho và đưa hàng vào"}
+        titleAdornment={inventoryMode ? undefined : <HandoverWorkflowHelp />}
+        size="3xl"
+      >
+        {workflowForm}
       </Modal>
 
       <Modal
