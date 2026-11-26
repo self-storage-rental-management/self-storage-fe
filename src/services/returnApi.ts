@@ -118,6 +118,7 @@ export interface ApiReturn {
   customerNotes?: string | null
   customerDecisionNote?: string | null
   inspectedAt?: string | null
+  reviewedAt?: string | null
   managerReviewDueAt?: string | null
   managerApprovalRequired?: boolean
   customerConfirmationDueAt?: string | null
