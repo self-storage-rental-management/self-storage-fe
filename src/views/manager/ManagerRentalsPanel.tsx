@@ -49,7 +49,6 @@ const billingStatusFor = (rental: RentalRecord) => {
   return { key: rental.paymentStatus, label: managerStatusLabel(rental.paymentStatus, 'vi'), variant: 'muted' }
 }
 
-const normalizeRentalMessage = (message: string) => message.replace(/hợp đồng/gi, 'hồ sơ thuê')
 
 export default function ManagerRentalsPanel({ user, rentals, renewals, reservations, units, unitTypes, assignUnitToHold, showToast }: Props) {
   const [query, setQuery] = useState('')
@@ -201,9 +200,9 @@ export default function ManagerRentalsPanel({ user, rentals, renewals, reservati
     <Modal open={Boolean(assignmentReservation)} onClose={() => { setAssignmentReservation(null); setAssignmentUnitId('') }} title="Phân gian kho vật lý">
       {assignmentReservation && <div className="space-y-4">
         <div className="rounded-lg bg-stone-50 p-3 text-sm">
-          <p><b>{assignmentReservation.id}</b>, {assignmentReservation.customerName}</p>
+          <p><b>{recordDisplayCode(assignmentReservation.id)}</b>, {assignmentReservation.customerName}</p>
           <p className="mt-1 text-stone-500">{managerUnitTypeLabel(assignmentReservation.unitTypeName, 'vi')}, {formatManagerDate(assignmentReservation.startDate)} → {formatManagerDate(assignmentReservation.endDate)}</p>
-          {assignmentReservation.assignedUnitId && <p className="mt-1 text-stone-500">Gian hiện tại: <b className="font-mono">{assignmentReservation.assignedUnitId}</b></p>}
+          {assignmentReservation.assignedUnitId && <p className="mt-1 text-stone-500">Gian hiện tại: <b className="font-mono">{recordDisplayCode(assignmentReservation.assignedUnitId)}</b></p>}
         </div>
         {assignmentCandidates.length ? <Select label="Gian kho phù hợp và không xung đột" value={assignmentUnitId} onChange={event => setAssignmentUnitId(event.target.value)}>
           {assignmentCandidates.map(unit => <option key={unit.id} value={unit.id}>{unit.code}, {unit.zone}</option>)}

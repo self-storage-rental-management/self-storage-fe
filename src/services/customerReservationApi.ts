@@ -381,6 +381,7 @@ export interface ReservationQuote {
 }
 
 export interface CreateReservationInput {
+  acceptedHandoverTermsVersion?: string
   acceptedSetupEarlyExitPolicyVersion?: string | null
   quoteId: string
   identityDocumentNumber: string
@@ -398,6 +399,7 @@ export interface CustomerReservation {
   setupEarlyExitPolicyVersion?: string | null
   setupEarlyExitFee?: number | null
   setupReturnRentalId?: string | null
+  violationRecovery?: boolean
   setupReturnCaseId?: string | null
   setupReturnScheduledDate?: string | null
   pricingPolicyVersion?: string | null
@@ -482,7 +484,7 @@ export interface CheckInDocument {
   entityId: string
   status: string
   createdAt: string
-  kind?: 'SIGNED_CONTRACT' | 'PAYMENT_RECEIPT' | 'HANDOVER_EVIDENCE' | 'INVENTORY_EVIDENCE' | 'OTHER'
+  kind?: 'SIGNED_CONTRACT' | 'SIGNED_HANDOVER_RECORD' | 'PAYMENT_RECEIPT' | 'HANDOVER_EVIDENCE' | 'INVENTORY_EVIDENCE' | 'INVENTORY_DECISION_EVIDENCE' | 'IDENTITY_VERIFICATION_PHOTO' | 'OTHER'
 }
 
 export interface ReservationGoodsItem extends GoodsItemInput {
@@ -505,6 +507,7 @@ export interface ReservationGoodsItem extends GoodsItemInput {
 }
 
 export interface CustomerReservationDetail {
+  attendance?: import('../domain/reservationCheckInPolicy').HandoverAttendance | null
   currentFacility?: Pick<NonNullable<CustomerReservation['facilitySnapshot']>, 'name' | 'address' | 'city' | 'phone' | 'accessHours'> | null
   currentUnitType?: { name: string } & {
     [Field in Exclude<keyof NonNullable<CustomerReservation['unitTypeSnapshot']>, 'name' | 'areaM2'>]: number | null
@@ -525,6 +528,7 @@ export interface CustomerReservationDetail {
   goodsItems: ReservationGoodsItem[]
   payments: ReservationPaymentResult[]
   checkInStatus?: string | null
+  identityCorrectedAtHandover?: boolean
   handoverCompletedAt?: string | null
   lockReference?: string | null
   receiptConfirmationDueAt?: string | null
@@ -708,10 +712,14 @@ export async function withdrawPaymentComplaint(complaintId: string) {
   return response.data
 }
 
-export async function createVnpayPaymentUrl(reservationId: string, idempotencyKey: string) {
+export async function createVnpayPaymentUrl(reservationId: string, idempotencyKey: string, acceptedHandoverTermsVersion?: string) {
   const response = await apiRequest<ApiEnvelope<VnpayPaymentUrlResult>>(
     `/api/customer/reservations/${reservationId}/vnpay/payment-url`,
-    { method: 'POST', headers: { 'Idempotency-Key': idempotencyKey } },
+    {
+      method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey },
+      ...(acceptedHandoverTermsVersion ? { body: JSON.stringify({ acceptedHandoverTermsVersion }) } : {}),
+    },
   )
   return response.data
 }

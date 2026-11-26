@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from 'react'
 import './managerInventoryList.css'
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { ApiClientError } from '../../services/apiClient'
 import { getAuthenticatedActor, type ApiActor } from '../../services/authApi'
 import { useRentalApiResource } from '../../hooks/useRentalApiResource'
-import { getManagerReportSummary, listManagerReportActivities, type ManagerReportActivity } from '../../services/managerReportingApi'
+import { getManagerReportSummary, listManagerReportActivities, type ManagerReportActivity, type ManagerReportSummary } from '../../services/managerReportingApi'
 import { formatVndAmount } from '../../i18n/currency'
 import { exportManagerFacilityExcel } from '../../utils/excelExport'
 import { recordDisplayCode } from '../../utils/recordDisplayCode'
@@ -90,6 +90,33 @@ function ReportMetric({ title, value, detail }: { title: string; value: string |
   </Card>
 }
 
+const inUseStorageUnitStatuses = new Set(['occupied', 'reserved', 'assigned', 'held'])
+
+const storageTypeOrder: Record<string, number> = { S: 0, M: 1, L: 2, XL: 3 }
+
+function storageTypeSortKey(row: ManagerReportSummary['unitTypeBreakdown'][number]) {
+  const code = row.typeCode.trim().toUpperCase()
+  if (code in storageTypeOrder) return code
+  const sizeFromName = row.typeName.match(/\((XL|S|M|L)\)\s*$/i)?.[1]
+  return sizeFromName?.toUpperCase() || code
+}
+
+export function sortUnitTypeBreakdown(rows: ManagerReportSummary['unitTypeBreakdown']) {
+  return [...rows].sort((left, right) => {
+    const leftKey = storageTypeSortKey(left)
+    const rightKey = storageTypeSortKey(right)
+    const orderDifference = (storageTypeOrder[leftKey] ?? Number.MAX_SAFE_INTEGER) - (storageTypeOrder[rightKey] ?? Number.MAX_SAFE_INTEGER)
+    return orderDifference || left.typeName.localeCompare(right.typeName, 'vi')
+  })
+}
+
+function countStorageUnitsInUse(summary: { occupiedUnits: number; reservedUnits: number; unitStatusBreakdown: Array<{ status: string; count: number }> }) {
+  if (!summary.unitStatusBreakdown.length) return summary.occupiedUnits + summary.reservedUnits
+  return summary.unitStatusBreakdown
+    .filter(row => inUseStorageUnitStatuses.has(row.status))
+    .reduce((total, row) => total + row.count, 0)
+}
+
 function authorizedManager(): ApiActor {
   const actor = getAuthenticatedActor()
   if (!actor || actor.status !== 'ACTIVE' || !actor.roles.includes('MANAGER') || !actor.permissions.includes('reports:read')) {
@@ -129,19 +156,7 @@ function ManagerReportsSession({ actor, facilityId, overview }: { actor: ApiActo
     listManagerReportActivities({ facilityId, page: page - 1, pageSize, search }))
   const summary = !summaryRead.loading && !summaryRead.error ? summaryRead.data : undefined
   const activities = !activityRead.loading && !activityRead.error ? activityRead.data : undefined
-
-  const chartMonthlyData = summary?.monthlyRevenue && summary.monthlyRevenue.length > 0
-    ? summary.monthlyRevenue.map((m) => {
-        const [year, month] = m.month.split('-')
-        const label = month ? `Th${month}/${year.slice(2)}` : m.month
-        return {
-          month: label,
-          fullMonth: m.month,
-          revenue: Number(m.revenue),
-          transactions: m.transactionsCount,
-        }
-      })
-    : []
+  const orderedUnitTypeBreakdown = summary ? sortUnitTypeBreakdown(summary.unitTypeBreakdown) : []
 
   function submitSearch(event: FormEvent) {
     event.preventDefault()
@@ -194,93 +209,16 @@ function ManagerReportsSession({ actor, facilityId, overview }: { actor: ApiActo
       />
     )}
     {summaryRead.loading ? <Card className="p-5" role="status">Đang tải báo cáo cơ sở...</Card> : summaryRead.error ? <Card className="flex flex-wrap items-center justify-between gap-3 p-5" role="alert"><p>{managerDisplayError(summaryRead.error)}</p><Button variant="outline" onClick={summaryRead.refresh}>Thử lại</Button></Card> : summary ? <>
-      <div className="grid min-w-0 grid-cols-2 gap-3 xl:grid-cols-3 2xl:grid-cols-5">
-        <ReportMetric title="Tiền thuê dự kiến/tháng" value={formatVndAmount(summary.monthlyRecurringRevenue)} detail="Theo các hợp đồng đang hiệu lực" />
+      <div className="grid min-w-0 grid-cols-2 gap-3 xl:grid-cols-4">
         <ReportMetric
-          title="Tiền đã thu"
-          value={summary.collectedRevenue === null ? 'Chưa xác minh' : formatVndAmount(summary.collectedRevenue)}
-          detail={
-            summary.totalRefunds && summary.totalRefunds > 0
-              ? `Đã trừ ${formatVndAmount(summary.totalRefunds)} hoàn tiền`
-              : 'Chỉ tính khoản thu đã được đối soát'
-          }
+          title="Gian kho đang sử dụng"
+          value={countStorageUnitsInUse(summary)}
+          detail="Gồm đang thuê, giữ chỗ, đã phân bổ và tạm giữ; gian chờ trả vẫn tính trong đang thuê"
         />
         <ReportMetric title="Hợp đồng quá hạn" value={summary.overdueRentalsCount} detail="Hồ sơ đã qua ngày hết hạn thuê" />
         <ReportMetric title="Nhận kho trong tháng" value={summary.monthCheckinsCount} detail="Số lượt nhận kho trong tháng này" />
         <ReportMetric title="Yêu cầu trả kho" value={summary.openReturnsCount} detail="Các yêu cầu đang chờ hoàn tất" />
       </div>
-      <ManagerCashflowPanel key={facilityId} facilityId={facilityId} identity={identity} onReport={setFinancialReport} />
-
-      <Card className="p-5">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="text-base font-bold text-stone-900">Biến động doanh thu thực thu theo tháng</h3>
-            <p className="mt-0.5 text-xs text-stone-500">
-              Doanh thu thực thu (đã khấu trừ tiền hoàn) trong 6 tháng gần nhất tại cơ sở
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-4 text-xs">
-            <div className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-              <span className="text-stone-600">
-                Tổng thực thu:{' '}
-                <b className="font-semibold text-stone-900">
-                  {summary.collectedRevenue === null ? 'Chưa xác minh' : formatVndAmount(summary.collectedRevenue)}
-                </b>
-              </span>
-            </div>
-            {summary.totalRefunds && summary.totalRefunds > 0 ? (
-              <div className="flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
-                <span className="text-stone-600">
-                  Đã hoàn tiền:{' '}
-                  <b className="font-semibold text-rose-600">{formatVndAmount(summary.totalRefunds)}</b>
-                </span>
-              </div>
-            ) : null}
-          </div>
-        </div>
-        {chartMonthlyData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={260}>
-            <AreaChart data={chartMonthlyData} margin={{ top: 10, right: 15, left: 10, bottom: 0 }}>
-              <defs>
-                <linearGradient id="managerRevGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.35} />
-                  <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis dataKey="month" tickLine={false} axisLine={{ stroke: '#e2e8f0' }} tick={{ fontSize: 11, fill: '#64748b' }} />
-              <YAxis
-                tickLine={false}
-                axisLine={false}
-                tick={{ fontSize: 11, fill: '#64748b' }}
-                tickFormatter={(val) => {
-                  if (val >= 1000000) return `${Math.round(val / 1000000)}tr`
-                  if (val >= 1000) return `${Math.round(val / 1000)}k`
-                  return String(val)
-                }}
-              />
-              <Tooltip
-                formatter={(value) => [`${formatVndAmount(Number(value))}`, 'Doanh thu thực thu']}
-                labelFormatter={(label) => `Thời gian: ${label}`}
-                contentStyle={{
-                  backgroundColor: '#ffffff',
-                  borderRadius: '0.75rem',
-                  border: '1px solid #e2e8f0',
-                  boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                  fontSize: '12px',
-                }}
-              />
-              <Area type="monotone" dataKey="revenue" stroke="#059669" strokeWidth={2.5} fillOpacity={1} fill="url(#managerRevGrad)" />
-            </AreaChart>
-          </ResponsiveContainer>
-        ) : (
-          <p className="flex h-[240px] items-center justify-center text-sm text-stone-500">
-            Chưa có dữ liệu biến động doanh thu.
-          </p>
-        )}
-      </Card>
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="p-5">
           <h3 className="mb-4 font-bold">Phân bổ trạng thái gian kho</h3>
@@ -293,11 +231,12 @@ function ManagerReportsSession({ actor, facilityId, overview }: { actor: ApiActo
         </Card>
         <Card className="p-5">
           <h3 className="mb-4 font-bold">Công suất theo loại kho</h3>
-          {summary.unitTypeBreakdown.length ? <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={summary.unitTypeBreakdown}><CartesianGrid strokeDasharray="3 3" stroke="#e7e5e4" /><XAxis dataKey="typeName" tick={{ fontSize: 11 }} /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="totalUnits" fill="#d6d3d1" name="Tổng số" radius={[4, 4, 0, 0]} /><Bar dataKey="occupiedUnits" fill="#e9a12c" name="Đang sử dụng" radius={[4, 4, 0, 0]} /></BarChart>
+          {orderedUnitTypeBreakdown.length ? <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={orderedUnitTypeBreakdown}><CartesianGrid strokeDasharray="3 3" stroke="#e7e5e4" /><XAxis dataKey="typeName" tick={{ fontSize: 11 }} /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="totalUnits" fill="#d6d3d1" name="Tổng số" radius={[4, 4, 0, 0]} /><Bar dataKey="occupiedUnits" fill="#e9a12c" name="Đang sử dụng" radius={[4, 4, 0, 0]} /></BarChart>
           </ResponsiveContainer> : <p className="flex h-[300px] items-center justify-center text-sm text-stone-500">Chưa có dữ liệu loại kho.</p>}
         </Card>
       </div>
+      <ManagerCashflowPanel key={facilityId} facilityId={facilityId} identity={identity} onReport={setFinancialReport} />
     </> : null}
 
     <Card className="manager-inventory-list overflow-hidden !rounded-2xl !shadow-none">

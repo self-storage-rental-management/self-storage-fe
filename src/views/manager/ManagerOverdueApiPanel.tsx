@@ -1,3 +1,4 @@
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import { displayStatusLabel } from '../../presentation/statusLabels'
 import { useEffect, useState } from "react"
 import type { ReactNode } from "react"
@@ -92,9 +93,9 @@ export function OverdueCaseSummary({ record: r, onChanged, actions }: { record: 
       <details className="border-t border-stone-100 pt-3 text-xs text-stone-500">
         <summary className="w-fit cursor-pointer py-1 hover:text-stone-800">Mã tham chiếu</summary>
         <dl className="mt-2 grid gap-3 rounded-lg bg-stone-50 p-3 sm:grid-cols-2">
-          <div className="min-w-0"><dt>Mã theo dõi</dt><dd className="mt-1 break-all font-mono text-stone-700">{r.caseRef}</dd></div>
-          <div className="min-w-0"><dt>Hồ sơ thuê</dt><dd className="mt-1 break-all font-mono text-stone-700">{r.rentalId}</dd></div>
-          {r.obligationRef && <div className="min-w-0"><dt>Nghĩa vụ thanh toán</dt><dd className="mt-1 break-all font-mono text-stone-700">{r.obligationRef}</dd></div>}
+          <div className="min-w-0"><dt>Mã theo dõi</dt><dd className="mt-1 break-all font-mono text-stone-700">{r.displayCode || recordDisplayCode(r.caseRef)}</dd></div>
+          <div className="min-w-0"><dt>Hồ sơ thuê</dt><dd className="mt-1 break-all font-mono text-stone-700">{r.rentalDisplayCode || recordDisplayCode(r.rentalId)}</dd></div>
+          {r.obligationRef && <div className="min-w-0"><dt>Nghĩa vụ thanh toán</dt><dd className="mt-1 break-all font-mono text-stone-700">{recordDisplayCode(r.obligationRef)}</dd></div>}
         </dl>
       </details>
       <div className={`space-y-3 rounded-lg p-3 ${r.kind === "RENTAL_TERM" ? "border border-blue-100 bg-blue-50/60" : "bg-stone-50"}`}>
@@ -139,9 +140,9 @@ export function OverdueFollowUpCard({ event: e }: { event: OverdueFollowUp }) {
       <details className="text-xs text-stone-500">
         <summary className="w-fit cursor-pointer">Thông tin ghi nhận</summary>
         <dl className="mt-2 grid gap-3 rounded-lg bg-stone-50 p-3 sm:grid-cols-2">
-          <div className="min-w-0"><dt>Người ghi</dt><dd className="mt-1 break-all">{e.actorId ?? "Hệ thống"}</dd></div>
-          <div className="min-w-0"><dt>Mã sự kiện</dt><dd className="mt-1 break-all font-mono">{e.id}</dd></div>
-          {e.externalRef && <div className="min-w-0 sm:col-span-2"><dt>Mã tham chiếu tiếp nhận</dt><dd className="mt-1 break-all font-mono">{e.externalRef}</dd></div>}
+          <div className="min-w-0"><dt>Người ghi</dt><dd className="mt-1 break-all">{e.actorName || (e.actorId ? "Nhân viên" : "Hệ thống")}</dd></div>
+          <div className="min-w-0"><dt>Mã sự kiện</dt><dd className="mt-1 break-all font-mono">{recordDisplayCode(e.id)}</dd></div>
+          {e.externalRef && <div className="min-w-0 sm:col-span-2"><dt>Mã tham chiếu tiếp nhận</dt><dd className="mt-1 break-all font-mono">{recordDisplayCode(e.externalRef)}</dd></div>}
         </dl>
       </details>
     </article>

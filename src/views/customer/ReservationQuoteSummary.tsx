@@ -6,6 +6,7 @@ import { formatVndAmount } from '../../i18n/currency'
 import type { ReservationQuote } from '../../services/customerReservationApi'
 import { rentalEndDateForDisplay } from '../../domain/rentalTimeline'
 import CustomerTransactionTerms from './CustomerTransactionTerms'
+import { HANDOVER_TERMS_VERSION } from '../../domain/reservationCheckInPolicy'
 
 function formatDisplayDate(value: string, endDate = false) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
@@ -16,7 +17,7 @@ function formatDisplayDate(value: string, endDate = false) {
   return displayMatch ? `${displayMatch[3]}/${displayMatch[2]}/${displayMatch[1]}` : displayEndDate.replace(/-/g, '/')
 }
 
-export default function ReservationQuoteSummary({ quote: q, needsReview, context = 'quote', hidePaymentNotices = false }: { quote: ReservationQuote; needsReview: boolean; context?: 'quote' | 'reservation'; hidePaymentNotices?: boolean }) {
+export default function ReservationQuoteSummary({ quote: q, needsReview, context = 'quote', hidePaymentNotices = false, handoverTermsVersion }: { quote: ReservationQuote; needsReview: boolean; context?: 'quote' | 'reservation'; hidePaymentNotices?: boolean; handoverTermsVersion?: string | null }) {
   const actor = getAuthenticatedActor()
   const emailUnverified = actor?.status === 'PENDING_VERIFICATION'
   const [resending, setResending] = useState(false)
@@ -43,7 +44,7 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
 
   return (
     <section className="space-y-5 rounded-2xl border border-stone-200 bg-white p-5 text-sm sm:p-6">
-      <details className="rounded-lg border border-stone-200 p-3"><summary className="cursor-pointer font-semibold">Điều khoản giữ kho, hủy, trả kho và hoàn tiền</summary><div className="mt-3"><CustomerTransactionTerms /></div></details>
+      <details className="rounded-lg border border-stone-200 p-3"><summary className="cursor-pointer font-semibold">Điều khoản giữ kho, hủy, trả kho và hoàn tiền</summary><div className="mt-3"><CustomerTransactionTerms handoverTermsVersion={context === 'quote' ? HANDOVER_TERMS_VERSION : handoverTermsVersion ?? null} depositAmount={q.reservationDepositAmount} /></div></details>
       {/* ── HEADER BÁO GIÁ ── */}
       {context === 'quote' && <>
       <div className="border-b border-stone-200 pb-4">

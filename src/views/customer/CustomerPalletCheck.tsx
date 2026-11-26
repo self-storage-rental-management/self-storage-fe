@@ -23,6 +23,9 @@ type StorageConditionGroup = {
   key: string
   capacity: PalletAllocation['capacity']
   cargoHeightCm?: number
+  bayLengthCm?: number
+  bayWidthCm?: number
+  bayClearHeightCm?: number
   actualLayers: number
 }
 
@@ -193,8 +196,11 @@ function maximumPiecesByDimensions(capacity: PalletAllocation['capacity'], layer
 function storageConditionGroups(item: PalletPlan['items'][number], plan: PalletPlan): StorageConditionGroup[] {
   const groups = new Map<string, StorageConditionGroup>()
   for (const allocation of item.allocations ?? []) {
-    const rack = plan.racks.find(value => value.code === allocation.rackCode)
+    const rack = plan.racks.find(value => value.code === allocation.rackCode) ?? plan.racks[0]
     const cargoHeightCm = rack?.maxCargoHeightCm
+    const bayLengthCm = rack?.bayLengthCm
+    const bayWidthCm = rack?.bayWidthCm
+    const bayClearHeightCm = rack?.levels[0]?.clearHeightCm
     const key = storageConditionKey(allocation.capacity, cargoHeightCm)
     const piecesPerPallet = Math.max(0, allocation.piecesPerPallet)
     const actualLayers = Math.max(1, Math.ceil(piecesPerPallet / piecesPerLayer(allocation.capacity)))
@@ -203,6 +209,9 @@ function storageConditionGroups(item: PalletPlan['items'][number], plan: PalletP
       key,
       capacity: previous?.capacity ?? allocation.capacity,
       cargoHeightCm: previous?.cargoHeightCm ?? cargoHeightCm,
+      bayLengthCm: previous?.bayLengthCm ?? bayLengthCm,
+      bayWidthCm: previous?.bayWidthCm ?? bayWidthCm,
+      bayClearHeightCm: previous?.bayClearHeightCm ?? bayClearHeightCm,
       actualLayers: Math.max(previous?.actualLayers ?? 1, actualLayers),
     })
   }
@@ -215,7 +224,7 @@ function StorageConditions({ plan, goodsItems, compartmentCount }: { plan: Palle
     <p className="font-semibold">Điều kiện lưu trữ</p>
     {plan.items.map(item => {
       const goods = goodsItems[item.itemNumber - 1]
-      return storageConditionGroups(item, plan).map(({ key, capacity, cargoHeightCm, actualLayers: plannedLayers }) => {
+      return storageConditionGroups(item, plan).map(({ key, capacity, cargoHeightCm, bayLengthCm, bayWidthCm, bayClearHeightCm, actualLayers: plannedLayers }) => {
         const layerCapacity = piecesPerLayer(capacity)
         const maxLayers = maximumLayers(capacity, goods, cargoHeightCm)
         const displayMaxPiecesByDimensions = maximumPiecesByDimensions(capacity, layerCapacity, maxLayers)
@@ -234,6 +243,9 @@ function StorageConditions({ plan, goodsItems, compartmentCount }: { plan: Palle
             <table className="w-full min-w-[32rem] text-left text-xs">
               <thead className="bg-stone-50"><tr><th className="px-3 py-2 font-semibold">Điều kiện lưu trữ</th><th className="px-3 py-2 text-right font-semibold">Kết quả</th></tr></thead>
               <tbody>
+                {bayLengthCm != null && bayWidthCm != null && bayClearHeightCm != null && (
+                  <tr className="border-t border-stone-200"><td className="px-3 py-2">Kích thước khoang thông thủy (D × R × C)</td><td className="px-3 py-2 text-right">{n(bayLengthCm)} × {n(bayWidthCm)} × {n(bayClearHeightCm)} cm</td></tr>
+                )}
                 <tr className="border-t border-stone-200"><td className="px-3 py-2">Kích thước tấm kê (D × R × C)</td><td className="px-3 py-2 text-right">{n(plan.palletLengthCm)} × {n(plan.palletWidthCm)} × {n(plan.palletHeightCm)} cm</td></tr>
                 <tr className="border-t border-stone-200"><td className="px-3 py-2">Khối lượng tấm kê rỗng</td><td className="px-3 py-2 text-right">{n(plan.emptyPalletKg)} kg/tấm kê</td></tr>
                 {goods && placementChanged && <tr className="border-t border-stone-200"><td className="px-3 py-2">Kích thước sau khi đặt</td><td className="px-3 py-2 text-right">{n(placementLengthCm!)} × {n(placementWidthCm!)} × {n(placementHeightCm!)} cm</td></tr>}

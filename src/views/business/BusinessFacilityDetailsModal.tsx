@@ -1,3 +1,4 @@
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Button, Modal } from '../../components/ui'
 import { UNIT_SPECS } from '../../data/demoDatabase'
@@ -328,7 +329,7 @@ export default function BusinessFacilityDetailsModal({
                 <h2 id="modal-title" className="text-base font-bold text-stone-900">Thông tin chi tiết cơ sở</h2>
                 {activeTab === 'overview' && <FacilityStatusTag status={facility.status} lang="vi" />}
               </div>
-              <p className="mt-1 break-words text-xs text-stone-600">{facility.name} · {facility.code || facility.id}</p>
+              <p className="mt-1 break-words text-xs text-stone-600">{facility.name} · {facility.code || recordDisplayCode(facility.id)}</p>
             </div>
             <button type="button" aria-label="Đóng" onClick={onClose} className="shrink-0 rounded-lg p-1.5 text-stone-400 transition hover:bg-stone-100 hover:text-stone-700">
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">

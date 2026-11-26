@@ -1,10 +1,29 @@
-import type { CheckInCase, CompleteCheckInRequest } from '../../services/checkInApi'
+import type { CheckInCase, CheckInInventoryLine, CompleteCheckInRequest } from '../../services/checkInApi'
 import { Button } from '../../components/ui'
 import { inventoryReportNote, staffGoodsCategoryLabel } from './staffPresentation'
 
 export type InventoryInspectionReport = Partial<Pick<CompleteCheckInRequest,
   'packageCount' | 'inventoryLines' | 'actualPackagingMethod' | 'packagingCondition' | 'notes' | 'identityVerificationNote' | 'varianceReason' | 'evidenceReferences'>> & {
-  actualMeasurements: Partial<CompleteCheckInRequest['actualMeasurements']>
+  actualMeasurements?: Partial<CompleteCheckInRequest['actualMeasurements']> | null
+}
+
+export function parseInventoryInspectionReport(actualJson?: string | null): InventoryInspectionReport | null {
+  if (!actualJson) return null
+  try {
+    const actual = JSON.parse(actualJson)
+    if (!actual || typeof actual !== 'object' || Array.isArray(actual)) return null
+    const finite = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? value : undefined
+    return {
+      packageCount: finite(actual.packageCount),
+      actualMeasurements: { weightKg: finite(actual.weightKg), actualVolumeM3: finite(actual.volumeM3) },
+      inventoryLines: Array.isArray(actual.lines) ? actual.lines.filter((line: unknown): line is CheckInInventoryLine => Boolean(line && typeof line === 'object' && 'goodsItemId' in line && 'actualQuantity' in line && typeof line.goodsItemId === 'string' && typeof line.actualQuantity === 'number')) : [],
+      actualPackagingMethod: typeof actual.packagingMethod === 'string' ? actual.packagingMethod : null,
+      packagingCondition: ['INTACT', 'MINOR_DAMAGE', 'MAJOR_DAMAGE', 'UNPACKAGED'].includes(actual.packagingCondition) ? actual.packagingCondition : null,
+      varianceReason: typeof actual.varianceReason === 'string' ? actual.varianceReason : null,
+      notes: typeof actual.notes === 'string' ? actual.notes : '',
+      evidenceReferences: Array.isArray(actual.evidenceReferences) ? actual.evidenceReferences.filter((id: unknown): id is string => typeof id === 'string') : [],
+    }
+  } catch { return null }
 }
 
 type Field = { label: string; value: string; declared?: string; changed?: boolean; comparable?: boolean }
@@ -60,8 +79,8 @@ export default function InventoryMismatchEvidence({ item, onPreview, showEvidenc
   return <section className="space-y-3 text-sm text-stone-900" aria-label="Kết quả kiểm kê đã lưu">
     <Fields caption="Tổng hợp kiểm kê" values={[
       numeric('Tổng số kiện', report.packageCount, item.declaredPackageCount, ' kiện'),
-      numeric('Tổng khối lượng', report.actualMeasurements.weightKg, item.declaredGoodsWeightKg, ' kg'),
-      numeric('Tổng thể tích', report.actualMeasurements.actualVolumeM3, item.declaredGoodsVolumeM3, ' m³'),
+      numeric('Tổng khối lượng', report.actualMeasurements?.weightKg, item.declaredGoodsWeightKg, ' kg'),
+      numeric('Tổng thể tích', report.actualMeasurements?.actualVolumeM3, item.declaredGoodsVolumeM3, ' m³'),
     ]} />
     <div className="divide-y divide-stone-200">
       {(report.inventoryLines || []).map((line, index) => {
@@ -102,7 +121,6 @@ export default function InventoryMismatchEvidence({ item, onPreview, showEvidenc
     </div>}
     <footer className={`space-y-2 rounded-lg border p-3 ${item.inventoryFullFit === false ? 'border-red-200 bg-red-50 text-red-950' : item.inventoryMismatchJson ? 'border-amber-200 bg-amber-50 text-amber-950' : 'border-stone-200 bg-stone-50'}`}>
       <p className="font-semibold">Kết luận: {conclusion}</p>
-      {item.inventoryMismatchSummary && <p className="text-xs">{item.inventoryMismatchSummary}</p>}
       <p className="whitespace-pre-wrap break-words text-xs"><b>Lý do chênh lệch:</b> {report.varianceReason || (item.inventoryFullFit && !item.inventoryMismatchJson ? 'Không có chênh lệch được ghi nhận.' : 'Chưa có lý do được ghi nhận.')}</p>
     </footer>
   </section>

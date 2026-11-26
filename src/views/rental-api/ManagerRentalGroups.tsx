@@ -37,7 +37,9 @@ export default function ManagerRentalGroups(props: ({ kind: 'rental'; rows: Rent
       { id: 'history', title: 'Hồ sơ đã kết thúc', subtitle: 'Hồ sơ thuê đã hoàn tất xử lý.', active: false, rows: rows.filter(row => managerRecordIsHistory(row, kind)) },
     ]
     return <div className="space-y-5">
-      {groups.map(group => <RentalRecordGroup key={group.id} id={`manager-rental-${group.id}`} title={group.title} subtitle={group.subtitle}
+      {groups.sort((a, b) => Number(b.active) - Number(a.active)
+        || (a.rows.length ? rows.indexOf(a.rows[0]) : Infinity) - (b.rows.length ? rows.indexOf(b.rows[0]) : Infinity))
+        .map(group => <RentalRecordGroup key={group.id} id={`manager-rental-${group.id}`} title={group.title} subtitle={group.subtitle}
         count={group.rows.length} active={group.active}
         empty={!rows.length ? 'Không có dữ liệu' : group.active ? 'Không có hồ sơ đang xử lý trên trang này.' : 'Không có hồ sơ lịch sử trên trang này.'}>
         {group.rows.map(row => <RentalRecordRow key={row.id} rental={row} role="manager" unitTypeName={copy(row.unitType.name)}

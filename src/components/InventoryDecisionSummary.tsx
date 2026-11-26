@@ -44,9 +44,10 @@ export default function InventoryDecisionSummary({ decision, onPreview, onOpenRe
       {decision.decidedAt && <div><dt className="text-xs">Thời điểm ghi nhận</dt><dd>{date(decision.decidedAt)}</dd></div>}
       {decision.note && !compact && <div className="sm:col-span-2"><dt className="text-xs">{refused ? 'Lý do từ chối' : 'Ghi chú quyết định'}</dt><dd className="whitespace-pre-wrap break-words font-medium">{decision.outcome === 'TRANSFER_REQUESTED' ? 'Đã tạo yêu cầu chuyển hàng. Theo dõi tại mục Hỗ trợ khách hàng.' : decision.note}</dd></div>}
       {decision.returnCaseId && <div><dt className="text-xs">Tiến trình trả kho</dt><dd className="font-semibold">{returnLabels[decision.returnStatus || ''] || 'Đang cập nhật hồ sơ trả kho'}</dd></div>}
-      {decision.scheduledReturnDate && <div><dt className="text-xs">Ngày hẹn trả kho</dt><dd>{decision.scheduledReturnDate.split('-').reverse().join('/')}</dd></div>}
+      {decision.scheduledReturnDate && <div><dt className="text-xs">Ngày trả kho dự kiến</dt><dd>{decision.scheduledReturnDate.split('-').reverse().join('/')}</dd></div>}
     </dl>
     {!compact && decision.source === 'STAFF' && <p className="text-xs">Quyết định đã được ghi nhận tại cơ sở theo biên bản có chữ ký khách.</p>}
+    {!compact && decision.source === 'MANAGER' && <p className="text-xs">Quản lý đã phát hành quyết định sau khi xem xét biên bản từ chối ký.</p>}
     <div className="flex flex-wrap gap-2">
       {decision.evidenceReferences.map((id, index) => <Button key={id} type="button" size="sm" variant="outline" disabled={opening} onClick={() => void preview(id)}>{decision.evidenceReferences.length === 1 ? 'Xem biên bản đã ký' : `Xem biên bản ${index + 1}`}</Button>)}
       {decision.returnCaseId && onOpenReturns && <Button type="button" size="sm" variant="outline" onClick={onOpenReturns}>Theo dõi hồ sơ trả kho</Button>}
