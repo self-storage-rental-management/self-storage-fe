@@ -108,7 +108,8 @@ describe('real Return transport and unknown settlement presentation', () => {
     expect(new Headers(fetch.mock.calls[0][1].headers).get('Authorization')).toBe('Bearer TEST-token')
   })
   it('restores the clearance time and revoke action from the owner detail response', async () => {
-    const cleared: ApiReturn = { ...record, status: 'scheduled', customerClearedAt: '2026-11-25T01:00:00Z', clearanceRevision: 2 }
+    const cleared: ApiReturn = { ...record, status: 'scheduled', customerClearedAt: '2026-11-25T01:00:00Z', clearanceRevision: 2,
+      recoveryEligibleAt: '2026-11-27T17:00:00Z' }
     const fetch = respond({ data: cleared })
     await setCustomerClearance({ ...cleared, customerClearedAt: null }, true)
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ cleared: true, clearanceRevision: 2 })
@@ -117,8 +118,15 @@ describe('real Return transport and unknown settlement presentation', () => {
     const html = renderToStaticMarkup(<CustomerClearance record={loaded} busy={false} run={vi.fn()} ownerId={ids.customer} />)
     expect(html).toContain('Thu hồi xác nhận dọn kho')
     expect(html).toContain('2026-11-25T01:00:00Z')
+    expect(html).toContain('Hạn cuối dọn kho')
+    expect(html).toContain('28/11/2026 00:00:00')
+    const mismatch = renderToStaticMarkup(<CustomerClearance record={{ ...loaded, returnType: 'INVENTORY_MISMATCH',
+      inventoryRemovalDeadlineAt: '2026-11-30T17:00:00Z' }} busy={false} run={vi.fn()} ownerId={ids.customer} />)
+    expect(mismatch).toContain('01/12/2026 00:00:00')
+    expect(mismatch).not.toContain('28/11/2026 00:00:00')
     const inspected = renderToStaticMarkup(<CustomerClearance record={{ ...loaded, status: 'payment_due', customerClearedAt: null }} busy={false} run={vi.fn()} ownerId={ids.customer} />)
     expect(inspected).toContain('aria-current="step"')
+    expect(inspected).not.toContain('Hạn cuối dọn kho')
     expect(inspected).not.toContain('<button')
   })
   it('reads paginated ownership-bound rows and detail', async () => {

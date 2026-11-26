@@ -6,7 +6,8 @@ import { useReturnRecords } from '../../hooks/useReturnRecords'
 import { returnScreenRecord } from '../../services/returnScreenAdapter'
 import { approveInventoryMismatch, getReturn, reviewDispute, recordReturnSettlement, uploadReturnEvidence, returnError } from '../../services/returnApi'
 import { getAuthenticatedActor } from '../../services/authApi'
-import ReturnAttendance from '../return-api/ReturnAttendance'
+import ReturnAttendance, { isReturnIdentityReviewPending } from '../return-api/ReturnAttendance'
+import { ViolationRecoveryEntry } from '../return-api/ViolationRecoveryPanel'
 import React, { useEffect, useRef, useState } from 'react'
 import { Badge, Button, Card, Table, Thead, Tbody, Th, Td, Tr, Modal, Select, Input } from '../../components/ui'
 import { formatVndAmount as formatVnd } from '../../i18n/currency'
@@ -129,6 +130,15 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
   // Filter returns by facility
   const scopedReturns = useApi ? storeReturns : storeReturns.filter(r => isManagerFacilityVisible(user, r.facilityId, r.facilityName))
   const facilityReturns = scopedReturns.filter(r => !returnHistory.isHidden(r.id))
+  const [reviewNow, setReviewNow] = useState(Date.now)
+  const hasReviewTimes = useApi && apiRead.rows.some(row => row.attendance?.reviewStartsAt)
+  useEffect(() => {
+    if (!hasReviewTimes) return
+    setReviewNow(Date.now())
+    const timer = window.setInterval(() => setReviewNow(Date.now()), 15_000)
+    return () => window.clearInterval(timer)
+  }, [hasReviewTimes])
+  const pendingIdentityReviews = new Set(useApi ? apiRead.rows.filter(row => isReturnIdentityReviewPending(row, reviewNow)).map(row => row.id) : [])
   const hiddenFacilityCount = scopedReturns.length - facilityReturns.length
   const moneyValue = (value?: number) => useApi ? value ?? Number.NaN : normalizeManagerMoney(value) ?? 0
 
@@ -136,7 +146,9 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
   const recoveryRequiredCount = facilityReturns.filter(r => r.status === 'recovery_required').length
   const refundPendingCount = facilityReturns.filter(r => r.status === 'refund_pending').length
   const completedCount = scopedReturns.filter(r => r.status === 'completed').length
-  const awaitingInspectionCount = facilityReturns.filter(r => r.status === 'requested' || r.status === 'scheduled').length
+  const awaitingIdentityReviewCount = facilityReturns.filter(r => pendingIdentityReviews.has(r.id)).length
+  const awaitsInspection = (r: ReturnCase) => (r.status === 'requested' || r.status === 'scheduled') && !pendingIdentityReviews.has(r.id)
+  const awaitingInspectionCount = facilityReturns.filter(awaitsInspection).length
   const inspectedCount = facilityReturns.filter(r => r.status === 'inspected' || r.status === 'awaiting_business_review' || r.status === 'awaiting_customer_confirmation').length
   const needsMaintenanceCount = facilityReturns.filter(r => (r.damageClassification && r.damageClassification !== 'no_damage') || r.proposedUnitStatus === 'maintenance').length
 
@@ -145,7 +157,8 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
       returnTab === 'All' ||
       returnTab === 'Tất cả' ||
       (returnTab === 'recovery_required' && r.status === 'recovery_required') ||
-      (returnTab === 'awaiting_inspection' && (r.status === 'requested' || r.status === 'scheduled')) ||
+      (returnTab === 'awaiting_identity_review' && pendingIdentityReviews.has(r.id)) ||
+      (returnTab === 'awaiting_inspection' && awaitsInspection(r)) ||
       (returnTab === 'inspected' && (r.status === 'inspected' || r.status === 'awaiting_business_review' || r.status === 'awaiting_customer_confirmation')) ||
       (returnTab === 'needs_maintenance' && ((r.damageClassification && r.damageClassification !== 'no_damage') || r.proposedUnitStatus === 'maintenance')) ||
       (returnTab === 'refund_pending' && r.status === 'refund_pending') ||
@@ -548,6 +561,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
         <p className="mt-1 text-sm text-stone-500">Theo dõi nghiệm thu hiện trường, biên bản và quyết toán hồ sơ trả kho.</p>
       </header>
         <div className="flex w-full items-center gap-2 sm:w-auto">
+          {useApi && <ViolationRecoveryEntry />}
           <input
             type="text"
             placeholder={'Tìm theo mã, khách, gian kho...'}
@@ -574,6 +588,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
           {[
             ['All', `Tất cả ${facilityReturns.length}`],
             ['awaiting_inspection', `Chờ nghiệm thu ${awaitingInspectionCount}`],
+            ...(useApi ? [['awaiting_identity_review', `Chờ đối soát danh tính ${awaitingIdentityReviewCount}`]] : []),
             ['recovery_required', `Cần xử lý thu hồi ${recoveryRequiredCount}`],
             ['inspected', `Đã kiểm tra ${inspectedCount}`],
             ['needs_maintenance', `Cần bảo trì ${needsMaintenanceCount}`],
@@ -821,6 +836,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
 
             {currentApiReturn && <ReturnAttendance key={currentApiReturn.id} record={currentApiReturn} role="manager"
               editable={!!getAuthenticatedActor()?.permissions.includes('rentals:update')} onChanged={apiRead.refresh} />}
+            {currentApiReturn?.status === 'withdrawn_for_recovery' && <ViolationRecoveryEntry sourceReturnId={currentApiReturn.id} label="Mở hồ sơ thu hồi" />}
             {/* Inspection & Fees Breakdown Bento Box */}
             <div className="grid grid-cols-2 gap-3 text-xs bg-stone-50 p-3.5 rounded-lg border border-stone-200">
               <div>

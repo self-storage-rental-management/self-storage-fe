@@ -1,4 +1,5 @@
 import InventoryDecisionSummary from '../../components/InventoryDecisionSummary'
+import { requestReturn, updateReturnRequest } from '../../services/returnApi'
 import InventoryMismatchEvidence, { parseInventoryInspectionReport } from '../staff/InventoryMismatchEvidence'
 import { intakeDecisionLabels } from '../../services/inventoryDecision'
 import { rentalEndDateForDisplay } from '../../domain/rentalTimeline'
@@ -367,6 +368,10 @@ export default function CustomerReservationCard({ user, reservation: r, facility
   const [detail, setDetail] = useState<CustomerReservationDetail | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [returnPlannerOpen, setReturnPlannerOpen] = useState(false)
+  const [returnDate, setReturnDate] = useState('')
+  const [returnDateError, setReturnDateError] = useState('')
+  const [savedReturnDate, setSavedReturnDate] = useState('')
   const [confirmingReceipt, setConfirmingReceipt] = useState(false)
   const receiptLock = useRef(false)
   const [bookingDocument, setBookingDocument] = useState<BookingDocument | null>(null)
@@ -417,6 +422,30 @@ export default function CustomerReservationCard({ user, reservation: r, facility
   const awaitingInventory = r.status === 'PREPARING' && (checkInStatus === 'setup_completed' || checkInStatus === 'completed')
   const partialInventoryPending = detail?.inventoryResolutionStatus === 'PARTIAL_ACCEPTED'
   const inventoryReturnRequested = detail?.inventoryResolutionStatus === 'RETURN_REQUESTED'
+  const returnCaseId = detail?.inventoryDecision?.returnCaseId ?? detail?.reservation.setupReturnCaseId
+  const returnRentalId = detail?.reservation.setupReturnRentalId
+  const returnStatus = detail?.inventoryDecision?.returnStatus
+  const removalDeadline = detail?.inventoryRemovalDeadlineAt
+  const minReturnDate = policyDateInput(new Date(now + 86_400_000))
+  const maxReturnDate = removalDeadline ? policyDateInput(new Date(Date.parse(removalDeadline) - 1)) : undefined
+  const canScheduleReturn = inventoryReturnRequested && !!(returnCaseId || returnRentalId) && !!maxReturnDate
+    && minReturnDate <= maxReturnDate && !detail?.inventoryEscalatedAt
+    && (!returnStatus || ['requested', 'scheduled'].includes(returnStatus))
+  const saveReturnDate = async () => {
+    if (busy || !canScheduleReturn || !returnDate || returnDate < minReturnDate || (maxReturnDate && returnDate > maxReturnDate)) return
+    setBusy(true)
+    setReturnDateError('')
+    try {
+      const note = detail?.inventoryDecision?.note || 'Khách đặt lịch bàn giao sau quyết định buộc trả kho.'
+      const saved = returnCaseId ? await updateReturnRequest(returnCaseId, returnDate, note)
+        : returnRentalId ? await requestReturn(returnRentalId, returnDate, note) : null
+      if (!saved) return
+      setReturnPlannerOpen(false)
+      setSavedReturnDate(saved.scheduledDate)
+      void getCustomerReservation(r.id).then(setDetail).catch(() => {})
+    } catch (error) { setReturnDateError(userFacingError(error, 'Không thể lưu lịch hẹn trả kho.')) }
+    finally { setBusy(false) }
+  }
   const inventoryMismatchPending = detail?.inventoryResolutionStatus === 'PENDING_CUSTOMER' || inventoryReturnRequested
   const prepaymentPaid = detail?.payments?.some(item => item.purpose === 'RESERVATION_DEPOSIT' && item.paymentStatus === 'PAID')
     || ['CONFIRMED', 'UNIT_RESERVED', 'READY_FOR_CHECKIN', 'AWAITING_CUSTOMER_RECEIPT', 'PREPARING', 'COMPLETED'].includes(r.status)
@@ -651,6 +680,15 @@ export default function CustomerReservationCard({ user, reservation: r, facility
           </div>}
           <CustomerReservationPayment receiptSlot={receiptSlot} remainingPayment={remainingPayment} attendanceDeadline={detail?.attendance?.deadline} handoverTermsVersion={detail?.attendance?.termsVersion} reservation={r} facilityName={displayedFacilityName} unitTypeName={displayedUnitTypeName} paymentStartedAt={detail?.paymentStartedAt} paymentExpiresAt={detail?.paymentExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />
           {r.violationRecovery && <p className="mt-3 text-sm font-medium text-amber-900">Mở mục Thu hồi kho để xem tiến độ và phản hồi.</p>}
+          {inventoryReturnRequested && <div className="mt-3 flex flex-wrap items-center gap-2">
+            {canScheduleReturn && <Button type="button" size="sm" onClick={() => {
+              setReturnDate(savedReturnDate); setReturnDateError(''); setReturnPlannerOpen(true)
+            }}>Đặt / đổi lịch trả kho</Button>}
+            {onOpenReturns && <Button type="button" size="sm" variant="outline" onClick={onOpenReturns}>Theo dõi trả kho</Button>}
+            {savedReturnDate && <span role="status" className="text-xs text-emerald-800">Đã lưu lịch hẹn ngày {formatDisplayDate(savedReturnDate)}.</span>}
+            {maxReturnDate && minReturnDate > maxReturnDate && removalDeadline && now < Date.parse(removalDeadline) && !detail?.inventoryEscalatedAt
+              && (!returnStatus || ['requested', 'scheduled'].includes(returnStatus)) && <span className="text-xs text-stone-600">Đã hết ngày có thể đặt trực tuyến. Vui lòng liên hệ cơ sở để bàn giao trong hạn.</span>}
+          </div>}
         </div>
         <div className="reservation-card-actions flex w-full min-w-0 flex-col items-end gap-2 md:w-64 md:shrink-0">
           <div className="text-right"><p className="text-xs text-stone-500">Tổng thu cả kỳ (gồm tiền cọc đảm bảo kho)</p><p className="text-xl font-bold text-stone-900">{(r.totalInitialObligation == null ? "Chưa xác định" : formatVnd(r.totalInitialObligation))}</p><p className="text-xs text-amber-800">Trả lúc giữ chỗ: {(r.reservationDepositAmount == null ? "Chưa xác định" : formatVnd(r.reservationDepositAmount))}</p></div>
@@ -808,6 +846,16 @@ export default function CustomerReservationCard({ user, reservation: r, facility
 
     </div>
     {message && <p role="status" className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{message}</p>}
+    <Modal open={returnPlannerOpen} onClose={() => { if (!busy) setReturnPlannerOpen(false) }} title="Đặt lịch trả kho">
+      {removalDeadline && <p className="mb-3 text-sm">Hạn cuối dọn kho · Trước {formatCustomerDateTime(removalDeadline)}</p>}
+      <VietnameseDateInput label="Ngày hẹn trả kho" value={returnDate} min={minReturnDate} max={maxReturnDate} onChange={setReturnDate} />
+      {returnDateError && <p role="alert" className="mt-2 text-sm text-red-700">{returnDateError}</p>}
+      <div className="mt-4 flex justify-end gap-2">
+        <Button type="button" variant="outline" disabled={busy} onClick={() => setReturnPlannerOpen(false)}>Hủy</Button>
+        <Button type="button" disabled={busy || !canScheduleReturn || !returnDate || returnDate < minReturnDate || !!(maxReturnDate && returnDate > maxReturnDate)}
+          onClick={() => void saveReturnDate()}>{busy ? 'Đang lưu…' : 'Lưu lịch hẹn'}</Button>
+      </div>
+    </Modal>
     <Modal size="2xl" open={bookingDocumentOpen} onClose={() => setBookingDocumentOpen(false)} title="Phiếu xác nhận giữ kho">
       {bookingDocument && <div className="space-y-5 py-1">
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-5 text-sm text-emerald-950 shadow-xs">
