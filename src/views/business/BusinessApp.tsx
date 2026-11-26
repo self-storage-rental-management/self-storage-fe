@@ -5,6 +5,7 @@ import DuongPolicyWorkspace from "../rental-support-integration/DuongPolicyWorks
 import UnitTypeReviewModal from "./UnitTypeReviewModal"
 import { listFacilityContentPolicies, saveFacilityContentPolicies, type FacilityContentPolicy } from "../../services/facilityContentPolicyApi"
 import BusinessReturnsPanel from "./BusinessReturnsPanel"
+import { ViolationRecoveryPanel } from '../return-api/ViolationRecoveryPanel'
 import BusinessRefundRequestsPanel from "./BusinessRefundRequestsPanel"
 import BusinessDamageIncidentsPanel from "./BusinessDamageIncidentsPanel"
 import CentralizedPolicyWorkspace from "./CentralizedPolicyWorkspace"
@@ -420,6 +421,7 @@ export default function BusinessApp({
   const [facilityDetailLayouts, setFacilityDetailLayouts] = useState<Record<string, RackResult | null>>({})
   const [facilityDataError, setFacilityDataError] = useState<string>()
   const [businessNotifications, setBusinessNotifications] = useState<ApiNotification[]>([])
+  const [recoveryNoticeTarget, setRecoveryNoticeTarget] = useState<{ id: string; request: number }>()
   const [reviewOpen, setReviewOpen] = useState(false)
   const [reviewRequestId, setReviewRequestId] = useState<string | null>(null)
 
@@ -663,6 +665,13 @@ export default function BusinessApp({
     {
       id: "returns",
       label: "Trả kho",
+      icon: Icon.clipboard,
+      group: "Vận hành và khuyến mãi",
+      permission: "returns:read",
+    },
+    {
+      id: "recoveries",
+      label: "Thu hồi kho",
       icon: Icon.clipboard,
       group: "Vận hành và khuyến mãi",
       permission: "returns:read",
@@ -3616,12 +3625,15 @@ export default function BusinessApp({
   return (
     <Layout
       user={user}
-      notifications={businessNotifications.map(item => ({ id: item.id, title: item.title, message: item.content, date: item.createdAt, isRead: item.isRead, page: item.type === 'SYSTEM' ? 'pricing' : 'facilities' }))}
+      notifications={businessNotifications.map(item => ({ id: item.id, title: item.title, message: item.content, date: item.createdAt, isRead: item.isRead, page: item.relatedEntityType === 'VIOLATION_RECOVERY' ? 'recoveries' : item.type === 'SYSTEM' ? 'pricing' : 'facilities' }))}
       additionalNotifications={additionalPricingNotifications}
       onNotificationClick={item => {
         const notification = businessNotifications.find(n => n.id === item.id)
         if (notification) {
-          if (notification.title === 'Yêu cầu duyệt thay đổi loại kho' && notification.relatedEntityId) {
+          if (notification.relatedEntityType === 'VIOLATION_RECOVERY' && notification.relatedEntityId) {
+            setPage('recoveries')
+            setRecoveryNoticeTarget({ id: notification.relatedEntityId, request: Date.now() })
+          } else if (notification.title === 'Yêu cầu duyệt thay đổi loại kho' && notification.relatedEntityId) {
             setPage('facilities')
             setReviewRequestId(notification.relatedEntityId)
             setReviewOpen(true)
@@ -3641,7 +3653,7 @@ export default function BusinessApp({
       }}
       navItems={NAV}
       currentPage={page}
-      onNavigate={next => { if (!integrationLocked) setPage(next) }}
+      onNavigate={next => { if (!integrationLocked) { setRecoveryNoticeTarget(undefined); setPage(next) } }}
       onLogout={() => { if (!integrationLocked) onLogout() }}
       canAccess={(permission) => {
         if (isApiAuthenticated()) return canApiActor(user, permission)
@@ -3673,6 +3685,14 @@ export default function BusinessApp({
           <BusinessReturnsPanel user={user} refreshVersion={returnsRefreshVersion} />
         </div>
       )}
+      {page === 'recoveries' && <div className="space-y-5">
+        <SectionHeader title="Thu hồi kho" subtitle="Theo dõi hồ sơ tại các cơ sở và xử lý các trường hợp cần BO xem xét." />
+        <Card className="recovery-workspace">
+          <h2>Hồ sơ thu hồi cần xử lý</h2>
+          <p>Đối chiếu biên bản, theo dõi thời hạn và ghi nhận quyết định xử lý.</p>
+          <ViolationRecoveryPanel activeOnly target={recoveryNoticeTarget} />
+        </Card>
+      </div>}
       {/* ── QUẢN LÝ CƠ SỞ (CRUD FACILITIES) ──────────────────── */}
       {page === "facilities" && (
         <div className="fade-in space-y-5">

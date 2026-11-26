@@ -9,6 +9,7 @@ export type CheckInListStatus = 'UNSCHEDULED' | NonNullable<CheckInStatus>
 export type CheckInGroup = 'ONGOING' | 'PROCESSED'
 export type CheckInReservationStatus = ReservationStatus
 export type InventoryVisit = {
+  access?: { completionDeadlineAt: string | null; writable: boolean; blockedReason: string | null } | null
   appointmentAt: string | null
   arrivedAt: string | null
   identityVerifiedAt: string | null
