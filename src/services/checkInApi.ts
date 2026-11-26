@@ -587,6 +587,13 @@ export async function recordCheckInArrival(checkInId: string, review?: { actualA
   ))
 }
 
+export async function triggerImmediateHandoverRecovery(checkInId: string, reason?: string) {
+  return assertEnvelope(await apiRequest<unknown>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/immediate-recovery`,
+    { method: 'POST', ...(reason && { body: JSON.stringify({ reason }) }) },
+  ))
+}
+
 export async function rejectCheckIn(
   checkInId: string,
   request: {
