@@ -113,4 +113,68 @@ describe('recovery evidence and verification feedback', () => {
     expect(html).toContain('Ảnh ghi nhận khách vắng mặt')
     expect(html).not.toContain('Ảnh ghi nhận khách đến')
   })
+  it('highlights customer reply and note prominently in recovery details', () => {
+    const disputedHtml = renderToStaticMarkup(
+      <RecoveryDetails entry={{ ...entry, reply: 'DISPUTED', customerNote: 'Tôi không chấp nhận' }} />,
+    )
+    expect(disputedHtml).toContain('Phản hồi của khách')
+    expect(disputedHtml).toContain('Đã gửi phản đối')
+    expect(disputedHtml).toContain('Tôi không chấp nhận')
+    expect(disputedHtml).toContain('bg-red-50')
+
+    const attendHtml = renderToStaticMarkup(
+      <RecoveryDetails entry={{ ...entry, reply: 'WILL_ATTEND', customerNote: 'Sẽ có mặt lúc 9h' }} />,
+    )
+    expect(attendHtml).toContain('Sẽ có mặt')
+    expect(attendHtml).toContain('bg-emerald-50')
+  })
+  it('renders manager response card, attachments, and multi-file upload inputs for dispute and resume', () => {
+    const detailsHtml = renderToStaticMarkup(
+      <RecoveryDetails entry={{
+        ...entry,
+        reply: 'DISPUTED',
+        customerNote: 'Tôi đã dọn xong',
+        customerAttachmentIds: ['cust-file-1', 'cust-file-2'],
+        managerResponseNote: 'Quản lý đã đối chiếu và phản hồi',
+        managerRespondedAt: '2026-11-27T02:00:00Z',
+        managerAttachmentIds: ['mgr-file-1', 'mgr-file-2'],
+      }} />,
+    )
+    expect(detailsHtml).toContain('Phản hồi từ Quản lý / Cơ sở')
+    expect(detailsHtml).toContain('Quản lý đã đối chiếu và phản hồi')
+    expect(detailsHtml).toContain('Tệp đính kèm 1')
+    expect(detailsHtml).toContain('Tệp đính kèm 2')
+    expect(detailsHtml).toContain('Tệp phản hồi 1')
+    expect(detailsHtml).toContain('Tệp phản hồi 2')
+
+    const disputeForm = renderToStaticMarkup(
+      <RecoveryAction entry={{ ...entry, responseDueAt: '2099-11-27T06:00:00Z', actions: ['DISPUTE'] }}
+        action="DISPUTE" onBack={() => {}} onSaved={() => {}} />,
+    )
+    expect(disputeForm).toContain('multiple=""')
+    expect(disputeForm).toContain('Tệp / hình ảnh đính kèm')
+
+    const resumeForm = renderToStaticMarkup(
+      <RecoveryAction entry={{ ...entry, stage: 'BLOCKED', actions: ['RESUME'] }}
+        action="RESUME" onBack={() => {}} onSaved={() => {}} />,
+    )
+    expect(resumeForm).toContain('multiple=""')
+    expect(resumeForm).toContain('Nội dung phản hồi và kết luận cho khách hàng')
+
+    const multiCommsHtml = renderToStaticMarkup(
+      <RecoveryDetails entry={{
+        ...entry,
+        reply: 'DISPUTED',
+        communications: [
+          { role: 'CUSTOMER', actorName: 'Thanh Thao', action: 'DISPUTE', time: '2026-11-27T01:00:00Z', note: 'Khiếu nại lần 1', attachmentIds: ['c-1'] },
+          { role: 'MANAGER', actorName: 'Quản lý Q1', action: 'RESUME', time: '2026-11-27T01:30:00Z', note: 'Phản hồi lần 1', attachmentIds: ['m-1'] },
+          { role: 'CUSTOMER', actorName: 'Thanh Thao', action: 'DISPUTE', time: '2026-11-27T02:00:00Z', note: 'Khiếu nại lần 2', attachmentIds: [] },
+        ],
+      }} />,
+    )
+    expect(multiCommsHtml).toContain('Lịch sử trao đổi &amp; khiếu nại (3 lượt)')
+    expect(multiCommsHtml).toContain('Khiếu nại lần 1')
+    expect(multiCommsHtml).toContain('Phản hồi lần 1')
+    expect(multiCommsHtml).toContain('Khiếu nại lần 2')
+  })
 })

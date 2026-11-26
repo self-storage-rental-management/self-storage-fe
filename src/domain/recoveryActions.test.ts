@@ -16,6 +16,14 @@ describe('automatic recovery actions', () => {
     expect(visibleRecoveryActions(['DISPUTE', 'REQUEST_FINANCE'], 'COMPLETED', '2026-11-26T00:00:00Z'))
       .toEqual(['DISPUTE', 'REQUEST_FINANCE'])
   })
+  it('hides the already-selected attendance choice until the customer switches to the opposite choice', () => {
+    const choices = ['WILL_ATTEND', 'CANNOT_ATTEND', 'DISPUTE']
+    const due = '2026-11-27T06:00:00Z'
+    const now = Date.parse(due) - 10_000
+    expect(visibleRecoveryActions(choices, 'AWAITING_ASSIGNMENT', due, now, 'NO_RESPONSE')).toEqual(choices)
+    expect(visibleRecoveryActions(choices, 'AWAITING_ASSIGNMENT', due, now, 'WILL_ATTEND')).toEqual(['CANNOT_ATTEND', 'DISPUTE'])
+    expect(visibleRecoveryActions(choices, 'AWAITING_ASSIGNMENT', due, now, 'CANNOT_ATTEND')).toEqual(['WILL_ATTEND', 'DISPUTE'])
+  })
 })
 
 describe('business recovery queue', () => {

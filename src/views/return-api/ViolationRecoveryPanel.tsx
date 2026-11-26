@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Button, Modal } from '../../components/ui'
+import FilePreviewDialog, { type FilePreview } from '../../components/FilePreviewDialog'
 import { apiDownload, apiRequest } from '../../services/apiClient'
 import { uploadMaintenanceEvidence } from '../../services/maintenanceApi'
 import { parseVietnamDate } from '../../utils/vietnamTime'
@@ -46,6 +47,9 @@ const replies: Record<string, string> = {
 type HistoryEvent = {
   action: string; actorName: string; time: string; stage: keyof typeof stages; note: string | null
 }
+type CommunicationEntry = {
+  role: string; actorName: string; action: string; time: string; note: string | null; attachmentIds?: string[]
+}
 type Entry = {
   id: string; unitCode: string; taskId: string | null; staffName: string | null
   reservationCode?: string | null; customerName?: string | null
@@ -63,6 +67,11 @@ type Entry = {
   history?: HistoryEvent[]
   detectedAt?: string | null; escalated?: boolean; reviewDueAt?: string | null; businessReviewDueAt?: string | null; review?: unknown
   canViewSourceGoods?: boolean
+  managerResponseNote?: string | null
+  managerRespondedAt?: string | null
+  customerAttachmentIds?: string[]
+  managerAttachmentIds?: string[]
+  communications?: CommunicationEntry[]
   actions: Action[]
 }
 type Staff = { id: string; name: string }
@@ -73,6 +82,7 @@ const CUSTOMER_PAGE_SIZE = 8
 const endpoint = '/api/violation-recoveries'
 const needsNote = new Set<Action>(['DISPUTE', 'BLOCK', 'RESUME', 'CANCEL', 'COMPLETE', 'FOLLOW_UP_PICKUP', 'REQUEST_FINANCE', 'RESOLVE_FINANCE', 'RECORD_LIQUIDATION'])
 const needsPhoto = new Set<Action>(['RECORD_PRESENT', 'RECORD_ABSENT', 'START', 'SAVE_ITEM', 'COMPLETE', 'RELEASE_ITEM', 'RECORD_LIQUIDATION'])
+const supportsAttachments = new Set<Action>(['DISPUTE', 'RESUME', 'CANCEL', 'CLOSE_REMEDIATION', 'BLOCK'])
 const isPendingItem = isPendingRecoveryItem
 const field = 'w-full rounded-md border border-stone-300 bg-white px-2 py-1.5'
 const dateLabel = (value?: string | null) => value
@@ -96,7 +106,7 @@ function primaryAction(entry: Entry): Action | undefined {
     'ASSIGN_PICKUP', 'FOLLOW_UP_PICKUP', 'RECORD_LIQUIDATION', 'RESOLVE_FINANCE',
     'WILL_ATTEND', 'ASSIGN',
   ]
-  return priority.find(key => visibleRecoveryActions(entry.actions, entry.stage, entry.responseDueAt).includes(key))
+  return priority.find(key => visibleRecoveryActions(entry.actions, entry.stage, entry.responseDueAt, undefined, entry.reply).includes(key))
 }
 const entryActionLabel = (entry: Entry, action: Action) => action === 'ASSIGN' && entry.staffName ? 'Đổi nhân viên'
   : action === 'START' && !canHandOverRecovery(entry) ? 'Thu hồi và lưu tạm' : actionLabels[action]
@@ -118,8 +128,21 @@ function RecoveryCountdown({ deadline, label }: { deadline?: string | null; labe
   </span>
 }
 
+async function uploadRecoveryAttachment(recoveryId: string, file: File): Promise<string> {
+  const form = new FormData()
+  form.set('file', file)
+  form.set('entityType', 'VIOLATION_RECOVERY')
+  form.set('entityId', recoveryId)
+  const response = await apiRequest<{ data?: { id?: string } }>('/api/files', { method: 'POST', body: form })
+  if (!response?.data?.id) throw new Error('Không thể tải tệp đính kèm lên hệ thống.')
+  return response.data.id
+}
+
 function EvidenceImagePreview({ id, label }: { id: string; label: string }) {
   const [url, setUrl] = useState<string | null>(null)
+  const [fileName, setFileName] = useState(label)
+  const [contentType, setContentType] = useState('')
+  const [previewOpen, setPreviewOpen] = useState(false)
   const [failed, setFailed] = useState(false)
   useEffect(() => {
     let active = true
@@ -131,25 +154,44 @@ function EvidenceImagePreview({ id, label }: { id: string; label: string }) {
         if (!active) return
         objectUrl = URL.createObjectURL(asset.blob)
         setUrl(objectUrl)
+        setFileName(asset.fileName || label)
+        setContentType(asset.contentType || asset.blob.type || '')
       })
       .catch(() => { if (active) setFailed(true) })
     return () => {
       active = false
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  }, [id])
+  }, [id, label])
+
+  const isImage = contentType.startsWith('image/')
+  const previewFile: FilePreview | null = url ? { url, name: fileName, type: contentType || 'application/octet-stream' } : null
 
   return (
-    <div className="rounded-md border border-stone-200 bg-stone-50 p-2 text-xs">
-      <p className="mb-1 font-medium text-stone-700">{label}</p>
+    <div className="rounded-md border border-stone-200 bg-white/90 p-2 text-xs">
+      <p className="mb-1 truncate font-medium text-stone-700" title={fileName}>{label}</p>
       {url ? (
-        <a href={url} target="_blank" rel="noreferrer" className="block">
-          <img src={url} alt={label} className="h-28 w-full rounded object-cover" />
-        </a>
+        isImage ? (
+          <button type="button" onClick={() => setPreviewOpen(true)} className="block w-full cursor-pointer overflow-hidden rounded border border-stone-200 hover:border-amber-400">
+            <img src={url} alt={fileName} className="h-28 w-full object-cover" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setPreviewOpen(true)}
+            className="flex w-full items-center justify-between gap-2 rounded border border-stone-200 bg-stone-50 px-2.5 py-2 text-left font-medium text-stone-800 hover:border-amber-400 hover:bg-amber-50"
+          >
+            <span className="truncate">{fileName}</span>
+            <span className="shrink-0 text-[11px] text-amber-800 underline">Xem tệp</span>
+          </button>
+        )
       ) : failed ? (
-        <p className="text-stone-500">Không tải được ảnh. Vui lòng thử lại.</p>
+        <p className="text-stone-500">Không tải được tệp. Vui lòng thử lại.</p>
       ) : (
-        <p className="text-stone-500">Đang tải ảnh…</p>
+        <p className="text-stone-500">Đang tải tệp…</p>
+      )}
+      {previewOpen && previewFile && (
+        <FilePreviewDialog file={previewFile} onClose={() => setPreviewOpen(false)} />
       )}
     </div>
   )
@@ -189,6 +231,7 @@ export function RecoveryAction({ entry, action, onBack, onSaved }: {
   const [selectedGroup, setSelectedGroup] = useState(() => (bulkAction && itemChoices.length === 1 ? itemChoices[0].key : ''))
   const [quantity, setQuantity] = useState('1')
   const [appointmentInput, setAppointmentInput] = useState('')
+  const [attachments, setAttachments] = useState<File[]>([])
   const selectedChoice = itemChoices.find(choice => choice.key === selectedGroup)
   useEffect(() => {
     if (!bulkAction) return
@@ -229,7 +272,7 @@ export function RecoveryAction({ entry, action, onBack, onSaved }: {
     event.preventDefault()
     const form = event.currentTarget
     if (lock.current) return
-    if (!visibleRecoveryActions(entry.actions, entry.stage, entry.responseDueAt).includes(action)) {
+    if (!visibleRecoveryActions(entry.actions, entry.stage, entry.responseDueAt, undefined, entry.reply).includes(action)) {
       setError('Thao tác không còn khả dụng hoặc đã hết hạn phản hồi. Vui lòng làm mới hồ sơ.')
       return
     }
@@ -265,6 +308,14 @@ export function RecoveryAction({ entry, action, onBack, onSaved }: {
         if (!entry.taskId || !(photo instanceof File) || !photo.size) throw new Error('Cần ảnh hiện trường cho đúng nhiệm vụ.')
         evidenceId = (await uploadMaintenanceEvidence(entry.taskId, photo)).id
       }
+      let attachmentIds: string[] | undefined
+      if (supportsAttachments.has(action) && attachments.length > 0) {
+        if (attachments.length > 10) throw new Error('Tối đa 10 tệp đính kèm mỗi lần gửi.')
+        attachmentIds = []
+        for (const fileItem of attachments) {
+          attachmentIds.push(await uploadRecoveryAttachment(entry.id, fileItem))
+        }
+      }
       if (verify || action === 'SAVE_ITEM') attempt.current ??= crypto.randomUUID()
       const response = await apiRequest<Envelope<Entry>>(`${endpoint}/${entry.id}/actions`, {
         method: 'POST',
@@ -275,8 +326,10 @@ export function RecoveryAction({ entry, action, onBack, onSaved }: {
           location: value('location'), disposition: value('disposition'),
           quantity: action === 'SAVE_ITEM' ? count : undefined,
           itemCodes: bulkAction ? selectedChoice!.items.slice(0, count).map(item => item.code) : undefined,
+          attachmentIds,
         }),
       })
+      setAttachments([])
       if (verify) {
         attempt.current = null
         const document = form.elements.namedItem('document')
@@ -388,8 +441,60 @@ export function RecoveryAction({ entry, action, onBack, onSaved }: {
       {action === 'RECORD_LIQUIDATION' && <label className="flex items-center gap-2 sm:col-span-2">
         <input type="checkbox" name="disposition" value="LIQUIDATED" required /> Tôi xác nhận kiện hàng đã được xử lý thanh lý theo biên bản
       </label>}
-      {needsNote.has(action) && <label className="sm:col-span-2">{action === 'COMPLETE' ? 'Biên bản và kết quả xử lý khóa' : action === 'RECORD_LIQUIDATION' ? 'Căn cứ, biên bản và kết quả xử lý thanh lý' : 'Ghi chú và căn cứ'}
+      {needsNote.has(action) && <label className="sm:col-span-2">{action === 'COMPLETE' ? 'Biên bản và kết quả xử lý khóa' : action === 'RECORD_LIQUIDATION' ? 'Căn cứ, biên bản và kết quả xử lý thanh lý' : action === 'RESUME' ? 'Nội dung phản hồi và kết luận cho khách hàng' : 'Ghi chú và căn cứ'}
         <textarea className={field} name="note" maxLength={4000} rows={3} required /></label>}
+      {supportsAttachments.has(action) && (
+        <div className="space-y-2 sm:col-span-2">
+          <label className="block text-xs font-medium text-stone-700">
+            Tệp / hình ảnh đính kèm (tối đa 10 tệp: JPG, PNG, WebP, PDF)
+            <input
+              type="file"
+              multiple
+              accept="image/jpeg,image/png,image/webp,application/pdf"
+              className="mt-1 block w-full text-xs"
+              disabled={busy}
+              onChange={event => {
+                const picked = Array.from(event.target.files || [])
+                const allowedMime = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf'])
+                const allowedExt = /\.(jpe?g|png|webp|pdf)$/i
+                const invalid = picked.find(item => !(allowedMime.has(item.type) || (!item.type && allowedExt.test(item.name))))
+                if (invalid) {
+                  setError(`Tệp "${invalid.name}" không đúng định dạng. Chỉ hỗ trợ ảnh JPG, PNG, WebP hoặc tệp PDF.`)
+                  event.currentTarget.value = ''
+                  return
+                }
+                const tooLarge = picked.find(item => item.size > 30 * 1024 * 1024)
+                if (tooLarge) {
+                  setError(`Tệp "${tooLarge.name}" vượt quá dung lượng tối đa 30 MB.`)
+                  event.currentTarget.value = ''
+                  return
+                }
+                setError('')
+                if (picked.length > 0) {
+                  setAttachments(prev => [...prev, ...picked].slice(0, 10))
+                }
+                event.currentTarget.value = ''
+              }}
+            />
+          </label>
+          {attachments.length > 0 && (
+            <ul className="flex flex-wrap gap-2">
+              {attachments.map((fileItem, idx) => (
+                <li key={`${fileItem.name}-${idx}`} className="flex items-center gap-1.5 rounded-md border border-stone-200 bg-stone-50 px-2.5 py-1 text-xs text-stone-700">
+                  <span className="max-w-[200px] truncate">{fileItem.name}</span>
+                  <button
+                    type="button"
+                    className="font-semibold text-red-700 hover:text-red-900"
+                    onClick={() => setAttachments(prev => prev.filter((_, i) => i !== idx))}
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </fieldset>
     <div className="flex justify-end gap-2">
       <Button type="button" variant="outline" size="sm" disabled={busy} onClick={onBack}>Quay lại</Button>
@@ -634,7 +739,124 @@ export function RecoveryDetails({ entry, actionArea, actionOpen = false }: { ent
       {entry.canViewSourceGoods && <RecoveryPreparation id={entry.id} />}
       <RecoveryAttendance entry={entry} />
       {entry.reasonNote && <p className="whitespace-pre-wrap break-words">{displayRoleNames(entry.reasonNote)}</p>}
-      {entry.customerNote && <p className="whitespace-pre-wrap break-words">Phản hồi của khách · {displayRoleNames(entry.customerNote)}</p>}
+      {(entry.communications?.length ?? 0) > 0 ? (
+        <section aria-label="Lịch sử trao đổi và phản hồi" className="space-y-2.5 rounded-xl border border-stone-200 bg-stone-50/70 p-3.5 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h5 className="font-bold text-stone-900">Lịch sử trao đổi &amp; khiếu nại ({entry.communications!.length} lượt)</h5>
+            {entry.reply && entry.reply !== 'NO_RESPONSE' && (
+              <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ring-1 ${entry.reply === 'DISPUTED'
+                ? 'bg-red-100 text-red-900 ring-red-300'
+                : entry.reply === 'WILL_ATTEND'
+                  ? 'bg-emerald-100 text-emerald-900 ring-emerald-300'
+                  : 'bg-amber-100 text-amber-900 ring-amber-300'}`}>
+                {replies[entry.reply] || entry.reply}
+              </span>
+            )}
+          </div>
+          <ol className="space-y-2.5">
+            {entry.communications!.map((item, idx) => {
+              const isCustomer = item.role === 'CUSTOMER'
+              const isDispute = item.action === 'DISPUTE'
+              const cardClass = isCustomer
+                ? (isDispute ? 'border-red-300 bg-red-50 text-red-950' : 'border-emerald-300 bg-emerald-50 text-emerald-950')
+                : 'border-blue-300 bg-blue-50 text-blue-950'
+              const actionText = item.action in actionLabels
+                ? actionLabels[item.action as Action]
+                : (replies[item.action] || 'Phản hồi')
+              return (
+                <li key={`${item.time}-${idx}`} className={`rounded-lg border px-3.5 py-2.5 ${cardClass}`}>
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <span className="font-bold">
+                      {isCustomer ? 'Khách hàng' : item.role === 'BUSINESS' ? 'Chủ doanh nghiệp' : 'Quản lý cơ sở'}
+                      {item.actorName ? ` · ${item.actorName}` : ''} · {actionText}
+                    </span>
+                    <span className="opacity-80">{dateLabel(item.time)}</span>
+                  </div>
+                  {item.note && (
+                    <p className="mt-1 whitespace-pre-wrap break-words font-semibold">
+                      {displayRoleNames(item.note)}
+                    </p>
+                  )}
+                  {!!item.attachmentIds?.length && (
+                    <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                      {item.attachmentIds.map((fileId, fileIdx) => (
+                        <EvidenceImagePreview key={fileId} id={fileId} label={`Tệp đính kèm ${fileIdx + 1}`} />
+                      ))}
+                    </div>
+                  )}
+                </li>
+              )
+            })}
+          </ol>
+        </section>
+      ) : (
+        <>
+          {(entry.customerNote || (entry.reply && entry.reply !== 'NO_RESPONSE')) && (() => {
+            const replyTone = entry.reply === 'DISPUTED'
+              ? 'border-red-300 bg-red-50 text-red-950'
+              : entry.reply === 'WILL_ATTEND'
+                ? 'border-emerald-300 bg-emerald-50 text-emerald-950'
+                : entry.reply === 'CANNOT_ATTEND'
+                  ? 'border-amber-300 bg-amber-50 text-amber-950'
+                  : 'border-stone-300 bg-stone-50 text-stone-900'
+            const badgeTone = entry.reply === 'DISPUTED'
+              ? 'bg-red-100 text-red-900 ring-red-300'
+              : entry.reply === 'WILL_ATTEND'
+                ? 'bg-emerald-100 text-emerald-900 ring-emerald-300'
+                : entry.reply === 'CANNOT_ATTEND'
+                  ? 'bg-amber-100 text-amber-900 ring-amber-300'
+                  : 'bg-stone-200 text-stone-800 ring-stone-300'
+            return (
+              <section aria-label="Phản hồi của khách" className={`rounded-xl border-2 px-4 py-3 text-sm shadow-xs ${replyTone}`}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-bold">Phản hồi của khách</span>
+                  {entry.reply && entry.reply !== 'NO_RESPONSE' && (
+                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ring-1 ${badgeTone}`}>
+                      {replies[entry.reply] || entry.reply}
+                    </span>
+                  )}
+                </div>
+                {entry.customerNote && (
+                  <p className="mt-1.5 whitespace-pre-wrap break-words font-semibold">
+                    {displayRoleNames(entry.customerNote)}
+                  </p>
+                )}
+                {!!entry.customerAttachmentIds?.length && (
+                  <div className="mt-2.5 grid gap-2 sm:grid-cols-3">
+                    {entry.customerAttachmentIds.map((fileId, idx) => (
+                      <EvidenceImagePreview key={fileId} id={fileId} label={`Tệp đính kèm ${idx + 1}`} />
+                    ))}
+                  </div>
+                )}
+              </section>
+            )
+          })()}
+          {(entry.managerResponseNote || !!entry.managerAttachmentIds?.length) && (
+            <section aria-label="Phản hồi của Quản lý" className="rounded-xl border-2 border-blue-300 bg-blue-50 px-4 py-3 text-sm text-blue-950 shadow-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-bold">Phản hồi từ Quản lý / Cơ sở</span>
+                {entry.managerRespondedAt && (
+                  <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-900 ring-1 ring-blue-300">
+                    {dateLabel(entry.managerRespondedAt)}
+                  </span>
+                )}
+              </div>
+              {entry.managerResponseNote && (
+                <p className="mt-1.5 whitespace-pre-wrap break-words font-semibold">
+                  {displayRoleNames(entry.managerResponseNote)}
+                </p>
+              )}
+              {!!entry.managerAttachmentIds?.length && (
+                <div className="mt-2.5 grid gap-2 sm:grid-cols-3">
+                  {entry.managerAttachmentIds.map((fileId, idx) => (
+                    <EvidenceImagePreview key={fileId} id={fileId} label={`Tệp phản hồi ${idx + 1}`} />
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+        </>
+      )}
       {entry.report && <p className="whitespace-pre-wrap break-words">Biên bản · {displayRoleNames(entry.report)}</p>}
       {entry.attendanceEvidenceId && <div className="space-y-2 border-t border-stone-200 pt-2">
         <p className="text-xs font-semibold text-stone-700">Ghi nhận khách đến hoặc vắng mặt</p>
@@ -795,7 +1017,7 @@ export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, man
       const pendingItems = entry.items.filter(isPendingItem).length
       const closed = entry.stage === 'COMPLETED' || entry.stage === 'CANCELLED'
       const currentDueAt = entry.actionDueAt || entry.deadlineAt
-      const replyActions = visibleRecoveryActions(entry.actions, entry.stage, entry.responseDueAt)
+      const replyActions = visibleRecoveryActions(entry.actions, entry.stage, entry.responseDueAt, undefined, entry.reply)
         .filter(key => key === 'WILL_ATTEND' || key === 'CANNOT_ATTEND' || key === 'DISPUTE')
       return <section key={entry.id} ref={entry.id === targetId ? targetCard : undefined} tabIndex={-1} className="recovery-case" aria-label={`Hồ sơ thu hồi ${entry.reservationCode || entry.unitCode}`}>
         <div className="recovery-case-header">
@@ -855,7 +1077,7 @@ export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, man
             if (!keepOpen) setAction(undefined)
           }} /> : !!detailEntry.actions.length && <div className="recovery-detail-actions">
             <h4>Thao tác với hồ sơ</h4>
-            <div>{visibleRecoveryActions(detailEntry.actions, detailEntry.stage, detailEntry.responseDueAt).map(key => <Button key={key} size="sm" variant={key === primaryAction(detailEntry) ? 'primary' : 'outline'}
+            <div>{visibleRecoveryActions(detailEntry.actions, detailEntry.stage, detailEntry.responseDueAt, undefined, detailEntry.reply).map(key => <Button key={key} size="sm" variant={key === primaryAction(detailEntry) ? 'primary' : 'outline'}
               onClick={() => openAction(detailEntry, key)}>{entryActionLabel(detailEntry, key)}</Button>)}</div>
           </div>} />
       </div>
