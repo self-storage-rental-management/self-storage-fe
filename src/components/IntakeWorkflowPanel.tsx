@@ -3,6 +3,7 @@ import { apiRequest } from '../services/apiClient'
 import { uploadCheckInEvidence } from '../services/checkInApi'
 import VietnameseDateInput from './VietnameseDateInput'
 import { Badge, Button } from './ui'
+import { canResolveAttendanceReview } from '../domain/intakePermissions'
 
 interface VerificationAttemptView {
   attemptNumber?: number | null
@@ -32,6 +33,7 @@ interface State {
   attendanceReviewDeadlineAt?: string | null
   attendanceReviewStatus?: string | null
   firstIdentityVerificationAt?: string | null
+  inspectionClockStartedAt?: string | null
   inspectionCompletionDeadlineAt?: string | null
   verificationAttemptCount?: number | null
   maxVerificationAttempts?: number | null
@@ -279,14 +281,18 @@ export default function IntakeWorkflowPanel({
   const usedExtensions = state.setupExtensionCount ?? 0
   const remainingExtensions = Math.max(0, maxExtensions - usedExtensions)
   const maxDaysPerExtension = Math.max(1, Math.floor((state.extensionMaxHours ?? (state.setupExtensionDays ?? 1) * 24) / 24))
-  const verificationStarted = Boolean(state.firstIdentityVerificationAt)
+  const inspectionClockStartedAt = state.inspectionClockStartedAt || state.firstIdentityVerificationAt
+  // The 72h window is anchored on the customer arrival confirmation, not on identity verification.
+  const clockStarted = Boolean(inspectionClockStartedAt)
   const verificationCount = state.verificationAttemptCount ?? 0
   const verificationLimit = state.maxVerificationAttempts ?? 2
   const verificationLocked = state.verificationStatus === 'PASSED'
     || state.verificationStatus === 'FAILED_MAX_ATTEMPTS'
     || verificationCount >= verificationLimit
+  // Attendance review and facility deadline changes are Manager-only in the backend.
+  const isManager = canResolveAttendanceReview(role)
 
-  const activeDeadline = verificationStarted
+  const activeDeadline = clockStarted
     ? (state.inspectionCompletionDeadlineAt || state.remainderDeadlineAt || state.resultConfirmationDueAt)
     : arrivalDeadline
   const remaining = formatRemaining(activeDeadline ? Date.parse(activeDeadline) - now : null)
@@ -300,7 +306,7 @@ export default function IntakeWorkflowPanel({
     : null
 
   if (mode === 'setup') {
-    if (!setupCutoff || verificationStarted || state.readyAt) return null
+    if (!setupCutoff || clockStarted || state.readyAt) return null
     const setupRemaining = formatRemaining(Date.parse(setupCutoff) - now)
     return (
       <div className="rounded-lg border border-stone-200 bg-stone-50/80 px-3.5 py-2.5 text-sm">
@@ -320,13 +326,13 @@ export default function IntakeWorkflowPanel({
 
   if (mode === 'staff-visit') {
     const visitRemaining = formatRemaining(
-      (verificationStarted ? state.inspectionCompletionDeadlineAt : arrivalDeadline)
-        ? Date.parse((verificationStarted ? state.inspectionCompletionDeadlineAt : arrivalDeadline)!) - now
+      (clockStarted ? state.inspectionCompletionDeadlineAt : arrivalDeadline)
+        ? Date.parse((clockStarted ? state.inspectionCompletionDeadlineAt : arrivalDeadline)!) - now
         : null,
     )
     return (
       <section className="space-y-3 rounded-xl border border-stone-200 bg-white p-4 text-left text-sm text-stone-800">
-        {verificationStarted ? (
+        {clockStarted ? (
           <>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
@@ -347,17 +353,17 @@ export default function IntakeWorkflowPanel({
             </div>
             <p className="text-xs text-stone-600">
               {state.inspectionCompletedAt
-                ? 'Buổi kiểm kê hàng hóa đã hoàn tất trong thời hạn 72 giờ kể từ khi xác minh danh tính.'
+                ? 'Buổi kiểm kê hàng hóa đã hoàn tất trong thời hạn 72 giờ kể từ khi xác nhận khách đến.'
                 : state.verificationStatus === 'PASSED'
-                  ? `Thời hạn 72 giờ hoàn tất kiểm kê được tính từ lúc xác minh danh tính lần đầu (${show(state.firstIdentityVerificationAt)}). Nhân viên cần hoàn tất kiểm kê hàng hóa trước hạn chót bên dưới.`
+                  ? `Thời hạn 72 giờ hoàn tất kiểm kê được tính từ lúc xác nhận khách đến (${show(inspectionClockStartedAt)}). Nhân viên cần hoàn tất kiểm kê hàng hóa trước hạn chót bên dưới.`
                   : state.verificationStatus === 'FAILED_MAX_ATTEMPTS'
                     ? 'Khách đã hết 2 lần xác minh danh tính. Hồ sơ chuyển xử lý không đạt kiểm kê.'
-                    : `Thời hạn 72 giờ hoàn tất kiểm kê đã bắt đầu tính từ lần xác minh danh tính đầu tiên (${show(state.firstIdentityVerificationAt)}). Cần xác minh lại danh tính và hoàn tất kiểm kê trước hạn chót bên dưới.`}
+                    : `Thời hạn 72 giờ hoàn tất kiểm kê đã bắt đầu tính từ lúc xác nhận khách đến (${show(inspectionClockStartedAt)}). Cần xác minh danh tính và hoàn tất kiểm kê trước hạn chót bên dưới.`}
             </p>
             <dl className="grid gap-2.5 sm:grid-cols-3">
               <div className="rounded-lg border border-stone-200 bg-stone-50/80 px-3 py-2.5">
                 <dt className="text-xs text-stone-500">Bắt đầu tính giờ kiểm kê</dt>
-                <dd className="mt-0.5 font-semibold text-stone-900">{show(state.firstIdentityVerificationAt)}</dd>
+                <dd className="mt-0.5 font-semibold text-stone-900">{show(inspectionClockStartedAt)}</dd>
               </div>
               <div className="rounded-lg border border-stone-200 bg-stone-50/80 px-3 py-2.5">
                 <dt className="text-xs text-stone-500">Hạn hoàn tất (72 giờ)</dt>
@@ -393,6 +399,61 @@ export default function IntakeWorkflowPanel({
               <Badge variant={visitRemaining.expired ? 'error' : visitRemaining.urgent ? 'warning' : 'muted'}>
                 {visitRemaining.text}
               </Badge>
+            )}
+          </div>
+        )}
+
+        {state.attendanceReviewStatus === 'PENDING' && (
+          <div className="space-y-2.5 rounded-lg border border-amber-300 bg-amber-50/90 p-3 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-semibold text-amber-950">Đối soát khách đến phút cuối (quá hạn 30 phút)</span>
+              <Badge variant="warning">Chờ đối soát</Badge>
+            </div>
+            <p className="text-stone-600">
+              Đơn hàng đã quá hạn đến kiểm kê nhưng còn trong khung đối soát 30 phút (Hạn đối soát: {show(state.attendanceReviewDeadlineAt)}).
+              {isManager
+                ? 'Quản lý có thể xác nhận khách đến để tiếp tục xác minh & kiểm kê ngay, hoặc chốt vắng mặt.'
+                : 'Đang chờ Quản lý kết luận đối soát. Nhân viên chưa thể tiếp tục xác minh và kiểm kê.'}
+            </p>
+            {/* Only a Manager may conclude the attendance review; the backend rejects Staff. */}
+            {isManager && (
+              <>
+                <input
+                  className="block w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs text-stone-900"
+                  placeholder="Lý do / bằng chứng đối soát (bắt buộc khi duyệt đúng hạn hoặc ngoại lệ)"
+                  value={reason}
+                  onChange={e => setReason(e.target.value)}
+                />
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="primary"
+                    disabled={busy || !reason.trim()}
+                    onClick={() => void change('RESOLVE_REVIEW', { outcome: 'APPROVED_ON_TIME' })}
+                  >
+                    Chấp nhận đến đúng hạn
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="danger"
+                    disabled={busy}
+                    onClick={() => void change('RESOLVE_REVIEW', { outcome: 'CONFIRMED_ABSENT' })}
+                  >
+                    Xác nhận vắng mặt
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={busy || !reason.trim()}
+                    onClick={() => void change('RESOLVE_REVIEW', { outcome: 'FACILITY_EXCEPTION' })}
+                  >
+                    Ngoại lệ cơ sở
+                  </Button>
+                </div>
+              </>
             )}
           </div>
         )}
@@ -455,7 +516,7 @@ export default function IntakeWorkflowPanel({
             <dd className="mt-0.5 font-semibold text-stone-900">{show(arrivalDeadline)}</dd>
           </div>
         )}
-        {mode !== 'inspection' && !verificationStarted && setupCutoff && (
+        {mode !== 'inspection' && !clockStarted && setupCutoff && (
           <div className="rounded-lg border border-stone-200 bg-stone-50/80 px-3 py-2.5">
             <dt className="text-xs text-stone-500">Hạn báo chuẩn bị xong</dt>
             <dd className="mt-0.5 font-semibold text-stone-900">
@@ -472,7 +533,7 @@ export default function IntakeWorkflowPanel({
             {state.appointmentAt ? show(state.appointmentAt) : <span className="text-xs font-normal text-stone-500">Chọn ngày giờ bên dưới</span>}
           </dd>
         </div>
-        {!verificationStarted && (
+        {!clockStarted && (
           <div className="rounded-lg border border-stone-200 bg-stone-50/80 px-3 py-2.5">
             <dt className="text-xs text-stone-500">Số lần gia hạn còn lại</dt>
             <dd className="mt-0.5 font-semibold text-stone-900">
@@ -496,12 +557,18 @@ export default function IntakeWorkflowPanel({
 
       {state.attendanceReviewStatus === 'PENDING' && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-950">
-          <p className="font-semibold">Đang đối soát thời điểm khách đến</p>
+          <p className="font-semibold">Đang đối soát thời điểm khách đến (quá hạn 30 phút)</p>
           <p className="mt-0.5">Hạn xử lý đối soát: {show(state.attendanceReviewDeadlineAt)}</p>
+          {role !== 'CUSTOMER' && (
+            <p className="mt-1 text-stone-600">
+              Đơn hàng quá hạn đến nhưng đang trong khung 30 phút đối soát.
+              {isManager ? ' Quản lý có thể kết luận đối soát ngay bên dưới.' : ' Đang chờ Quản lý kết luận đối soát.'}
+            </p>
+          )}
         </div>
       )}
 
-      {verificationStarted && (
+      {clockStarted && (
         <div className="space-y-2 rounded-lg border border-stone-200 bg-stone-50/80 p-3.5 text-xs text-stone-800">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-sm font-semibold text-stone-900">
@@ -517,15 +584,15 @@ export default function IntakeWorkflowPanel({
           </div>
           <p className="text-stone-600">
             {state.inspectionCompletedAt
-              ? 'Buổi kiểm kê hàng hóa đã hoàn tất trong thời hạn 72 giờ kể từ khi xác minh danh tính.'
+              ? 'Buổi kiểm kê hàng hóa đã hoàn tất trong thời hạn 72 giờ kể từ khi xác nhận khách đến.'
               : state.verificationStatus === 'PASSED'
-                ? `Thời hạn 72 giờ hoàn tất kiểm kê được tính từ lúc xác minh danh tính lần đầu (${show(state.firstIdentityVerificationAt)}). Cần hoàn tất kiểm kê hàng hóa trước hạn chót bên dưới.`
-                : `Thời hạn 72 giờ hoàn tất kiểm kê đã bắt đầu tính từ lần xác minh danh tính đầu tiên (${show(state.firstIdentityVerificationAt)}).`}
+                ? `Thời hạn 72 giờ hoàn tất kiểm kê được tính từ lúc xác nhận khách đến (${show(inspectionClockStartedAt)}). Cần hoàn tất kiểm kê hàng hóa trước hạn chót bên dưới.`
+                : `Thời hạn 72 giờ hoàn tất kiểm kê đã bắt đầu tính từ lúc xác nhận khách đến (${show(inspectionClockStartedAt)}).`}
           </p>
           <dl className="grid gap-2 sm:grid-cols-3">
             <div className="rounded-md border border-stone-200 bg-white px-3 py-2">
               <dt className="text-[11px] text-stone-500">Bắt đầu tính giờ kiểm kê</dt>
-              <dd className="mt-0.5 font-semibold text-stone-900">{show(state.firstIdentityVerificationAt)}</dd>
+              <dd className="mt-0.5 font-semibold text-stone-900">{show(inspectionClockStartedAt)}</dd>
             </div>
             <div className="rounded-md border border-stone-200 bg-white px-3 py-2">
               <dt className="text-[11px] text-stone-500">Hạn hoàn tất (72 giờ)</dt>
@@ -558,7 +625,7 @@ export default function IntakeWorkflowPanel({
       {state.exceptionReason && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">Điều chỉnh từ cơ sở: {state.exceptionReason}{state.exceptionDueAt ? ` · Hạn mới ${show(state.exceptionDueAt)}` : ''}</p>}
       {state.resultConfirmationDueAt && <p className="text-xs text-stone-600">Vui lòng xác nhận hoặc góp ý kết quả kiểm kê trong vòng 48 giờ.</p>}
 
-      {role === 'CUSTOMER' && !verificationStarted && !state.inspectionFailureReason && (
+      {role === 'CUSTOMER' && !clockStarted && !state.inspectionFailureReason && (
         <div className="space-y-3 border-t border-stone-200 pt-3">
           {!hideCompleteSetupButton && !state.readyAt && (
             <div>
@@ -675,12 +742,14 @@ export default function IntakeWorkflowPanel({
         </div>
       )}
 
-      {(role === 'MANAGER' || role === 'BUSINESS') && (
+      {(role === 'STAFF' || role === 'MANAGER' || role === 'BUSINESS') && (
         <div className="space-y-3 border-t border-stone-200 pt-3 text-xs">
-          {role === 'MANAGER' && state.attendanceReviewStatus === 'PENDING' && (
+          {/* Concluding the attendance review and changing the facility deadline are
+              Manager-only actions; the backend rejects Staff for both. */}
+          {isManager && state.attendanceReviewStatus === 'PENDING' && (
             <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50/70 p-3">
               <p className="font-semibold text-amber-950">Kết luận đối soát khách đến phút cuối</p>
-              <input className="block w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5" placeholder="Lý do / bằng chứng đối soát" value={reason} onChange={e => setReason(e.target.value)} />
+              <input className="block w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5" placeholder="Lý do / bằng chứng đối soát (bắt buộc khi duyệt đúng hạn hoặc ngoại lệ)" value={reason} onChange={e => setReason(e.target.value)} />
               <div className="flex flex-wrap gap-2">
                 <Button type="button" size="sm" variant="primary" disabled={busy || !reason.trim()} onClick={() => void change('RESOLVE_REVIEW', { outcome: 'APPROVED_ON_TIME' })}>Chấp nhận đến đúng hạn</Button>
                 <Button type="button" size="sm" variant="danger" disabled={busy} onClick={() => void change('RESOLVE_REVIEW', { outcome: 'CONFIRMED_ABSENT' })}>Xác nhận vắng mặt</Button>
@@ -688,7 +757,7 @@ export default function IntakeWorkflowPanel({
               </div>
             </div>
           )}
-          {role === 'MANAGER' && (
+          {isManager && (
             <div className="space-y-2">
               <VietnameseDateTimeField
                 label="Ngày giờ mới theo giờ Việt Nam (dd/mm/yyyy)"
