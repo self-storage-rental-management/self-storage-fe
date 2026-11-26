@@ -642,34 +642,59 @@ export default function ManagerUnitTypeModal({ open, facilityId, onClose, onCrea
           {!goodsCatalog ? <p className="text-sm text-stone-500">Đang tải danh mục hàng hóa…</p> : activeCategories.map(category => {
             const checked = selectedCategories.includes(category.id)
             const materials = category.materials.filter(material => material.status === 'ACTIVE')
-            const allMaterialsChecked = materials.length > 0 && materials.every(m => selectedMaterials.includes(m.id))
+            const selectedCatMaterialsCount = materials.filter(m => selectedMaterials.includes(m.id)).length
+            const allMaterialsChecked = materials.length > 0 && selectedCatMaterialsCount === materials.length
             return <details key={category.id} className="rounded-lg border border-stone-200">
-              <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold text-stone-900"><span>{category.label}</span><span className="text-xs font-normal text-stone-500">{checked ? 'Đã chọn' : 'Chưa chọn'}</span></summary>
+              <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold text-stone-900 select-none hover:bg-stone-50 transition-colors">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onClick={event => event.stopPropagation()}
+                    onChange={event => {
+                      setMetadataDirty(true)
+                      const isChecking = event.target.checked
+                      setSelectedCategories(current => isChecking ? [...new Set([...current, category.id])] : current.filter(id => id !== category.id))
+                      if (!isChecking) {
+                        setSelectedMaterials(current => current.filter(id => !materials.some(material => material.id === id)))
+                      } else {
+                        const detailsEl = (event.currentTarget as HTMLElement).closest('details')
+                        if (detailsEl) detailsEl.open = true
+                      }
+                    }}
+                    className="h-4 w-4 rounded border-stone-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+                  />
+                  <span>{category.label}</span>
+                  {checked && (
+                    <span className="text-xs font-normal text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                      {selectedCatMaterialsCount > 0 ? `${selectedCatMaterialsCount} vật liệu` : 'Không có vật liệu chính'}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-normal text-stone-500">{checked ? 'Đã chọn' : 'Chưa chọn'}</span>
+                  <span className="text-stone-400 text-xs">▼</span>
+                </div>
+              </summary>
               <div className="space-y-3 border-t border-stone-200 p-4">
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={checked} onChange={event => {
-                    setMetadataDirty(true)
-                    setSelectedCategories(current => event.target.checked ? [...new Set([...current, category.id])] : current.filter(id => id !== category.id))
-                    if (!event.target.checked) setSelectedMaterials(current => current.filter(id => !materials.some(material => material.id === id)))
-                  }} /> Cho phép lưu nhóm hàng này
-                </label>
-                {checked && materials.length > 0 && (
+                {materials.length === 0 ? (
+                  <p className="text-xs text-stone-500 italic">Nhóm hàng này không có danh mục vật liệu phụ thuộc.</p>
+                ) : (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between pt-1">
-                      <span className="text-xs font-medium text-stone-600">Vật liệu chính:</span>
+                      <span className="text-xs font-medium text-stone-600">Vật liệu chính (tùy chọn):</span>
                       <button
                         type="button"
                         className="text-xs font-semibold text-amber-700 hover:text-amber-800 hover:underline cursor-pointer"
                         onClick={() => {
                           setMetadataDirty(true)
-                          setSelectedMaterials(current => {
-                            const materialIds = materials.map(m => m.id)
-                            if (allMaterialsChecked) {
-                              return current.filter(id => !materialIds.includes(id))
-                            } else {
-                              return [...new Set([...current, ...materialIds])]
-                            }
-                          })
+                          const materialIds = materials.map(m => m.id)
+                          if (allMaterialsChecked) {
+                            setSelectedMaterials(current => current.filter(id => !materialIds.includes(id)))
+                          } else {
+                            setSelectedCategories(current => [...new Set([...current, category.id])])
+                            setSelectedMaterials(current => [...new Set([...current, ...materialIds])])
+                          }
                         }}
                       >
                         {allMaterialsChecked ? "Bỏ chọn tất cả" : "Chọn tất cả"}
@@ -683,10 +708,16 @@ export default function ManagerUnitTypeModal({ open, facilityId, onClose, onCrea
                             checked={selectedMaterials.includes(material.id)}
                             onChange={event => {
                               setMetadataDirty(true)
-                              setSelectedMaterials(current => event.target.checked ? [...new Set([...current, material.id])] : current.filter(id => id !== material.id))
+                              if (event.target.checked) {
+                                setSelectedCategories(current => [...new Set([...current, category.id])])
+                                setSelectedMaterials(current => [...new Set([...current, material.id])])
+                              } else {
+                                setSelectedMaterials(current => current.filter(id => id !== material.id))
+                              }
                             }}
+                            className="h-4 w-4 rounded border-stone-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
                           />
-                          {material.label}{material.fragile ? ' · Dễ vỡ' : ''}
+                          <span className="text-stone-800">{material.label}{material.fragile ? ' · Dễ vỡ' : ''}</span>
                         </label>
                       ))}
                     </div>
