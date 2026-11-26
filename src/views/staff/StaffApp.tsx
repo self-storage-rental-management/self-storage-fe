@@ -44,6 +44,7 @@ import StaffUnitReleasePanel from "./StaffUnitReleasePanel"
 import StaffDailyTaskQueue from "./StaffDailyTaskQueue"
 import RecoveryTaskDetail from "../rental-api/RecoveryTaskDetail"
 import ReturnApiPanel from "../return-api/ReturnApiPanel"
+import { ViolationRecoveryEntry } from "../return-api/ViolationRecoveryPanel"
 import {
   archiveCompletedCheckIn,
   listCheckIns,
@@ -2972,6 +2973,7 @@ export default function StaffApp({
                 eyebrow="CỔNG NHÂN VIÊN · KIỂM KÊ & BẰNG CHỨNG"
                 title="Trả kho & nghiệm thu"
                 subtitle="Đối chiếu hiện trạng, ghi nhận quyết toán và hoàn cọc trên dữ liệu máy chủ"
+                action={<ViolationRecoveryEntry />}
               />
               <ReturnApiPanel role="staff" onChanged={refreshCredentialAlerts} />
             </div>

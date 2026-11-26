@@ -28,6 +28,7 @@ import RenewalOperationsPanel, { RenewalDocumentHistory, RenewalPaymentHistory }
 import RenewalDecisionModal from "./RenewalDecisionModal"
 import CustomerRenewalRequestModal from "../customer/CustomerRenewalRequestModal"
 import ReturnApiPanel from "../return-api/ReturnApiPanel"
+import { ViolationRecoveryEntry } from "../return-api/ViolationRecoveryPanel"
 import {
   rentalDate,
   rentalMoney,
@@ -365,10 +366,13 @@ function WorkspaceData({
   return (
     <div className="space-y-5">
       <section className="space-y-5 rounded-2xl border border-stone-200 bg-white p-4 sm:p-5">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{role === 'customer' ? 'Kho của bạn' : 'Quản lý hợp đồng'}</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-stone-900">{role === "manager" ? "Hồ sơ thuê & Gia hạn" : "Hồ sơ thuê"}</h1>
-          <p className="mt-1 text-sm text-stone-500">Thông tin hợp đồng, thời hạn thuê, gia hạn và trả kho trong cùng một nơi.</p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{role === 'customer' ? 'Kho của bạn' : 'Quản lý hợp đồng'}</p>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight text-stone-900">{role === "manager" ? "Hồ sơ thuê & Gia hạn" : "Hồ sơ thuê"}</h1>
+            <p className="mt-1 text-sm text-stone-500">Thông tin hợp đồng, thời hạn thuê, gia hạn và trả kho trong cùng một nơi.</p>
+          </div>
+          {role === 'customer' && <ViolationRecoveryEntry label="Theo dõi thu hồi kho" />}
         </div>
       <div className={role === "customer" ? "grid grid-cols-2 gap-2 lg:grid-cols-4" : "grid gap-3 sm:grid-cols-2"}>
         {[
