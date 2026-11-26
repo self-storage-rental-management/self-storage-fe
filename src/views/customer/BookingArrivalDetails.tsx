@@ -1,4 +1,3 @@
-import { HANDOVER_TERMS_NOTICE } from '../../domain/reservationCheckInPolicy'
 import type { ReservationQuote } from '../../services/customerReservationApi'
 import { formatVndAmount } from '../../i18n/currency'
 import { rentalEndDateForDisplay } from '../../domain/rentalTimeline'
@@ -59,7 +58,8 @@ export default function BookingArrivalDetails(p: Props) {
       <span className="space-y-1 leading-5">
         <span className="block">Tôi đã đọc, hiểu và đồng ý:</span>
         <ul className="list-disc space-y-0.5 pl-5">
-          <li>{HANDOVER_TERMS_NOTICE} Sau giờ hẹn 12 giờ, nếu bạn vẫn chưa đến, hệ thống sẽ nhắc bạn nhận kho. Nếu đơn vẫn còn chờ xử lý, hệ thống nhắc mỗi 2 giờ trong 24 giờ cuối trước hạn đến nhận kho, từ mốc còn 24 giờ đến mốc còn 2 giờ.</li>
+          <li>Đến nhận kho trong 7 ngày (ngày hẹn tính là ngày đầu), mang CCCD gốc hợp lệ; hoàn tất bàn giao trong 72 giờ từ lần đối chiếu CCCD đầu tiên.</li>
+          <li>CCCD lệch tối đa 3 số được sửa một lần sau xác minh; lệch từ 4 số sẽ bị từ chối. Không nhận kho đúng hạn hoặc bị từ chối do lệch CCCD: mất khoản giữ chỗ 20% và cần đặt đơn mới.</li>
           {hasSetupEarlyExitTerms && <li>Điều khoản trả kho trong thời gian chuẩn bị của báo giá này.</li>}
         </ul>
       </span>
