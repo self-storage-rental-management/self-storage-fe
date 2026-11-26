@@ -1,9 +1,11 @@
 import { recordDisplayCode, receiptDisplayCode } from '../../utils/recordDisplayCode'
+import { compareReturnQueue } from '../../utils/returnQueueSort'
 import { ClearanceStatus, CustomerClearance, ReturnContract, ReturnPreparation } from './ReturnClearance'
 import ReturnAttendance, { requiresReturnAttendance } from './ReturnAttendance'
 import { ViolationRecoveryEntry } from './ViolationRecoveryPanel'
 import { listMaintenanceStaff } from '../../services/maintenanceApi'
 import { getRental } from '../../services/rentalApi'
+import { getCustomerReservation, extendCustomerInventoryReturnWindow, resolveCustomerInventory } from '../../services/customerReservationApi'
 import ProcessingLeaseBoundary from '../../components/ProcessingLeaseBoundary'
 import ReturnPolicyNotice from '../../components/ReturnPolicyNotice'
 import EmergencyContactsPanel from '../../components/EmergencyContactsPanel'
@@ -67,19 +69,6 @@ const returnStatusOptions: Array<[ApiReturn['status'] | 'all', string]> = [
   ['recovery_required', 'Cần xử lý khách không đến'],
   ['completed', 'Đã hoàn tất'],
 ]
-
-function staffQueuePriority(record: ApiReturn, today: string) {
-  if (record.status === 'completed') return 5
-  if (!['requested', 'scheduled', 'payment_due', 'refund_pending', 'recovery_required'].includes(record.status)) return 4
-  if (!record.scheduledDate) return 3
-  if (record.scheduledDate < today) return 0
-  return record.scheduledDate === today ? 1 : 2
-}
-
-function queueTimestamp(record: ApiReturn) {
-  const timestamp = record.status === 'completed' ? record.completedAt ?? record.requestedAt : record.requestedAt
-  return Date.parse(timestamp ?? '') || 0
-}
 
 function returnRecoveryCutoff(value: string | null | undefined) {
   if (!value) return null
@@ -145,7 +134,7 @@ export function ReturnSummary({ record, hideTerminationFee = false, hideHeader =
       {inventoryMismatch && <div className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-950">
         <p className="font-bold">Đơn trả kho do kiểm kê sai lệch</p>
         <p className="mt-1">Tính tiền theo số ngày sử dụng thực tế (Đơn giá tháng × Số ngày / 30).</p>
-        <p className="mt-1 text-xs font-medium">Khách có thể hẹn đến hết ngày cuối trong giờ tiếp nhận của cơ sở. Vui lòng đặt lịch trực tuyến trước ít nhất một ngày.</p>
+        <p className="mt-1 text-xs font-medium">Khách dọn hàng trong hạn và xác nhận khi sẵn sàng bàn giao.</p>
       </div>}
       {record.status === 'recovery_required' && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-950">Khách chưa đến theo lịch và đã hết thời gian ân hạn. Hàng chưa được tự động di chuyển. Cơ sở cần lập biên bản, kiểm kê và bàn giao hai người trước khi thu hồi.</p>}
       {record.status === 'recovery_required' && record.recoveryTaskDeadlineAt && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-950">Hạn xử lý nhiệm vụ thu hồi: {returnRecoveryCutoff(record.recoveryTaskDeadlineAt)}</p>}
@@ -489,6 +478,17 @@ function ReturnWorkspace({
 }) {
   const actor = getAuthenticatedActor()
   const contract = useRentalApiResource(identity, async () => role === 'customer' && rentalId ? getRental('customer', rentalId) : null)
+  const mismatch = Boolean(contract.data?.inventoryMismatchReturn || (contract.data?.inventory?.mismatch && !contract.data.inventory.fullFit)
+    || contract.data?.inventory?.decision === 'RETURN_REQUESTED')
+  const reservationId = contract.data?.reservationId
+  const removal = useRentalApiResource(`${identity}:removal:${mismatch}:${reservationId}`, async () =>
+    mismatch && reservationId ? getCustomerReservation(reservationId) : null)
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    if (!mismatch) return
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [mismatch])
   const [page, setPage] = useState(0)
   const read = useRentalApiResource(`${identity}:${page}`, async () => {
     if (!rentalId) return listReturns(role, page)
@@ -520,10 +520,15 @@ function ReturnWorkspace({
   const [feedback, setFeedback] = useState('')
   const [date, setDate] = useState('')
   const [notes, setNotes] = useState('')
+  useEffect(() => {
+    if (!mismatch) return
+    const summary = removal.data?.inventoryMismatchSummary || contract.data?.inventory?.mismatchSummary
+    setNotes(current => current || `Trả kho do kiểm kê sai lệch${summary ? `: ${summary}` : '.'}`)
+  }, [mismatch, removal.data?.inventoryMismatchSummary, contract.data?.inventory?.mismatchSummary])
   const [editing, setEditing] = useState<string | null>(null)
   const today = vietnamDateInput()
 
-  async function run(work: () => Promise<ApiReturn>) {
+  async function run(work: () => Promise<unknown>) {
     if (lock.current || recoveryLock.current) return
     lock.current = true
     setBusy(true)
@@ -545,15 +550,25 @@ function ReturnWorkspace({
     }
   }
 
+  function extendRemovalWindow() {
+    if (!reservationId) return
+    void run(async () => {
+      await extendCustomerInventoryReturnWindow(reservationId)
+      if (mounted.current) {
+        removal.refresh()
+        contract.refresh()
+      }
+    })
+  }
+
   const rows = useMemo(() => {
     const records = read.data?.data.filter((item) => !rentalId || item.rentalId === rentalId) ?? []
     if (role === 'staff' && !rentalId) {
-      return records.sort((left, right) =>
-        staffQueuePriority(left, today) - staffQueuePriority(right, today)
-        || queueTimestamp(right) - queueTimestamp(left)
-        || left.id.localeCompare(right.id))
+      // The API ranks the entire staff queue before pagination. Re-sorting one page
+      // would put a later appointment ahead of a customer already waiting on another page.
+      return records
     }
-    return records.sort((left, right) => left.scheduledDate.localeCompare(right.scheduledDate))
+    return records.sort((left, right) => compareReturnQueue(left, right, role))
   }, [read.data, rentalId, role, today])
 
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null)
@@ -565,6 +580,7 @@ function ReturnWorkspace({
   useEffect(() => {
     if (rentalId && rows.length > 0 && !selectedRecordId) {
       setSelectedRecordId(rows[0].id)
+      setFeedback('')
     }
   }, [rentalId, rows, selectedRecordId])
 
@@ -600,6 +616,9 @@ function ReturnWorkspace({
     })
   }, [rows, statusFilter, searchQuery])
 
+  const pendingMismatch = role === 'customer' && selectedRecord?.returnType === 'INVENTORY_MISMATCH'
+    && ['requested', 'scheduled'].includes(selectedRecord.status) && selectedRecord.sourceType !== 'RECOVERY'
+
   const readable = actor?.status === 'ACTIVE' && (
     actor.roles.includes(role.toUpperCase() as 'CUSTOMER' | 'STAFF' | 'MANAGER') ||
     (role === 'manager' && (actor.roles.includes('BUSINESS') || actor.roles.includes('ADMIN')))
@@ -607,11 +626,71 @@ function ReturnWorkspace({
 
   if (!readable) return null
 
+  if (role === 'customer' && rentalId && !selectedRecord) {
+    if (read.loading && !read.data) return <p role="status">Đang tải thông tin trả kho…</p>
+    if (read.error) return <p role="alert">{returnError(read.error)}</p>
+    if (rows.length) return null
+    if (!rentalActive) return <p className="text-sm text-stone-600">Hồ sơ thuê hiện chưa thể gửi yêu cầu trả kho.</p>
+
+    const minReturnDate = vietnamDateInput(new Date(Date.now() + 86_400_000))
+    const deadline = removal.data?.inventoryRemovalDeadlineAt || contract.data?.inventory?.removalDeadline
+    const expired = mismatch && Boolean(deadline && now >= Date.parse(deadline))
+    const invalidDate = !mismatch && (!date || date < minReturnDate)
+    const removalUnavailable = mismatch && (removal.loading || !!removal.error || !deadline || !reservationId)
+    return <div className="space-y-3">
+      <form onSubmit={(event) => {
+        event.preventDefault()
+        if (busy || removalUnavailable || expired || invalidDate) return
+        if (mismatch && reservationId) {
+          void run(() => resolveCustomerInventory(reservationId, 'CANCEL_AND_RETURN', notes))
+        } else {
+          void run(() => requestReturn(rentalId, date, notes))
+        }
+      }} className="space-y-4">
+        {contract.data ? <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <strong className="break-all text-sm text-stone-900">{contract.data.storageUnit.code}</strong>
+          <span className="text-sm text-stone-600">{contract.data.facility.name}</span>
+        </div> : <p role={contract.error ? 'alert' : 'status'}>{contract.error ? returnError(contract.error) : 'Đang tải thông tin hợp đồng…'}</p>}
+        {mismatch && <section className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          {deadline && <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <p>Hạn cuối dọn hàng · <strong>{returnRecoveryCutoff(deadline)}</strong></p>
+            <p role="timer" className="tabular-nums">{returnRecoveryCountdown(deadline, now)}</p>
+          </div>}
+          {removal.loading && <p role="status">Đang tải hạn dọn hàng…</p>}
+          {!!removal.error && <><p role="alert">{returnError(removal.error)}</p><Button type="button" variant="outline" onClick={removal.refresh}>Tải lại hạn dọn hàng</Button></>}
+          {!removal.loading && !removal.error && !deadline && <p role="alert">Chưa xác định được hạn dọn hàng. Vui lòng liên hệ cơ sở.</p>}
+          {removal.data && <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-amber-200 pt-2">
+            <p>Đã gia hạn {removal.data.inventoryReturnExtensionCount ?? 0}/2 lần{removal.data.inventoryReturnExtensionDays ? ` · Mỗi lần thêm ${removal.data.inventoryReturnExtensionDays} ngày` : ''}.</p>
+            {removal.data.inventoryReturnCanExtend && !expired
+              ? <Button type="button" size="sm" variant="outline" disabled={busy} onClick={extendRemovalWindow}>{busy ? 'Đang xử lý…' : 'Gia hạn dọn hàng'}</Button>
+              : <p>{expired ? 'Đã hết hạn dọn hàng. Vui lòng liên hệ cơ sở để xử lý.'
+                : (removal.data.inventoryReturnExtensionCount ?? 0) >= 2 ? 'Đã sử dụng hết 2 lượt gia hạn.'
+                : 'Hồ sơ không còn đủ điều kiện gia hạn.'}</p>}
+          </div>}
+        </section>}
+        <p className="text-sm leading-5 text-stone-600">Dọn hết hàng rồi xác nhận trong hồ sơ trả kho. Khoản hoàn hoặc thu thêm được xác định sau nghiệm thu.</p>
+        {!mismatch && <VietnameseDateInput label="Ngày hẹn trả kho" value={date} min={minReturnDate} onChange={setDate} />}
+        <label className="block text-sm font-medium text-stone-700">Lý do<textarea required rows={2} placeholder="Nhập lý do trả kho…" value={notes} maxLength={2000} disabled={busy} onChange={(event) => setNotes(event.target.value)} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white p-3 font-normal" /></label>
+        <div className="space-y-2">
+          {contract.data && <details className="rounded-xl border border-stone-200 px-4 py-3 text-sm">
+            <summary className="cursor-pointer font-semibold text-stone-800">Thông tin hợp đồng</summary>
+            <div className="mt-2"><ReturnContract rental={contract.data} date={date} depositAmount={removal.data?.reservation.securityDepositAmount} reservationCode={removal.data?.reservation.reservationCode} inventoryMismatch={mismatch} /></div>
+          </details>}
+          <ReturnPolicyNotice />
+        </div>
+        <div className="flex justify-end border-t border-stone-200 pt-3">
+          <Button type="submit" disabled={busy || invalidDate || expired || removalUnavailable || !notes.trim() || read.loading || contract.loading || !contract.data}>Gửi yêu cầu trả kho</Button>
+        </div>
+      </form>
+      {feedback && <p role="status">{feedback}</p>}
+    </div>
+  }
+
   return (
     <div className={rentalId ? 'space-y-4' : 'space-y-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-xs'}>
       {/* ─── FOCUSED DETAIL WORKSPACE (When a record is selected) ─── */}
       {selectedRecord ? (
-        <div className="space-y-5 fade-in">
+        <div className="space-y-4 fade-in">
           {/* Header Bar */}
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 pb-4">
             <div className="flex flex-wrap items-center gap-2.5">
@@ -634,21 +713,21 @@ function ReturnWorkspace({
               }`}>
                 {labels[selectedRecord.status]}
               </span>
-              {selectedRecord.customerName && (
+              {role !== 'customer' && selectedRecord.customerName && (
                 <span className="text-xs text-stone-700">
                   Khách: <strong className="font-bold text-stone-900">{selectedRecord.customerName}</strong>
                 </span>
               )}
-              {selectedRecord.customerNotes && (
+              {!pendingMismatch && selectedRecord.customerNotes && (
                 <span className="text-xs text-stone-600 italic">
                   Lý do: &ldquo;{selectedRecord.customerNotes}&rdquo;
                 </span>
               )}
-              <span className="text-xs text-stone-500">
+              {(selectedRecord.attendance?.handoverAppointmentAt || selectedRecord.scheduledDate) && <span className="text-xs text-stone-500">
                 {selectedRecord.attendance?.handoverAppointmentAt ? <>
                   Lịch bàn giao sau đối soát · <strong className="text-stone-700">{returnRecoveryCutoff(selectedRecord.attendance.handoverAppointmentAt)}</strong>
                 </> : <>Ngày hẹn trả · <strong className="text-stone-700">{rentalDate(selectedRecord.scheduledDate)}</strong></>}
-              </span>
+              </span>}
             </div>
 
             <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
@@ -673,13 +752,28 @@ function ReturnWorkspace({
 
           {feedback && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{feedback}</p>}
           {role === 'customer' && selectedRecord.sourceType !== 'RECOVERY' && <>
-            {contract.data && <ReturnContract rental={contract.data} record={selectedRecord} />}
-            <CustomerClearance record={selectedRecord} ownerId={actor?.id} busy={busy || read.loading} run={run} />
+            <CustomerClearance record={selectedRecord} ownerId={actor?.id} busy={busy || read.loading} run={run}
+              countdown={pendingMismatch ? returnRecoveryCountdown(selectedRecord.inventoryRemovalDeadlineAt ?? selectedRecord.recoveryEligibleAt, now) : undefined}
+              extension={pendingMismatch && removal.data ? {
+                count: removal.data.inventoryReturnExtensionCount ?? 0,
+                onExtend: removal.data.inventoryReturnCanExtend && !removal.loading
+                  && Date.parse(removal.data.inventoryRemovalDeadlineAt ?? '') > now ? extendRemovalWindow : undefined,
+              } : undefined} />
+            {contract.data && <details className="rounded-xl border border-stone-200 px-4 py-3 text-sm">
+              <summary className="cursor-pointer font-semibold text-stone-800">Thông tin hợp đồng</summary>
+              <div className="mt-2"><ReturnContract rental={contract.data} record={selectedRecord} /></div>
+            </details>}
           </>}
           {/* Form Actions / 2-Column Inspection */}
           {role === 'staff' && <ReturnAttendance key={selectedRecord.id} record={selectedRecord} role="staff"
             editable={!!actor?.permissions.includes('returns:process')} onChanged={read.refresh} />}
-          {(role !== 'staff' || !requiresReturnAttendance(selectedRecord) || (!!selectedRecord.attendance?.arrivedAt && !!selectedRecord.attendance.verifiedAt)) && <LeasedReturnActions
+          {pendingMismatch ? <details className="rounded-xl border border-stone-200 px-4 py-3 text-sm">
+            <summary className="cursor-pointer font-semibold text-stone-800">Lý do trả kho và quyết toán</summary>
+            <div className="mt-2 space-y-2 text-stone-700">
+              {selectedRecord.customerNotes && <p className="whitespace-pre-wrap break-words">{selectedRecord.customerNotes}</p>}
+              <p>Tiền sử dụng tính theo số ngày thực tế. Khoản hoàn hoặc thu thêm được xác định sau nghiệm thu.</p>
+            </div>
+          </details> : (role !== 'staff' || !requiresReturnAttendance(selectedRecord) || (!!selectedRecord.attendance?.arrivedAt && !!selectedRecord.attendance.verifiedAt)) && <LeasedReturnActions
             key={selectedRecord.id + ":" + (selectedRecord.clearanceRevision ?? 0) + ":" + (selectedRecord.settlementVersion ?? 0)}
             role={role}
             record={selectedRecord}
@@ -699,7 +793,8 @@ function ReturnWorkspace({
             }}
           />}
 
-          {role === 'customer' && !selectedRecord.attendance?.arrivedAt && (selectedRecord.status === 'requested' || (selectedRecord.returnType === 'INVENTORY_MISMATCH' && selectedRecord.status === 'scheduled')) && editing !== selectedRecord.id && (
+
+          {role === 'customer' && !selectedRecord.attendance?.arrivedAt && selectedRecord.returnType !== 'INVENTORY_MISMATCH' && selectedRecord.status === 'requested' && editing !== selectedRecord.id && (
             <div className="mt-3 flex justify-end border-t border-stone-100 pt-3">
               <Button
                 type="button"
@@ -717,13 +812,9 @@ function ReturnWorkspace({
             </div>
           )}
 
-          {role === 'customer' && editing === selectedRecord.id && (() => {
+          {role === 'customer' && selectedRecord.returnType !== 'INVENTORY_MISMATCH' && editing === selectedRecord.id && (() => {
             const minReturnDate = vietnamDateInput(Date.now() + 86_400_000)
-            const deadlineMs = selectedRecord.returnType === 'INVENTORY_MISMATCH' && selectedRecord.inventoryRemovalDeadlineAt
-              ? Date.parse(selectedRecord.inventoryRemovalDeadlineAt) : null
-            const maxMismatchDate = deadlineMs != null ? vietnamDateInput(deadlineMs - 1) : undefined
             const tooEarly = Boolean(date && date < minReturnDate)
-            const tooLate = Boolean(date && maxMismatchDate && date > maxMismatchDate)
             return (
               <form onSubmit={(event) => {
                 event.preventDefault()
@@ -731,24 +822,19 @@ function ReturnWorkspace({
                   setFeedback('Ngày hẹn trả kho phải sau ngày tạo đơn trả kho ít nhất 1 ngày.')
                   return
                 }
-                if (tooLate) {
-                  setFeedback('Ngày hẹn vượt quá hạn trả kho.')
-                  return
-                }
                 void run(() => updateReturnRequest(selectedRecord.id, date, notes))
               }} className="mt-3 space-y-3 rounded-xl border border-amber-200 bg-amber-50/60 p-4">
                 <p className="text-sm font-bold text-stone-900">Chọn lịch hẹn trả kho dự kiến</p>
                 <div>
-                  <VietnameseDateInput label="Ngày hẹn trả kho dự kiến" value={date} min={minReturnDate} max={maxMismatchDate} onChange={setDate} />
+                  <VietnameseDateInput label="Ngày hẹn trả kho dự kiến" value={date} min={minReturnDate} onChange={setDate} />
                   {tooEarly && <p className="mt-1 text-xs font-semibold text-rose-600">Ngày hẹn trả kho phải sau ngày tạo đơn trả kho ít nhất 1 ngày.</p>}
-                  {tooLate && <p className="mt-1 text-xs font-semibold text-rose-600">Ngày hẹn vượt quá hạn trả kho.</p>}
                 </div>
                 <label className="block text-sm font-medium text-stone-700">Lý do / ghi chú
                   <textarea required rows={2} value={notes} maxLength={2000} disabled={busy} onChange={(event) => setNotes(event.target.value)} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white p-2.5 text-sm font-normal" />
                 </label>
                 <div className="flex flex-wrap justify-end gap-2">
                   <Button type="button" variant="outline" disabled={busy} onClick={() => setEditing(null)}>Hủy</Button>
-                  <Button type="submit" disabled={busy || !date || tooEarly || tooLate || !notes.trim()}>Lưu lịch hẹn trả kho</Button>
+                  <Button type="submit" disabled={busy || !date || tooEarly || !notes.trim()}>Lưu lịch hẹn trả kho</Button>
                 </div>
               </form>
             )
@@ -829,37 +915,6 @@ function ReturnWorkspace({
               })}
             </div>
           </div>
-
-          {/* Customer request return form (if applicable) */}
-          {role === 'customer' && rentalId && read.data && ((rentalActive && !rows.some(record => record.status !== 'completed' || (record.sourceType === 'RECOVERY' && record.recoveryTaskStatus !== 'CLOSED'))) || editing) && (() => {
-            const minReturnDate = vietnamDateInput(new Date(Date.now() + 86_400_000))
-            return (
-            <form onSubmit={(event) => {
-              event.preventDefault()
-              if (date && date < minReturnDate) {
-                setFeedback('Ngày hẹn trả kho phải sau ngày tạo đơn trả kho ít nhất 1 ngày.')
-                return
-              }
-              void run(() => editing ? updateReturnRequest(editing, date, notes) : requestReturn(rentalId, date, notes))
-            }} className="space-y-4 rounded-xl border border-stone-200 bg-stone-50 p-4">
-              {contract.data ? <ReturnContract rental={contract.data} date={date} /> : <p role="status">{contract.error ? returnError(contract.error) : 'Đang tải thông tin hợp đồng…'}</p>}
-              <ReturnPreparation />
-              <p className="text-sm text-stone-600">Số tiền hoàn lại hoặc phải thanh toán thêm sẽ được xác định sau khi nhân viên nghiệm thu và hệ thống lập bảng quyết toán.</p>
-              <ReturnPolicyNotice />
-              <div>
-                <VietnameseDateInput label="Ngày hẹn trả kho" value={date} min={minReturnDate} onChange={setDate} />
-                {date && date < minReturnDate && (
-                  <p className="mt-1 text-xs font-semibold text-rose-600">Ngày hẹn trả kho phải sau ngày tạo đơn trả kho ít nhất 1 ngày.</p>
-                )}
-              </div>
-              <label className="block text-sm font-medium text-stone-700">Lý do<textarea required rows={3} placeholder="Nhập lý do trả kho…" value={notes} maxLength={2000} disabled={busy} onChange={(event) => setNotes(event.target.value)} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white p-3 font-normal" /></label>
-              <div className="flex flex-wrap gap-3">
-                <Button type="submit" disabled={busy || !date || date < minReturnDate || !notes.trim() || read.loading}>{editing ? 'Lưu chỉnh sửa' : 'Gửi yêu cầu trả kho'}</Button>
-                {editing && <Button type="button" variant="outline" disabled={busy} onClick={() => setEditing(null)}>Hủy chỉnh sửa</Button>}
-              </div>
-            </form>
-            )
-          })()}
 
           {read.loading && !read.data && <p role="status">Đang tải hồ sơ trả kho...</p>}
           {!!read.error && <p role="alert">{returnError(read.error)}</p>}

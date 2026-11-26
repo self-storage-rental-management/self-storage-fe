@@ -1,4 +1,5 @@
 import { recordDisplayCode } from '../../utils/recordDisplayCode'
+import { compareWorkQueue } from '../../utils/workQueueSort'
 import { useEffect, useMemo, useRef, useState } from "react"
 import { vietnamDateInput } from "../../utils/vietnamTime"
 import "./staffDailyTaskQueue.css"
@@ -51,6 +52,8 @@ interface QueueRow {
   deadlineAt: string | null
   priority: "high" | "medium" | "low"
   status: QueueStatus
+  waitingSince?: string | null
+  completedAt?: string | null
   assignedTask?: FacilityTask
   maintenanceTask?: MaintenanceTaskApi
   operationalTask?: StaffDailyOperation
@@ -69,8 +72,6 @@ const toDateInputValue = (value: string) => {
   if (Number.isNaN(date.getTime())) return ""
   return vietnamDateInput(date)
 }
-
-const priorityRank: Record<QueueRow["priority"], number> = { high: 0, medium: 1, low: 2 }
 
 function queueStatusLabel(status: QueueStatus) {
   if (status === "completed") return "Đã hoàn thành"
@@ -97,22 +98,10 @@ function isFinished(status: QueueStatus) {
 }
 
 function compareQueueRows(left: QueueRow, right: QueueRow, sort: StaffTaskSort) {
-  const leftFinished = isFinished(left.status)
-  const rightFinished = isFinished(right.status)
-  if (leftFinished !== rightFinished) return leftFinished ? 1 : -1
-
-  const leftDue = new Date(left.deadlineAt || left.dueAt).getTime()
-  const rightDue = new Date(right.deadlineAt || right.dueAt).getTime()
-  const leftOverdue = !leftFinished && Number.isFinite(leftDue) && leftDue < Date.now()
-  const rightOverdue = !rightFinished && Number.isFinite(rightDue) && rightDue < Date.now()
-  if (leftOverdue !== rightOverdue) return leftOverdue ? -1 : 1
-
-  const priorityDifference = priorityRank[left.priority] - priorityRank[right.priority]
-  const dueDifference = (Number.isFinite(leftDue) ? leftDue : Number.POSITIVE_INFINITY) -
-    (Number.isFinite(rightDue) ? rightDue : Number.POSITIVE_INFINITY)
-  return sort === "priority"
-    ? priorityDifference || dueDifference || left.title.localeCompare(right.title, "vi")
-    : dueDifference || priorityDifference || left.title.localeCompare(right.title, "vi")
+  const order = (row: QueueRow) => ({ id: row.id, closed: isFinished(row.status),
+    urgent: sort === 'priority' && row.priority === 'high', dueAt: row.deadlineAt || row.dueAt,
+    waitingSince: row.waitingSince, completedAt: row.completedAt })
+  return compareWorkQueue(order(left), order(right))
 }
 
 function deadlineLabel(value: string | null, now: number) {
@@ -240,11 +229,13 @@ export default function StaffDailyTaskQueue({
       customer: task.customerName?.trim() || "",
       sourceLabel: task.recoveryRequired ? "Thu hồi hàng" : task.taskType === "inventory_check" ? "Kiểm kê đầu vào" : "Bảo trì",
       notes: task.taskType === "inventory_check" ? "" : task.reason,
-      dueAt: task.dueAt || task.createdAt,
+      dueAt: task.dueAt || '',
       deadlineAt: task.deadlineAt ?? null,
       priority: task.priority,
       status: task.status,
       maintenanceTask: task,
+      waitingSince: task.createdAt,
+      completedAt: task.completedAt,
     }))
     const assignedRows: QueueRow[] = assignedTasks.map((task) => ({
       id: `assigned-${task.id}`,
@@ -258,6 +249,8 @@ export default function StaffDailyTaskQueue({
       priority: task.priority,
       status: task.status,
       assignedTask: task,
+      waitingSince: task.assignedAt || task.createdAt,
+      completedAt: task.completedAt || task.cancelledAt,
     }))
     const operationalRows: QueueRow[] = operationalTasks
       .filter((task) => !(task.id.startsWith("maintenance-") && maintenanceIds.has(task.id)))

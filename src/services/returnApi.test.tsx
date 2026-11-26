@@ -25,6 +25,20 @@ function respond(data: unknown, status = 200) {
 beforeEach(() => { state.actor = operationsActor('customer'); setAccessToken('TEST-token') })
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); clearAuthTokens() })
 describe('real Return transport and unknown settlement presentation', () => {
+  it('explains when an approved handover returns to manager review', () => {
+    const overdue = new Date(Date.now() - 60_000).toISOString()
+    const item: ApiReturn = {
+      ...record, status: 'scheduled', returnType: 'INVENTORY_MISMATCH',
+      attendance: {
+        arrivedAt: overdue, evidenceId: ids.file, expiresAt: overdue, attempts: 1,
+        verifiedAt: overdue, reviewStartsAt: overdue, reviewAccepted: true, handoverDueAt: overdue,
+      },
+    }
+    const html = renderToStaticMarkup(<ReturnAttendance record={item} role="staff" editable onChanged={() => {}} />)
+    expect(html).toContain('Đã quá hạn bàn giao sau đối soát')
+    expect(html).toContain('quay lại chờ Quản lý rà soát')
+    expect(html).not.toContain('Quản lý đã cho phép tiếp tục bàn giao.')
+  })
   it('shows the arrival photo and CCCD in one verification form', () => {
     const attendance: NonNullable<ApiReturn['attendance']> = {
       arrivedAt: null, evidenceId: null, expiresAt: null, attempts: 0,

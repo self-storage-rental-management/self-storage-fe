@@ -51,6 +51,8 @@ export default function ReturnAttendance({ record, role, editable, onChanged }: 
     setDocument('')
   }, [attendance?.reverificationStartedAt])
   const pendingReview = isReturnIdentityReviewPending({ ...record, attendance }, now)
+  const handoverOverdue = pendingReview && attendance?.reviewAccepted === true
+    && !!attendance.handoverDueAt && now >= Date.parse(attendance.handoverDueAt)
   const canReopen = pendingReview && !!attendance?.evidenceId && !attendance.verifiedAt && !attendance.reverificationStartedAt
   const canAssign = pendingReview && (!!attendance?.verifiedAt || canReopen)
   useEffect(() => {
@@ -117,8 +119,13 @@ export default function ReturnAttendance({ record, role, editable, onChanged }: 
     {attendance.handoverDueAt && <p className="text-sm">Hạn bàn giao sau đối soát · {new Date(attendance.handoverDueAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</p>}
     {role === 'manager' && attendance.evidenceId && <Button type="button" variant="outline"
       onClick={() => void downloadEvidence(attendance.evidenceId!)}>Tải ảnh tiếp nhận</Button>}
-    {pendingReview && <p role="status">Phiên đã kết thúc. Đang chờ Quản lý đối soát.</p>}
-    {attendance.reviewAccepted != null && <p role="status">{attendance.reviewAccepted ? 'Quản lý đã cho phép tiếp tục bàn giao.' : 'Quản lý đã kết thúc đối soát và không tiếp tục bàn giao thường.'}</p>}
+    {handoverOverdue
+      ? <div role="status" className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-red-900">
+        <p className="font-semibold">Đã quá hạn bàn giao sau đối soát</p>
+        <p>Hồ sơ đã quay lại chờ Quản lý rà soát. Bằng chứng khách đến đúng hạn được giữ lại.</p>
+      </div>
+      : pendingReview && <p role="status">Phiên đã kết thúc. Đang chờ Quản lý đối soát.</p>}
+    {!handoverOverdue && attendance.reviewAccepted != null && <p role="status">{attendance.reviewAccepted ? 'Quản lý đã cho phép tiếp tục bàn giao.' : 'Quản lý đã kết thúc đối soát và không tiếp tục bàn giao thường.'}</p>}
     {canEnterIdentity && <form className="space-y-3"
       onSubmit={event => {
         event.preventDefault()

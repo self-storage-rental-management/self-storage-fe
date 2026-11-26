@@ -4147,7 +4147,8 @@ export default function BusinessApp({
                           const primary = packageSort === 'discount-desc' ? b.discountPercent - a.discountPercent
                             : packageSort === 'discount-asc' ? a.discountPercent - b.discountPercent
                             : packageSort === 'months-desc' ? monthsB - monthsA : monthsA - monthsB
-                          return primary || Number(b.status === 'active') - Number(a.status === 'active') || a.label.localeCompare(b.label, 'vi') || a.id.localeCompare(b.id)
+                          const rank = (item: DurationDiscountItem) => item.runtimeStatus === 'ACTIVE' || (!item.runtimeStatus && item.status === 'active') ? 0 : item.runtimeStatus === 'SCHEDULED' ? 1 : 2
+                          return rank(a) - rank(b) || primary || a.label.localeCompare(b.label, 'vi') || a.id.localeCompare(b.id)
                         }).map((item) => {
                           const hasDiscount = item.discountPercent > 0
                           const isSpecific = item.scopeType === "specific"
@@ -4348,7 +4349,8 @@ export default function BusinessApp({
                     const primary = packageSort === 'discount-desc' ? b.discountPercent - a.discountPercent
                       : packageSort === 'discount-asc' ? a.discountPercent - b.discountPercent
                       : packageSort === 'months-desc' ? monthsB - monthsA : monthsA - monthsB
-                    return primary || Number(b.status === 'active') - Number(a.status === 'active') || a.label.localeCompare(b.label, 'vi') || a.id.localeCompare(b.id)
+                    const rank = (item: DurationDiscountItem) => item.runtimeStatus === 'ACTIVE' || (!item.runtimeStatus && item.status === 'active') ? 0 : item.runtimeStatus === 'SCHEDULED' ? 1 : 2
+                    return rank(a) - rank(b) || primary || a.label.localeCompare(b.label, 'vi') || a.id.localeCompare(b.id)
                   }).map((item) => {
                 const isActive = item.status === "active"
                 const hasDiscount = item.discountPercent > 0

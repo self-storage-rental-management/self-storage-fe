@@ -111,8 +111,8 @@ const returnTask = (item: ApiReturn): StaffDailyOperation => {
     displayCode: item.displayCode,
     title: `Trả kho ${item.unitNumber}`,
     customer: item.customerName,
-    time: item.scheduledDate,
-    dueAt: item.scheduledDate ? `${item.scheduledDate}T23:59:59` : new Date().toISOString(),
+    time: item.scheduledDate ?? "Chưa có lịch",
+    dueAt: item.inventoryRemovalDeadlineAt ?? (item.scheduledDate ? `${item.scheduledDate}T23:59:59` : new Date().toISOString()),
     sla:
       item.status === "refund_pending"
         ? "Cần chuyển hoàn cọc cho khách hàng"
@@ -189,7 +189,7 @@ export async function loadStaffDailyOperations(
       scheduledTo: to,
     }),
     listReturns("staff", 0, 100),
-    listSupportTickets("staff", { page: 0, size: 100, sort: "updatedAt,desc" }),
+    listSupportTickets("staff", { page: 0, size: 100, sort: "priority,asc" }),
     listStaffMaintenanceTasks({
       assignedStaffId: actorId,
       page: 0,
