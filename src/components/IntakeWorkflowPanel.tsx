@@ -459,7 +459,7 @@ export default function IntakeWorkflowPanel({
               <>
                 <input
                   className="block w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs text-stone-900"
-                  placeholder="Lý do / bằng chứng đối soát (bắt buộc khi duyệt đúng hạn hoặc ngoại lệ)"
+                  placeholder="Lý do / bằng chứng đối soát (bắt buộc khi duyệt đúng hạn)"
                   value={reason}
                   onChange={e => setReason(e.target.value)}
                 />
@@ -482,15 +482,6 @@ export default function IntakeWorkflowPanel({
                   >
                     Xác nhận vắng mặt
                   </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={busy || !reason.trim()}
-                    onClick={() => void change('RESOLVE_REVIEW', { outcome: 'FACILITY_EXCEPTION' })}
-                  >
-                    Ngoại lệ cơ sở
-                  </Button>
                 </div>
               </>
             )}
@@ -501,6 +492,18 @@ export default function IntakeWorkflowPanel({
           <div className="border-t border-stone-200 pt-2">
             <Button type="button" size="sm" variant="danger" disabled={busy} onClick={() => void change('MARK_MISSED')}>
               Xác nhận bỏ lỡ lịch
+            </Button>
+          </div>
+        )}
+
+        {!state.inspectionCompletedAt && !state.inspectionFailureReason
+          && (clockStarted || remainingExtensions === 0 || (arrivalDeadline != null && now >= Date.parse(arrivalDeadline))) && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-stone-200 pt-2">
+            <span className="text-xs text-stone-600">
+              Không thể dời hạn thêm hoặc đã vào cửa sổ kiểm kê — có thể tạo nhiệm vụ thu hồi ngay không cần đợi 72 giờ.
+            </span>
+            <Button type="button" size="sm" variant="danger" disabled={busy} onClick={() => void change('IMMEDIATE_RECOVERY')}>
+              Tạo yêu cầu thu hồi ngay
             </Button>
           </div>
         )}
@@ -792,11 +795,10 @@ export default function IntakeWorkflowPanel({
           {isManager && state.attendanceReviewStatus === 'PENDING' && (
             <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50/70 p-3">
               <p className="font-semibold text-amber-950">Kết luận đối soát khách đến phút cuối</p>
-              <input className="block w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5" placeholder="Lý do / bằng chứng đối soát (bắt buộc khi duyệt đúng hạn hoặc ngoại lệ)" value={reason} onChange={e => setReason(e.target.value)} />
+              <input className="block w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5" placeholder="Lý do / bằng chứng đối soát (bắt buộc khi duyệt đúng hạn)" value={reason} onChange={e => setReason(e.target.value)} />
               <div className="flex flex-wrap gap-2">
                 <Button type="button" size="sm" variant="primary" disabled={busy || !reason.trim()} onClick={() => void change('RESOLVE_REVIEW', { outcome: 'APPROVED_ON_TIME' })}>Chấp nhận đến đúng hạn</Button>
                 <Button type="button" size="sm" variant="danger" disabled={busy} onClick={() => void change('RESOLVE_REVIEW', { outcome: 'CONFIRMED_ABSENT' })}>Xác nhận vắng mặt</Button>
-                <Button type="button" size="sm" variant="outline" disabled={busy || !reason.trim()} onClick={() => void change('RESOLVE_REVIEW', { outcome: 'FACILITY_EXCEPTION' })}>Ngoại lệ cơ sở</Button>
               </div>
             </div>
           )}

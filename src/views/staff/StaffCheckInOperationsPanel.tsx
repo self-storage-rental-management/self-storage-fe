@@ -35,6 +35,7 @@ import {
   listCheckIns,
   recordCheckInRemainingPayment,
   recordCheckInArrival,
+  triggerImmediateHandoverRecovery,
   rejectCheckIn,
   scheduleCheckIn,
   signCheckInContract,
@@ -2138,6 +2139,38 @@ export default function StaffCheckInOperationsPanel({
             </dl>
             {handoverTarget.attendance?.completionDeadline && stepForCheckIn(handoverTarget) <= 4 &&
               <p>Hạn hoàn tất bàn giao: {formatStaffDateTime(handoverTarget.attendance.completionDeadline)}</p>}
+            {stepForCheckIn(handoverTarget) <= 4 && !inventoryMode && (
+              Boolean(handoverTarget.attendance?.completionDeadline) ||
+              (Boolean(handoverTarget.attendance?.attendanceDeadline) && Date.now() >= Date.parse(handoverTarget.attendance!.attendanceDeadline!))
+            ) && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50/70 px-3 py-2 text-xs text-red-900">
+                <span>Đã vào cửa sổ bàn giao hoặc đến hạn bàn giao không thể dời thêm — có thể thu hồi / giải phóng kho ngay không cần đợi 72 giờ.</span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="danger"
+                  disabled={busy}
+                  onClick={() => {
+                    void (async () => {
+                      setBusy(true)
+                      setError(null)
+                      try {
+                        await triggerImmediateHandoverRecovery(handoverTarget.id)
+                        showToast('Đã tạo yêu cầu thu hồi và giải phóng đơn bàn giao.')
+                        setHandoverTarget(null)
+                        await refresh()
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : 'Không thể thu hồi đơn bàn giao.')
+                      } finally {
+                        setBusy(false)
+                      }
+                    })()
+                  }}
+                >
+                  Thu hồi ngay (không đợi 72h)
+                </Button>
+              </div>
+            )}
             {handoverTarget.attendance?.arrivalUnderReview && <p>Giờ đến đang chờ quản lý đối soát.</p>}
             {handoverDeadlinePassed && !handoverTarget.attendance?.arrivalUnderReview && <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm font-medium text-amber-900">{handoverDeadlineMessage}</p>}
             {error && (inventoryMode || handoverStep !== 1)
