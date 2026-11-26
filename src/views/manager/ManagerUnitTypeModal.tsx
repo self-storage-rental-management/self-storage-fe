@@ -639,93 +639,101 @@ export default function ManagerUnitTypeModal({ open, facilityId, onClose, onCrea
               </button>
             )}
           </div>
-          {!goodsCatalog ? <p className="text-sm text-stone-500">Đang tải danh mục hàng hóa…</p> : activeCategories.map(category => {
-            const checked = selectedCategories.includes(category.id)
-            const materials = category.materials.filter(material => material.status === 'ACTIVE')
-            const selectedCatMaterialsCount = materials.filter(m => selectedMaterials.includes(m.id)).length
-            const allMaterialsChecked = materials.length > 0 && selectedCatMaterialsCount === materials.length
-            return <details key={category.id} className="rounded-lg border border-stone-200">
-              <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold text-stone-900 select-none hover:bg-stone-50 transition-colors">
-                <div className="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onClick={event => event.stopPropagation()}
-                    onChange={event => {
-                      setMetadataDirty(true)
-                      const isChecking = event.target.checked
-                      setSelectedCategories(current => isChecking ? [...new Set([...current, category.id])] : current.filter(id => id !== category.id))
-                      if (!isChecking) {
-                        setSelectedMaterials(current => current.filter(id => !materials.some(material => material.id === id)))
-                      } else {
-                        const detailsEl = (event.currentTarget as HTMLElement).closest('details')
-                        if (detailsEl) detailsEl.open = true
-                      }
-                    }}
-                    className="h-4 w-4 rounded border-stone-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
-                  />
-                  <span>{category.label}</span>
-                  {checked && (
-                    <span className="text-xs font-normal text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-                      {selectedCatMaterialsCount > 0 ? `${selectedCatMaterialsCount} vật liệu` : 'Không có vật liệu chính'}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-normal text-stone-500">{checked ? 'Đã chọn' : 'Chưa chọn'}</span>
-                  <span className="text-stone-400 text-xs">▼</span>
-                </div>
-              </summary>
-              <div className="space-y-3 border-t border-stone-200 p-4">
-                {materials.length === 0 ? (
-                  <p className="text-xs text-stone-500 italic">Nhóm hàng này không có danh mục vật liệu phụ thuộc.</p>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between pt-1">
-                      <span className="text-xs font-medium text-stone-600">Vật liệu chính (tùy chọn):</span>
-                      <button
-                        type="button"
-                        className="text-xs font-semibold text-amber-700 hover:text-amber-800 hover:underline cursor-pointer"
-                        onClick={() => {
-                          setMetadataDirty(true)
-                          const materialIds = materials.map(m => m.id)
-                          if (allMaterialsChecked) {
-                            setSelectedMaterials(current => current.filter(id => !materialIds.includes(id)))
-                          } else {
-                            setSelectedCategories(current => [...new Set([...current, category.id])])
-                            setSelectedMaterials(current => [...new Set([...current, ...materialIds])])
-                          }
-                        }}
-                      >
-                        {allMaterialsChecked ? "Bỏ chọn tất cả" : "Chọn tất cả"}
-                      </button>
+          {!goodsCatalog ? (
+            <p className="text-sm text-stone-500">Đang tải danh mục hàng hóa…</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
+              {activeCategories.map(category => {
+                const checked = selectedCategories.includes(category.id)
+                const materials = category.materials.filter(material => material.status === 'ACTIVE')
+                const selectedCatMaterialsCount = materials.filter(m => selectedMaterials.includes(m.id)).length
+                const allMaterialsChecked = materials.length > 0 && selectedCatMaterialsCount === materials.length
+                return (
+                  <details key={category.id} className="rounded-lg border border-stone-200 bg-white shadow-xs">
+                    <summary className="flex cursor-pointer list-none items-center justify-between px-3.5 py-2.5 text-sm font-semibold text-stone-900 select-none hover:bg-stone-50 transition-colors">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onClick={event => event.stopPropagation()}
+                          onChange={event => {
+                            setMetadataDirty(true)
+                            const isChecking = event.target.checked
+                            setSelectedCategories(current => isChecking ? [...new Set([...current, category.id])] : current.filter(id => id !== category.id))
+                            if (!isChecking) {
+                              setSelectedMaterials(current => current.filter(id => !materials.some(material => material.id === id)))
+                            } else {
+                              const detailsEl = (event.currentTarget as HTMLElement).closest('details')
+                              if (detailsEl) detailsEl.open = true
+                            }
+                          }}
+                          className="h-4 w-4 rounded border-stone-300 text-amber-600 focus:ring-amber-500 cursor-pointer shrink-0"
+                        />
+                        <span className="truncate">{category.label}</span>
+                        {checked && (
+                          <span className="text-[11px] font-normal text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 shrink-0">
+                            {selectedCatMaterialsCount > 0 ? `${selectedCatMaterialsCount} vật liệu` : 'Không có vật liệu'}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0 ml-2">
+                        <span className="text-xs font-normal text-stone-500">{checked ? 'Đã chọn' : 'Chưa chọn'}</span>
+                        <span className="text-stone-400 text-xs">▼</span>
+                      </div>
+                    </summary>
+                    <div className="space-y-3 border-t border-stone-200 p-3.5 bg-stone-50/50">
+                      {materials.length === 0 ? (
+                        <p className="text-xs text-stone-500 italic">Nhóm hàng này không có danh mục vật liệu phụ thuộc.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between pt-0.5">
+                            <span className="text-xs font-medium text-stone-600">Vật liệu chính (tùy chọn):</span>
+                            <button
+                              type="button"
+                              className="text-xs font-semibold text-amber-700 hover:text-amber-800 hover:underline cursor-pointer"
+                              onClick={() => {
+                                setMetadataDirty(true)
+                                const materialIds = materials.map(m => m.id)
+                                if (allMaterialsChecked) {
+                                  setSelectedMaterials(current => current.filter(id => !materialIds.includes(id)))
+                                } else {
+                                  setSelectedCategories(current => [...new Set([...current, category.id])])
+                                  setSelectedMaterials(current => [...new Set([...current, ...materialIds])])
+                                }
+                              }}
+                            >
+                              {allMaterialsChecked ? "Bỏ chọn tất cả" : "Chọn tất cả"}
+                            </button>
+                          </div>
+                          <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
+                            {materials.map(material => (
+                              <label key={material.id} className="flex items-center gap-2 rounded bg-white border border-stone-200 px-2.5 py-1.5 text-xs cursor-pointer hover:bg-stone-50">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedMaterials.includes(material.id)}
+                                  onChange={event => {
+                                    setMetadataDirty(true)
+                                    if (event.target.checked) {
+                                      setSelectedCategories(current => [...new Set([...current, category.id])])
+                                      setSelectedMaterials(current => [...new Set([...current, material.id])])
+                                    } else {
+                                      setSelectedMaterials(current => current.filter(id => id !== material.id))
+                                    }
+                                  }}
+                                  className="h-3.5 w-3.5 rounded border-stone-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+                                />
+                                <span className="text-stone-800 truncate">{material.label}{material.fragile ? ' · Dễ vỡ' : ''}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                      {materials.map(material => (
-                        <label key={material.id} className="flex items-center gap-2 rounded bg-stone-50 px-3 py-2 text-sm cursor-pointer hover:bg-stone-100">
-                          <input
-                            type="checkbox"
-                            checked={selectedMaterials.includes(material.id)}
-                            onChange={event => {
-                              setMetadataDirty(true)
-                              if (event.target.checked) {
-                                setSelectedCategories(current => [...new Set([...current, category.id])])
-                                setSelectedMaterials(current => [...new Set([...current, material.id])])
-                              } else {
-                                setSelectedMaterials(current => current.filter(id => id !== material.id))
-                              }
-                            }}
-                            className="h-4 w-4 rounded border-stone-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
-                          />
-                          <span className="text-stone-800">{material.label}{material.fragile ? ' · Dễ vỡ' : ''}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </details>
-          })}
+                  </details>
+                )
+              })}
+            </div>
+          )}
         </section>
         <section className="rounded-xl border border-stone-200 p-4">
           <h3 className="font-semibold text-stone-900">Tổng hợp cấu hình gian kho</h3>
