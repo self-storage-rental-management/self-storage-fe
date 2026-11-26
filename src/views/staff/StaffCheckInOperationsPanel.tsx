@@ -3577,6 +3577,9 @@ export default function StaffCheckInOperationsPanel({
         )}
         {detailTarget && <StaffRecordDocuments key={detailTarget.checkInId || detailTarget.reservationId}
           item={detailTarget} onPreview={assetId => void previewEvidenceFile(assetId)} onOpenReturns={onOpenReturns} />}
+        <div className="mt-4 flex justify-end border-t border-stone-200 pt-4">
+          <Button variant="outline" onClick={() => setDetailTarget(null)}>Đóng</Button>
+        </div>
       </Modal>
       <Modal
         open={Boolean(previewEvidence)}
