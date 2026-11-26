@@ -496,18 +496,6 @@ export default function IntakeWorkflowPanel({
           </div>
         )}
 
-        {!state.inspectionCompletedAt && !state.inspectionFailureReason
-          && (clockStarted || remainingExtensions === 0 || (arrivalDeadline != null && now >= Date.parse(arrivalDeadline))) && (
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-stone-200 pt-2">
-            <span className="text-xs text-stone-600">
-              Không thể dời hạn thêm hoặc đã vào cửa sổ kiểm kê — có thể tạo nhiệm vụ thu hồi ngay không cần đợi 72 giờ.
-            </span>
-            <Button type="button" size="sm" variant="danger" disabled={busy} onClick={() => void change('IMMEDIATE_RECOVERY')}>
-              Tạo yêu cầu thu hồi ngay
-            </Button>
-          </div>
-        )}
-
         {(state.arrivedAt || state.actualArrivedAt) && !verificationLocked && state.verificationStatus === 'IN_PROGRESS' && (
           <div className="space-y-2 rounded-lg border border-stone-200 bg-stone-50 p-3 text-xs">
             <p className="font-semibold text-stone-900">Xác minh danh tính lại (Lần {verificationCount + 1}/{verificationLimit})</p>
