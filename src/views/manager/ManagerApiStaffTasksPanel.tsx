@@ -17,6 +17,7 @@ import { managerFacilityNotice, singleManagerFacility } from './managerFacilityU
 import ManagerCheckInReminderPanel from './ManagerCheckInReminderPanel'
 import ManagerInventoryAppointments from './ManagerInventoryAppointments'
 import ManagerIntakeWorkflowPanel from './ManagerIntakeWorkflowPanel'
+import { ViolationRecoveryPanel } from '../return-api/ViolationRecoveryPanel'
 import {
   assignMaintenanceTask,
   cancelMaintenanceTask,
@@ -35,6 +36,7 @@ interface Props {
   showToast: (message: string) => void
   initialUnit?: { unitId: string; unitCode: string } | null
   onInitialUnitConsumed?: () => void
+  initialRecovery?: { id: string; request: number }
 }
 
 const taskStatusLabel: Record<MaintenanceTaskApi['status'], string> = {
@@ -57,8 +59,9 @@ function statusVariant(status: MaintenanceTaskApi['status']) {
   return 'warning'
 }
 
-export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onInitialUnitConsumed }: Props) {
+export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onInitialUnitConsumed, initialRecovery }: Props) {
   const [activeTab, setActiveTab] = useState<'tasks' | 'handover'>('tasks')
+  useEffect(() => { if (initialRecovery) setActiveTab('tasks') }, [initialRecovery])
   const [receiptCount, setReceiptCount] = useState<number | null>(null)
   const [inventoryCount, setInventoryCount] = useState<number | null>(null)
   const actor = getAuthenticatedActor()
@@ -284,6 +287,11 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
       </div>
 
       <div id="staff-tasks-panel" role="tabpanel" aria-labelledby="staff-tasks-tab" hidden={activeTab !== 'tasks'} className="space-y-5">
+      <Card className="recovery-workspace">
+        <h2 className="text-lg font-semibold text-stone-900">Thu hồi kho cần điều phối</h2>
+        <p>Theo dõi và phân công xử lý các hồ sơ thu hồi tại cơ sở.</p>
+        <ViolationRecoveryPanel activeOnly target={initialRecovery} />
+      </Card>
       {!loading && !taskError && !staffReadFailed && !staff.length && <ManagerActionNotice tone="info">Chưa có nhân viên được phân công để nhận nhiệm vụ tại cơ sở này.</ManagerActionNotice>}
       {!loading && !taskError && !unitReadFailed && !units.length && <ManagerActionNotice tone="info">Chưa có gian kho khả dụng để tạo nhiệm vụ bảo trì.</ManagerActionNotice>}
       {!loading && (unitReadFailed || staffReadFailed) && <p className="text-xs text-stone-500">Chưa tải được danh sách kho hoặc nhân viên để tạo nhiệm vụ. Dữ liệu nhiệm vụ vẫn được tải riêng.</p>}
@@ -306,7 +314,6 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
             {loading && <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-stone-500">Đang tải dữ liệu nhiệm vụ…</td></tr>}
             {!loading && Boolean(taskError) && <tr><td colSpan={7} className="px-4 py-6 text-center text-sm text-amber-800"><span>Chưa tải được nhiệm vụ bảo trì. {managerDisplayError(taskError)}</span><Button className="ml-3" size="sm" variant="outline" onClick={() => void reload()}>Thử lại</Button></td></tr>}
             {!loading && Boolean(recoveryError) && <tr><td colSpan={7} className="px-4 py-6 text-center text-sm text-amber-800"><span>Chưa tải được nhiệm vụ thu hồi kho. {managerDisplayError(recoveryError)}</span><Button className="ml-3" size="sm" variant="outline" onClick={() => void reload()}>Thử lại</Button></td></tr>}
-            {!loading && recoveryDisabled && <tr><td colSpan={7} className="px-4 py-3 text-center text-sm text-stone-500">Chức năng nhiệm vụ thu hồi kho chưa được bật.</td></tr>}
             {!loading && !taskError && !recoveryError && !tasks.length && !recoveryTasks.length && <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-stone-500">{recoveryDisabled ? 'Chưa có nhiệm vụ bảo trì tại cơ sở này.' : 'Chưa có nhiệm vụ tại cơ sở này.'}</td></tr>}
             {!loading && recoveryTasks.map(task => <Tr key={`recovery-${task.id}`}>
               <Td><p className="font-semibold text-stone-900">Thu hồi kho - {task.customerName}</p><p className="mt-1 text-xs text-stone-500">{task.reason === 'AUTO_OVERDUE_DAY_8' ? 'Hợp đồng quá hạn, chưa gia hạn.' : managerDisplayText(task.reason)}</p></Td>

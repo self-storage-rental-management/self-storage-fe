@@ -17,7 +17,7 @@ import { ARRIVAL_REVIEW_MS, HANDOVER_TERMS_VERSION, isCheckInHandoverExpired, st
 import { ApiClientError } from "../../services/apiClient"
 import { packageVolumeM3 } from '../../domain/reservationCapacity'
 import { inventoryResult } from '../../domain/inventoryResult'
-import { canOpenInventory } from '../../domain/inventoryAccess'
+import { canAccessInventory, inventoryInspectionBlockReason } from '../../domain/inventoryAccess'
 import { pageAfterRefresh, shouldReplaceVisiblePage } from '../../domain/checkInListPaging'
 import { resolveResumeStep, INSPECTION_STEP, handoverStepForStatus } from '../../domain/staffHandoverPosition'
 import { canReturnToInventoryStage, isInventoryResultReopenable, isInventoryStageReadOnly, INVENTORY_STAGE_LABELS, type InventoryStage } from '../../domain/inventoryStages'
@@ -715,7 +715,7 @@ export default function StaffCheckInOperationsPanel({
     if (!canGoBackToInventoryStage(stage)) return
     setError(null)
     setFieldErrors({})
-    if (stage === 2) {
+    if (stage === 2 && !inventoryInspectionBlockReason(handoverTarget)) {
       // Re-open the editable inspection form even when a draft was already saved.
       setInventoryEditing(true)
       setConfirmedInventoryReview(null)
@@ -1092,11 +1092,12 @@ export default function StaffCheckInOperationsPanel({
     resolutionStatus: handoverTarget?.inventoryResolutionStatus,
     checkInStatus: handoverTarget?.checkInStatus,
   })
-  const inventoryStageReadOnly = inventoryMode && isInventoryStageReadOnly({
+  const inventoryBlockedReason = inventoryInspectionBlockReason(handoverTarget, now)
+  const inventoryStageReadOnly = inventoryMode && (Boolean(inventoryBlockedReason) || isInventoryStageReadOnly({
     stage: inventoryStage,
     published: inventoryPublished,
     reopenable: inventoryResultReopenable,
-  })
+  }))
   const isViewingEarlierInventoryStage = inventoryMode && inventoryStage < highestInventoryStage
   const isReviewingCompletedStep = Boolean(
     handoverTarget &&
@@ -1189,7 +1190,7 @@ export default function StaffCheckInOperationsPanel({
         // Polling must not move the operator. Only a real status transition advances the step;
         // a regular tick that finds the same status leaves the open step untouched.
         if (latest.checkInStatus !== previousStatus) {
-          setHandoverStep(current => current === 6 && canOpenInventory(latest.checkInStatus, latest.inventoryVisit?.appointmentAt) ? 6 : Math.min(5, stepForCheckIn(latest)))
+          setHandoverStep(current => current === 6 && canAccessInventory(latest) ? 6 : Math.min(5, stepForCheckIn(latest)))
         }
         if (previousStatus === "handover_pending_receipt" && latest.checkInStatus === "setup_in_progress") {
           showToast("Khách hàng đã xác nhận nhận kho. Đang chờ khách chuẩn bị hàng để kiểm kê.")
@@ -1265,6 +1266,8 @@ export default function StaffCheckInOperationsPanel({
 
   const submitHandover = async () => {
     if (submitting || inventoryCommandLock.current) return
+    const blocked = inventoryInspectionBlockReason(handoverTarget)
+    if (blocked) { setError(blocked); return }
     setFieldErrors({})
     setError(null)
 
@@ -1508,6 +1511,8 @@ export default function StaffCheckInOperationsPanel({
 
   const continueInventoryResolution = async () => {
     if (!handoverTarget?.checkInId || !inventorySavedAt || inventoryEditing || submitting || inventoryCommandLock.current) return
+    const blocked = inventoryInspectionBlockReason(handoverTarget)
+    if (blocked) { setError(blocked); return }
     inventoryCommandLock.current = true
     setSubmitting(true); setError(null)
     try {
@@ -1795,7 +1800,7 @@ export default function StaffCheckInOperationsPanel({
   }
 
   const openHandover = async (item: CheckInCase, inventory = false) => {
-    if (inventory && !canOpenInventory(item.checkInStatus, item.inventoryVisit?.appointmentAt)) return
+    if (inventory && !canAccessInventory(item)) { showToast(inventoryInspectionBlockReason(item) || 'Hồ sơ chưa đủ điều kiện kiểm kê.'); return }
     // Re-acquiring the processing lease reloads the same case. That must not throw away the
     // operator's position or the draft they are editing, or the form visibly jumps around.
     const reopeningSameCase = handoverTarget?.checkInId != null && handoverTarget.checkInId === item.checkInId
@@ -2015,6 +2020,7 @@ export default function StaffCheckInOperationsPanel({
         {item.checkInStatus === "setup_completed" && item.inventoryVisit?.arrivedAt && (
           <p className="mt-1 text-xs text-stone-600">{item.inventoryVisit.identityVerifiedAt ? "Đã xác minh" : "Đã đến, chờ xác minh"}</p>
         )}
+        {item.inventoryVisit?.access?.completionDeadlineAt && <p className="mt-1 text-xs text-stone-600">Hạn hoàn tất kiểm kê: {formatStaffDateTime(item.inventoryVisit.access.completionDeadlineAt)}</p>}
         {group === "ONGOING" && stepForCheckIn(item) <= 4 && (item.appointmentAt || item.scheduledAt) && handoverExpired(item, now) && (
           <p className="mt-1 text-[11px] font-medium text-red-700">Đã hết hạn nhận kho</p>
         )}
@@ -2053,7 +2059,8 @@ export default function StaffCheckInOperationsPanel({
       </Td>
       <Td className="whitespace-normal text-center">
         <div className={`mx-auto w-full gap-1.5 ${actionLayoutClass}`}>
-          <Button size="sm" variant="outline" className={`${actionButtonClass} ${inventoryActionClass}`} disabled={submitting || !canOpenInventory(item.checkInStatus, item.inventoryVisit?.appointmentAt)} title={!canOpenInventory(item.checkInStatus, item.inventoryVisit?.appointmentAt) ? "Chờ khách xác nhận lịch kiểm kê" : "Mở form kiểm kê riêng"} onClick={() => openHandover(item, true)}>Xem tiến trình kiểm kê</Button>
+          <Button size="sm" variant="outline" className={`${actionButtonClass} ${inventoryActionClass}`} disabled={submitting || !canAccessInventory(item, now)} title={inventoryInspectionBlockReason(item, now) || 'Xem tiến trình kiểm kê'} onClick={() => openHandover(item, true)}>{!canAccessInventory(item, now) && inventoryInspectionBlockReason(item, now) ? 'Kiểm kê đã khóa' : 'Xem tiến trình kiểm kê'}</Button>
+          {inventoryInspectionBlockReason(item, now) && item.checkInStatus !== 'completed' && <p className="text-xs text-red-700">{inventoryInspectionBlockReason(item, now)}</p>}
           {showsOngoingActions && (
             <>
               <Button
@@ -2140,6 +2147,7 @@ export default function StaffCheckInOperationsPanel({
             {handoverTarget.attendance?.completionDeadline && stepForCheckIn(handoverTarget) <= 4 &&
               <p>Hạn hoàn tất bàn giao: {formatStaffDateTime(handoverTarget.attendance.completionDeadline)}</p>}
             {handoverTarget.attendance?.arrivalUnderReview && <p>Giờ đến đang chờ quản lý đối soát.</p>}
+            {inventoryMode && inventoryBlockedReason && <p role="status" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{inventoryBlockedReason} Chỉ xem lại dữ liệu đã lưu.</p>}
             {handoverDeadlinePassed && !handoverTarget.attendance?.arrivalUnderReview && <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm font-medium text-amber-900">{handoverDeadlineMessage}</p>}
             {error && (inventoryMode || handoverStep !== 1)
               && error !== "Một số trường thông tin chưa hợp lệ. Vui lòng kiểm tra các trường được đánh dấu đỏ bên dưới." && (
@@ -2693,7 +2701,7 @@ export default function StaffCheckInOperationsPanel({
             )}
             {inventoryMode && handoverTarget.checkInStatus !== 'setup_in_progress' && inventoryStage === 1 && <StaffInventoryVisitPanel
               key={handoverTarget.checkInId ?? handoverTarget.reservationId}
-              item={handoverTarget} now={now} busy={submitting} onBusyChange={setSubmitting}
+              item={handoverTarget} now={now} busy={submitting || Boolean(inventoryBlockedReason)} onBusyChange={setSubmitting}
               onSaved={updated => {
                 setHandoverTarget(updated)
                 if (updated.inventoryVisit?.identityVerifiedAt) {
@@ -3173,7 +3181,7 @@ export default function StaffCheckInOperationsPanel({
             )}
 
             {inventoryMode && inventoryStage === 3 && <div>
-              {inventorySavedAt && !inventoryPublished && <p role="status" className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">Đã lưu bản kiểm kê lúc {formatStaffDateTime(inventorySavedAt)}. Có thể chỉnh sửa trước khi chuyển sang kết quả tiếp nhận.</p>}
+              {inventorySavedAt && !inventoryPublished && !inventoryBlockedReason && <p role="status" className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">Đã lưu bản kiểm kê lúc {formatStaffDateTime(inventorySavedAt)}. Có thể chỉnh sửa trước khi chuyển sang kết quả tiếp nhận.</p>}
               {(() => {
                 const fit = inventoryPublished ? handoverTarget.inventoryFullFit : !inventoryCapacity || ["UNKNOWN", "PENDING"].includes(inventoryCapacity.state) ? null : inventoryCapacity.state !== "NOT_FIT"
                 const result = inventoryResult(fit, inventoryPublished ? Boolean(handoverTarget.inventoryMismatchJson) : measurementVariance)
@@ -3197,7 +3205,7 @@ export default function StaffCheckInOperationsPanel({
                     packagingNote={handoverNotes} reason={measurementVariance ? effectiveVarianceReason : ''}
                     evidence={<div className="flex flex-wrap gap-2">{evidenceFiles.map((file, index) => <span key={index} className="rounded border bg-stone-50 px-3 py-2">{file.name}</span>)}{checkInEvidenceAssetIds(evidenceReferences).filter(id => !checkInEvidenceAssetIds(parseEmptyStorageHandover(handoverTarget.readinessNote).evidenceReferences).includes(id)).map((id, index) => <Button key={id} size="sm" variant="outline" onClick={() => void previewEvidenceFile(id)}>Xem bằng chứng {index + 1}</Button>)}</div>}
                   />
-                  {!inventoryPublished && <p className="text-sm text-amber-900">Đã lưu hàng hóa kiểm kê. Tiếp tục để hệ thống kiểm tra sức chứa chính thức và ghi nhận phương án trực tiếp tại cơ sở.</p>}
+                  {!inventoryPublished && !inventoryBlockedReason && <p className="text-sm text-amber-900">Đã lưu hàng hóa kiểm kê. Tiếp tục để hệ thống kiểm tra sức chứa chính thức và ghi nhận phương án trực tiếp tại cơ sở.</p>}
                 </InventoryResultNotice>
               })()}
             </div>}
@@ -3241,10 +3249,10 @@ export default function StaffCheckInOperationsPanel({
                     <Button disabled={submitting} onClick={() => setInventoryStage((inventoryStage + 1) as InventoryStage)}>Tiếp theo →</Button>
                   ) : (
                     <>
-                      {inventoryStage === 1 && <Button disabled={submitting || handoverTarget.checkInStatus === 'setup_in_progress' || !handoverTarget.inventoryVisit?.identityVerifiedAt} onClick={() => advanceInventoryStage(2)}>Tiếp tục kiểm kê hàng hóa</Button>}
+                      {inventoryStage === 1 && <Button disabled={submitting || Boolean(inventoryBlockedReason) || handoverTarget.checkInStatus === 'setup_in_progress' || !handoverTarget.inventoryVisit?.identityVerifiedAt} onClick={() => advanceInventoryStage(2)}>Tiếp tục kiểm kê hàng hóa</Button>}
                       {inventoryStage === 2 && inventoryStageReadOnly && <Button onClick={() => advanceInventoryStage(4)}>Xem lại kết quả kiểm kê</Button>}
                       {inventoryStage === 2 && !inventoryStageReadOnly && <Button disabled={submitting} onClick={() => void submitHandover()}>{submitting ? "Đang lưu kiểm kê…" : "Xác nhận hàng hóa kiểm kê"}</Button>}
-                      {inventoryStage === 3 && !inventoryPublished && <Button disabled={submitting || (lineInventory && !inventoryReviewConfirmed) || Boolean(handoverTarget.inventoryFinalDeadlineAt && Date.parse(handoverTarget.inventoryFinalDeadlineAt) <= now)} onClick={() => void continueInventoryResolution()}>{submitting ? "Đang kiểm tra sức chứa…" : "Tiếp tục đến kết quả tiếp nhận"}</Button>}
+                      {inventoryStage === 3 && !inventoryPublished && <Button disabled={submitting || Boolean(inventoryBlockedReason) || (lineInventory && !inventoryReviewConfirmed)} onClick={() => void continueInventoryResolution()}>{submitting ? "Đang kiểm tra sức chứa…" : "Tiếp tục đến kết quả tiếp nhận"}</Button>}
                       {inventoryStage === 3 && inventoryPublished && <Button onClick={() => advanceInventoryStage(4)}>Xem kết quả tiếp nhận</Button>}
                     </>
                   )}
@@ -3336,8 +3344,7 @@ export default function StaffCheckInOperationsPanel({
                       Quay lại
                     </Button>
                   )}
-                  <Button disabled={submitting || !handoverTarget.inventoryVisit?.identityVerifiedAt || Boolean(handoverTarget.inventoryFinalDeadlineAt
-                    && Date.parse(handoverTarget.inventoryFinalDeadlineAt) <= now)} onClick={() => submitHandover()}>{submitting ? "Đang hoàn tất…" : "Hoàn tất kiểm kê"}</Button>
+                  <Button disabled={submitting || Boolean(inventoryBlockedReason) || !handoverTarget.inventoryVisit?.identityVerifiedAt} onClick={() => submitHandover()}>{submitting ? "Đang hoàn tất…" : "Hoàn tất kiểm kê"}</Button>
                 </div>
               )}
             </div>
