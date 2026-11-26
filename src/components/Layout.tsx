@@ -7,6 +7,7 @@ import { markAllNotificationsRead } from '../services/notificationApi'
 import { userFacingError } from '../presentation/userFacingError'
 import { useDisplayPunctuation } from '../presentation/useDisplayPunctuation'
 import { managerDisplayText } from '../views/manager/managerPresentation'
+import { mergeNotificationFeed } from './notificationFeed'
 
 export interface NavItem {
   id: string
@@ -333,17 +334,10 @@ export default function Layout({
     return roleLabel
   }
 
-  const allNotificationsMap = new Map<string, LayoutNotification>()
-  bellActionNotifications.filter(n => !(n+    user.role === 'manager' && n.page === 'returns' &&
+  const visibleBellActions = bellActionNotifications.filter(n => !(user.role === 'manager' && n.page === 'returns' &&
     n.message === 'Vui lòng tạo yêu cầu tại màn hình Bảo trì bằng gian kho thực tế, không tạo phiếu cục bộ cho hồ sơ từ hệ thống.'
-  )).forEach(n => allNotificationsMap.set(n.id, n))
-  ;(suppliedNotifications ?? []).forEach(n => {
-    if (!allNotificationsMap.has(n.id)) allNotificationsMap.set(n.id, n)
-  })
-  ;(additionalNotifications ?? []).forEach(n => {
-    if (!allNotificationsMap.has(n.id)) allNotificationsMap.set(n.id, n)
-  })
-  const notifications = Array.from(allNotificationsMap.values())
+  ))
+  const notifications = mergeNotificationFeed(visibleBellActions, suppliedNotifications, additionalNotifications)
 
   const isNotificationRead = (item: LayoutNotification) => Boolean(item.isRead || readNotificationIds.includes(item.id))
   const unreadCount = notifications.filter(item => !item.isRead && !badgeSeenNotificationIds.includes(item.id)).length
@@ -367,6 +361,10 @@ export default function Layout({
 
   const openNotifications = () => {
     setNotificationsOpen(open => !open)
+    if (!notificationsOpen) {
+      if (onRetryNotifications) onRetryNotifications()
+      else window.dispatchEvent(new Event('storagehub:notifications-refresh'))
+    }
     if (!notificationsOpen && unreadCount > 0) {
       const nextSeenIds = Array.from(new Set([...badgeSeenNotificationIds, ...notifications.map(item => item.id)]))
       setBadgeSeenNotificationIds(nextSeenIds)

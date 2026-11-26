@@ -3,6 +3,7 @@ import { Button } from '../../components/ui'
 import { normalizeRentalIdentity, validateRentalIdentity } from '../../domain/rentalIdentity'
 import { formatCustomerDateTime } from '../../i18n/customerDate'
 import { userFacingError } from '../../presentation/userFacingError'
+import { inventoryInspectionBlockReason } from '../../domain/inventoryAccess'
 import { recordInventoryArrival, uploadCheckInEvidence, verifyInventoryIdentity, type CheckInCase } from '../../services/checkInApi'
 
 export default function StaffInventoryVisitPanel({ item, now, busy, onBusyChange, onSaved, onPreview }: {
@@ -21,7 +22,8 @@ export default function StaffInventoryVisitPanel({ item, now, busy, onBusyChange
   const [error, setError] = useState('')
   const locked = useRef(false)
   const visit = item.inventoryVisit
-  const expired = Boolean(item.inventoryFinalDeadlineAt && Date.parse(item.inventoryFinalDeadlineAt) <= now)
+  const blockedReason = inventoryInspectionBlockReason(item, now)
+  const expired = Boolean(blockedReason)
   const open = item.checkInStatus === 'setup_completed'
     && (item.inventoryResolutionStatus == null || item.inventoryResolutionStatus === 'NOT_STARTED')
   const format = (value: string) => formatCustomerDateTime(new Date(value))
@@ -80,8 +82,9 @@ export default function StaffInventoryVisitPanel({ item, now, busy, onBusyChange
     </div> : open && <div className="space-y-4">
       {expired && (
         <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">
-          <p className="font-semibold text-red-800">Đã quá hạn kiểm kê</p>
-          <p className="mt-0.5 text-stone-600">Hồ sơ đang trong thời gian đối soát. Nhân viên có thể đối soát và chấp nhận khách đến ở phần bên dưới.</p>
+          <p className="font-semibold text-red-800">
+            {blockedReason}
+          </p>
         </div>
       )}
       {!visit?.appointmentAt && !expired && <p role="status">Đang chờ khách chọn lịch kiểm kê.</p>}

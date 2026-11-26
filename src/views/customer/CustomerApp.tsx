@@ -41,6 +41,7 @@ import { goodsCatalogIssue, resolveDraftMaterial } from '../../domain/goodsCatal
 import { listNotifications, markNotificationRead, type ApiNotification } from '../../services/notificationApi'
 import { goodsReviewLabels, reservationProgress } from './reservationPresentation'
 import ReturnApiPanel from '../return-api/ReturnApiPanel'
+import { ViolationRecoveryPanel } from '../return-api/ViolationRecoveryPanel'
 import ReturnSettlementModal from '../../components/ReturnSettlementModal'
 import { isGeneratedDefaultRentalPackageList, resolveRentalPackagesForUnit } from '../../domain/packageRules'
 import { LEGACY_RENEWAL_NOTICE, LEGACY_RENEWAL_HISTORY_NOTICE, legacyRenewalMoney, isLegacyRenewalPayment } from '../../domain/legacyRenewal'
@@ -1072,6 +1073,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     if (!isApiAuthenticated()) setSupportChatbotOpen(true)
   }, [])
   const [focusedNotificationTarget, setFocusedNotificationTarget] = useState<string | null>(null)
+  const [recoveryNotificationTarget, setRecoveryNotificationTarget] = useState<{ id: string; request: number }>()
   const notificationRevealTimers = useRef<number[]>([])
   const [supportTab, setSupportTab] = useState('All')
   const [supportSearch, setSupportSearch] = useState('')
@@ -1846,6 +1848,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       void markNotificationRead(notificationId).then(updated => {
         setBackendNotifications(current => current.map(item => item.id === updated.id ? updated : item))
       }).catch(reason => notificationFeed.reportFailure(reason))
+      const source = backendNotifications.find(item => item.id === notificationId)
+      if (source?.relatedEntityType === 'VIOLATION_RECOVERY' && source.relatedEntityId) {
+        navigateTo('rental-records')
+        setRecoveryNotificationTarget({ id: source.relatedEntityId, request: Date.now() })
+        return
+      }
     }
     if (notification.page === 'support') { openSupportWidget(notification.targetId); return }
     navigateTo(notification.page)
@@ -4353,6 +4361,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       </Modal>
 
       {isApiAuthenticated() && <CustomerSupportWidget openRequest={supportWidgetRequest} />}
+      {isApiAuthenticated() && recoveryNotificationTarget && <Modal title="Thông báo thu hồi kho" size="2xl" open onClose={() => setRecoveryNotificationTarget(undefined)}>
+        <ViolationRecoveryPanel target={recoveryNotificationTarget} />
+      </Modal>}
 
       {!isApiAuthenticated() && <CustomerSupportChatbot
         user={user}

@@ -26,7 +26,8 @@ import SupportApiWorkspace from '../support-api/SupportApiWorkspace'
 import { canApiActor, getAuthenticatedActor, isApiAuthenticated } from '../../services/authApi'
 import { isFacilityTaskOverdue, isManagerFacilityVisible } from '../../domain/managerRules'
 import { managerStatusLabel } from './managerI18n'
-import { listNotifications, markNotificationRead, notifyBell, type ApiNotification } from '../../services/notificationApi'
+import { listNotifications, markNotificationRead, notifyBell } from '../../services/notificationApi'
+import { managerNotificationPage } from './managerNotificationRouting'
 import { listManagerPaymentComplaints } from '../../services/managerPaymentComplaintApi'
 
 export default function ManagerApp({ user, onLogout }: { user: User; onLogout: () => void }) {
@@ -71,6 +72,8 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
   ]
   const [page, setPage] = useState(() => getInitialPage(nav, 'dashboard'))
   const [supportTarget, setSupportTarget] = useState<{ id: string; request: number }>()
+  const [recoveryTarget, setRecoveryTarget] = useState<{ id: string; request: number }>()
+  useEffect(() => { if (page !== 'staff-tasks') setRecoveryTarget(undefined) }, [page])
   const notificationFeed = useBackendNotifications(user.id, isApiAuthenticated())
   const { items: backendNotifications, setItems: setBackendNotifications } = notificationFeed
 
@@ -150,17 +153,6 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
       return notifications
     })
   const managerNotifications = [...renewalNotifications, ...returnDisputeNotifications, ...managerTaskNotifications]
-  const managerNotificationPage = (notification: ApiNotification) => {
-    if (notification.type === 'SUPPORT') return 'support'
-    if (notification.type === 'RETURN') return 'returns'
-    if (notification.type === 'CHECKIN') {
-      return notification.title === 'Khách hàng đã cập nhật lịch nhận kho' ? 'unit-assignment' : 'dashboard'
-    }
-    if (notification.type === 'RESERVATION') return 'unit-assignment'
-    if (notification.type === 'RENEWAL') return 'rentals'
-    if (notification.type === 'PAYMENT' || notification.type === 'OVERDUE') return notification.type === 'OVERDUE' ? 'overdue-cases' : 'payment-complaints'
-    return 'dashboard'
-  }
   const managerApiNotifications: LayoutNotification[] = backendNotifications.map(notification => ({
     id: `api-notification-${notification.id}`,
     title: notification.title,
@@ -175,6 +167,10 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     if (notification.id.startsWith('api-notification-')) {
       const notificationId = notification.id.replace('api-notification-', '')
       setPage(notification.page)
+      if (notification.page === 'staff-tasks' && notification.targetId
+        && backendNotifications.some(item => item.id === notificationId && item.relatedEntityType === 'VIOLATION_RECOVERY')) {
+        setRecoveryTarget({ id: notification.targetId, request: Date.now() })
+      }
       if (notification.page === 'support' && notification.targetId) setSupportTarget({ id: notification.targetId, request: Date.now() })
       setBackendNotifications(current => current.map(item =>
         item.id === notificationId ? { ...item, isRead: true } : item
@@ -193,13 +189,13 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
       : <ManagerInventoryPanel user={user} units={hub.units} rentals={hub.rentals} reservations={hub.holds} checkins={hub.checkins} returns={hub.returns} activities={hub.activities} maintenanceTasks={hub.maintenanceTasks} unitTypes={hub.unitTypes} facilityId={managerFacilityId || ''} facilityName={facility?.name || user.facility || ''} createUnit={hub.createUnit} updateUnit={hub.updateUnit} deleteUnit={hub.deleteUnit} updateUnitStatus={hub.updateUnitStatus} onCreateMaintenanceWork={draft => { setStaffTaskDraft(draft); setPage('staff-tasks') }} onOpenRental={rentalId => { setInventoryRentalId(rentalId); setPage('rentals') }} onOpenMaintenance={(unitId, unitCode) => { setInventoryMaintenanceDraft({ unitId, unitCode }); setPage('staff-tasks') }} showToast={showToast} />)}
     {page === 'unit-assignment' && isApiAuthenticated() && <ManagerAssignmentWorkspace showToast={showToast} onOpenRental={rentalId => { setInventoryRentalId(rentalId); setPage('rentals') }} onOpenMaintenance={(unitId, unitCode) => { setInventoryMaintenanceDraft({ unitId, unitCode }); setPage('staff-tasks') }} />}
     {page === 'rentals' && (isApiAuthenticated() ? <ManagerRentalsApiPanel key={`${user.id}:${JSON.stringify(getAuthenticatedActor()?.facilityScopes)}`} initialRentalId={inventoryRentalId} /> : <ManagerRentalsPanel user={user} rentals={hub.rentals} renewals={hub.renewals} reservations={hub.holds} units={hub.units} unitTypes={hub.unitTypes} assignUnitToHold={hub.assignUnitToHold} showToast={showToast} />)}
-    {page === 'returns' && <ManagerReturnsPanel user={user} showToast={showToast} sb={statusBadge} onCreateMaintenanceWork={draft => { setStaffTaskDraft(draft); setPage('staff-tasks') }} />}
+    {page === 'returns' && <ManagerReturnsPanel user={user} showToast={showToast} sb={statusBadge} onOpenRecovery={() => { setRecoveryTarget(undefined); setPage('staff-tasks') }} onCreateMaintenanceWork={draft => { setStaffTaskDraft(draft); setPage('staff-tasks') }} />}
 
     {page === 'payments' && (isApiAuthenticated() ? <ManagerFinancialApiPanel /> : <ManagerPaymentsPanel user={user} rentals={hub.rentals} payments={hub.payments} config={hub.config} applyRentalLateFee={hub.applyRentalLateFee} setRentalOverlock={hub.setRentalOverlock} sendDelinquencyReminder={hub.sendDelinquencyReminder} showToast={showToast} />)}
     {page === 'overdue-cases' && isApiAuthenticated() && <ManagerOverdueApiPanel key={user.id} />}
     {page === 'payment-complaints' && isApiAuthenticated() && <ManagerPaymentComplaintsPanel showToast={showToast} />}
     {page === 'staff-tasks' && (isApiAuthenticated()
-      ? <ManagerApiStaffTasksPanel showToast={showToast} initialUnit={inventoryMaintenanceDraft} onInitialUnitConsumed={() => setInventoryMaintenanceDraft(null)} />
+      ? <ManagerApiStaffTasksPanel showToast={showToast} initialUnit={inventoryMaintenanceDraft} onInitialUnitConsumed={() => setInventoryMaintenanceDraft(null)} initialRecovery={recoveryTarget} />
       : <ManagerStaffTasksPanel user={user} facilityId={managerFacilityId || ''} facilityName={facility?.name || user.facility || ''} tasks={hub.staffTasks} createFacilityTask={hub.createFacilityTask} updateFacilityTask={hub.updateFacilityTask} initialDraft={staffTaskDraft} onDraftConsumed={() => setStaffTaskDraft(null)} showToast={showToast} />)}
     {page === 'profile' && <ProfileView user={user} />}
     {page === 'support' && isApiAuthenticated() && <SupportApiWorkspace role="manager" openTicket={supportTarget} />}

@@ -42,9 +42,10 @@ interface ManagerReturnsPanelProps {
   showToast: (msg: string) => void
   sb: (v: string) => React.ReactNode
   onCreateMaintenanceWork?: (draft: { referenceId: string; title: string; notes: string }) => void
+  onOpenRecovery?: () => void
 }
 
-export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaintenanceWork }: ManagerReturnsPanelProps) {
+export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaintenanceWork, onOpenRecovery }: ManagerReturnsPanelProps) {
   const {
     returns: legacyReturns,
     users,
@@ -561,7 +562,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
         <p className="mt-1 text-sm text-stone-500">Theo dõi nghiệm thu hiện trường, biên bản và quyết toán hồ sơ trả kho.</p>
       </header>
         <div className="flex w-full items-center gap-2 sm:w-auto">
-          {useApi && <ViolationRecoveryEntry />}
+          {useApi && (onOpenRecovery ? <Button variant="outline" size="sm" onClick={onOpenRecovery}>Điều phối thu hồi kho</Button> : <ViolationRecoveryEntry />)}
           <input
             type="text"
             placeholder={'Tìm theo mã, khách, gian kho...'}
@@ -589,7 +590,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
             ['All', `Tất cả ${facilityReturns.length}`],
             ['awaiting_inspection', `Chờ nghiệm thu ${awaitingInspectionCount}`],
             ...(useApi ? [['awaiting_identity_review', `Chờ đối soát danh tính ${awaitingIdentityReviewCount}`]] : []),
-            ['recovery_required', `Cần xử lý thu hồi ${recoveryRequiredCount}`],
+            ...(recoveryRequiredCount > 0 ? [['recovery_required', `Hồ sơ trả cần thu hồi ${recoveryRequiredCount}`]] : []),
             ['inspected', `Đã kiểm tra ${inspectedCount}`],
             ['needs_maintenance', `Cần bảo trì ${needsMaintenanceCount}`],
             ['completed', `Hoàn tất ${completedCount}`],
@@ -836,7 +837,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
 
             {currentApiReturn && <ReturnAttendance key={currentApiReturn.id} record={currentApiReturn} role="manager"
               editable={!!getAuthenticatedActor()?.permissions.includes('rentals:update')} onChanged={apiRead.refresh} />}
-            {currentApiReturn?.status === 'withdrawn_for_recovery' && <ViolationRecoveryEntry sourceReturnId={currentApiReturn.id} label="Mở hồ sơ thu hồi" />}
+            {currentApiReturn?.status === 'withdrawn_for_recovery' && (onOpenRecovery ? <Button onClick={onOpenRecovery}>Mở điều phối thu hồi</Button> : <ViolationRecoveryEntry sourceReturnId={currentApiReturn.id} label="Mở hồ sơ thu hồi" />)}
             {/* Inspection & Fees Breakdown Bento Box */}
             <div className="grid grid-cols-2 gap-3 text-xs bg-stone-50 p-3.5 rounded-lg border border-stone-200">
               <div>
