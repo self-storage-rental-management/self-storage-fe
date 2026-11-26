@@ -615,13 +615,84 @@ export default function ManagerUnitTypeModal({ open, facilityId, onClose, onCrea
       </section>}
       {step === 4 && <section className="space-y-5">
         <section className="space-y-3">
-          <h3 className="font-semibold text-stone-900">Loại hàng được nhận</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-stone-900">Loại hàng được nhận</h3>
+            {activeCategories.length > 0 && (
+              <button
+                type="button"
+                className="text-xs font-semibold text-amber-700 hover:text-amber-800 hover:underline cursor-pointer"
+                onClick={() => {
+                  setMetadataDirty(true)
+                  const allCatIds = activeCategories.map(c => c.id)
+                  const allMatIds = activeCategories.flatMap(c => c.materials.filter(m => m.status === 'ACTIVE').map(m => m.id))
+                  const allSelected = allCatIds.every(id => selectedCategories.includes(id))
+                  if (allSelected) {
+                    setSelectedCategories([])
+                    setSelectedMaterials([])
+                  } else {
+                    setSelectedCategories(allCatIds)
+                    setSelectedMaterials(allMatIds)
+                  }
+                }}
+              >
+                {activeCategories.every(c => selectedCategories.includes(c.id)) ? "Bỏ chọn tất cả nhóm hàng" : "Chọn tất cả nhóm hàng"}
+              </button>
+            )}
+          </div>
           {!goodsCatalog ? <p className="text-sm text-stone-500">Đang tải danh mục hàng hóa…</p> : activeCategories.map(category => {
             const checked = selectedCategories.includes(category.id)
             const materials = category.materials.filter(material => material.status === 'ACTIVE')
+            const allMaterialsChecked = materials.length > 0 && materials.every(m => selectedMaterials.includes(m.id))
             return <details key={category.id} className="rounded-lg border border-stone-200">
               <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold text-stone-900"><span>{category.label}</span><span className="text-xs font-normal text-stone-500">{checked ? 'Đã chọn' : 'Chưa chọn'}</span></summary>
-              <div className="space-y-3 border-t border-stone-200 p-4"><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={checked} onChange={event => { setMetadataDirty(true); setSelectedCategories(current => event.target.checked ? [...new Set([...current, category.id])] : current.filter(id => id !== category.id)); if (!event.target.checked) setSelectedMaterials(current => current.filter(id => !materials.some(material => material.id === id))) }} /> Cho phép lưu nhóm hàng này</label>{checked && materials.length > 0 && <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{materials.map(material => <label key={material.id} className="flex items-center gap-2 rounded bg-stone-50 px-3 py-2 text-sm"><input type="checkbox" checked={selectedMaterials.includes(material.id)} onChange={event => { setMetadataDirty(true); setSelectedMaterials(current => event.target.checked ? [...new Set([...current, material.id])] : current.filter(id => id !== material.id)) }} />{material.label}{material.fragile ? ' · Dễ vỡ' : ''}</label>)}</div>}</div>
+              <div className="space-y-3 border-t border-stone-200 p-4">
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={checked} onChange={event => {
+                    setMetadataDirty(true)
+                    setSelectedCategories(current => event.target.checked ? [...new Set([...current, category.id])] : current.filter(id => id !== category.id))
+                    if (!event.target.checked) setSelectedMaterials(current => current.filter(id => !materials.some(material => material.id === id)))
+                  }} /> Cho phép lưu nhóm hàng này
+                </label>
+                {checked && materials.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-xs font-medium text-stone-600">Vật liệu chính:</span>
+                      <button
+                        type="button"
+                        className="text-xs font-semibold text-amber-700 hover:text-amber-800 hover:underline cursor-pointer"
+                        onClick={() => {
+                          setMetadataDirty(true)
+                          setSelectedMaterials(current => {
+                            const materialIds = materials.map(m => m.id)
+                            if (allMaterialsChecked) {
+                              return current.filter(id => !materialIds.includes(id))
+                            } else {
+                              return [...new Set([...current, ...materialIds])]
+                            }
+                          })
+                        }}
+                      >
+                        {allMaterialsChecked ? "Bỏ chọn tất cả" : "Chọn tất cả"}
+                      </button>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {materials.map(material => (
+                        <label key={material.id} className="flex items-center gap-2 rounded bg-stone-50 px-3 py-2 text-sm cursor-pointer hover:bg-stone-100">
+                          <input
+                            type="checkbox"
+                            checked={selectedMaterials.includes(material.id)}
+                            onChange={event => {
+                              setMetadataDirty(true)
+                              setSelectedMaterials(current => event.target.checked ? [...new Set([...current, material.id])] : current.filter(id => id !== material.id))
+                            }}
+                          />
+                          {material.label}{material.fragile ? ' · Dễ vỡ' : ''}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </details>
           })}
         </section>
