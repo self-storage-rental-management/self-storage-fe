@@ -1238,9 +1238,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     return reservationSizeFilter === 'all' || storageSizeCode(unitType?.name || unitType?.code || '') === reservationSizeFilter
   })
 
-  const activeBackendReservations = filteredBackendReservations.filter(reservation => !['EXPIRED', 'COMPLETED'].includes(reservation.status))
+  const activeBackendReservations = filteredBackendReservations.filter(reservation => !reservation.violationRecovery && !['EXPIRED', 'COMPLETED'].includes(reservation.status))
   const expiredBackendReservations = filteredBackendReservations.filter(reservation => reservation.status === 'EXPIRED')
-  const completedBackendReservations = filteredBackendReservations.filter(reservation => reservation.status === 'COMPLETED')
+  const completedBackendReservations = filteredBackendReservations.filter(reservation => reservation.violationRecovery || reservation.status === 'COMPLETED')
   const activeReservationHolds = filteredReservationHolds.filter(hold => !['EXPIRED', 'COMPLETED', 'completed'].includes(hold.status))
   const expiredReservationHolds = filteredReservationHolds.filter(hold => hold.status === 'EXPIRED')
   const completedReservationHolds = filteredReservationHolds.filter(hold => ['COMPLETED', 'completed'].includes(hold.status))

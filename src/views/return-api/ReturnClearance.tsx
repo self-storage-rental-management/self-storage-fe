@@ -17,7 +17,7 @@ const steps = ['Đã gửi yêu cầu trả kho', 'Chuẩn bị bàn giao kho', 
   'Xác nhận quyết toán', 'Thu hoặc hoàn tiền nếu có', 'Hoàn tất trả kho']
 const currentStep: Record<ApiReturn['status'], number> = {
   requested: 1, scheduled: 1, recovery_required: 2, inspected: 2, awaiting_business_review: 3,
-  awaiting_customer_confirmation: 3, disputed: 3, payment_due: 4, refund_pending: 4, completed: 5,
+  awaiting_customer_confirmation: 3, disputed: 3, payment_due: 4, refund_pending: 4, completed: 5, withdrawn_for_recovery: 1,
 }
 
 export function ReturnPreparation() {

@@ -1,4 +1,4 @@
-import InventoryMismatchEvidence, { type InventoryInspectionReport } from '../staff/InventoryMismatchEvidence'
+import InventoryMismatchEvidence, { parseInventoryInspectionReport } from '../staff/InventoryMismatchEvidence'
 import InventoryDecisionSummary from '../../components/InventoryDecisionSummary'
 import { displayStatusLabel } from '../../presentation/statusLabels'
 import { invoiceNumberLabel } from '../customer/paymentLabels'
@@ -11,7 +11,7 @@ import BookingTransactionReceipt from "./BookingTransactionReceipt"
 import type { RentalApiDetail, RentalApiRole } from "../../types/rentalApi"
 import { bookingPaymentPurposes, bookingPaymentStatuses } from "../../services/rentalBookingEvidence"
 import { rentalRecordLabel, rentalStatusLabel, rentalMoney, unknown, rentalDataWarning, rentalPeriodText, rentalDate, accessStatusLabels } from "./presentation"
-import { downloadCheckInEvidence, type CheckInInventoryLine } from "../../services/checkInApi"
+import { downloadCheckInEvidence } from "../../services/checkInApi"
 import { confirmCustomerRentalStart, extendCustomerInventoryReturnWindow, getCustomerReservation, markCustomerPreparationComplete, previewCustomerRentalStart, resolveCustomerInventory, type CustomerReservationDetail, type RentalStartConfirmation } from "../../services/customerReservationApi"
 import { updateReturnRequest } from "../../services/returnApi"
 import { InventoryLineInspectionResult, InventoryResolutionNotice, PackagingInspectionResult } from "../customer/CustomerReservationCard"
@@ -59,26 +59,6 @@ function GoodsImage({ image }: { image: { id: string; originalName: string; cont
     {preview && url && <FilePreviewDialog file={{ url, type: image.contentType, name: image.originalName }} onClose={() => setPreview(false)} />}
   </div>
 }
-function savedInventoryReport(rental: RentalApiDetail): InventoryInspectionReport | null {
-  if (rental.inventory?.report) return rental.inventory.report
-  if (!rental.inventory?.actualJson) return null
-  try {
-    const actual = JSON.parse(rental.inventory.actualJson)
-    if (!actual || typeof actual !== 'object' || Array.isArray(actual)) return null
-    const finite = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? value : undefined
-    return {
-      packageCount: finite(actual.packageCount),
-      actualMeasurements: { weightKg: finite(actual.weightKg), actualVolumeM3: finite(actual.volumeM3) },
-      inventoryLines: Array.isArray(actual.lines) ? actual.lines.filter((line: unknown): line is CheckInInventoryLine => Boolean(line && typeof line === 'object' && 'goodsItemId' in line && 'actualQuantity' in line && typeof line.goodsItemId === 'string' && typeof line.actualQuantity === 'number')) : [],
-      actualPackagingMethod: typeof actual.packagingMethod === 'string' ? actual.packagingMethod : null,
-      packagingCondition: ['INTACT', 'MINOR_DAMAGE', 'MAJOR_DAMAGE', 'UNPACKAGED'].includes(actual.packagingCondition) ? actual.packagingCondition : null,
-      varianceReason: typeof actual.varianceReason === 'string' ? actual.varianceReason : null,
-      notes: typeof actual.notes === 'string' ? actual.notes : '',
-      evidenceReferences: Array.isArray(actual.evidenceReferences) ? actual.evidenceReferences.filter((id: unknown): id is string => typeof id === 'string') : [],
-    }
-  } catch { return null }
-}
-
 export default function RentalDetail({
   rental,
   onRequest,
@@ -176,7 +156,7 @@ export default function RentalDetail({
   const valueClass = "mt-1 text-sm font-semibold text-stone-900"
 
   const displayCode = rental.displayCode
-  const inspectionReport = savedInventoryReport(rental)
+  const inspectionReport = rental.inventory?.report ?? parseInventoryInspectionReport(rental.inventory?.actualJson)
   const evidence = rental.bookingEvidence
   const agreed = evidence?.agreedAmounts
   const warnings = rental.dataWarnings.filter(warning => warning.field !== "contractEndDate")

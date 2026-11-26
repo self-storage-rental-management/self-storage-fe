@@ -1,10 +1,29 @@
-import type { CheckInCase, CompleteCheckInRequest } from '../../services/checkInApi'
+import type { CheckInCase, CheckInInventoryLine, CompleteCheckInRequest } from '../../services/checkInApi'
 import { Button } from '../../components/ui'
 import { inventoryReportNote, staffGoodsCategoryLabel } from './staffPresentation'
 
 export type InventoryInspectionReport = Partial<Pick<CompleteCheckInRequest,
   'packageCount' | 'inventoryLines' | 'actualPackagingMethod' | 'packagingCondition' | 'notes' | 'identityVerificationNote' | 'varianceReason' | 'evidenceReferences'>> & {
   actualMeasurements: Partial<CompleteCheckInRequest['actualMeasurements']>
+}
+
+export function parseInventoryInspectionReport(actualJson?: string | null): InventoryInspectionReport | null {
+  if (!actualJson) return null
+  try {
+    const actual = JSON.parse(actualJson)
+    if (!actual || typeof actual !== 'object' || Array.isArray(actual)) return null
+    const finite = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? value : undefined
+    return {
+      packageCount: finite(actual.packageCount),
+      actualMeasurements: { weightKg: finite(actual.weightKg), actualVolumeM3: finite(actual.volumeM3) },
+      inventoryLines: Array.isArray(actual.lines) ? actual.lines.filter((line: unknown): line is CheckInInventoryLine => Boolean(line && typeof line === 'object' && 'goodsItemId' in line && 'actualQuantity' in line && typeof line.goodsItemId === 'string' && typeof line.actualQuantity === 'number')) : [],
+      actualPackagingMethod: typeof actual.packagingMethod === 'string' ? actual.packagingMethod : null,
+      packagingCondition: ['INTACT', 'MINOR_DAMAGE', 'MAJOR_DAMAGE', 'UNPACKAGED'].includes(actual.packagingCondition) ? actual.packagingCondition : null,
+      varianceReason: typeof actual.varianceReason === 'string' ? actual.varianceReason : null,
+      notes: typeof actual.notes === 'string' ? actual.notes : '',
+      evidenceReferences: Array.isArray(actual.evidenceReferences) ? actual.evidenceReferences.filter((id: unknown): id is string => typeof id === 'string') : [],
+    }
+  } catch { return null }
 }
 
 type Field = { label: string; value: string; declared?: string; changed?: boolean; comparable?: boolean }
