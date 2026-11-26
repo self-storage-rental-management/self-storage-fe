@@ -1,6 +1,7 @@
 import { recordDisplayCode, receiptDisplayCode } from '../../utils/recordDisplayCode'
 import { ClearanceStatus, CustomerClearance, ReturnContract, ReturnPreparation } from './ReturnClearance'
 import ReturnAttendance, { requiresReturnAttendance } from './ReturnAttendance'
+import { ViolationRecoveryEntry } from './ViolationRecoveryPanel'
 import { listMaintenanceStaff } from '../../services/maintenanceApi'
 import { getRental } from '../../services/rentalApi'
 import ReturnPolicyNotice from '../../components/ReturnPolicyNotice'
@@ -644,7 +645,7 @@ function ReturnWorkspace({
               <span className="text-xs text-stone-500">
                 {selectedRecord.attendance?.handoverAppointmentAt ? <>
                   Lịch bàn giao sau đối soát · <strong className="text-stone-700">{returnRecoveryCutoff(selectedRecord.attendance.handoverAppointmentAt)}</strong>
-                </> : <>Hạn trả: <strong className="text-stone-700">{rentalDate(selectedRecord.scheduledDate)}</strong></>}
+                </> : <>Ngày hẹn trả · <strong className="text-stone-700">{rentalDate(selectedRecord.scheduledDate)}</strong></>}
               </span>
             </div>
 
@@ -1208,6 +1209,10 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
         || (!!attendance.verifiedAt && attendance.reviewAccepted !== false
           && ((!expiresAt && handoverApproved) || inspectionNow < Date.parse(expiresAt ?? ''))))))
   const canReview = write && role === 'manager' && record.status === 'disputed'
+  // The mismatch confirmation SLA uses publication time, with review or inspection time for older statements.
+  const statementAt = Date.parse(record.settlementPublishedAt ?? record.reviewedAt ?? record.inspectedAt ?? '')
+  const confirmationDeadline = mismatch && record.status === 'awaiting_customer_confirmation' && !record.customerConfirmed && Number.isFinite(statementAt)
+    ? new Date(statementAt + 72 * 60 * 60 * 1000).toISOString() : null
   const recoveryNextStep = !recovery ? null : record.recoveryTaskStatus === 'CLOSED'
     ? 'Thu hồi đã hoàn tất. Hồ sơ thuê đã kết thúc và trạng thái kho đã được cập nhật.'
     : record.status === 'completed' ? 'Quyết toán đã hoàn tất. Hồ sơ thuê chỉ kết thúc sau khi nhân viên hoàn tất xử lý tài sản và giải phóng kho.'
@@ -1253,6 +1258,10 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
         Bảng kê phiên bản {record.settlementVersion}
         {record.settlementPublishedAt && <> · Phát hành {returnRecoveryCutoff(record.settlementPublishedAt)}</>}
       </p>}
+      {role === 'customer' && confirmationDeadline && <p className="text-sm">
+        Hạn phản hồi bảng kê · <time dateTime={confirmationDeadline}>{returnRecoveryCutoff(confirmationDeadline)}</time> (giờ Việt Nam)
+      </p>}
+      {record.status === 'withdrawn_for_recovery' && <ViolationRecoveryEntry sourceReturnId={record.id} label="Mở hồ sơ thu hồi" />}
       {mismatch && record.status === 'payment_due' && record.settlementPaymentDueAt && <p className="text-sm">
         Hạn thanh toán trước {returnRecoveryCutoff(record.settlementPaymentDueAt)}
       </p>}
