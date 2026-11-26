@@ -17,7 +17,7 @@ import { ARRIVAL_REVIEW_MS, HANDOVER_TERMS_VERSION, isCheckInHandoverExpired, st
 import { ApiClientError } from "../../services/apiClient"
 import { packageVolumeM3 } from '../../domain/reservationCapacity'
 import { inventoryResult } from '../../domain/inventoryResult'
-import { canAccessInventory, inventoryInspectionBlockReason } from '../../domain/inventoryAccess'
+import { canAccessInventory, inventoryInspectionBlockReason, isCheckInRecoveryTransferred } from '../../domain/inventoryAccess'
 import { pageAfterRefresh, shouldReplaceVisiblePage } from '../../domain/checkInListPaging'
 import { resolveResumeStep, INSPECTION_STEP, handoverStepForStatus } from '../../domain/staffHandoverPosition'
 import { canReturnToInventoryStage, isInventoryResultReopenable, isInventoryStageReadOnly, INVENTORY_STAGE_LABELS, type InventoryStage } from '../../domain/inventoryStages'
@@ -1985,16 +1985,17 @@ export default function StaffCheckInOperationsPanel({
   }
 
   const renderRow = (item: CheckInCase, group: CheckInGroup) => {
+    const recoveryTransferred = isCheckInRecoveryTransferred(item)
     const actions = staffCheckInActions(item, now)
     const receiptState = receiptConfirmationState(item, now)
     const receiptRelease = receiptReleaseState(item, now)
-    const showsOngoingActions = group === "ONGOING" && item.checkInStatus !== "completed"
-    const showsDetailAction = ["handover_pending_receipt", "setup_in_progress", "setup_completed"].includes(item.checkInStatus || "")
+    const showsOngoingActions = !recoveryTransferred && group === "ONGOING" && item.checkInStatus !== "completed"
+    const showsDetailAction = recoveryTransferred || ["handover_pending_receipt", "setup_in_progress", "setup_completed"].includes(item.checkInStatus || "")
     const actionButtonCount = 1
       + (showsOngoingActions ? 1 : 0)
       + (showsOngoingActions && actions.canReject ? 1 : 0)
       + (showsDetailAction ? 1 : 0)
-      + (item.checkInStatus === "completed" ? 3 : 0)
+      + (!recoveryTransferred && item.checkInStatus === "completed" ? 3 : 0)
     const actionLayoutClass = actionButtonCount === 1
       ? "flex max-w-md flex-wrap items-center justify-center"
       : "grid max-w-[25rem] grid-cols-2"
@@ -2014,13 +2015,15 @@ export default function StaffCheckInOperationsPanel({
         </p>
       </Td>
       <Td>
-        <span>{item.checkInStatus === "setup_completed"
+        <span>{recoveryTransferred
+          ? formatStaffDateTime(item.inventoryVisit?.appointmentAt || item.appointmentAt || item.scheduledAt)
+          : item.checkInStatus === "setup_completed"
           ? item.inventoryVisit?.appointmentAt ? formatStaffDateTime(item.inventoryVisit.appointmentAt) : "Chưa đặt lịch kiểm kê"
           : formatStaffDateTime(item.appointmentAt || item.scheduledAt)}</span>
-        {item.checkInStatus === "setup_completed" && item.inventoryVisit?.arrivedAt && (
+        {!recoveryTransferred && item.checkInStatus === "setup_completed" && item.inventoryVisit?.arrivedAt && (
           <p className="mt-1 text-xs text-stone-600">{item.inventoryVisit.identityVerifiedAt ? "Đã xác minh" : "Đã đến, chờ xác minh"}</p>
         )}
-        {item.inventoryVisit?.access?.completionDeadlineAt && <p className="mt-1 text-xs text-stone-600">Hạn hoàn tất kiểm kê: {formatStaffDateTime(item.inventoryVisit.access.completionDeadlineAt)}</p>}
+        {!recoveryTransferred && item.inventoryVisit?.access?.completionDeadlineAt && <p className="mt-1 text-xs text-stone-600">Hạn hoàn tất kiểm kê: {formatStaffDateTime(item.inventoryVisit.access.completionDeadlineAt)}</p>}
         {group === "ONGOING" && stepForCheckIn(item) <= 4 && (item.appointmentAt || item.scheduledAt) && handoverExpired(item, now) && (
           <p className="mt-1 text-[11px] font-medium text-red-700">Đã hết hạn nhận kho</p>
         )}
@@ -2038,7 +2041,7 @@ export default function StaffCheckInOperationsPanel({
       <Td className="whitespace-nowrap">
         <Badge
           variant={
-            item.inventoryDecision?.outcome === 'REFUSED' || receiptRelease.eligible || receiptState.expired
+            recoveryTransferred ? "info" : item.inventoryDecision?.outcome === 'REFUSED' || receiptRelease.eligible || receiptState.expired
               ? "error"
               : item.checkInStatus === "completed"
               ? "success"
@@ -2050,7 +2053,8 @@ export default function StaffCheckInOperationsPanel({
                   : "warning"
           }
         >
-          {item.inventoryDecision ? intakeDecisionLabels[item.inventoryDecision.outcome] : receiptRelease.eligible
+          {recoveryTransferred ? staffCheckInStatusLabel(item.checkInStatus, item.reservationStatus, true)
+            : item.inventoryDecision ? intakeDecisionLabels[item.inventoryDecision.outcome] : receiptRelease.eligible
             ? "Đủ điều kiện để quản lý cơ sở giải phóng kho"
             : receiptState.expired
             ? "Đã quá hạn xác nhận nhận kho"
@@ -2060,7 +2064,7 @@ export default function StaffCheckInOperationsPanel({
       <Td className="whitespace-normal text-center">
         <div className={`mx-auto w-full gap-1.5 ${actionLayoutClass}`}>
           <Button size="sm" variant="outline" className={`${actionButtonClass} ${inventoryActionClass}`} disabled={submitting || !canAccessInventory(item, now)} title={inventoryInspectionBlockReason(item, now) || 'Xem tiến trình kiểm kê'} onClick={() => openHandover(item, true)}>{!canAccessInventory(item, now) && inventoryInspectionBlockReason(item, now) ? 'Kiểm kê đã khóa' : 'Xem tiến trình kiểm kê'}</Button>
-          {inventoryInspectionBlockReason(item, now) && item.checkInStatus !== 'completed' && <p className="text-xs text-red-700">{inventoryInspectionBlockReason(item, now)}</p>}
+          {!recoveryTransferred && inventoryInspectionBlockReason(item, now) && item.checkInStatus !== 'completed' && <p className="text-xs text-red-700">{inventoryInspectionBlockReason(item, now)}</p>}
           {showsOngoingActions && (
             <>
               <Button
@@ -2092,7 +2096,7 @@ export default function StaffCheckInOperationsPanel({
               Xem biên bản
             </Button>
           )}
-          {item.checkInStatus === "completed" && (
+          {!recoveryTransferred && item.checkInStatus === "completed" && (
             <>
               <Button
                 className={`${actionButtonClass} ${handoverActionClass}`}
@@ -2120,7 +2124,7 @@ export default function StaffCheckInOperationsPanel({
               </Button>
             </>
           )}
-          {group === "PROCESSED" && item.checkInStatus !== "completed" && (
+          {group === "PROCESSED" && !recoveryTransferred && item.checkInStatus !== "completed" && (
             <span className="max-w-60 whitespace-normal text-xs text-stone-600">{item.rejectionReason || staffCheckInStatusLabel(item.checkInStatus, item.reservationStatus)}</span>
           )}
         </div>
@@ -3388,6 +3392,7 @@ export default function StaffCheckInOperationsPanel({
             <option value="handover_pending_receipt">Đã bàn giao · chờ khách xác nhận</option>
             <option value="setup_in_progress">Khách đang chuẩn bị hàng</option>
             <option value="setup_completed">Chờ kiểm kê hàng hóa</option>
+            <option value="RECOVERY_TRANSFERRED">Đã chuyển thu hồi</option>
             <option value="no_show">Khách không đến</option>
             <option value="completed">Đã hoàn tất kiểm kê</option>
             <option value="rejected">Từ chối nhận kho</option>
@@ -3568,18 +3573,10 @@ export default function StaffCheckInOperationsPanel({
               <p>{parseEmptyStorageHandover(detailTarget.readinessNote).condition}</p>
               <p>{detailTarget.checkInStatus === "completed" ? "Biên bản chưa có dữ liệu chi tiết." : "Chưa kiểm kê"}</p>
             </div>
-            <div className="flex justify-end">
-              <Button variant="outline" onClick={() => setDetailTarget(null)}>
-                Đóng
-              </Button>
-            </div>
           </div>
         )}
         {detailTarget && <StaffRecordDocuments key={detailTarget.checkInId || detailTarget.reservationId}
           item={detailTarget} onPreview={assetId => void previewEvidenceFile(assetId)} onOpenReturns={onOpenReturns} />}
-        <div className="mt-4 flex justify-end border-t border-stone-200 pt-4">
-          <Button variant="outline" onClick={() => setDetailTarget(null)}>Đóng</Button>
-        </div>
       </Modal>
       <Modal
         open={Boolean(previewEvidence)}

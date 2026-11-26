@@ -4,6 +4,7 @@ import { apiRequest } from '../services/apiClient'
 type Contact = { name: string; phone: string; relationship?: string; email?: string }
 type Contacts = { rentalId: string; customerName: string; currentContacts: Contact[]; contractSnapshot?: string }
 export default function EmergencyContactsPanel({ rentalId, unitId }: { rentalId?: string; unitId?: string }) {
+  const [open, setOpen] = useState(false)
   const [rows, setRows] = useState<Contacts[] | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -15,13 +16,23 @@ export default function EmergencyContactsPanel({ rentalId, unitId }: { rentalId?
     } catch { setError('Không tải được liên hệ khẩn cấp. Vui lòng thử lại hoặc kiểm tra quyền truy cập.') }
     finally { setLoading(false) }
   }
+  const toggle = () => {
+    if (open) {
+      setOpen(false)
+      return
+    }
+    setOpen(true)
+    if (rows === null || error) void load()
+  }
   const render = (contacts: Contact[]) => contacts.map((c, i) => <li key={i} className="my-2">
     <span className="font-medium">{c.name}</span>{c.relationship && ` · ${c.relationship}`} · <a className="font-semibold text-amber-800 underline" href={`tel:${c.phone.replace(/[^+0-9]/g, '')}`}>Gọi {c.phone}</a>{c.email && <span> · {c.email}</span>}
   </li>)
   return <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
-    <button type="button" className="font-semibold underline" disabled={loading} onClick={() => void load()}>{loading ? 'Đang tải…' : 'Xem / gọi liên hệ khẩn cấp'}</button>
-    {error && <p role="alert">{error}</p>}
-    {rows && <><p className="mt-2 text-xs">Chỉ gọi khi không liên lạc được khách hoặc có sự cố. Người liên hệ không có quyền nhận hay trả kho.</p>
+    <button type="button" className="font-semibold underline" aria-expanded={open} disabled={loading} onClick={toggle}>
+      {loading ? 'Đang tải…' : open ? 'Thu gọn liên hệ khẩn cấp' : 'Xem / gọi liên hệ khẩn cấp'}
+    </button>
+    {open && error && <p role="alert">{error}</p>}
+    {open && rows && <><p className="mt-2 text-xs">Chỉ gọi khi không liên lạc được khách hoặc có sự cố. Người liên hệ không có quyền nhận hay trả kho.</p>
       {!rows.length && <p>Không có hợp đồng thuê đang sử dụng ô kho này.</p>}
       {rows.map(row => {
         let snapshot: Contact[] = []

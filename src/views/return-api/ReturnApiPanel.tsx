@@ -2,7 +2,7 @@ import { recordDisplayCode, receiptDisplayCode } from '../../utils/recordDisplay
 import { compareReturnQueue } from '../../utils/returnQueueSort'
 import { ClearanceStatus, CustomerClearance, ReturnContract, ReturnPreparation } from './ReturnClearance'
 import ReturnAttendance, { requiresReturnAttendance } from './ReturnAttendance'
-import { ViolationRecoveryEntry } from './ViolationRecoveryPanel'
+import { ViolationRecoveryEntry, ViolationRecoveryPanel } from './ViolationRecoveryPanel'
 import { listMaintenanceStaff } from '../../services/maintenanceApi'
 import { getRental } from '../../services/rentalApi'
 import { getCustomerReservation, extendCustomerInventoryReturnWindow, resolveCustomerInventory } from '../../services/customerReservationApi'
@@ -23,6 +23,7 @@ import RecoveryTaskLink from '../rental-api/RecoveryTaskLink'
 import {
   getReturn,
   confirmReturn,
+  extendMismatchReturnWindow,
   feeKeys,
   inspectReturn,
   savePropertyCheck,
@@ -127,7 +128,11 @@ export function ReturnSummary({ record, hideTerminationFee = false, hideHeader =
             <div><h4 className="text-lg font-bold text-stone-900">{record.unitNumber}</h4><p className="mt-1 text-sm text-stone-500">{record.facilityName}</p></div>
             <span className={`rounded-full px-3 py-1 text-xs font-semibold ${badgeClass}`}>{statusLabel(record)}</span>
           </div>
-          {!handoverAppointment && <p className="text-sm text-stone-600">{'Ngày dự kiến trả: '}<strong className="text-stone-900">{rentalDate(record.scheduledDate)}</strong></p>}
+          {!handoverAppointment && (
+            record.returnType === 'INVENTORY_MISMATCH' && record.scheduledAppointmentAt
+              ? <p className="text-sm text-stone-600">{'Ngày, giờ hẹn bàn giao: '}<strong className="text-stone-900">{returnRecoveryCutoff(record.scheduledAppointmentAt)}</strong></p>
+              : <p className="text-sm text-stone-600">{'Ngày dự kiến trả: '}<strong className="text-stone-900">{rentalDate(record.scheduledDate)}</strong></p>
+          )}
         </>
       )}
       {['requested', 'scheduled'].includes(record.status) && record.recoveryEligibleAt && !record.attendance?.arrivedAt && <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">Nếu khách chưa đến và chưa hoàn tất trả kho, hồ sơ sẽ chuyển sang nhiệm vụ xử lý sau <strong>{returnRecoveryCountdown(record.recoveryEligibleAt, now) || returnRecoveryCutoff(record.recoveryEligibleAt)}</strong>. Hàng chưa được tự động di chuyển.</p>}
@@ -526,6 +531,7 @@ function ReturnWorkspace({
     setNotes(current => current || `Trả kho do kiểm kê sai lệch${summary ? `: ${summary}` : '.'}`)
   }, [mismatch, removal.data?.inventoryMismatchSummary, contract.data?.inventory?.mismatchSummary])
   const [editing, setEditing] = useState<string | null>(null)
+  const [listMode, setListMode] = useState<'returns' | 'recovery'>('returns')
   const today = vietnamDateInput()
 
   async function run(work: () => Promise<unknown>) {
@@ -550,7 +556,17 @@ function ReturnWorkspace({
     }
   }
 
-  function extendRemovalWindow() {
+  function extendRemovalWindow(returnRecord?: ApiReturn) {
+    if (returnRecord?.returnType === 'INVENTORY_MISMATCH') {
+      void run(async () => {
+        await extendMismatchReturnWindow(returnRecord.id, returnRecord.returnVersion, crypto.randomUUID())
+        if (mounted.current) {
+          removal.refresh()
+          contract.refresh()
+        }
+      })
+      return
+    }
     if (!reservationId) return
     void run(async () => {
       await extendCustomerInventoryReturnWindow(reservationId)
@@ -662,7 +678,7 @@ function ReturnWorkspace({
           {removal.data && <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-amber-200 pt-2">
             <p>Đã gia hạn {removal.data.inventoryReturnExtensionCount ?? 0}/2 lần{removal.data.inventoryReturnExtensionDays ? ` · Mỗi lần thêm ${removal.data.inventoryReturnExtensionDays} ngày` : ''}.</p>
             {removal.data.inventoryReturnCanExtend && !expired
-              ? <Button type="button" size="sm" variant="outline" disabled={busy} onClick={extendRemovalWindow}>{busy ? 'Đang xử lý…' : 'Gia hạn dọn hàng'}</Button>
+              ? <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => extendRemovalWindow()}>{busy ? 'Đang xử lý…' : 'Gia hạn dọn hàng'}</Button>
               : <p>{expired ? 'Đã hết hạn dọn hàng. Vui lòng liên hệ cơ sở để xử lý.'
                 : (removal.data.inventoryReturnExtensionCount ?? 0) >= 2 ? 'Đã sử dụng hết 2 lượt gia hạn.'
                 : 'Hồ sơ không còn đủ điều kiện gia hạn.'}</p>}
@@ -723,9 +739,11 @@ function ReturnWorkspace({
                   Lý do: &ldquo;{selectedRecord.customerNotes}&rdquo;
                 </span>
               )}
-              {(selectedRecord.attendance?.handoverAppointmentAt || selectedRecord.scheduledDate) && <span className="text-xs text-stone-500">
+              {(selectedRecord.attendance?.handoverAppointmentAt || selectedRecord.scheduledAppointmentAt || selectedRecord.scheduledDate) && <span className="text-xs text-stone-500">
                 {selectedRecord.attendance?.handoverAppointmentAt ? <>
                   Lịch bàn giao sau đối soát · <strong className="text-stone-700">{returnRecoveryCutoff(selectedRecord.attendance.handoverAppointmentAt)}</strong>
+                </> : selectedRecord.scheduledAppointmentAt ? <>
+                  Lịch hẹn bàn giao · <strong className="text-stone-700">{returnRecoveryCutoff(selectedRecord.scheduledAppointmentAt)}</strong>
                 </> : <>Ngày hẹn trả · <strong className="text-stone-700">{rentalDate(selectedRecord.scheduledDate)}</strong></>}
               </span>}
             </div>
@@ -752,12 +770,27 @@ function ReturnWorkspace({
 
           {feedback && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{feedback}</p>}
           {role === 'customer' && selectedRecord.sourceType !== 'RECOVERY' && <>
-            <CustomerClearance record={selectedRecord} ownerId={actor?.id} busy={busy || read.loading} run={run}
+            <CustomerClearance record={selectedRecord} ownerId={actor?.id} busy={busy || read.loading}
+              run={async work => {
+                await run(async () => {
+                  const updated = await work()
+                  if (mounted.current && selectedRecord.returnType === 'INVENTORY_MISMATCH') {
+                    removal.refresh()
+                    contract.refresh()
+                  }
+                  return updated
+                })
+              }}
               countdown={pendingMismatch ? returnRecoveryCountdown(selectedRecord.inventoryRemovalDeadlineAt ?? selectedRecord.recoveryEligibleAt, now) : undefined}
-              extension={pendingMismatch && removal.data ? {
-                count: removal.data.inventoryReturnExtensionCount ?? 0,
-                onExtend: removal.data.inventoryReturnCanExtend && !removal.loading
-                  && Date.parse(removal.data.inventoryRemovalDeadlineAt ?? '') > now ? extendRemovalWindow : undefined,
+              extension={pendingMismatch ? {
+                count: selectedRecord.returnExtensionCount ?? removal.data?.inventoryReturnExtensionCount ?? 0,
+                onExtend: selectedRecord.canExtendReturnWindow !== false
+                  && (selectedRecord.returnExtensionCount ?? removal.data?.inventoryReturnExtensionCount ?? 0) < (selectedRecord.maxReturnExtensions ?? 2)
+                  && Date.parse(selectedRecord.inventoryRemovalDeadlineAt ?? removal.data?.inventoryRemovalDeadlineAt ?? '') > now
+                  && !selectedRecord.attendance?.arrivedAt
+                  && !selectedRecord.attendance?.lateArrivalClaimedAt
+                  && selectedRecord.attendance?.reviewStatus !== 'PENDING'
+                  ? () => extendRemovalWindow(selectedRecord) : undefined,
               } : undefined} />
             {contract.data && <details className="rounded-xl border border-stone-200 px-4 py-3 text-sm">
               <summary className="cursor-pointer font-semibold text-stone-800">Thông tin hợp đồng</summary>
@@ -852,6 +885,30 @@ function ReturnWorkspace({
       ) : (
         /* ─── MASTER LIST VIEW (When no record is selected) ─── */
         <div className="space-y-4">
+          {role !== 'customer' && (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={listMode === 'returns' ? 'primary' : 'outline'}
+                onClick={() => setListMode('returns')}
+              >
+                Danh sách hồ sơ trả kho &amp; quyết toán
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={listMode === 'recovery' ? 'primary' : 'outline'}
+                onClick={() => setListMode('recovery')}
+              >
+                Thu hồi kho
+              </Button>
+            </div>
+          )}
+          {role !== 'customer' && listMode === 'recovery' ? (
+            <ViolationRecoveryPanel />
+          ) : (
+          <>
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 pb-3">
             <div>
               <h3 className="text-base font-bold text-stone-900">Danh sách hồ sơ trả kho &amp; quyết toán</h3>
@@ -972,7 +1029,11 @@ function ReturnWorkspace({
                       </div>
                       <div>
                         <span className="text-stone-400 block text-[11px]">Hạn dự kiến trả</span>
-                        <span className="font-semibold text-stone-700">{rentalDate(record.scheduledDate)}</span>
+                        <span className="font-semibold text-stone-700">
+                          {record.returnType === 'INVENTORY_MISMATCH' && record.scheduledAppointmentAt
+                            ? returnRecoveryCutoff(record.scheduledAppointmentAt)
+                            : rentalDate(record.scheduledDate)}
+                        </span>
                       </div>
                       <div className="col-span-2 pt-1 border-t border-stone-50 flex items-center justify-between">
                         <span className="text-stone-400 text-[11px]">
@@ -1044,6 +1105,8 @@ function ReturnWorkspace({
                 <Button size="sm" variant="outline" disabled={busy || recoveryBusy || !read.data || page + 1 >= read.data.pagination.totalPages} onClick={() => { if (!recoveryLock.current) setPage((value) => value + 1) }}>Trang sau</Button>
               </div>
             </div>
+          )}
+          </>
           )}
         </div>
       )}

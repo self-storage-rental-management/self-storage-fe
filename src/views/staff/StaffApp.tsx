@@ -44,7 +44,6 @@ import StaffUnitReleasePanel from "./StaffUnitReleasePanel"
 import StaffDailyTaskQueue from "./StaffDailyTaskQueue"
 import RecoveryTaskDetail from "../rental-api/RecoveryTaskDetail"
 import ReturnApiPanel from "../return-api/ReturnApiPanel"
-import { ViolationRecoveryEntry } from "../return-api/ViolationRecoveryPanel"
 import {
   archiveCompletedCheckIn,
   listCheckIns,
@@ -872,7 +871,7 @@ export default function StaffApp({
     {
       id: "return",
 
-      label: "Trả kho & nghiệm thu",
+      label: "Trả kho & thu hồi",
 
       icon: Icon.clipboard,
 
@@ -2971,9 +2970,8 @@ export default function StaffApp({
             <div className="fade-in space-y-4">
               <SectionHeader
                 eyebrow="CỔNG NHÂN VIÊN · KIỂM KÊ & BẰNG CHỨNG"
-                title="Trả kho & nghiệm thu"
+                title="Trả kho & thu hồi"
                 subtitle="Đối chiếu hiện trạng, ghi nhận quyết toán và hoàn cọc trên dữ liệu máy chủ"
-                action={<ViolationRecoveryEntry />}
               />
               <ReturnApiPanel role="staff" onChanged={refreshCredentialAlerts} />
             </div>
@@ -2983,7 +2981,7 @@ export default function StaffApp({
             <div className="fade-in">
           <SectionHeader
             eyebrow={"CỔNG NHÂN VIÊN · KIỂM KÊ & BẰNG CHỨNG"}
-            title={"Trả kho & nghiệm thu"}
+            title={"Trả kho & thu hồi"}
             subtitle={
               "Đối chiếu hiện trạng trước-sau, kiểm kê hàng hóa, phân loại và lưu bằng chứng"
             }
