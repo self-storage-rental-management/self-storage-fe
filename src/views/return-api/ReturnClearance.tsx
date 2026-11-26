@@ -1,6 +1,7 @@
 import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import { useState } from 'react'
 import { Button, Modal } from '../../components/ui'
+import { formatCustomerDateTime } from '../../i18n/customerDate'
 import { setCustomerClearance, type ApiReturn } from '../../services/returnApi'
 import type { RentalApiDetail } from '../../types/rentalApi'
 import { rentalDate, rentalMoney } from '../rental-api/presentation'
@@ -53,10 +54,18 @@ export function CustomerClearance({ record, busy, run, ownerId }: { record: ApiR
   const [confirming, setConfirming] = useState(false)
   const editable = ownerId === record.customerId && ['requested', 'scheduled'].includes(record.status)
     && !record.inspectedAt && !record.noShowAt && record.sourceType !== 'RECOVERY'
+  const clearanceDeadline = record.returnType === 'INVENTORY_MISMATCH'
+    ? record.inventoryRemovalDeadlineAt ?? record.recoveryEligibleAt
+    : record.attendance?.reviewAccepted === true
+      ? record.attendance.handoverDueAt ?? record.recoveryEligibleAt
+      : record.recoveryEligibleAt
   return <section className="space-y-3 rounded-xl border border-stone-200 p-4">
     <p className="break-all text-sm">Mã yêu cầu · {record.displayCode || recordDisplayCode(record.id)}</p>
     <ClearanceStatus record={record} />
     {editable && <>
+      {clearanceDeadline && <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+        <strong>Hạn cuối dọn kho</strong> · Trước <time dateTime={clearanceDeadline}>{formatCustomerDateTime(clearanceDeadline)}</time> (giờ Việt Nam)
+      </p>}
       <ReturnPreparation />
       {record.warehouseEmptyVerified === false && <p className="rounded-lg bg-amber-50 p-3 text-sm">Nhân viên ghi nhận còn tài sản. {record.inspectionNotes}</p>}
       {record.customerClearedAt
