@@ -96,7 +96,7 @@ function SupportSession({
     page: 0,
     size: role === "manager" ? 10 : 20,
     ...(facilityId ? { facilityId } : {}),
-    sort: role === "staff" ? "updatedAt,desc" : "createdAt,desc",
+    sort: "priority,asc",
   })
   const [search, setSearch] = useState(""),
     [selected, setSelected] = useState<string>()
@@ -233,7 +233,7 @@ function SupportSession({
               <summary className="flex min-h-9 cursor-pointer list-none items-center gap-2 rounded-lg px-2 text-xs font-medium text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-800 focus-visible:outline-2 focus-visible:outline-amber-600 [&::-webkit-details-marker]:hidden">
                 <svg aria-hidden="true" className="show-icon h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></svg>
                 <span className="flex-1">Tìm kiếm & lọc</span>
-                {(!!query.search || !!query.status || query.sort !== 'createdAt,desc') && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] text-amber-800">Đang áp dụng</span>}
+                {(!!query.search || !!query.status || query.sort !== 'priority,asc') && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] text-amber-800">Đang áp dụng</span>}
                 <svg aria-hidden="true" className="show-icon h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-180 motion-reduce:transition-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
               </summary>
               <form className="mt-2 space-y-2 border-t border-stone-200/70 pt-3" onSubmit={e => { e.preventDefault(); change({ search: search.trim() }) }}>
@@ -248,13 +248,13 @@ function SupportSession({
                 </label>}
                 <label className="block text-xs text-stone-500">Sắp xếp
                   <select className={`${supportInputClass} !mt-1 !min-h-9 !py-1.5 !text-xs`} value={query.sort} disabled={locked} onChange={e => change({ sort: e.target.value })}>
-                    <option value="createdAt,desc">Mới nhất</option><option value="createdAt,asc">Cũ nhất</option><option value="updatedAt,desc">Vừa cập nhật</option><option value="subject,asc">Nội dung A-Z</option>
+                    <option value="priority,asc">Cần xử lý / hạn gần nhất</option><option value="createdAt,desc">Mới nhất</option><option value="createdAt,asc">Cũ nhất</option><option value="updatedAt,desc">Vừa cập nhật</option><option value="subject,asc">Nội dung A-Z</option>
                   </select>
                 </label>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" type="submit" variant="outline" className="!min-h-8 !px-3 !py-1 !text-xs" disabled={locked}>Áp dụng</Button>
-                <Button size="sm" type="button" variant="ghost" className="!min-h-8 !px-3 !py-1 !text-xs" disabled={locked} onClick={() => { setSearch(''); setQuery({ page: 0, size: role === 'manager' ? 10 : 20, ...(facilityId ? { facilityId } : {}), sort: 'createdAt,desc' }) }}>Đặt lại</Button>
+                <Button size="sm" type="button" variant="ghost" className="!min-h-8 !px-3 !py-1 !text-xs" disabled={locked} onClick={() => { setSearch(''); setQuery({ page: 0, size: role === 'manager' ? 10 : 20, ...(facilityId ? { facilityId } : {}), sort: 'priority,asc' }) }}>Đặt lại</Button>
               </div>
               </form>
             </details>}

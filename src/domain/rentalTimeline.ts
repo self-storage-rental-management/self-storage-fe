@@ -1,4 +1,4 @@
-/** Preview only. Actual handover determines the final paid period on the server. */
+/** Preview only. The customer's selected appointment determines the final paid period on the server. */
 export function estimatedRentalPeriod(handoverDate: string, setupDays: number, months: number) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(handoverDate) || !Number.isInteger(setupDays) || setupDays < 0 || !Number.isInteger(months) || months < 1) return null
   const start = new Date(`${handoverDate}T00:00:00Z`)

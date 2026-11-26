@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Badge, Button, Card, Modal, SectionHeader, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
-import { listCheckIns, releaseCustomerReceiptTimeout, sendCustomerReceiptReminder, type CheckInCase } from '../../services/checkInApi'
+import { listArrivalReviews, resolveArrivalReview, type PendingArrival, listCheckIns, releaseCustomerReceiptTimeout, type CheckInCase } from '../../services/checkInApi'
+import { downloadCheckInEvidence, listInventoryRefusals, reviewInventoryRefusal, type InventoryRefusalReview } from '../../services/checkInApi'
 import { managerDisplayError } from './managerPresentation'
 import { formatManagerDateTime } from './managerList'
 
@@ -39,11 +40,13 @@ function releaseCountdown(value: string | null | undefined, now: number) {
 }
 
 export default function ManagerCheckInReminderPanel({ showToast, onCountChange }: { showToast: (message: string) => void; onCountChange?: (count: number | null) => void }) {
+  const [reviews, setReviews] = useState<PendingArrival[]>([])
+  const [refusals, setRefusals] = useState<InventoryRefusalReview[]>([])
+  const [reasons, setReasons] = useState<Record<string, string>>({})
   const [items, setItems] = useState<CheckInCase[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<unknown>(null)
   const [now, setNow] = useState(Date.now)
-  const [sendingId, setSendingId] = useState<string | null>(null)
   const [releaseTarget, setReleaseTarget] = useState<CheckInCase | null>(null)
   const [releasingId, setReleasingId] = useState<string | null>(null)
 
@@ -52,6 +55,9 @@ export default function ManagerCheckInReminderPanel({ showToast, onCountChange }
     setError(null)
     try {
       const result = await listCheckIns({ group: 'ONGOING', status: 'handover_pending_receipt', page: 0, pageSize: 100 })
+      const [arrivalReviews, refusalReviews] = await Promise.all([listArrivalReviews(), listInventoryRefusals()])
+      setReviews(arrivalReviews)
+      setRefusals(refusalReviews)
       setItems(result.data.filter(item => item.checkInStatus === 'handover_pending_receipt'))
       onCountChange?.(result.pagination.totalItems)
     } catch (reason) {
@@ -79,22 +85,8 @@ export default function ManagerCheckInReminderPanel({ showToast, onCountChange }
       || Number(rightState.urgent) - Number(leftState.urgent)
       || new Date(left.receiptConfirmationDueAt || left.checkedInAt || 0).getTime()
         - new Date(right.receiptConfirmationDueAt || right.checkedInAt || 0).getTime()
+      || left.reservationId.localeCompare(right.reservationId)
   }), [items, now])
-
-  const remind = async (item: CheckInCase) => {
-    if (!item.checkInId || sendingId) return
-    setSendingId(item.checkInId)
-    try {
-      const result = await sendCustomerReceiptReminder(item.checkInId)
-      showToast(result.sent
-        ? `Đã gửi nhắc khách xác nhận nhận kho cho đơn ${item.reservationCode}.`
-        : `Quản lý đã nhắc đơn ${item.reservationCode} trong 2 giờ gần đây. Vui lòng thử lại sau.`)
-    } catch (reason) {
-      showToast(managerDisplayError(reason))
-    } finally {
-      setSendingId(null)
-    }
-  }
 
   const release = async () => {
     const item = releaseTarget
@@ -114,10 +106,54 @@ export default function ManagerCheckInReminderPanel({ showToast, onCountChange }
 
   return (
     <div className="space-y-3">
+      {refusals.map(({ checkInId, reservationCode, facilityName, submittedAt, report }) => <Card key={checkInId}>
+        <div className="space-y-2 p-4">
+          <h3 className="font-semibold">Biên bản khách từ chối ký · {reservationCode}</h3>
+          <p>{facilityName} · {formatManagerDateTime(submittedAt)}</p>
+          <p>Người lập biên bản: {report.staffName} · Nhân chứng: {report.witness.name}</p>
+          <p>Căn cứ buộc trả: {report.grounds}</p>
+          <p>Nội dung trao đổi: {report.discussion}</p>
+          {report.customerReason && <p>Lý do khách từ chối ký: {report.customerReason}</p>}
+          <Button size="sm" variant="outline" onClick={async () => {
+            try {
+              const attachment = await downloadCheckInEvidence(report.evidenceId)
+              const url = URL.createObjectURL(attachment.blob)
+              const link = document.createElement('a')
+              link.href = url
+              link.download = attachment.fileName || 'bien-ban-tu-choi-ky'
+              link.click()
+              window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+            } catch (error) { showToast(managerDisplayError(error)) }
+          }}>Tải ảnh biên bản</Button>
+          <label className="block">Kết luận và căn cứ<textarea className="block w-full rounded border p-2" maxLength={1000}
+            value={reasons[checkInId] ?? ''} onChange={e => setReasons({ ...reasons, [checkInId]: e.target.value })} /></label>
+          <div className="flex flex-wrap gap-2">{[true, false].map(approved => <Button key={String(approved)}
+            disabled={!!releasingId || !reasons[checkInId]?.trim()} onClick={async () => {
+              setReleasingId(checkInId)
+              try {
+                await reviewInventoryRefusal(checkInId, submittedAt, approved, reasons[checkInId].trim())
+                showToast(approved ? 'Đã phát hành quyết định trả kho.' : 'Đã gửi yêu cầu bổ sung biên bản.')
+                await reload()
+              } catch (error) { showToast(managerDisplayError(error)) }
+              finally { setReleasingId(null) }
+            }}>{approved ? 'Duyệt và phát hành' : 'Yêu cầu bổ sung'}</Button>)}</div>
+        </div>
+      </Card>)}
+      {reviews.map(review => <Card key={review.checkInId}><div className="space-y-2 p-4">
+        <strong>Đối soát giờ đến · {review.reservationCode}</strong>
+        <p>{formatManagerDateTime(review.actualArrivedAt)} · {review.evidence}</p>
+        <label>Lý do quyết định <input maxLength={500} value={reasons[review.checkInId] ?? ''} onChange={e => setReasons({ ...reasons, [review.checkInId]: e.target.value })} /></label>
+        <div className="flex gap-2">{[true, false].map(accepted => <Button key={String(accepted)} disabled={!!releasingId || !reasons[review.checkInId]?.trim()}
+          onClick={async () => {
+            setReleasingId(review.checkInId)
+            try { await resolveArrivalReview(review.checkInId, accepted, reasons[review.checkInId].trim()); await reload() }
+            catch (error) { showToast(managerDisplayError(error)) } finally { setReleasingId(null) }
+          }}>{accepted ? 'Xác nhận đến đúng hạn' : 'Bác ghi nhận'}</Button>)}</div>
+      </div></Card>)}
       <SectionHeader
         eyebrow="Chờ khách xác nhận"
         title="Theo dõi xác nhận nhận kho"
-        subtitle="Quản lý có thể gửi lời nhắc trực tiếp khi khách hàng chưa xác nhận sau bàn giao."
+        subtitle="Hệ thống tự nhắc khách nếu còn 2 giờ đến hạn xác nhận nhận kho."
       />
       <Card className="overflow-hidden">
         {loading ? <p className="p-5 text-sm text-stone-500">Đang tải hồ sơ…</p>
@@ -138,8 +174,7 @@ export default function ManagerCheckInReminderPanel({ showToast, onCountChange }
                       {releaseState.eligible && <p className="mt-1 text-xs font-semibold text-red-700">{releaseState.text}</p>}
                     </Td>
                     <Td className="text-right"><div className="flex flex-wrap justify-end gap-2">
-                      <Button size="sm" variant="outline" disabled={sendingId !== null || releasingId !== null} onClick={() => void remind(item)}>{sendingId === item.checkInId ? 'Đang gửi…' : 'Nhắc khách xác nhận'}</Button>
-                      {releaseState.eligible && <Button size="sm" variant="danger" disabled={sendingId !== null || releasingId !== null} onClick={() => setReleaseTarget(item)}>{releasingId === item.checkInId ? 'Đang giải phóng…' : 'Giải phóng kho'}</Button>}
+                      {releaseState.eligible && <Button size="sm" variant="danger" disabled={releasingId !== null} onClick={() => setReleaseTarget(item)}>{releasingId === item.checkInId ? 'Đang giải phóng…' : 'Giải phóng kho'}</Button>}
                     </div></Td>
                   </Tr>
                 })}</Tbody>

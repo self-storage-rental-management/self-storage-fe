@@ -5,6 +5,7 @@ import type { ManagerReportSummary } from '../../services/managerReportingApi'
 import { ApiClientError } from '../../services/apiClient'
 import { manager } from '../../../tests/rentalApiFixtures'
 import ManagerDashboardApiPanel from './ManagerDashboardApiPanel'
+import { sortUnitTypeBreakdown } from './ManagerReportsApiPanel'
 
 const state = vi.hoisted(() => ({
   actor: null as ApiActor | null, summary: {} as Record<string, unknown>, identities: [] as string[],
@@ -27,7 +28,7 @@ const summary: ManagerReportSummary = {
 beforeEach(() => {
   state.actor = { ...manager, permissions: [...manager.permissions, 'reports:read'], facilityNames: { f1: 'Cơ sở 1' } }
   state.summary = { data: { ...summary } }
-  state.cashflow = { data: { facilityId: 'f1', from: '2026-06-01', to: '2026-11-24', snapshotAt: '2026-11-24T00:00:00Z', completeness: 'PARTIAL', collected: 0, refunded: 0, netRetained: 0, pendingRefund: 0, securityDepositHeld: null, monthly: [], settlements: [], warnings: [] } }
+  state.cashflow = { data: { facilityId: 'f1', from: '2026-06-01', to: '2026-11-24', snapshotAt: '2026-11-24T00:00:00Z', completeness: 'PARTIAL', firstPaymentDate: '2026-06-01', collected: 0, refunded: 0, netRetained: 0, pendingRefund: 0, pendingApprovalRefund: 0, securityDepositHeld: null, daily: [], monthly: [], settlements: [], warnings: [] } }
   state.identities = []
 })
 const render = () => renderToStaticMarkup(<ManagerDashboardApiPanel setPage={() => {}} />)
@@ -35,17 +36,45 @@ const render = () => renderToStaticMarkup(<ManagerDashboardApiPanel setPage={() 
 describe('Manager dashboard uses the current facility report', () => {
   it('shows compact metrics and distinguishes unverified receipts from verified zero', () => {
     const html = render()
-    for (const title of ['Tiền thuê dự kiến/tháng', 'Tiền đã thu', 'Hợp đồng quá hạn', 'Nhận kho trong tháng', 'Yêu cầu trả kho']) expect(html).toContain(title)
+    for (const title of ['Gian kho đang sử dụng', 'Hợp đồng quá hạn', 'Nhận kho trong tháng', 'Yêu cầu trả kho', 'Tiền đã thu']) expect(html).toContain(title)
+    expect(html).toContain('>2<')
     expect(html).not.toContain('Tỷ lệ lấp đầy')
-    expect(html).toContain('9.500.000')
+    expect(html).not.toContain('Tiền thuê dự kiến/tháng')
     expect(html).toContain('Chưa đủ dữ liệu')
     expect(html).toContain('min-h-[112px]')
-    expect(html).toContain('2xl:grid-cols-5')
+    expect(html).toContain('xl:grid-cols-4')
     state.summary = { data: { ...summary, collectedRevenue: 0 } }
     state.cashflow = { data: { ...(state.cashflow.data as object), completeness: 'RECORDED', securityDepositHeld: 0 } }
     const verified = render()
     expect(verified).not.toContain('Chưa đủ dữ liệu')
     expect(verified).toContain('>0<')
+  })
+  it('counts assigned and held units as storage units in use', () => {
+    state.summary = { data: {
+      ...summary,
+      unitStatusBreakdown: [
+        { status: 'available', name: 'Sẵn sàng', count: 17, percentage: 85 },
+        { status: 'occupied', name: 'Đang thuê', count: 1, percentage: 5 },
+        { status: 'assigned', name: 'Đã phân bổ', count: 2, percentage: 10 },
+      ],
+    } }
+    const html = render()
+    expect(html).toContain('>3<')
+    expect(html).toContain('đã phân bổ')
+  })
+  it('orders storage capacity charts by S, M, L, XL', () => {
+    const ordered = sortUnitTypeBreakdown([
+      { typeCode: 'XL', typeName: 'Kho Rất Lớn (XL)', totalUnits: 5, occupiedUnits: 0, occupancyRate: 0 },
+      { typeCode: 'L', typeName: 'Kho Lớn (L)', totalUnits: 5, occupiedUnits: 0, occupancyRate: 0 },
+      { typeCode: 'M', typeName: 'Kho Trung (M)', totalUnits: 5, occupiedUnits: 0, occupancyRate: 0 },
+      { typeCode: 'S', typeName: 'Kho Nhỏ (S)', totalUnits: 5, occupiedUnits: 1, occupancyRate: 20 },
+    ])
+    expect(ordered.map(row => row.typeCode)).toEqual(['S', 'M', 'L', 'XL'])
+  })
+  it('places the storage charts before the cashflow report', () => {
+    const html = render()
+    expect(html.indexOf('Phân bổ trạng thái gian kho')).toBeLessThan(html.indexOf('Quản lý thu và hoàn tiền'))
+    expect(html.indexOf('Công suất theo loại kho')).toBeLessThan(html.indexOf('Quản lý thu và hoàn tiền'))
   })
   it('shows Vietnamese business labels instead of raw return type codes', () => {
     state.cashflow = { data: { ...(state.cashflow.data as object), settlements: [{

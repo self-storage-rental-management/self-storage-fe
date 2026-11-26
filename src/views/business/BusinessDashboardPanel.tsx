@@ -1,3 +1,4 @@
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import { useEffect, useMemo, useState, useCallback } from "react"
 import {
   Area,
@@ -277,7 +278,7 @@ export default function BusinessDashboardPanel({
 
       return {
         id: fac.id,
-        code: fac.code || fac.id,
+        code: fac.code || recordDisplayCode(fac.id),
         name: fac.name,
         city: fac.city || "-",
         address: fac.address,
@@ -340,7 +341,7 @@ export default function BusinessDashboardPanel({
               <option value="all">{isVi ? "Toàn bộ chi nhánh" : "All Facilities"}</option>
               {facilitiesList.map((f) => (
                 <option key={f.id} value={f.id}>
-                  {f.name} ({f.code || f.id})
+                  {f.name} ({f.code || recordDisplayCode(f.id)})
                 </option>
               ))}
             </Select>

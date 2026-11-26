@@ -81,9 +81,7 @@ import {
   RESERVATIONS,
   CHECKINS,
   RETURNS,
-  SUPPORT_TICKETS,
   MY_RENTALS,
-  type TicketItem,
 } from "../../data/demoDatabase"
 
 import StaffFileUpload from "./StaffFileUpload"
@@ -152,10 +150,6 @@ type StaffReturn = Omit<typeof RETURNS[number], "status"> & {
 
   requestReason: string
 }
-
-type TicketStatus = "open" | "in-progress" | "waiting-customer" | "resolved"
-
-type StaffTicket = Omit<TicketItem, "status"> & { status: TicketStatus }
 
 type StaffListSort = "deadline-asc" | "deadline-desc" | "name-asc"
 
@@ -876,7 +870,7 @@ export default function StaffApp({
     {
       id: "return",
 
-      label: "Trả kho & nghiệm thu",
+      label: "Trả kho & thu hồi",
 
       icon: Icon.clipboard,
 
@@ -1056,10 +1050,6 @@ export default function StaffApp({
 
   const [earlyCheckinConfirmed, setEarlyCheckinConfirmed] = useState(false)
 
-  const [noShowTarget, setNoShowTarget] = useState<StaffCheckin | null>(null)
-
-  const [noShowReason, setNoShowReason] = useState("")
-
   const [returnInventory, setReturnInventory] = useState("match")
 
   const [returnClassification, setReturnClassification] = useState("no-damage")
@@ -1103,45 +1093,6 @@ export default function StaffApp({
         (user.facility && user.facility !== "All facilities"),
     )
 
-  const [staffTickets, setStaffTickets] = useState<StaffTicket[]>(() =>
-    DEMO_DATA_ENABLED && hasFacilityScope
-      ? SUPPORT_TICKETS.filter((item) =>
-          isFacilityVisible(user, item.facilityId, item.facility),
-        )
-      : [],
-  )
-
-  const [selectedStaffTicket, setSelectedStaffTicket] =
-    useState<StaffTicket | null>(null)
-
-  const [assignedStaffByTicket, setAssignedStaffByTicket] =
-    useState<Record<string, string>>(() =>
-      Object.fromEntries(
-        (DEMO_DATA_ENABLED ? SUPPORT_TICKETS : []).map((ticket) => {
-          const latestStaffMessage = [...ticket.messages]
-
-            .reverse()
-
-            .find((message) => message.role === "staff")
-
-          return [ticket.id, latestStaffMessage?.sender ?? ""]
-        }),
-      ),
-    )
-
-  const [respondModal, setRespondModal] = useState(false)
-
-  const [staffReplyText, setStaffReplyText] = useState("")
-
-  const [ticketNewStatus, setTicketNewStatus] =
-    useState<TicketStatus>("in-progress")
-
-  const [ticketEvidence, setTicketEvidence] = useState("")
-
-  const [ticketEscalated, setTicketEscalated] = useState(false)
-
-  const [ticketEscalationReason, setTicketEscalationReason] = useState("")
-
   const [toast, setToast] = useState<string | null>(null)
 
   const toastTimer = useRef<number | undefined>(undefined)
@@ -1153,19 +1104,6 @@ export default function StaffApp({
 
     [],
   )
-
-  const chatEndRef = useRef<HTMLDivElement | null>(null)
-
-  const activeStaffTicket = selectedStaffTicket
-    ? (staffTickets.find((ticket) => ticket.id === selectedStaffTicket.id) ??
-      selectedStaffTicket)
-    : null
-
-  useEffect(() => {
-    if (!respondModal || !activeStaffTicket) return
-
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
-  }, [respondModal, activeStaffTicket?.messages.length])
 
   useEffect(() => {
     const sharedReservations = hub.holds
@@ -2655,7 +2593,7 @@ export default function StaffApp({
                   <Tr key={`${kind}-${task.id}`}>
                     <Td>
                       <b>{task.title}</b>
-                      {kind === "assigned" && task.referenceId && <p className="text-xs text-stone-500">{task.referenceId}</p>}
+                      {kind === "assigned" && task.referenceId && <p className="text-xs text-stone-500">{recordDisplayCode(task.referenceId)}</p>}
                     </Td>
                     <Td className="whitespace-nowrap text-xs">{kind === "assigned" ? staffTaskTypeLabel[task.type] : task.id.startsWith("maintenance-") ? "Bảo trì" : task.id.startsWith("support-") ? "Hỗ trợ" : task.id.startsWith("return-") ? "Trả kho" : task.id.startsWith("checkin-") ? "Nhận kho" : task.recoveryTask ? "Thu hồi" : "Vận hành"}</Td>
                     <Td>{kind === "assigned" ? task.facilityName : task.customer}</Td>
@@ -3027,7 +2965,7 @@ export default function StaffApp({
             <div className="fade-in space-y-4">
               <SectionHeader
                 eyebrow="CỔNG NHÂN VIÊN · KIỂM KÊ & BẰNG CHỨNG"
-                title="Trả kho & nghiệm thu"
+                title="Trả kho & thu hồi"
                 subtitle="Đối chiếu hiện trạng, ghi nhận quyết toán và hoàn cọc trên dữ liệu máy chủ"
               />
               <ReturnApiPanel role="staff" onChanged={refreshCredentialAlerts} />
@@ -3038,7 +2976,7 @@ export default function StaffApp({
             <div className="fade-in">
           <SectionHeader
             eyebrow={"CỔNG NHÂN VIÊN · KIỂM KÊ & BẰNG CHỨNG"}
-            title={"Trả kho & nghiệm thu"}
+            title={"Trả kho & thu hồi"}
             subtitle={
               "Đối chiếu hiện trạng trước-sau, kiểm kê hàng hóa, phân loại và lưu bằng chứng"
             }
@@ -4687,402 +4625,6 @@ export default function StaffApp({
           </dl>}
           <div className="flex justify-end"><Button variant="outline" onClick={() => setSelectedRenewal(null)}>Đóng</Button></div>
         </div>
-      </Modal>
-      <Modal
-        closeLabel="Đóng hộp thoại"
-        open={Boolean(noShowTarget)}
-        onClose={() => setNoShowTarget(null)}
-        title={"Xác nhận khách hàng không đến"}
-      >
-        {noShowTarget && (
-          <div className="space-y-4">
-            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
-              <b>{noShowTarget.customer}</b> · {noShowTarget.unit}
-              <br />
-              {"Lịch nhận kho"}: {formatDate(noShowTarget.appointmentDate)} ·{" "}
-              {formatTime(noShowTarget.appointmentTime)}
-              <br />
-              {"Hạn cuối"}: {formatDate(noShowTarget.checkInDeadline)}
-            </div>
-            <Input
-              label={"Lý do khách không đến (bắt buộc)"}
-              value={noShowReason}
-              onChange={(event) => setNoShowReason(event.target.value)}
-            />
-            <p className="text-xs text-stone-500">
-              {
-                "Thao tác này hủy quy trình nhận kho và ghi nhận yêu cầu giải phóng gian kho hoặc thu hồi quyền truy cập chờ kích hoạt."
-              }
-            </p>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setNoShowTarget(null)}>
-                {"Hủy"}
-              </Button>
-              <Button
-                variant="danger"
-                disabled={!noShowReason.trim()}
-                onClick={() => {
-                  try {
-                    hub.expireReservation(noShowTarget.reservationId, "NO_SHOW")
-
-                    setCheckins((items) =>
-                      items.map((item) =>
-                        item.id === noShowTarget.id
-                          ? {
-                              ...item,
-
-                              status: "no-show",
-
-                              evidence: [
-                                ...item.evidence,
-
-                                `NO-SHOW-${Date.now()} · ${user.name}: ${noShowReason.trim()} · Hủy quy trình nhận kho, giải phóng gian kho, thu hồi quyền truy cập`,
-                              ],
-                            }
-                          : item,
-                      ),
-                    )
-
-                    setNoShowTarget(null)
-
-                    showToast(
-                      "Đã ghi nhận khách không đến. Khách hàng và kho đã được cập nhật.",
-                    )
-                  } catch (error) {
-                    showToast(staffErrorMessage(error, "Không thể ghi nhận khách không đến."))
-                  }
-                }}
-              >
-                {"Xác nhận khách không đến"}
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
-
-      {/* Staff Ticket Resolution Modal */}
-      <Modal
-        closeLabel="Đóng hộp thoại"
-        open={respondModal}
-        onClose={() => setRespondModal(false)}
-        size="xl"
-        className="!p-0 overflow-hidden bg-[#f4f1ea] border border-[#e7e2d8]"
-        contentClassName="p-5 sm:p-6 bg-[#f4f1ea] space-y-4"
-        customHeader={
-          <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-[#e7e2d8] sticky top-0 z-20">
-            <h2
-              id="modal-title"
-              className="text-[15px] font-semibold text-[#191b20]"
-              style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
-            >
-              Phiếu hỗ trợ
-            </h2>
-            <button
-              type="button"
-              aria-label="Đóng"
-              className="text-[#767268] hover:text-[#191b20] hover:bg-[#f4f1ea] px-2.5 py-1 text-xs font-semibold rounded-lg transition cursor-pointer"
-              onClick={() => setRespondModal(false)}
-            >
-              Đóng
-            </button>
-          </div>
-        }
-      >
-        {activeStaffTicket && (
-          <div className="space-y-4">
-            {/* Card thông tin ticket */}
-            <div className="rounded-[10px] border border-[#e7e2d8] bg-white p-5 sm:p-6 shadow-2xs">
-              <div className="flex flex-wrap items-center gap-2">
-                <span
-                  className="inline-flex items-center px-2.5 py-0.5 rounded font-mono font-bold tracking-wide text-[11.5px]"
-                  style={{ background: '#efece3', color: 'var(--ink)' }}
-                >
-                  {activeStaffTicket.id}
-                </span>
-                {activeStaffTicket.status === 'resolved' ? (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11.5px] font-bold bg-[#edf7f0] text-[#2f9e5c] border border-[#bfe7ce]">
-                    Đã giải quyết
-                  </span>
-                ) : activeStaffTicket.status === 'in-progress' ? (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11.5px] font-bold bg-[#fef3eb] text-[#e0680f] border border-[#fcd9bd]">
-                    Đang xử lý
-                  </span>
-                ) : activeStaffTicket.status === 'waiting-customer' ? (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11.5px] font-bold bg-[#efece3] text-[#767268] border border-[#deddd2]">
-                    Chờ khách hàng
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11.5px] font-bold bg-[#efece3] text-[#767268] border border-[#deddd2]">
-                    Chờ xử lý
-                  </span>
-                )}
-              </div>
-
-              <h3
-                className="mt-3 text-[19px] font-bold leading-snug text-[#191b20]"
-                style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
-              >
-                {activeStaffTicket.subject}
-              </h3>
-
-              <div className="mt-3 pt-3 border-t border-[#e7e2d8]/70 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-[13px] text-[#767268]">
-                <div>
-                  <span>{activeStaffTicket.customer}</span>
-                  <span className="mx-1.5">·</span>
-                  <span>{activeStaffTicket.email}</span>
-                </div>
-                <div className="font-medium text-[#191b20] sm:text-right">
-                  <span>{activeStaffTicket.facility}</span>
-                  <span className="mx-1.5">·</span>
-                  <span>
-                    Gian kho{" "}
-                    <b className="font-bold text-[#191b20]">
-                      {activeStaffTicket.unit}
-                    </b>
-                  </span>
-                </div>
-              </div>
-              <h3 className="font-bold text-base mt-1 text-stone-100">
-                {activeStaffTicket.subject}
-              </h3>
-              <p className="text-xs text-stone-300 mt-1">
-                {"Khách thuê: "}
-                {activeStaffTicket.customer} ({activeStaffTicket.email}) · Gian
-                kho {activeStaffTicket.unit}
-              </p>
-            </div>
-
-            {/* Chatbox */}
-            <div className="max-h-72 overflow-y-auto rounded-[10px] border border-[#e7e2d8] bg-[#faf8f4] p-4 space-y-3.5">
-              {activeStaffTicket.messages?.map((msg) => {
-                const isStaff = msg.role === "staff"
-
-                const isCustomer = msg.role === "customer"
-
-                return (
-                  <div
-                    key={msg.id}
-                    className={`flex flex-col ${
-                      isStaff ? "items-end" : "items-start"
-                    }`}
-                  >
-                    <div className="mb-1 px-1 flex items-center gap-1.5 text-[11px] text-[#767268]">
-                      <span className="font-semibold text-[#191b20]">
-                        {msg.sender}
-                      </span>
-                      <span>·</span>
-                      <span>
-                        {isStaff
-                          ? "Nhân viên hỗ trợ"
-                          : isCustomer
-                            ? "Khách hàng"
-                            : "Hệ thống"}
-                      </span>
-                      <span>·</span>
-                      <span>{formatDateTime(msg.time)}</span>
-                    </div>
-                    <div
-                      className={`max-w-[75%] rounded-[10px] px-3.5 py-2.5 text-xs leading-relaxed shadow-2xs ${
-                        isStaff
-                          ? "bg-[#fdece0] text-[#191b20] rounded-br-[3px] border border-[#fcd9bd]/60"
-                          : "bg-white text-[#191b20] border border-[#e7e2d8] rounded-bl-[3px]"
-                      }`}
-                    >
-                      <p className="whitespace-pre-wrap text-[13px] leading-relaxed break-words">
-                        {msg.text}
-                      </p>
-                    </div>
-                  </div>
-                )
-              })}
-              <div ref={chatEndRef} />
-            </div>
-
-            {/* Status Changer */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-stone-700 block mb-1">
-                  {"Cập nhật trạng thái"}
-                </label>
-                <select
-                  value={ticketNewStatus}
-                  onChange={(e) =>
-                    setTicketNewStatus(e.target.value as TicketStatus)
-                  }
-                  className="rounded-[6px] border border-[#e7e2d8] bg-white px-3 py-1.5 text-xs text-[#191b20] font-medium focus:outline-none focus:ring-2 focus:ring-[#e0680f] cursor-pointer"
-                >
-                  <option value="in-progress">Đang xử lý</option>
-                  <option value="waiting-customer">
-                    Chờ khách hàng phản hồi
-                  </option>
-                  <option value="resolved">Đã giải quyết xong</option>
-                  <option value="open">Mở mới / Chờ xử lý</option>
-                </select>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-[#191b20] whitespace-nowrap">
-                  Phụ trách:
-                </span>
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-[#e0680f] text-white text-[11px] font-bold flex items-center justify-center shadow-xs">
-                    {(
-                      activeStaffTicket.assignedStaff ||
-                      assignedStaffByTicket[activeStaffTicket.id] ||
-                      user.name ||
-                      "DS"
-                    )
-
-                      .slice(0, 2)
-
-                      .toUpperCase()}
-                  </div>
-                  <span className="text-xs font-bold text-[#191b20]">
-                    {activeStaffTicket.assignedStaff ||
-                      assignedStaffByTicket[activeStaffTicket.id] ||
-                      user.name ||
-                      "Chưa gán"}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Staff Reply */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-stone-700">
-                {"Nội dung phản hồi chính thức tới khách hàng"}
-              </label>
-              <textarea
-                rows={3}
-                placeholder={
-                  "Nhập hướng dẫn khắc phục sự cố, cấp lại mã truy cập hoặc thông báo cho khách hàng..."
-                }
-                value={staffReplyText}
-                onChange={(e) => setStaffReplyText(e.target.value)}
-                className="w-full rounded-[6px] border border-[#e7e2d8] bg-white px-3 py-2 text-xs text-[#191b20] placeholder:text-[#767268]/60 focus:outline-none focus:ring-2 focus:ring-[#e0680f] focus:border-[#e0680f] transition resize-none leading-relaxed"
-              />
-            </div>
-
-            <Input
-              label={"Bằng chứng đính kèm (mã tệp/đường dẫn)"}
-              value={ticketEvidence}
-              onChange={(event) => setTicketEvidence(event.target.value)}
-            />
-            <div className="rounded-[8px] border border-amber-200 bg-amber-50/70 p-3 space-y-2">
-              <label className="text-xs font-semibold text-amber-900 flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={ticketEscalated}
-                  onChange={(event) => {
-                    setTicketEscalated(event.target.checked)
-
-                    if (event.target.checked) setTicketNewStatus("in-progress")
-                  }}
-                />
-                <span>Chuyển cấp cho quản lý/đội kỹ thuật</span>
-              </label>
-              {ticketEscalated && (
-                <Input
-                  label={"Lý do chuyển cấp"}
-                  value={ticketEscalationReason}
-                  onChange={(event) =>
-                    setTicketEscalationReason(event.target.value)
-                  }
-                />
-              )}
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#e7e2d8]">
-              <button
-                type="button"
-                onClick={() => setRespondModal(false)}
-                className="rounded-[6px] border border-[#e7e2d8] bg-white px-4 py-2 text-xs font-semibold text-[#191b20] hover:bg-[#faf8f4] transition cursor-pointer"
-              >
-                Đóng
-              </button>
-              <button
-                type="button"
-                disabled={
-                  !staffReplyText.trim() ||
-                  (ticketEscalated && !ticketEscalationReason.trim())
-                }
-                onClick={() => {
-                  const newMsg = staffReplyText.trim()
-                    ? {
-                        id: `msg-${Date.now()}`,
-
-                        sender: user.name,
-
-                        role: "staff" as const,
-
-                        time: "Vừa xong",
-
-                        text: `${staffReplyText.trim()}${
-                          ticketEvidence.trim()
-                            ? `\n[Bằng chứng: ${ticketEvidence.trim()}]`
-                            : ""
-                        }${
-                          ticketEscalated
-                            ? `\n[Chuyển cấp: ${ticketEscalationReason.trim()}]`
-                            : ""
-                        }`,
-                      }
-                    : null
-
-                  setStaffTickets((prev) =>
-                    prev.map((ticket) => {
-                      if (ticket.id !== activeStaffTicket.id) return ticket
-
-                      return {
-                        ...ticket,
-
-                        status: ticketEscalated
-                          ? "in-progress" as const
-                          : ticketNewStatus,
-
-                        messages: newMsg
-                          ? [...(ticket.messages || []), newMsg]
-                          : ticket.messages,
-                      }
-                    }),
-                  )
-
-                  setAssignedStaffByTicket((previous) => ({
-                    ...previous,
-
-                    [activeStaffTicket.id]:
-                      previous[activeStaffTicket.id] ||
-                      activeStaffTicket.assignedStaff ||
-                      user.name,
-                  }))
-
-                  setStaffReplyText("")
-
-                  setTicketEvidence("")
-
-                  setTicketEscalated(false)
-
-                  setTicketEscalationReason("")
-
-                  setRespondModal(false)
-
-                  showToast(
-                    `${user.name} đã gửi phản hồi cho ${activeStaffTicket.id}.`,
-                  )
-                }}
-                className={`rounded-[6px] px-4 py-2 text-xs font-bold transition flex items-center gap-1.5 ${
-                  !staffReplyText.trim() ||
-                  (ticketEscalated && !ticketEscalationReason.trim())
-                    ? "bg-[#d8d4c9] text-[#767268] cursor-not-allowed border-none"
-                    : "bg-[#e0680f] text-white hover:bg-[#b8540c] shadow-sm cursor-pointer border-none"
-                }`}
-              >
-                {"Lưu và gửi phản hồi"}
-              </button>
-            </div>
-          </div>
-        )}
       </Modal>
 
       <ReturnSettlementModal
