@@ -59,6 +59,18 @@ describe('Return summary', () => {
     expect(html).toContain('Hạn xử lý nhiệm vụ thu hồi')
   })
 
+  it('shows the confirmed handover appointment instead of the original return date after review', () => {
+    const html = renderToStaticMarkup(<ReturnSummary record={{ ...record, status: 'scheduled', attendance: {
+      arrivedAt: '2026-10-20T01:00:00Z', evidenceId: null, expiresAt: '2026-10-20T01:30:00Z',
+      attempts: 1, verifiedAt: '2026-10-20T01:05:00Z', reviewStartsAt: null, reviewAccepted: true,
+      handoverAppointmentAt: '2026-10-21T04:00:00Z',
+    } }} />)
+    expect(html).toContain('Lịch bàn giao sau đối soát')
+    expect(html).toContain('21/10/')
+    expect(html).toContain('11:00')
+    expect(html).not.toContain('Ngày dự kiến trả')
+  })
+
   it('formats the recovery deadline as a live countdown', () => {
     expect(returnRecoveryCountdown('2026-11-26T00:00:00Z', Date.parse('2026-11-24T00:00:00Z'))).toBe('Còn 2 ngày 00:00:00')
     expect(returnRecoveryCountdown('2026-11-24T00:00:00Z', Date.parse('2026-11-24T00:00:01Z'))).toBe('Đã quá hạn')
