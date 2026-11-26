@@ -1,9 +1,10 @@
 import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react'
-import { Button, Modal } from '../../components/ui'
+import { Button } from '../../components/ui'
 import { apiDownload, apiRequest } from '../../services/apiClient'
 import { uploadMaintenanceEvidence } from '../../services/maintenanceApi'
 import { parseVietnamDate } from '../../utils/vietnamTime'
 import { userFacingError } from '../../presentation/userFacingError'
+import { revealRecord } from '../../utils/revealRecord'
 import './ViolationRecoveryPanel.css'
 
 const actionLabels = {
@@ -31,6 +32,7 @@ const stages = {
 const reasons: Record<string, string> = {
   SETUP_OVERDUE: 'Quá hạn hoàn tất chuẩn bị', INVENTORY_NO_SHOW: 'Khách không đến kiểm kê',
   INVENTORY_IDENTITY_FAILED: 'Xác minh kiểm kê chưa thành công', INVENTORY_TIMEOUT: 'Quá hạn hoàn tất kiểm kê',
+  INVENTORY_CONFIRMATION_OVERDUE: 'Quá hạn 48 giờ phản hồi kết quả kiểm kê',
   REMOVAL_OVERDUE: 'Quá hạn dọn hàng sau kiểm kê sai lệch', HANDOVER_FOLLOW_UP: 'Bàn giao sau đối soát cần xử lý',
 }
 const replies: Record<string, string> = {
@@ -435,12 +437,12 @@ function RecoveryDetails({ entry }: { entry: Entry }) {
 
 export function ViolationRecoveryEntry({ label = 'Thu hồi kho', sourceReturnId }: { label?: string; sourceReturnId?: string }) {
   const [open, setOpen] = useState(false)
-  return <>
-    <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => setOpen(true)}>{label}</Button>
-    {open && <Modal title="Thu hồi kho" size="2xl" open onClose={() => setOpen(false)}>
-      <ViolationRecoveryPanel sourceReturnId={sourceReturnId} />
-    </Modal>}
-  </>
+  return <div className="min-w-0">
+    <Button type="button" variant="outline" size="sm" aria-expanded={open} onClick={() => setOpen(value => !value)}>
+      {open ? 'Thu gọn hồ sơ thu hồi' : label}
+    </Button>
+    {open && <ViolationRecoveryPanel sourceReturnId={sourceReturnId} />}
+  </div>
 }
 
 export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, target }: {
@@ -455,6 +457,8 @@ export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, tar
   const [targetId, setTargetId] = useState(target?.id)
   const [showClosed, setShowClosed] = useState(false)
   const [detailId, setDetailId] = useState<string>()
+  const targetCard = useRef<HTMLElement>(null)
+  const revealedTarget = useRef<typeof target>(undefined)
   useEffect(() => {
     setTargetId(target?.id)
     setPage(0)
@@ -479,11 +483,29 @@ export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, tar
     return () => { active = false }
   }, [page, refresh, sourceReturnId, activeOnly, targetId, showClosed])
 
+  useEffect(() => {
+    if (!target || target.id !== targetId || loading || error || !targetCard.current
+      || revealedTarget.current === target) return
+    revealedTarget.current = target
+    revealRecord(targetCard.current)
+  }, [target, targetId, loading, error, entries])
+
   const detailEntry = entries.find(entry => entry.id === detailId)
   const openAction = (entry: Entry, key: Action) => {
     setDetailId(undefined)
     setAction({ id: entry.id, action: key })
   }
+
+  if (detailEntry) return <section className="recovery-panel space-y-4" aria-label="Chi tiết hồ sơ thu hồi">
+    <Button size="sm" variant="outline" onClick={() => setDetailId(undefined)}>Quay lại</Button>
+    <h3 className="text-lg font-semibold">Hồ sơ thu hồi · {detailEntry.reservationCode || detailEntry.unitCode}</h3>
+        <RecoveryDetails entry={detailEntry} />
+        {!!detailEntry.actions.length && <div className="recovery-detail-actions">
+          <h4>Thao tác với hồ sơ</h4>
+          <div>{detailEntry.actions.map(key => <Button key={key} size="sm" variant={key === primaryAction(detailEntry) ? 'primary' : 'outline'}
+            onClick={() => openAction(detailEntry, key)}>{entryActionLabel(detailEntry, key)}</Button>)}</div>
+        </div>}
+  </section>
 
   return <div className="recovery-panel">
     <div className="recovery-toolbar">
@@ -506,7 +528,7 @@ export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, tar
       const currentDueAt = entry.stage === 'REVIEW_REQUIRED'
         ? entry.escalated ? entry.businessReviewDueAt : entry.reviewDueAt : entry.actionDueAt
       const reviewOverdue = entry.stage === 'REVIEW_REQUIRED' && !!currentDueAt && Date.now() >= Date.parse(currentDueAt)
-      return <section key={entry.id} className="recovery-case" aria-label={`Hồ sơ thu hồi ${entry.reservationCode || entry.unitCode}`}>
+      return <section key={entry.id} ref={entry.id === targetId ? targetCard : undefined} tabIndex={-1} className="recovery-case" aria-label={`Hồ sơ thu hồi ${entry.reservationCode || entry.unitCode}`}>
         <div className="recovery-case-header">
           <div>
             <h3>{entry.reservationCode || entry.unitCode}</h3>
@@ -550,15 +572,6 @@ export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, tar
       <Button size="sm" variant="outline" disabled={loading || !!action || page === 0} onClick={() => setPage(value => value - 1)}>Trang trước</Button>
       <Button size="sm" variant="outline" disabled={loading || !!action || entries.length < 30} onClick={() => setPage(value => value + 1)}>Trang sau</Button>
     </div>}
-    {detailEntry && <Modal title={`Hồ sơ thu hồi · ${detailEntry.reservationCode || detailEntry.unitCode}`} size="2xl" open onClose={() => setDetailId(undefined)}>
-      <div className="recovery-detail-modal">
-        <RecoveryDetails entry={detailEntry} />
-        {!!detailEntry.actions.length && <div className="recovery-detail-actions">
-          <h4>Thao tác với hồ sơ</h4>
-          <div>{detailEntry.actions.map(key => <Button key={key} size="sm" variant={key === primaryAction(detailEntry) ? 'primary' : 'outline'}
-            onClick={() => openAction(detailEntry, key)}>{entryActionLabel(detailEntry, key)}</Button>)}</div>
-        </div>}
-      </div>
-    </Modal>}
+
   </div>
 }

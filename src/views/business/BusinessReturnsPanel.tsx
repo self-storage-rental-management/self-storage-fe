@@ -78,7 +78,7 @@ const SAMPLE_RETURNS: Array<{
   facilityName: string
   customerName: string
   customerPhone?: string
-  scheduledDate: string
+  scheduledDate: string | null
   status: string
   returnType?: ApiReturn['returnType']
   settlementMode?: ApiReturn['settlementMode']
@@ -957,7 +957,6 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
 
   return (
     <div className="space-y-6">
-      {useApi && <div className="flex justify-end"><ViolationRecoveryEntry /></div>}
       <ReturnPolicyNotice business />
 
       {/* ── THỐNG KÊ TỔNG QUAN KPI TRẢ KHO & QUYẾT TOÁN ── */}
@@ -1084,7 +1083,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                       <p className="break-words text-xs text-stone-500">{item.customerPhone || 'Khách hàng cá nhân'}</p>
                     </Td>
                     <Td className="whitespace-nowrap font-mono text-xs text-stone-600 font-semibold">
-                      {item.scheduledDate}
+                      {item.scheduledDate || 'Chưa có lịch'}
                     </Td>
                     <Td className="whitespace-nowrap text-xs font-semibold text-stone-800">
                       {formatAmount(item.depositAmount)}

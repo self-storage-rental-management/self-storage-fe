@@ -119,7 +119,7 @@ export async function listRenewals(
       "sort",
       ...(role === "manager" ? ["facilityId", "search"] : []),
     ],
-    ["createdAt", "newEndDate", "amount", "id"],
+    ["priority", "createdAt", "newEndDate", "amount", "id"],
   )
   return readRentalPage<RenewalApiRecord>(
     await apiRequest(`/api/${role}/renewals${suffix}`),

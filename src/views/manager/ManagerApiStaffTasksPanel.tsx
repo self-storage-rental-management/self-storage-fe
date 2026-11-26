@@ -1,4 +1,5 @@
 import { recordDisplayCode } from '../../utils/recordDisplayCode'
+import { compareWorkQueue } from '../../utils/workQueueSort'
 import { displayStatusLabel } from '../../presentation/statusLabels'
 import EmergencyContactsPanel from '../../components/EmergencyContactsPanel'
 import './managerStaffTasks.css'
@@ -158,6 +159,16 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
   }, [initialUnit, loading, unitReadFailed, staffReadFailed, units, staff])
 
   const openTasks = useMemo(() => tasks.filter(task => !['completed', 'cancelled'].includes(task.status)), [tasks])
+  const queueRows = [
+    ...recoveryTasks.map(task => ({ kind: 'recovery' as const, task, order: {
+      id: `recovery-${task.id}`, closed: task.status === 'CLOSED', waitingSince: task.receivedAt,
+    } })),
+    ...tasks.map(task => ({ kind: 'maintenance' as const, task, order: {
+      id: `maintenance-${task.id}`, closed: ['completed', 'cancelled'].includes(task.status),
+      urgent: task.priority === 'high', dueAt: task.deadlineAt ?? task.dueAt,
+      waitingSince: task.createdAt, completedAt: task.completedAt,
+    } })),
+  ].sort((a, b) => compareWorkQueue(a.order, b.order))
 
   const resetForm = () => {
     setTitle('')
@@ -315,7 +326,7 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
             {!loading && Boolean(taskError) && <tr><td colSpan={7} className="px-4 py-6 text-center text-sm text-amber-800"><span>Chưa tải được nhiệm vụ bảo trì. {managerDisplayError(taskError)}</span><Button className="ml-3" size="sm" variant="outline" onClick={() => void reload()}>Thử lại</Button></td></tr>}
             {!loading && Boolean(recoveryError) && <tr><td colSpan={7} className="px-4 py-6 text-center text-sm text-amber-800"><span>Chưa tải được nhiệm vụ thu hồi kho. {managerDisplayError(recoveryError)}</span><Button className="ml-3" size="sm" variant="outline" onClick={() => void reload()}>Thử lại</Button></td></tr>}
             {!loading && !taskError && !recoveryError && !tasks.length && !recoveryTasks.length && <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-stone-500">{recoveryDisabled ? 'Chưa có nhiệm vụ bảo trì tại cơ sở này.' : 'Chưa có nhiệm vụ tại cơ sở này.'}</td></tr>}
-            {!loading && recoveryTasks.map(task => <Tr key={`recovery-${task.id}`}>
+            {!loading && queueRows.map(row => row.kind === 'recovery' ? ((task: RecoveryTask) => <Tr key={`recovery-${task.id}`}>
               <Td><p className="font-semibold text-stone-900">Thu hồi kho - {task.customerName}</p><p className="mt-1 text-xs text-stone-500">{task.reason === 'AUTO_OVERDUE_DAY_8' ? 'Hợp đồng quá hạn, chưa gia hạn.' : managerDisplayText(task.reason)}</p></Td>
               <Td><Badge variant="warning">Thu hồi kho</Badge></Td>
               <Td>{task.storageUnitCode}</Td>
@@ -323,8 +334,7 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
               <Td className="tabular-nums"><p className="text-xs text-stone-500">Tiếp nhận</p>{rentalDate(task.receivedAt)}</Td>
               <Td><Badge variant={task.status === 'CLOSED' ? 'muted' : task.status === 'IN_PROGRESS' ? 'info' : 'warning'}>{recoveryStatusLabels[task.status]}</Badge></Td>
               <Td><Button size="sm" variant="outline" onClick={() => setSelectedRecovery(task)}>Chi tiết</Button></Td>
-            </Tr>)}
-            {!loading && tasks.map(task => (
+            </Tr>)(row.task) : ((task: MaintenanceTaskApi) => (
               <Tr key={task.id}>
                 <Td><p className="font-semibold text-stone-900">{task.title}</p><p className="mt-1 text-xs text-stone-500">Ưu tiên: {taskPriorityLabel[task.priority]}</p><details className="mt-1 text-xs text-stone-600"><summary className="w-fit cursor-pointer">Xem nội dung</summary><p className="mt-1 whitespace-pre-wrap">{task.reason}</p><p className="mt-1 break-all">Mã nhiệm vụ: {task.displayCode || recordDisplayCode(task.id)}</p></details></Td>
                 <Td><Badge variant="muted">Bảo trì</Badge></Td>
@@ -353,7 +363,7 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
                   )}
                 </Td>
               </Tr>
-            ))}
+            ))(row.task))}
           </Tbody>
         </Table>
       </Card>

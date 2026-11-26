@@ -1,5 +1,4 @@
 import InventoryDecisionSummary from '../../components/InventoryDecisionSummary'
-import { requestReturn, updateReturnRequest } from '../../services/returnApi'
 import InventoryMismatchEvidence, { parseInventoryInspectionReport } from '../staff/InventoryMismatchEvidence'
 import { intakeDecisionLabels } from '../../services/inventoryDecision'
 import { rentalEndDateForDisplay } from '../../domain/rentalTimeline'
@@ -119,13 +118,12 @@ function receiptConfirmationCountdown(value: string | null | undefined, now: num
 }
 
 
-export function InventoryResolutionNotice({ detail, now, submitting, onResolve, onExtendReturnWindow, onScheduleReturnDate, onOpenReturns }: {
+export function InventoryResolutionNotice({ detail, now, submitting, onResolve, onExtendReturnWindow, onOpenReturns }: {
   detail: CustomerReservationDetail
   now: number
   submitting: boolean
   onOpenReturns?: () => void
   onExtendReturnWindow?: () => void
-  onScheduleReturnDate?: (returnCaseId: string, scheduledDate: string, note: string) => Promise<void>
   onResolve: (decision: 'ACCEPT_FULL' | 'CANCEL_AND_RETURN', scheduledDate?: string) => void
 }) {
   const resultConfirmationDeadline = detail.inventoryResultPublishedAt
@@ -143,106 +141,51 @@ export function InventoryResolutionNotice({ detail, now, submitting, onResolve, 
       : resultConfirmationDeadlineIso || detail.inventoryFinalDeadlineAt
   const activeCountdown = inventoryDeadlineText(activeDeadline, now)
   const hasVariance = Boolean(detail.inventoryMismatchSummary) || !detail.inventoryFullFit
-  const today = policyDateInput(new Date())
-  const tomorrow = policyDateInput(new Date(Date.now() + 86_400_000))
-  const removalFirst = detail.inventoryRemovalPublishedAt
-    ? policyDateInput(new Date(new Date(detail.inventoryRemovalPublishedAt).getTime() + 86_400_000)) : tomorrow
   const removalDeadline = detail.inventoryRemovalDeadlineAt
   const removalDeadlineMs = removalDeadline ? Date.parse(removalDeadline) : null
-  const removalLast = removalDeadlineMs != null ? policyDateInput(new Date(removalDeadlineMs - 1)) : undefined
-  const minReturnDate = removalFirst > tomorrow ? removalFirst : tomorrow
-  const maxReturnDate = removalLast
   const inventoryExpired = Boolean(detail.inventoryEscalatedAt)
     || Boolean(detail.inventoryFinalDeadlineAt && Date.parse(detail.inventoryFinalDeadlineAt) <= now)
     || (removalDeadlineMs != null && removalDeadlineMs <= now)
   const canPlanReturn = !detail.inventoryEscalatedAt
     && (removalDeadlineMs == null ? !inventoryExpired : now < removalDeadlineMs)
-  const [returnDate, setReturnDate] = useState('')
-  const [returnPlannerOpen, setReturnPlannerOpen] = useState(false)
-  const [returnDateError, setReturnDateError] = useState('')
+  const [confirmReturnOpen, setConfirmReturnOpen] = useState(false)
   if (detail.inventoryDecision) {
-    const decisionReturnCaseId = detail.inventoryDecision.returnCaseId || detail.reservation.setupReturnCaseId
-    const canScheduleDecisionReturn = Boolean(
-      onScheduleReturnDate
-      && decisionReturnCaseId
-      && ['requested', 'scheduled'].includes(detail.inventoryDecision.returnStatus || '')
-      && canPlanReturn,
-    )
-    return (
-      <div className="space-y-3">
-        <InventoryDecisionSummary decision={detail.inventoryDecision} onOpenReturns={onOpenReturns} />
-        {canScheduleDecisionReturn && decisionReturnCaseId && !onOpenReturns && (
-          <div className="space-y-3 rounded-lg border border-red-300 bg-white p-3 text-left text-xs">
-            <p className="font-bold text-red-950">Chọn / đổi ngày hẹn trả kho dự kiến</p>
-            {activeDeadline && <p className="font-semibold text-red-900">{activeCountdown || 'Hạn xử lý'} · {formatCustomerDateTime(new Date(activeDeadline))}</p>}
-            <VietnameseDateInput label="Ngày hẹn trả kho" value={returnDate} min={minReturnDate} max={removalLast} onChange={(value) => { setReturnDate(value); setReturnDateError('') }} />
-            {removalLast && <p className="font-semibold text-stone-700">Hạn chọn lịch trả kho: đến hết {formatDisplayDate(removalLast)}. Đổi lịch không tự kéo dài hạn này.</p>}
-            <p className="text-xs font-medium text-red-900">Khách có thể hẹn đến hết ngày cuối trong giờ tiếp nhận của cơ sở. Vui lòng đặt lịch trực tuyến trước ít nhất một ngày.</p>
-            {returnDateError && <p role="alert" className="font-semibold text-red-700">{returnDateError}</p>}
-            <div className="flex justify-end">
-              <Button
-                size="sm"
-                variant="danger"
-                disabled={submitting || !returnDate}
-                onClick={() => {
-                  if (!returnDate || returnDate < minReturnDate || (removalLast && returnDate > removalLast)) {
-                    setReturnDateError('Ngày hẹn trả kho phải sau ngày tạo đơn ít nhất 1 ngày và nằm trong thời hạn trả kho.')
-                    return
-                  }
-                  setReturnDateError('')
-                  void onScheduleReturnDate!(decisionReturnCaseId, returnDate, detail.inventoryDecision?.note || 'Khách hẹn ngày trả kho.')
-                }}
-              >
-                {submitting ? 'Đang lưu…' : 'Lưu ngày hẹn trả kho'}
-              </Button>
-            </div>
-          </div>
-        )}
-      </div>
-    )
+    return <InventoryDecisionSummary decision={detail.inventoryDecision} onOpenReturns={onOpenReturns} />
+  }
+  if (detail.inventoryResolutionStatus === 'PENDING_CUSTOMER' && resultConfirmationDeadline != null && now >= resultConfirmationDeadline) {
+    return <p role="status" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-950">
+      Đã hết 48 giờ phản hồi kết quả kiểm kê. Hồ sơ chuyển sang thu hồi kho.
+    </p>
   }
   if (partialAccepted && detail.checkInStatus === 'completed') return <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-950">Đã hoàn tất kiểm kê theo phương án tiếp nhận trước đây.</p>
   if (detail.inventoryResolutionStatus === 'TRANSFER_REQUESTED') return <p role="status" className="rounded-lg bg-blue-50 p-3 text-sm text-blue-950">Cơ sở đã nhận yêu cầu thu xếp chuyển hàng. Bạn có thể theo dõi tại mục hỗ trợ.</p>
   if (!['PENDING_CUSTOMER', 'PARTIAL_ACCEPTED', 'RETURN_REQUESTED'].includes(detail.inventoryResolutionStatus || '')) return null
-  const confirmInventoryReturn = () => {
-    if (!canPlanReturn || !returnDate || returnDate < minReturnDate || (removalLast && returnDate > removalLast)) {
-      setReturnDateError('Vui lòng chọn ngày trả kho hợp lệ.')
-      return
-    }
-    setReturnDateError('')
-    setReturnPlannerOpen(false)
-    onResolve('CANCEL_AND_RETURN', returnDate)
-  }
   return (
     <div className={`rounded-lg border p-3 text-left text-xs ${hasVariance || activeCountdown === 'Đã quá hạn xử lý' ? 'border-red-300 bg-red-50 text-red-950' : 'border-blue-300 bg-blue-50 text-blue-950'}`}>
       <p className="font-bold">{returnRequested ? 'Đã yêu cầu trả kho do kiểm kê sai lệch' : partialAccepted ? 'Phương án kiểm kê cần cập nhật' : 'Kiểm kê cần bạn xác nhận'}</p>
       <p className="mt-1">{partialAccepted
         ? 'Phương án nhận một phần đã ngừng áp dụng. Vui lòng liên hệ nhân viên để chọn chuyển hàng hoặc trả kho.'
         : returnRequested
-          ? 'Cơ sở đã tiếp nhận yêu cầu trả kho. Nếu lỡ lịch hẹn, bạn vẫn có thể đổi lịch trong hạn trả hàng. Hết hạn, hồ sơ chuyển sang chờ thu hồi.'
+          ? 'Cơ sở đã tiếp nhận yêu cầu trả kho. Vui lòng dọn hết hàng và báo cơ sở khi sẵn sàng bàn giao. Hết hạn, hồ sơ chuyển sang chờ thu hồi.'
         : hasVariance ? `Nhân viên đã ghi nhận sai lệch giữa hàng thực tế và thông tin đặt kho. ${detail.inventoryMismatchSummary || 'Vui lòng chọn phương án xử lý.'}` : 'Hàng hóa đã được kiểm kê và phù hợp với khai báo. Vui lòng xem và xác nhận kết quả.'}</p>
       {detail.inventoryFullFit && detail.inventorySuggestedPackageCount != null && <p className="mt-1">Số kiện có thể tiếp nhận theo phương án xếp: <b>{detail.inventorySuggestedPackageCount}</b></p>}
       {(detail.inventoryReturnExtensionCount ?? 0) > 0 && <p className="mt-1 font-semibold">Đã kéo dài thời gian trả kho: {detail.inventoryReturnExtensionCount} lần.</p>}
-      {!partialAccepted && !returnRequested && !returnPlannerOpen && <div className="mt-3 flex flex-wrap justify-end gap-2">
+      {!partialAccepted && !returnRequested && !confirmReturnOpen && <div className="mt-3 flex flex-wrap justify-end gap-2">
         {detail.inventoryFullFit && <Button size="sm" disabled={submitting} onClick={() => onResolve('ACCEPT_FULL')}>Nhận toàn bộ hàng</Button>}
         {!detail.inventoryFullFit && detail.inventoryReturnCanExtend && onExtendReturnWindow && (
-          <Button size="sm" variant="outline" disabled={submitting} onClick={onExtendReturnWindow}>Yêu cầu kéo dài thời gian</Button>
+          <Button size="sm" variant="outline" disabled={submitting} onClick={onExtendReturnWindow}>Gia hạn thêm 2 ngày</Button>
         )}
-        {!detail.inventoryFullFit && <Button size="sm" variant="danger" disabled={submitting || !canPlanReturn} onClick={() => { setReturnPlannerOpen(true) }}>Tạo yêu cầu trả kho ngay</Button>}
+        {!detail.inventoryFullFit && <Button size="sm" variant="danger" disabled={submitting || !canPlanReturn} onClick={() => { setConfirmReturnOpen(true) }}>Tạo yêu cầu trả kho ngay</Button>}
       </div>}
-      {!partialAccepted && !returnRequested && returnPlannerOpen && <div className="mt-3 space-y-3 rounded-lg border border-red-300 bg-white p-3">
-        <p className="font-bold text-red-950">Chọn ngày trả kho dự kiến</p>
-        <VietnameseDateInput label="Ngày hẹn trả kho" value={returnDate} min={minReturnDate} max={removalLast} onChange={(value) => { setReturnDate(value); setReturnDateError('') }} />
-        {removalLast && <p className="font-semibold">Hạn chọn lịch trả kho: đến hết {formatDisplayDate(removalLast)}. Đổi lịch không tự kéo dài hạn này.</p>}
-        <p className="text-xs font-medium text-red-900">Khách có thể hẹn đến hết ngày cuối trong giờ tiếp nhận của cơ sở. Vui lòng đặt lịch trực tuyến trước ít nhất một ngày.</p>
-        {returnDateError && <p role="alert" className="font-semibold text-red-700">{returnDateError}</p>}
-        <p className="text-red-950">Ngày chọn là lịch hẹn bàn giao. Tiền dự kiến có thể thay đổi theo ngày bàn giao thực tế nhưng không cộng ngày cơ sở chậm thu hồi sau hạn. Bạn được xem và xác nhận bảng kê trước khi hoàn tiền hoặc thu thêm.</p>
+      {!partialAccepted && !returnRequested && confirmReturnOpen && <div className="mt-3 space-y-3 rounded-lg border border-red-300 bg-white p-3">
+        <p className="font-bold text-red-950">Xác nhận gửi yêu cầu trả kho</p>
+        <p className="text-red-950">Vui lòng dọn hết hàng trong thời hạn trả kho và báo cơ sở khi sẵn sàng bàn giao.</p>
         <div className="flex flex-wrap justify-end gap-2">
           {detail.inventoryReturnCanExtend && onExtendReturnWindow && (
-            <Button size="sm" variant="outline" disabled={submitting} onClick={onExtendReturnWindow}>Yêu cầu kéo dài thời gian</Button>
+            <Button size="sm" variant="outline" disabled={submitting} onClick={onExtendReturnWindow}>Gia hạn thêm 2 ngày</Button>
           )}
-          <Button size="sm" variant="outline" disabled={submitting} onClick={() => setReturnPlannerOpen(false)}>Hủy</Button>
-          <Button size="sm" variant="danger" disabled={submitting || !returnDate || !canPlanReturn} onClick={confirmInventoryReturn}>{submitting ? 'Đang gửi…' : 'Xác nhận yêu cầu trả kho'}</Button>
+          <Button size="sm" variant="outline" disabled={submitting} onClick={() => setConfirmReturnOpen(false)}>Hủy</Button>
+          <Button size="sm" variant="danger" disabled={submitting || !canPlanReturn} onClick={() => { setConfirmReturnOpen(false); onResolve('CANCEL_AND_RETURN') }}>{submitting ? 'Đang gửi…' : 'Xác nhận yêu cầu trả kho'}</Button>
         </div>
       </div>}
     </div>
@@ -368,10 +311,6 @@ export default function CustomerReservationCard({ user, reservation: r, facility
   const [detail, setDetail] = useState<CustomerReservationDetail | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [returnPlannerOpen, setReturnPlannerOpen] = useState(false)
-  const [returnDate, setReturnDate] = useState('')
-  const [returnDateError, setReturnDateError] = useState('')
-  const [savedReturnDate, setSavedReturnDate] = useState('')
   const [confirmingReceipt, setConfirmingReceipt] = useState(false)
   const receiptLock = useRef(false)
   const [bookingDocument, setBookingDocument] = useState<BookingDocument | null>(null)
@@ -422,30 +361,6 @@ export default function CustomerReservationCard({ user, reservation: r, facility
   const awaitingInventory = r.status === 'PREPARING' && (checkInStatus === 'setup_completed' || checkInStatus === 'completed')
   const partialInventoryPending = detail?.inventoryResolutionStatus === 'PARTIAL_ACCEPTED'
   const inventoryReturnRequested = detail?.inventoryResolutionStatus === 'RETURN_REQUESTED'
-  const returnCaseId = detail?.inventoryDecision?.returnCaseId ?? detail?.reservation.setupReturnCaseId
-  const returnRentalId = detail?.reservation.setupReturnRentalId
-  const returnStatus = detail?.inventoryDecision?.returnStatus
-  const removalDeadline = detail?.inventoryRemovalDeadlineAt
-  const minReturnDate = policyDateInput(new Date(now + 86_400_000))
-  const maxReturnDate = removalDeadline ? policyDateInput(new Date(Date.parse(removalDeadline) - 1)) : undefined
-  const canScheduleReturn = inventoryReturnRequested && !!(returnCaseId || returnRentalId) && !!maxReturnDate
-    && minReturnDate <= maxReturnDate && !detail?.inventoryEscalatedAt
-    && (!returnStatus || ['requested', 'scheduled'].includes(returnStatus))
-  const saveReturnDate = async () => {
-    if (busy || !canScheduleReturn || !returnDate || returnDate < minReturnDate || (maxReturnDate && returnDate > maxReturnDate)) return
-    setBusy(true)
-    setReturnDateError('')
-    try {
-      const note = detail?.inventoryDecision?.note || 'Khách đặt lịch bàn giao sau quyết định buộc trả kho.'
-      const saved = returnCaseId ? await updateReturnRequest(returnCaseId, returnDate, note)
-        : returnRentalId ? await requestReturn(returnRentalId, returnDate, note) : null
-      if (!saved) return
-      setReturnPlannerOpen(false)
-      setSavedReturnDate(saved.scheduledDate)
-      void getCustomerReservation(r.id).then(setDetail).catch(() => {})
-    } catch (error) { setReturnDateError(userFacingError(error, 'Không thể lưu lịch hẹn trả kho.')) }
-    finally { setBusy(false) }
-  }
   const inventoryMismatchPending = detail?.inventoryResolutionStatus === 'PENDING_CUSTOMER' || inventoryReturnRequested
   const prepaymentPaid = detail?.payments?.some(item => item.purpose === 'RESERVATION_DEPOSIT' && item.paymentStatus === 'PAID')
     || ['CONFIRMED', 'UNIT_RESERVED', 'READY_FOR_CHECKIN', 'AWAITING_CUSTOMER_RECEIPT', 'PREPARING', 'COMPLETED'].includes(r.status)
@@ -680,15 +595,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
           </div>}
           <CustomerReservationPayment receiptSlot={receiptSlot} remainingPayment={remainingPayment} attendanceDeadline={detail?.attendance?.deadline} handoverTermsVersion={detail?.attendance?.termsVersion} reservation={r} facilityName={displayedFacilityName} unitTypeName={displayedUnitTypeName} paymentStartedAt={detail?.paymentStartedAt} paymentExpiresAt={detail?.paymentExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />
           {r.violationRecovery && <p className="mt-3 text-sm font-medium text-amber-900">Mở mục Thu hồi kho để xem tiến độ và phản hồi.</p>}
-          {inventoryReturnRequested && <div className="mt-3 flex flex-wrap items-center gap-2">
-            {canScheduleReturn && <Button type="button" size="sm" onClick={() => {
-              setReturnDate(savedReturnDate); setReturnDateError(''); setReturnPlannerOpen(true)
-            }}>Đặt / đổi lịch trả kho</Button>}
-            {onOpenReturns && <Button type="button" size="sm" variant="outline" onClick={onOpenReturns}>Theo dõi trả kho</Button>}
-            {savedReturnDate && <span role="status" className="text-xs text-emerald-800">Đã lưu lịch hẹn ngày {formatDisplayDate(savedReturnDate)}.</span>}
-            {maxReturnDate && minReturnDate > maxReturnDate && removalDeadline && now < Date.parse(removalDeadline) && !detail?.inventoryEscalatedAt
-              && (!returnStatus || ['requested', 'scheduled'].includes(returnStatus)) && <span className="text-xs text-stone-600">Đã hết ngày có thể đặt trực tuyến. Vui lòng liên hệ cơ sở để bàn giao trong hạn.</span>}
-          </div>}
+          {inventoryReturnRequested && onOpenReturns && <Button className="mt-3" type="button" size="sm" variant="outline" onClick={onOpenReturns}>Theo dõi trả kho</Button>}
         </div>
         <div className="reservation-card-actions flex w-full min-w-0 flex-col items-end gap-2 md:w-64 md:shrink-0">
           <div className="text-right"><p className="text-xs text-stone-500">Tổng thu cả kỳ (gồm tiền cọc đảm bảo kho)</p><p className="text-xl font-bold text-stone-900">{(r.totalInitialObligation == null ? "Chưa xác định" : formatVnd(r.totalInitialObligation))}</p><p className="text-xs text-amber-800">Trả lúc giữ chỗ: {(r.reservationDepositAmount == null ? "Chưa xác định" : formatVnd(r.reservationDepositAmount))}</p></div>
@@ -846,16 +753,6 @@ export default function CustomerReservationCard({ user, reservation: r, facility
 
     </div>
     {message && <p role="status" className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{message}</p>}
-    <Modal open={returnPlannerOpen} onClose={() => { if (!busy) setReturnPlannerOpen(false) }} title="Đặt lịch trả kho">
-      {removalDeadline && <p className="mb-3 text-sm">Hạn cuối dọn kho · Trước {formatCustomerDateTime(removalDeadline)}</p>}
-      <VietnameseDateInput label="Ngày hẹn trả kho" value={returnDate} min={minReturnDate} max={maxReturnDate} onChange={setReturnDate} />
-      {returnDateError && <p role="alert" className="mt-2 text-sm text-red-700">{returnDateError}</p>}
-      <div className="mt-4 flex justify-end gap-2">
-        <Button type="button" variant="outline" disabled={busy} onClick={() => setReturnPlannerOpen(false)}>Hủy</Button>
-        <Button type="button" disabled={busy || !canScheduleReturn || !returnDate || returnDate < minReturnDate || !!(maxReturnDate && returnDate > maxReturnDate)}
-          onClick={() => void saveReturnDate()}>{busy ? 'Đang lưu…' : 'Lưu lịch hẹn'}</Button>
-      </div>
-    </Modal>
     <Modal size="2xl" open={bookingDocumentOpen} onClose={() => setBookingDocumentOpen(false)} title="Phiếu xác nhận giữ kho">
       {bookingDocument && <div className="space-y-5 py-1">
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-5 text-sm text-emerald-950 shadow-xs">
