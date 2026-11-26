@@ -369,6 +369,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
     if (isAwaitingManagerReview(record)) return <Badge variant="warning">Chờ quản lý cơ sở duyệt</Badge>
     if (record.status === 'awaiting_business_review') return <Badge variant="warning">Chờ Ban điều hành duyệt</Badge>
     if (record.status === 'recovery_required') return <Badge variant="error">Cần xử lý thu hồi</Badge>
+    if (record.status === 'withdrawn_for_recovery') return <Badge variant="warning">Đã chuyển sang thu hồi</Badge>
     return sb(record.status)
   }
 

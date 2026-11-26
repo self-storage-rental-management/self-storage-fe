@@ -177,7 +177,7 @@ export default function CustomerReservationPayment({ receiptSlot, user, reservat
   if (!snapshot) return <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{MISSING_RESERVATION_SNAPSHOT}</p>
   const receiptButton = <Button variant="outline" size="sm" className="reservation-action reservation-action-receipt min-h-10 w-full justify-center" onClick={openReceipts}>Xem biên lai thanh toán</Button>
   return <>
-    {reservation.status === 'AWAITING_PAYMENT' && <div className={`mt-3 w-full max-w-lg rounded-lg p-3 text-left text-xs ${timerTone}`}>
+    {reservation.status === 'AWAITING_PAYMENT' && <div className={`mt-3 w-fit max-w-full rounded-lg p-3 text-left text-xs ${timerTone}`}>
       <p className="font-bold">Thời gian thanh toán đặt cọc giữ chỗ còn lại · Hạn thanh toán trước 20%</p>
       <p role="timer" className="mt-1 text-2xl font-extrabold tabular-nums">{countdown.text}</p>
       <p className="mt-1">{countdown.expired ? 'Đã hết thời hạn. Đang chờ cập nhật trạng thái đơn.' : 'Vui lòng hoàn tất thanh toán trước khi hết thời hạn.'}</p>
