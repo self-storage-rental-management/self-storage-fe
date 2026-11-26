@@ -1,11 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '../../components/ui'
 import { apiDownload } from '../../services/apiClient'
+import { getAuthenticatedActor } from '../../services/authApi'
 import { listMaintenanceStaff } from '../../services/maintenanceApi'
 import { parseVietnamDate } from '../../utils/vietnamTime'
 import {
-  recordReturnArrival, returnError, reviewReturnArrival, uploadReturnEvidence, verifyReturnIdentity, type ApiReturn,
+  reopenReturnVerification, returnError, reviewReturnArrival, uploadReturnEvidence, verifyReturnIdentity, type ApiReturn,
 } from '../../services/returnApi'
+
+export function requiresReturnAttendance(record: ApiReturn) {
+  return !!record.attendance && record.sourceType !== 'RECOVERY'
+    && ['requested', 'scheduled'].includes(record.status)
+    && !(record.returnType === 'INVENTORY_MISMATCH' && record.setupReturnedAt)
+}
 
 export default function ReturnAttendance({ record, role, editable, onChanged }: {
   record: ApiReturn
@@ -33,14 +40,20 @@ export default function ReturnAttendance({ record, role, editable, onChanged }: 
     return () => window.clearInterval(timer)
   }, [])
   useEffect(() => setResult(undefined), [record.attendance])
-  const pendingReview = attendance?.reviewAccepted !== false && !!attendance?.reviewStartsAt && now >= Date.parse(attendance.reviewStartsAt)
   useEffect(() => {
-    if (role !== 'manager' || !editable || !pendingReview || !attendance?.verifiedAt) return
+    attempt.current = null
+    setDocument('')
+  }, [attendance?.reverificationStartedAt])
+  const pendingReview = attendance?.reviewAccepted !== false && !!attendance?.reviewStartsAt && now >= Date.parse(attendance.reviewStartsAt)
+  const canReopen = pendingReview && !!attendance?.evidenceId && !attendance.verifiedAt && !attendance.reverificationStartedAt
+  const canAssign = pendingReview && (!!attendance?.verifiedAt || canReopen)
+  useEffect(() => {
+    if (role !== 'manager' || !editable || !canAssign) return
     let active = true
     listMaintenanceStaff(record.facilityId).then(people => { if (active) setStaff(people) })
       .catch(failure => { if (active) setError(returnError(failure)) })
     return () => { active = false }
-  }, [role, editable, pendingReview, attendance?.verifiedAt, record.facilityId])
+  }, [role, editable, canAssign, record.facilityId])
 
   async function downloadEvidence(id: string) {
     try {
@@ -56,11 +69,15 @@ export default function ReturnAttendance({ record, role, editable, onChanged }: 
     }
   }
 
-  if (!attendance || record.sourceType === 'RECOVERY' || !['requested', 'scheduled'].includes(record.status)) return null
+  if (!attendance || !requiresReturnAttendance(record)) return null
   const arrivalDeadline = record.returnType === 'INVENTORY_MISMATCH'
     ? record.inventoryRemovalDeadlineAt
     : record.recoveryEligibleAt
   const beforeDeadline = !arrivalDeadline || now < Date.parse(arrivalDeadline)
+  const assignedToVerify = !attendance.reverificationStaffId || attendance.reverificationStaffId === getAuthenticatedActor()?.id
+  const canEnterIdentity = role === 'staff' && editable && assignedToVerify && !attendance.verifiedAt
+    && !pendingReview && attendance.reviewAccepted == null && (!!attendance.arrivedAt || beforeDeadline)
+  const canVerify = canEnterIdentity && (!!attendance.arrivedAt || !!file) && !busy && !!document.trim()
 
   async function submit(action: () => Promise<ApiReturn>) {
     if (lock.current) return
@@ -81,59 +98,74 @@ export default function ReturnAttendance({ record, role, editable, onChanged }: 
   }
 
   return <section className="space-y-3 rounded-xl border border-stone-200 p-4">
-    <h4 className="font-semibold">Tiếp nhận và xác minh danh tính</h4>
+    <h4 className="font-semibold">{role === 'manager' ? 'Tiếp nhận và xác minh danh tính' : 'Xác minh danh tính trả kho'}</h4>
     {error && <p role="alert" className="text-red-700">{error}</p>}
+    {role === 'staff' && attendance.arrivedAt && <p className="text-sm">Đã ghi nhận khách đến lúc {new Date(attendance.arrivedAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}.</p>}
+    {role === 'staff' && !attendance.arrivedAt && !beforeDeadline && <p role="status" className="text-sm">Đã hết hạn ghi nhận khách đến. Vui lòng kiểm tra hồ sơ thu hồi.</p>}
     {attendance.expiresAt && <p className="text-sm">Phiên xác minh đến {new Date(attendance.expiresAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })} · Đã thử {attendance.attempts}/2 lần.</p>}
+    {attendance.reverificationStartedAt && !attendance.verifiedAt && !pendingReview && attendance.reviewAccepted == null && (
+      <p className="text-sm">Quản lý đã mở phiên xác minh lại. {role === 'staff' && !assignedToVerify && 'Nhân viên được phân công sẽ đối chiếu giấy tờ.'}</p>
+    )}
     {attendance.verifiedAt && <p className="text-sm font-medium">Đã xác minh danh tính.</p>}
+    {role === 'manager' && attendance.handoverAppointmentAt && <p className="text-sm">Lịch bàn giao sau đối soát · {new Date(attendance.handoverAppointmentAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</p>}
     {attendance.handoverDueAt && <p className="text-sm">Hạn bàn giao sau đối soát · {new Date(attendance.handoverDueAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</p>}
     {role === 'manager' && attendance.evidenceId && <Button type="button" variant="outline"
       onClick={() => void downloadEvidence(attendance.evidenceId!)}>Tải ảnh tiếp nhận</Button>}
     {pendingReview && <p role="status">Phiên đã kết thúc. Đang chờ Quản lý đối soát.</p>}
     {attendance.reviewAccepted != null && <p role="status">{attendance.reviewAccepted ? 'Quản lý đã cho phép tiếp tục bàn giao.' : 'Quản lý đã kết thúc đối soát và không tiếp tục bàn giao thường.'}</p>}
-    {role === 'staff' && editable && !attendance.arrivedAt && beforeDeadline && <>
-      <label className="block text-sm">Ảnh hiện trường chứng minh khách đã đến và sẵn sàng bàn giao
-        <input className="block" type="file" accept="image/jpeg,image/png,image/webp" disabled={busy}
+    {canEnterIdentity && <form className="space-y-3"
+      onSubmit={event => {
+        event.preventDefault()
+        if (!canVerify) return
+        void submit(async () => {
+          let evidenceId: string | undefined
+          if (!attendance.arrivedAt && file) {
+            evidence.current ??= (await uploadReturnEvidence(record.id, file, 'staff', 'tiep-nhan-tra-kho')).id
+            evidenceId = evidence.current
+          }
+          attempt.current ??= crypto.randomUUID()
+          const updated = await verifyReturnIdentity(record.id, attempt.current, document.trim(), attendance.reverificationStartedAt, evidenceId)
+          attempt.current = null
+          setDocument('')
+          if (!updated.attendance?.verifiedAt) setError('Giấy tờ không khớp với hồ sơ đặt kho.')
+          return updated
+        })
+      }}>
+      {!attendance.arrivedAt && <label className="block text-sm">Ảnh hiện trường chứng minh khách đã đến và sẵn sàng bàn giao
+        <input className="block" type="file" accept="image/jpeg,image/png,image/webp" required disabled={busy}
           onChange={e => { setFile(e.target.files?.[0]); evidence.current = null }} />
-      </label>
-      <Button type="button" disabled={busy || !file} onClick={() => void submit(async () => {
-        if (!file) throw new Error('Vui lòng chọn ảnh hiện trường.')
-        evidence.current ??= (await uploadReturnEvidence(record.id, file, 'staff', 'tiep-nhan-tra-kho')).id
-        return recordReturnArrival(record.id, evidence.current)
-      })}>Ghi nhận khách đã đến</Button>
-    </>}
-    {role === 'staff' && editable && attendance.arrivedAt && !attendance.verifiedAt && !pendingReview && attendance.reviewAccepted == null && <>
-      <label className="block text-sm">Số giấy tờ gốc của chính chủ
+      </label>}
+      <label className="block text-sm">Số CCCD trên giấy tờ gốc
         <input className="block rounded border p-2" type="password" autoComplete="off" maxLength={32} value={document}
-          disabled={busy} onChange={e => { setDocument(e.target.value); attempt.current = null }} />
+          required disabled={busy} aria-describedby="return-identity-help"
+          onChange={e => { setDocument(e.target.value); attempt.current = null }} />
       </label>
-      <Button type="button" disabled={busy || !document.trim()} onClick={() => void submit(async () => {
-        attempt.current ??= crypto.randomUUID()
-        const updated = await verifyReturnIdentity(record.id, attempt.current, document.trim())
-        attempt.current = null
-        setDocument('')
-        if (!updated.attendance?.verifiedAt) setError('Giấy tờ không khớp với hồ sơ đặt kho.')
-        return updated
-      })}>Đối chiếu giấy tờ</Button>
-    </>}
+      <p id="return-identity-help" className="text-xs text-stone-600">
+        Nhập CCCD 12 số hoặc số hộ chiếu đã dùng khi đặt kho.
+      </p>
+      <Button type="submit" disabled={!canVerify}>Xác minh danh tính</Button>
+    </form>}
     {role === 'manager' && editable && pendingReview && <>
       <label className="block text-sm">Kết luận và căn cứ đối soát
         <textarea className="block w-full rounded border p-2" maxLength={1000} value={reason} onChange={e => setReason(e.target.value)} />
       </label>
-      {attendance.verifiedAt && <div className="grid gap-3 sm:grid-cols-2">
+      {canAssign && <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-sm">Nhân viên phụ trách
           <select className="block w-full rounded border p-2" disabled={busy} value={staffId} onChange={e => setStaffId(e.target.value)}>
             <option value="">Chọn nhân viên</option>
             {staff.map(person => <option key={person.id} value={person.id}>{person.fullName}</option>)}
           </select>
         </label>
-        <label className="block text-sm">Lịch khác nếu cần · giờ Việt Nam
+        {attendance.verifiedAt && <label className="block text-sm">Lịch khác nếu cần · giờ Việt Nam
           <input className="block w-full rounded border p-2" type="datetime-local" disabled={busy} value={appointment} onChange={e => setAppointment(e.target.value)} />
-        </label>
+        </label>}
       </div>}
       <div className="flex flex-wrap gap-2">
-        <Button type="button" disabled={busy || !reason.trim() || !attendance.verifiedAt || !staffId}
+        {canReopen && <Button type="button" disabled={busy || !reason.trim() || !staffId}
+          onClick={() => void submit(() => reopenReturnVerification(record.id, staffId, reason.trim()))}>Mở lại phiên xác minh</Button>}
+        {attendance.verifiedAt && <Button type="button" disabled={busy || !reason.trim() || !staffId}
           onClick={() => void submit(() => reviewReturnArrival(record.id, true, reason.trim(), staffId,
-            appointment ? parseVietnamDate(appointment).toISOString() : undefined))}>Cho tiếp tục bàn giao</Button>
+            appointment ? parseVietnamDate(appointment).toISOString() : undefined))}>Cho tiếp tục bàn giao</Button>}
         <Button type="button" variant="outline" disabled={busy || !reason.trim()}
           onClick={() => void submit(() => reviewReturnArrival(record.id, false, reason.trim()))}>Kết thúc đối soát</Button>
       </div>
