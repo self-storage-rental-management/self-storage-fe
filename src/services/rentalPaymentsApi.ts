@@ -24,6 +24,7 @@ const RENTAL_PAYMENT_PURPOSES: RentalPaymentPurpose[] = [
 ]
 
 export interface RentalPaymentReceipt {
+  rentalDisplayCode?: string | null
   paymentId: string; rentalId: string; renewalId: string | null; purpose: RentalPaymentPurpose
   status: 'PENDING' | 'PROCESSING' | 'PAID' | 'NOT_RECEIVED' | 'FAILED' | 'CANCELLED'
   amount: number; currency: string; refundedAmount: number; transactionReference: string | null; gatewayTransactionNo: string | null

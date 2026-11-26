@@ -697,6 +697,8 @@ export interface StructuralInspection {
 }
 
 export interface ReturnCase {
+  displayCode?: string | null
+  rentalDisplayCode?: string | null
   id: string
   rentalId: string
   unitId: string

@@ -1,3 +1,4 @@
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import { displayStatusLabel } from '../../presentation/statusLabels'
 import EmergencyContactsPanel from '../../components/EmergencyContactsPanel'
 import './managerStaffTasks.css'
@@ -318,7 +319,7 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
             </Tr>)}
             {!loading && tasks.map(task => (
               <Tr key={task.id}>
-                <Td><p className="font-semibold text-stone-900">{task.title}</p><p className="mt-1 text-xs text-stone-500">Ưu tiên: {taskPriorityLabel[task.priority]}</p><details className="mt-1 text-xs text-stone-600"><summary className="w-fit cursor-pointer">Xem nội dung</summary><p className="mt-1 whitespace-pre-wrap">{task.reason}</p><p className="mt-1 break-all">Mã nhiệm vụ: {task.id}</p></details></Td>
+                <Td><p className="font-semibold text-stone-900">{task.title}</p><p className="mt-1 text-xs text-stone-500">Ưu tiên: {taskPriorityLabel[task.priority]}</p><details className="mt-1 text-xs text-stone-600"><summary className="w-fit cursor-pointer">Xem nội dung</summary><p className="mt-1 whitespace-pre-wrap">{task.reason}</p><p className="mt-1 break-all">Mã nhiệm vụ: {task.displayCode || recordDisplayCode(task.id)}</p></details></Td>
                 <Td><Badge variant="muted">Bảo trì</Badge></Td>
                 <Td>{task.unitCode}<div className="manager-task-contacts mt-1"><EmergencyContactsPanel key={task.storageUnitId} unitId={task.storageUnitId} /></div></Td>
                 <Td>

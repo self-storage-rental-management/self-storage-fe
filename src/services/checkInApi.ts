@@ -147,6 +147,7 @@ export interface CheckInCase {
   inventoryPending: boolean
   inventoryDecision?: InventoryDecision | null
   inventoryResolutionStatus?: InventoryResolutionStatus | null
+  inventoryRefusalStatus?: 'PENDING' | 'APPROVED' | 'REJECTED' | null
   inventoryFullFit?: boolean
   inventoryPartialFitAvailable?: boolean
   inventorySuggestedPackageCount?: number | null
@@ -180,6 +181,7 @@ export interface CheckInCase {
     maxCargoWeightKg?: number | null
   } | null
   lockReference: string | null
+  attendance?: import('../domain/reservationCheckInPolicy').HandoverAttendance | null
   readinessNote: string | null
   rejectionReason: string | null
   rejectionDisposition: 'AVAILABLE' | 'MAINTENANCE' | null
@@ -194,6 +196,8 @@ export interface CheckInCase {
   customerName: string
   customerEmail: string
   identityDocumentNumber: string | null
+  declaredIdentityMasked?: string | null
+  identityCorrected?: boolean
   customerPhone: string | null
   facilityId: string
   facilityName: string
@@ -241,6 +245,7 @@ interface ApiEnvelope<T> {
 
 export interface CheckInEvidenceAsset {
   id: string
+  createdAt?: string
   originalName: string
   contentType: string
   sizeBytes: number
@@ -418,10 +423,26 @@ export async function completeCheckIn(checkInId: string, request: CompleteCheckI
   ))
 }
 
+export type IdentityComparison = 'MATCH' | 'CORRECTABLE' | 'REJECT'
+
+export async function compareCheckInIdentity(checkInId: string, identityDocumentNumber: string, bookingOwnerConfirmed: boolean): Promise<IdentityComparison> {
+  const response = await apiRequest<ApiEnvelope<IdentityComparison>>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/identity-comparison`,
+    { method: 'POST', body: JSON.stringify({ identityDocumentNumber, bookingOwnerConfirmed }) },
+  )
+  const result = response?.data
+  if (result !== 'MATCH' && result !== 'CORRECTABLE' && result !== 'REJECT') {
+    throw new ApiClientError('Không thể đối chiếu CCCD.', { code: 'INVALID_API_RESPONSE' })
+  }
+  return result
+}
+
 export async function verifyCheckInIdentity(checkInId: string, request: {
   identityDocumentNumber: string
   note?: string
+  bookingOwnerConfirmed?: boolean
   adulthoodConfirmed?: boolean
+  correctionConfirmed?: boolean
 }) {
   return assertEnvelope(await apiRequest<unknown>(
     `/api/staff/check-ins/${encodeURIComponent(checkInId)}/identity-verification`,
@@ -429,7 +450,7 @@ export async function verifyCheckInIdentity(checkInId: string, request: {
   ))
 }
 
-export async function correctCheckInIdentity(checkInId: string, request: { identityDocumentNumber: string; note: string; adulthoodConfirmed?: boolean }) {
+export async function correctCheckInIdentity(checkInId: string, request: { identityDocumentNumber: string; note: string; bookingOwnerConfirmed?: boolean; adulthoodConfirmed?: boolean }) {
   return assertEnvelope(await apiRequest<unknown>(`/api/staff/check-ins/${encodeURIComponent(checkInId)}/identity-correction`, {
     method: 'POST', body: JSON.stringify(request),
   }))
@@ -512,10 +533,57 @@ export async function recordCheckInRemainingPayment(checkInId: string, request: 
   ))
 }
 
-export async function markCheckInNoShow(checkInId: string, reason: string) {
+export interface PendingArrival { checkInId: string; reservationCode: string; actualArrivedAt: string; evidence: string }
+
+export interface RefusalWitness { id: string; name: string }
+export interface InventoryRefusalInput {
+  customerPresent: boolean
+  witnessId: string
+  evidenceId: string
+  grounds: string
+  discussion: string
+  customerReason?: string
+  resultVersion: number
+}
+export interface InventoryRefusalReview {
+  checkInId: string
+  reservationCode: string
+  facilityName: string
+  submittedAt: string
+  report: InventoryRefusalInput & { staffName: string; witness: RefusalWitness }
+}
+export async function listRefusalWitnesses(id: string) {
+  return (await apiRequest<ApiEnvelope<RefusalWitness[]>>(`/api/staff/check-ins/${encodeURIComponent(id)}/refusal-witnesses`)).data
+}
+export async function submitInventoryRefusal(id: string, request: InventoryRefusalInput) {
+  return assertEnvelope(await apiRequest<unknown>(`/api/staff/check-ins/${encodeURIComponent(id)}/signature-refusal`, {
+    method: 'POST', body: JSON.stringify(request),
+  }))
+}
+export async function listInventoryRefusals() {
+  return (await apiRequest<ApiEnvelope<InventoryRefusalReview[]>>('/api/staff/check-ins/signature-refusal-reviews')).data
+}
+export async function reviewInventoryRefusal(id: string, submittedAt: string, approved: boolean, reason: string) {
+  return assertEnvelope(await apiRequest<unknown>(`/api/staff/check-ins/${encodeURIComponent(id)}/signature-refusal-review`, {
+    method: 'POST', body: JSON.stringify({ submittedAt, approved, reason }),
+  }))
+}
+
+export async function listArrivalReviews() {
+  const result = await apiRequest<ApiEnvelope<PendingArrival[]>>('/api/staff/check-ins/arrival-reviews')
+  return result.data
+}
+
+export async function resolveArrivalReview(id: string, accepted: boolean, reason: string) {
+  return assertEnvelope(await apiRequest<unknown>(`/api/staff/check-ins/${encodeURIComponent(id)}/arrival-review`, {
+    method: 'POST', body: JSON.stringify({ accepted, reason }),
+  }))
+}
+
+export async function recordCheckInArrival(checkInId: string, review?: { actualArrivedAt: string; evidence: string; disputed?: boolean }) {
   return assertEnvelope(await apiRequest<unknown>(
-    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/no-show`,
-    { method: 'POST', body: JSON.stringify({ reason }) },
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/arrival`,
+    { method: 'POST', ...(review && { body: JSON.stringify(review) }) },
   ))
 }
 
@@ -525,21 +593,11 @@ export async function rejectCheckIn(
     reason: string
     disposition: 'AVAILABLE' | 'MAINTENANCE'
     evidenceReferences: string[]
+    mismatchedIdentityDocument?: string
   },
 ) {
   return assertEnvelope(await apiRequest<unknown>(
     `/api/staff/check-ins/${encodeURIComponent(checkInId)}/reject`,
-    { method: 'POST', body: JSON.stringify(request) },
-  ))
-}
-
-export async function confirmPartialInventoryRemoval(checkInId: string, request: {
-  remainderRemoved: boolean
-  evidenceReferences: string[]
-  notes: string
-}) {
-  return assertEnvelope(await apiRequest<unknown>(
-    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/inventory-partial-removal`,
     { method: 'POST', body: JSON.stringify(request) },
   ))
 }

@@ -5,7 +5,7 @@ export interface CashflowReport {
   collected: number; refunded: number; netRetained: number; pendingRefund: number; pendingApprovalRefund: number; securityDepositHeld: number | null
   daily: { day: string; collected: number; refunded: number; net: number }[]
   monthly: { month: string; collected: number; refunded: number; net: number }[]
-  settlements: { id: string; reservationCode: string; customerName: string; status: string; reason: string; deposit: number | null; rentalCredit: number | null; deductions: number | null; refund: number; paidAt: string | null; reference: string | null; payoutRecorded: boolean }[]
+  settlements: { id: string; reservationCode: string; customerName: string; status: string; reason: string; deposit: number | null; rentalCredit: number | null; deductions: number | null; refund: number; paidAt: string | null; reference: string | null; receiptCode?: string | null; payoutRecorded: boolean }[]
   warnings: string[]
 }
 

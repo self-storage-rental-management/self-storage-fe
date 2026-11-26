@@ -1,6 +1,7 @@
 import type { RentalApiPage } from "./rentalApi"
 
 export interface OverdueCase {
+  rentalDisplayCode?: string | null
   displayCode?: string | null
   caseRef: string
   rentalId: string
@@ -29,6 +30,7 @@ export interface OverduePage extends RentalApiPage<OverdueCase> {
   missingSources: string[]
 }
 export interface OverdueFollowUp {
+  actorName?: string | null
   id: string
   caseRef: string
   type: "NOTE" | "REMINDER" | "RECOVERY_HANDOFF"
