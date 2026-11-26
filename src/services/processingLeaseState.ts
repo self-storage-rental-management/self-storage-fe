@@ -26,7 +26,7 @@ export function processingTarget(path: string, method = 'GET'): { target: Proces
   if (match) return { target: 'ASSIGNMENT', id: match[1] }
   match = route.match(/^\/api\/staff\/check-ins\/reservations\/([0-9a-f-]{36})\/schedule$/i)
   if (match) return { target: 'RESERVATION', id: match[1] }
-  match = route.match(/^\/api\/staff\/check-ins\/([0-9a-f-]{36})\/(identity-correction|identity-verification|complete|contract-signing|payment-confirmation|setup\/(?:start|complete)|remaining-payment|no-show|reject|inventory-(?:arrival|identity|partial-removal|resolution-at-site|draft(?:\/resolve)?))$/i)
+  match = route.match(/^\/api\/staff\/check-ins\/([0-9a-f-]{36})\/(identity-correction|identity-comparison|identity-verification|complete|contract-signing|payment-confirmation|setup\/(?:start|complete)|remaining-payment|no-show|reject|inventory-(?:arrival|identity|partial-removal|resolution-at-site|draft(?:\/resolve|\/publish)?|return-reminder)|signature-refusal|arrival|receipt-(?:reminder|release))$/i)
   if (match) return { target: 'CHECK_IN', id: match[1] }
   match = route.match(/^\/api\/(?:staff|manager|business)\/returns\/([0-9a-f-]{36})\/(inspection|complete-refund|settlement-receipts|review-dispute|setup-exit-decision|legacy-pricing-decision)$/i)
   if (match) return { target: 'RETURN', id: match[1] }
