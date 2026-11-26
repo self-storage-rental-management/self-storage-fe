@@ -118,9 +118,9 @@ export default function ProcessingLeaseBoundary({ target, id, enabled = true, on
   return <div className="space-y-3">
     <div role="status" className={`rounded-xl border p-3 text-sm ${owned ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-300 bg-amber-50 text-amber-950'}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p>{pending ? 'Đang kiểm tra quyền xử lý hồ sơ…' : owned ? 'Bạn đang giữ quyền xử lý hồ sơ này.' : view?.occupied ? `Hồ sơ đang được ${view.ownerName || 'nhân sự khác'} xử lý. Bạn chỉ có thể xem.` : 'Bạn đang xem hồ sơ. Nhận xử lý trước khi chỉnh sửa.'}</p>
+        <p>{pending ? 'Đang kiểm tra quyền xử lý hồ sơ…' : owned ? 'Bạn đang giữ quyền xử lý hồ sơ này.' : view?.occupied && view?.ownerId !== actorId ? `Hồ sơ đang được ${view.ownerName || 'nhân sự khác'} xử lý. Bạn chỉ có thể xem.` : 'Bạn đang xem hồ sơ. Nhận xử lý trước khi chỉnh sửa.'}</p>
         {owned ? <button type="button" disabled={pending || lease?.inFlight} onClick={() => void release()} className="rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50">Nhường xử lý</button>
-          : <button type="button" disabled={pending || !!view?.occupied} onClick={() => setAttempt(n => n + 1)} className="rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50">Nhận xử lý / tải lại</button>}
+          : <button type="button" disabled={pending || (!!view?.occupied && view?.ownerId !== actorId)} onClick={() => setAttempt(n => n + 1)} className="rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50">Nhận xử lý / tải lại</button>}
       </div>
       {view?.expiresAt && <p className="mt-1 text-xs">Quyền xử lý được gia hạn khi màn hình đang hoạt động; tự hết hạn sau 2 phút nếu mất kết nối.</p>}
       {(error || lease?.invalid) && <p className="mt-1 text-xs font-semibold">{error || 'Phiên xử lý đã thay đổi. Đóng và mở lại hồ sơ trước khi tiếp tục.'}</p>}
