@@ -5,7 +5,7 @@ import { isUuid } from './renewalOperationsApi'
 import { renameEvidenceFile } from '../utils/evidenceFileName'
 
 export type ReturnRole = 'customer' | 'staff' | 'manager' | 'business'
-export const returnStatuses = ['requested', 'scheduled', 'inspected', 'awaiting_business_review', 'awaiting_customer_confirmation', 'disputed', 'payment_due', 'refund_pending', 'recovery_required', 'completed'] as const
+export const returnStatuses = ['requested', 'scheduled', 'inspected', 'awaiting_business_review', 'awaiting_customer_confirmation', 'disputed', 'payment_due', 'refund_pending', 'recovery_required', 'completed', 'withdrawn_for_recovery'] as const
 export interface OverdueSettlement {
   accruedAmount: number | null
   settlementAmount: number | null
@@ -104,6 +104,8 @@ export interface ApiReturn {
     verifiedAt: string | null
     reviewStartsAt: string | null
     reviewAccepted: boolean | null
+    handoverDueAt?: string | null
+    handoverStaffId?: string | null
   } | null
   returnPolicyVersion?: string | null
   returnType?: 'CANCELLED_IN_SETUP' | 'RETURN_IN_SETUP' | 'INVENTORY_MISMATCH' | 'EARLY_RETURN' | 'NORMAL'
@@ -344,8 +346,8 @@ export function recordReturnArrival(id: string, evidenceId: string) {
 export function verifyReturnIdentity(id: string, attemptId: string, documentNumber: string) {
   return mutate('staff', id, 'identity', { attemptId, documentNumber })
 }
-export function reviewReturnArrival(id: string, accepted: boolean, reason: string) {
-  return mutate('manager', id, 'arrival-review', { accepted, reason })
+export function reviewReturnArrival(id: string, accepted: boolean, reason: string, staffId?: string, appointmentAt?: string) {
+  return mutate('manager', id, 'arrival-review', { accepted, reason, staffId, appointmentAt })
 }
 export function savePropertyCheck(record: ApiReturn, unitVacated: boolean, staffNotes: string, evidencePhotos: string[]) {
   return mutate('staff', record.id, 'property-check', { unitVacated, staffNotes, evidencePhotos, clearanceRevision: record.clearanceRevision ?? 0 })

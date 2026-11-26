@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '../../components/ui'
 import { apiDownload } from '../../services/apiClient'
+import { listMaintenanceStaff } from '../../services/maintenanceApi'
+import { parseVietnamDate } from '../../utils/vietnamTime'
 import {
   recordReturnArrival, returnError, reviewReturnArrival, uploadReturnEvidence, verifyReturnIdentity, type ApiReturn,
 } from '../../services/returnApi'
@@ -17,6 +19,9 @@ export default function ReturnAttendance({ record, role, editable, onChanged }: 
   const [file, setFile] = useState<File>()
   const [document, setDocument] = useState('')
   const [reason, setReason] = useState('')
+  const [staffId, setStaffId] = useState('')
+  const [appointment, setAppointment] = useState('')
+  const [staff, setStaff] = useState<Awaited<ReturnType<typeof listMaintenanceStaff>>>([])
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const lock = useRef(false)
@@ -28,6 +33,14 @@ export default function ReturnAttendance({ record, role, editable, onChanged }: 
     return () => window.clearInterval(timer)
   }, [])
   useEffect(() => setResult(undefined), [record.attendance])
+  const pendingReview = attendance?.reviewAccepted !== false && !!attendance?.reviewStartsAt && now >= Date.parse(attendance.reviewStartsAt)
+  useEffect(() => {
+    if (role !== 'manager' || !editable || !pendingReview || !attendance?.verifiedAt) return
+    let active = true
+    listMaintenanceStaff(record.facilityId).then(people => { if (active) setStaff(people) })
+      .catch(failure => { if (active) setError(returnError(failure)) })
+    return () => { active = false }
+  }, [role, editable, pendingReview, attendance?.verifiedAt, record.facilityId])
 
   async function downloadEvidence(id: string) {
     try {
@@ -44,7 +57,6 @@ export default function ReturnAttendance({ record, role, editable, onChanged }: 
   }
 
   if (!attendance || record.sourceType === 'RECOVERY' || !['requested', 'scheduled'].includes(record.status)) return null
-  const pendingReview = attendance.reviewAccepted == null && !!attendance.reviewStartsAt && now >= Date.parse(attendance.reviewStartsAt)
   const arrivalDeadline = record.returnType === 'INVENTORY_MISMATCH'
     ? record.inventoryRemovalDeadlineAt
     : record.recoveryEligibleAt
@@ -73,6 +85,7 @@ export default function ReturnAttendance({ record, role, editable, onChanged }: 
     {error && <p role="alert" className="text-red-700">{error}</p>}
     {attendance.expiresAt && <p className="text-sm">Phiên xác minh đến {new Date(attendance.expiresAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })} · Đã thử {attendance.attempts}/2 lần.</p>}
     {attendance.verifiedAt && <p className="text-sm font-medium">Đã xác minh danh tính.</p>}
+    {attendance.handoverDueAt && <p className="text-sm">Hạn bàn giao sau đối soát · {new Date(attendance.handoverDueAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</p>}
     {role === 'manager' && attendance.evidenceId && <Button type="button" variant="outline"
       onClick={() => void downloadEvidence(attendance.evidenceId!)}>Tải ảnh tiếp nhận</Button>}
     {pendingReview && <p role="status">Phiên đã kết thúc. Đang chờ Quản lý đối soát.</p>}
@@ -106,9 +119,21 @@ export default function ReturnAttendance({ record, role, editable, onChanged }: 
       <label className="block text-sm">Kết luận và căn cứ đối soát
         <textarea className="block w-full rounded border p-2" maxLength={1000} value={reason} onChange={e => setReason(e.target.value)} />
       </label>
+      {attendance.verifiedAt && <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block text-sm">Nhân viên phụ trách
+          <select className="block w-full rounded border p-2" disabled={busy} value={staffId} onChange={e => setStaffId(e.target.value)}>
+            <option value="">Chọn nhân viên</option>
+            {staff.map(person => <option key={person.id} value={person.id}>{person.fullName}</option>)}
+          </select>
+        </label>
+        <label className="block text-sm">Lịch khác nếu cần · giờ Việt Nam
+          <input className="block w-full rounded border p-2" type="datetime-local" disabled={busy} value={appointment} onChange={e => setAppointment(e.target.value)} />
+        </label>
+      </div>}
       <div className="flex flex-wrap gap-2">
-        <Button type="button" disabled={busy || !reason.trim() || !attendance.verifiedAt}
-          onClick={() => void submit(() => reviewReturnArrival(record.id, true, reason.trim()))}>Cho tiếp tục bàn giao</Button>
+        <Button type="button" disabled={busy || !reason.trim() || !attendance.verifiedAt || !staffId}
+          onClick={() => void submit(() => reviewReturnArrival(record.id, true, reason.trim(), staffId,
+            appointment ? parseVietnamDate(appointment).toISOString() : undefined))}>Cho tiếp tục bàn giao</Button>
         <Button type="button" variant="outline" disabled={busy || !reason.trim()}
           onClick={() => void submit(() => reviewReturnArrival(record.id, false, reason.trim()))}>Kết thúc đối soát</Button>
       </div>

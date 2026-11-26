@@ -48,6 +48,7 @@ const labels: Record<ApiReturn['status'], string> = {
   payment_due: 'Chờ thanh toán quyết toán',
   refund_pending: 'Chờ hoàn cọc',
   recovery_required: 'Cần xử lý khách không đến',
+  withdrawn_for_recovery: 'Đã chuyển sang thu hồi',
   completed: 'Đã hoàn tất',
 }
 const returnStatusOptions: Array<[ApiReturn['status'] | 'all', string]> = [
@@ -1082,6 +1083,7 @@ function getNextStepText(status: ApiReturn['status'], role: ReturnRole, recovery
       refund_pending: 'Cơ sở đang xử lý hoàn cọc. Khoản tiền sẽ được chuyển hoàn theo thông tin của bạn.',
       recovery_required: 'Khách chưa đến theo lịch. Cơ sở cần xử lý hồ sơ thu hồi theo quy trình.',
       completed: 'Hồ sơ trả kho và quyết toán đã hoàn tất.',
+      withdrawn_for_recovery: 'Mở mục Thu hồi kho để theo dõi hồ sơ.',
     }
     return customerSteps[status] || 'Đang xử lý hồ sơ trả kho.'
   }
@@ -1098,12 +1100,13 @@ function getNextStepText(status: ApiReturn['status'], role: ReturnRole, recovery
     refund_pending: 'Cơ sở thực hiện hoàn cọc cho khách hàng và ghi nhận biên lai hoàn tiền để hoàn tất hồ sơ.',
     recovery_required: 'Khách chưa đến theo lịch. Cơ sở cần lập biên bản và xử lý thu hồi theo quy trình.',
     completed: 'Hồ sơ trả kho và quyết toán đã hoàn tất.',
+    withdrawn_for_recovery: 'Mở mục Thu hồi kho để tiếp tục xử lý.',
   }
   return staffSteps[status] || 'Đang xử lý hồ sơ trả kho.'
 }
 
 function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLocked, onRecoveryChanged }: { role: ReturnRole; record: ApiReturn; run: (work: () => Promise<ApiReturn>) => Promise<void>; busy: boolean; recoveryLocked: boolean; onRecoveryLocked: (locked: boolean) => void; onRecoveryChanged: () => void }) {
-  const expiresAt = record.attendance?.expiresAt
+  const expiresAt = record.attendance?.reviewAccepted ? record.attendance.handoverDueAt : record.attendance?.expiresAt
   const [inspectionNow, setInspectionNow] = useState(Date.now)
   useEffect(() => {
     setInspectionNow(Date.now())
@@ -1186,7 +1189,10 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
     (['requested', 'scheduled'].includes(record.status)
       && (!record.attendance || (mismatch && !!record.setupReturnedAt)
         || (!!record.attendance.verifiedAt && record.attendance.reviewAccepted !== false
-          && (record.attendance.reviewAccepted === true || inspectionNow < Date.parse(expiresAt ?? ''))))))
+          && (record.attendance.reviewAccepted === true
+            ? (!record.attendance.handoverDueAt || inspectionNow < Date.parse(record.attendance.handoverDueAt))
+              && (!record.attendance.handoverStaffId || record.attendance.handoverStaffId === actor?.id)
+            : inspectionNow < Date.parse(expiresAt ?? ''))))))
   const canReview = write && role === 'manager' && record.status === 'disputed'
   const recoveryNextStep = !recovery ? null : record.recoveryTaskStatus === 'CLOSED'
     ? 'Thu hồi đã hoàn tất. Hồ sơ thuê đã kết thúc và trạng thái kho đã được cập nhật.'

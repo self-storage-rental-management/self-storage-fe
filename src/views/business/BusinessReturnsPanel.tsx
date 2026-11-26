@@ -39,6 +39,7 @@ export const statusLabels: Record<string, string> = {
   inspected: 'Đã nghiệm thu hiện trường',
   awaiting_business_review: 'Chờ duyệt quyết toán',
   recovery_required: 'Cần xử lý thu hồi',
+  withdrawn_for_recovery: 'Đã chuyển sang thu hồi',
   awaiting_customer_confirmation: 'Chờ khách xác nhận quyết toán',
   disputed: 'Đang khiếu nại (Chờ Quản lý thẩm định)',
   payment_due: 'Chờ khách nộp phụ phí',

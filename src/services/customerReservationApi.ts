@@ -399,6 +399,7 @@ export interface CustomerReservation {
   setupEarlyExitPolicyVersion?: string | null
   setupEarlyExitFee?: number | null
   setupReturnRentalId?: string | null
+  violationRecovery?: boolean
   setupReturnCaseId?: string | null
   setupReturnScheduledDate?: string | null
   pricingPolicyVersion?: string | null

@@ -152,9 +152,10 @@ function MaintenanceWorkspace({ actorId, identity, taskId, showToast }: {
             </div>
             {task.resultReport && <p className="mt-2 rounded bg-stone-50 p-2 text-sm text-stone-700">Kết quả: {task.resultReport}</p>}
             <div className="mt-3 flex flex-wrap justify-end gap-2">
-              {task.status === 'open' && <Button size="sm" disabled={busy} onClick={() => start(task)}>Bắt đầu xử lý</Button>}
+              {task.status === 'open' && task.recoveryType !== 'VIOLATION' && <Button size="sm" disabled={busy} onClick={() => start(task)}>Bắt đầu xử lý</Button>}
               {task.recoveryType === 'RETURN_NO_SHOW' && !['completed', 'cancelled'].includes(task.status) && <span className="text-xs font-semibold text-red-700">Hoàn tất trong biên bản trả kho</span>}
-              {task.recoveryType !== 'RETURN_NO_SHOW' && task.status === 'in_progress' && <Button size="sm" disabled={busy} onClick={() => openCompletion(task)}>Hoàn thành nhiệm vụ</Button>}
+              {task.recoveryType === 'VIOLATION' && !['completed', 'cancelled'].includes(task.status) && <span className="text-xs font-semibold">Tiếp tục tại mục Thu hồi kho</span>}
+              {task.recoveryType !== 'RETURN_NO_SHOW' && task.recoveryType !== 'VIOLATION' && task.status === 'in_progress' && <Button size="sm" disabled={busy} onClick={() => openCompletion(task)}>Hoàn thành nhiệm vụ</Button>}
               {task.status === 'completed' && <span className="text-xs font-semibold text-emerald-700">Đã gửi kết quả</span>}
             </div>
           </div>
