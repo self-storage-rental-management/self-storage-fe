@@ -392,7 +392,7 @@ export default function ManagerUnitTypeModal({ open, facilityId, onClose, onCrea
       const fields: [number | undefined, string, boolean, number, number | undefined][] = [
         [rackForm.lengthCm, 'Chiều dài khung', false, 0.01, undefined], [rackForm.widthCm, 'Chiều rộng khung', false, 0.01, undefined],
         [rackForm.heightCm, 'Chiều cao khung', false, 0.01, undefined], [rackForm.uprightFrameCount, 'Số bộ trụ đứng', true, 2, 20],
-        [rackForm.levelCount, 'Số tầng mỗi khung', true, 1, 100], [rackForm.requestedRackCount, 'Số khung mỗi gian', true, 1, 100],
+        [rackForm.levelCount, 'Số cặp dằm ngang', true, 1, 100], [rackForm.requestedRackCount, 'Số khung mỗi gian', true, 1, 100],
         [rackForm.maxBeamPairLoadKg, 'Giới hạn chịu tải mỗi khoang', false, 0.01, undefined], [rackForm.maxRackLoadKg, 'Giới hạn chịu tải mỗi khung', false, 0.01, undefined],
       ]
       for (const [value, label, integer, min, max] of fields) {
@@ -592,7 +592,7 @@ export default function ManagerUnitTypeModal({ open, facilityId, onClose, onCrea
           <h3 className="font-semibold text-stone-900">Cấu tạo và số lượng</h3>
           <div className="grid gap-4 sm:grid-cols-3">
             <label className="text-sm font-medium text-stone-700">Số bộ trụ đứng<input className={`${inputClass} mt-1`} type="number" min={2} max={20} value={rackForm.uprightFrameCount} onChange={event => changeRackField('uprightFrameCount', event.target.valueAsNumber)} /></label>
-            <label className="text-sm font-medium text-stone-700">Số tầng mỗi khung<input className={`${inputClass} mt-1`} type="number" min={1} value={rackForm.levelCount} onChange={event => changeRackField('levelCount', event.target.valueAsNumber)} /></label>
+            <label className="text-sm font-medium text-stone-700">Số cặp dằm ngang<input className={`${inputClass} mt-1`} type="number" min={1} value={rackForm.levelCount} onChange={event => changeRackField('levelCount', event.target.valueAsNumber)} /></label>
             <label className="text-sm font-medium text-stone-700">Số khung mỗi gian<input className={`${inputClass} mt-1`} type="number" min={1} value={rackForm.requestedRackCount} onChange={event => changeRackField('requestedRackCount', event.target.valueAsNumber)} /></label>
           </div>
         </section>
