@@ -82,14 +82,6 @@ function DesktopIcon({ className = 'w-4 h-4' }: { className?: string }) {
   )
 }
 
-function MobileIcon({ className = 'w-4 h-4' }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 18h.01M7 4h10a2 2 0 012 2v12a2 2 0 01-2 2H7a2 2 0 01-2-2V6a2 2 0 012-2z" />
-    </svg>
-  )
-}
-
 function BotIcon({ className = 'w-4 h-4' }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -115,15 +107,6 @@ function BrowserIconBadge({ type }: { type: string }) {
   }
 }
 
-function DeviceIconBadge({ type }: { type: 'desktop' | 'mobile' | 'tablet' | 'bot' }) {
-  if (type === 'mobile' || type === 'tablet') {
-    return <MobileIcon className="h-4 w-4 text-stone-500" />
-  }
-  if (type === 'bot') {
-    return <BotIcon className="h-4 w-4 text-purple-600" />
-  }
-  return <DesktopIcon className="h-4 w-4 text-stone-500" />
-}
 
 // ─── Component ───────────────────────────────────────────────────────────────
 

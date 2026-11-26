@@ -1,3 +1,4 @@
+import { receiptDisplayCode, internalPaymentReference } from '../../utils/recordDisplayCode'
 import { useEffect, useState } from 'react'
 import { Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Button, Card, Input } from '../../components/ui'
@@ -47,7 +48,9 @@ function settlementStatusText(status: string) {
 function settlementTimingText(line: CashflowReport['settlements'][number]) {
   if (line.payoutRecorded && line.paidAt) {
     const paidAt = new Date(line.paidAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })
-    return `Đã hoàn tiền lúc ${paidAt}${line.reference ? ` · Mã giao dịch: ${line.reference}` : ''}`
+    const receipt = line.receiptCode || (line.reference ? receiptDisplayCode(null, line.reference) : null)
+    const transferReference = line.receiptCode && line.reference && !internalPaymentReference(line.reference) ? line.reference : null
+    return [`Đã hoàn tiền lúc ${paidAt}`, receipt, transferReference].filter(Boolean).join(' · ')
   }
   if (pendingApprovalSettlementStatuses.has(line.status)) return 'Chưa có ngày hoàn tiền do yêu cầu đang chờ phê duyệt.'
   if (pendingPayoutSettlementStatuses.has(line.status)) return 'Chưa có ngày hoàn tiền do đang chờ chi hoàn.'

@@ -1,9 +1,9 @@
-import InventoryMismatchEvidence, { type InventoryInspectionReport } from '../staff/InventoryMismatchEvidence'
+import InventoryMismatchEvidence, { parseInventoryInspectionReport } from '../staff/InventoryMismatchEvidence'
 import InventoryDecisionSummary from '../../components/InventoryDecisionSummary'
 import { displayStatusLabel } from '../../presentation/statusLabels'
 import { invoiceNumberLabel } from '../customer/paymentLabels'
 import { useManagerPresentation } from "../manager/managerPresentation"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import RenewalRiskNotice from "./RenewalRiskNotice"
 import RentalHandoverFiles from "./RentalHandoverFiles"
 import { Badge, Button, Card, Modal } from "../../components/ui"
@@ -11,7 +11,7 @@ import BookingTransactionReceipt from "./BookingTransactionReceipt"
 import type { RentalApiDetail, RentalApiRole } from "../../types/rentalApi"
 import { bookingPaymentPurposes, bookingPaymentStatuses } from "../../services/rentalBookingEvidence"
 import { rentalRecordLabel, rentalStatusLabel, rentalMoney, unknown, rentalDataWarning, rentalPeriodText, rentalDate, accessStatusLabels } from "./presentation"
-import { downloadCheckInEvidence, type CheckInInventoryLine } from "../../services/checkInApi"
+import { downloadCheckInEvidence } from "../../services/checkInApi"
 import { confirmCustomerRentalStart, extendCustomerInventoryReturnWindow, getCustomerReservation, markCustomerPreparationComplete, previewCustomerRentalStart, resolveCustomerInventory, type CustomerReservationDetail, type RentalStartConfirmation } from "../../services/customerReservationApi"
 import { updateReturnRequest } from "../../services/returnApi"
 import { InventoryLineInspectionResult, InventoryResolutionNotice, PackagingInspectionResult } from "../customer/CustomerReservationCard"
@@ -19,6 +19,9 @@ import InventoryAppointmentPanel from "../customer/InventoryAppointmentPanel"
 import IntakeWorkflowPanel from "../../components/IntakeWorkflowPanel"
 import { formatCustomerDateTime } from "../../i18n/customerDate"
 import { listReturns, type ApiReturn } from "../../services/returnApi"
+import { CustomerClearance } from '../return-api/ReturnClearance'
+import { getAuthenticatedActor } from '../../services/authApi'
+import { getReturn, returnError } from '../../services/returnApi'
 import { ReturnSummary } from "../return-api/ReturnApiPanel"
 import { userFacingError } from "../../presentation/userFacingError"
 import FilePreviewDialog from "../../components/FilePreviewDialog"
@@ -57,26 +60,6 @@ function GoodsImage({ image }: { image: { id: string; originalName: string; cont
     {preview && url && <FilePreviewDialog file={{ url, type: image.contentType, name: image.originalName }} onClose={() => setPreview(false)} />}
   </div>
 }
-function savedInventoryReport(rental: RentalApiDetail): InventoryInspectionReport | null {
-  if (rental.inventory?.report) return rental.inventory.report
-  if (!rental.inventory?.actualJson) return null
-  try {
-    const actual = JSON.parse(rental.inventory.actualJson)
-    if (!actual || typeof actual !== 'object' || Array.isArray(actual)) return null
-    const finite = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? value : undefined
-    return {
-      packageCount: finite(actual.packageCount),
-      actualMeasurements: { weightKg: finite(actual.weightKg), actualVolumeM3: finite(actual.volumeM3) },
-      inventoryLines: Array.isArray(actual.lines) ? actual.lines.filter((line: unknown): line is CheckInInventoryLine => Boolean(line && typeof line === 'object' && 'goodsItemId' in line && 'actualQuantity' in line && typeof line.goodsItemId === 'string' && typeof line.actualQuantity === 'number')) : [],
-      actualPackagingMethod: typeof actual.packagingMethod === 'string' ? actual.packagingMethod : null,
-      packagingCondition: ['INTACT', 'MINOR_DAMAGE', 'MAJOR_DAMAGE', 'UNPACKAGED'].includes(actual.packagingCondition) ? actual.packagingCondition : null,
-      varianceReason: typeof actual.varianceReason === 'string' ? actual.varianceReason : null,
-      notes: typeof actual.notes === 'string' ? actual.notes : '',
-      evidenceReferences: Array.isArray(actual.evidenceReferences) ? actual.evidenceReferences.filter((id: unknown): id is string => typeof id === 'string') : [],
-    }
-  } catch { return null }
-}
-
 export default function RentalDetail({
   rental,
   onRequest,
@@ -107,6 +90,24 @@ export default function RentalDetail({
   const [inventoryActionMessage, setInventoryActionMessage] = useState('')
   const [inventoryActionError, setInventoryActionError] = useState('')
   const [activeReturnCase, setActiveReturnCase] = useState<ApiReturn>()
+  const clearanceLock = useRef(false)
+  const [clearanceBusy, setClearanceBusy] = useState(false)
+  const [clearanceError, setClearanceError] = useState('')
+  async function updateClearance(work: () => Promise<ApiReturn>) {
+    if (clearanceLock.current || !activeReturnCase) return
+    clearanceLock.current = true
+    setClearanceBusy(true)
+    setClearanceError('')
+    try {
+      setActiveReturnCase(await work())
+    } catch (error) {
+      setClearanceError(returnError(error))
+      try { setActiveReturnCase(await getReturn('customer', activeReturnCase.id)) } catch { /* Keep the action error visible. */ }
+    } finally {
+      clearanceLock.current = false
+      setClearanceBusy(false)
+    }
+  }
   const isReturningRental = ['return_requested', 'return_inspection', 'closing'].includes(rental.status)
   const inventoryReservationId = role === 'customer'
     ? rental.reservationId : null
@@ -156,7 +157,7 @@ export default function RentalDetail({
   const valueClass = "mt-1 text-sm font-semibold text-stone-900"
 
   const displayCode = rental.displayCode
-  const inspectionReport = savedInventoryReport(rental)
+  const inspectionReport = rental.inventory?.report ?? parseInventoryInspectionReport(rental.inventory?.actualJson)
   const evidence = rental.bookingEvidence
   const agreed = evidence?.agreedAmounts
   const warnings = rental.dataWarnings.filter(warning => warning.field !== "contractEndDate")
@@ -261,7 +262,12 @@ export default function RentalDetail({
             <Badge variant="warning">{copy(rentalStatusLabel(rental))}</Badge>
           </div>
           {activeReturnCase ? (
-            <ReturnSummary record={activeReturnCase} hideHeader />
+            <>
+              <ReturnSummary record={activeReturnCase} hideHeader />
+              {role === 'customer' && activeReturnCase.sourceType !== 'RECOVERY' && <CustomerClearance
+                record={activeReturnCase} ownerId={getAuthenticatedActor()?.id} busy={clearanceBusy} run={updateClearance} />}
+              {clearanceError && <p role="alert" className="text-sm text-red-800">{clearanceError}</p>}
+            </>
           ) : (
             <p className="text-sm text-amber-900">Hồ sơ đã chuyển sang trả kho. Vui lòng mở mục <b>Trả kho</b> để theo dõi lịch trả, nghiệm thu và bảng kê quyết toán.</p>
           )}

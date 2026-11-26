@@ -1,3 +1,4 @@
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import { useEffect, useMemo, useRef, useState } from "react"
 import { vietnamDateInput } from "../../utils/vietnamTime"
 import "./staffDailyTaskQueue.css"
@@ -304,7 +305,8 @@ export default function StaffDailyTaskQueue({
   }
 
   const completeMaintenance = () => {
-    if (!maintenanceCompletionTarget || !maintenanceResult.trim()) return
+    if (!maintenanceCompletionTarget || !maintenanceResult.trim()
+      || maintenanceCompletionTarget.unitReadinessCheck && (!makeUnitAvailable || !maintenanceEvidence.length)) return
     void runMaintenance(async () => {
       const evidencePhotos: string[] = []
       for (const file of maintenanceEvidence) {
@@ -330,7 +332,7 @@ export default function StaffDailyTaskQueue({
     const operational = row.operationalTask
     return (
       <Tr key={row.id}>
-        <Td className="[overflow-wrap:anywhere]"><p className="font-semibold text-stone-900">{row.title}</p><p className="text-xs text-stone-400">{assigned?.id || maintenance?.id || operational?.id}</p></Td>
+        <Td className="[overflow-wrap:anywhere]"><p className="font-semibold text-stone-900">{row.title}</p>{(maintenance || assigned || operational?.displayCode) && <p className="text-xs text-stone-400">{maintenance?.displayCode || operational?.displayCode || recordDisplayCode(maintenance?.id || assigned?.id)}</p>}</Td>
         <Td><Badge variant="muted">{row.sourceLabel}</Badge></Td>
         <Td className="text-xs [overflow-wrap:anywhere]">
           {row.customer && <p>{row.customer}</p>}
@@ -349,7 +351,7 @@ export default function StaffDailyTaskQueue({
           {maintenance?.taskType === "inventory_check" && !isFinished(maintenance.status) && <span className="text-xs font-semibold text-amber-700">Hoàn tất trong quy trình nhận kho</span>}
           {maintenance?.recoveryType === "RETURN_NO_SHOW" && !isFinished(maintenance.status) && <span className="text-xs font-semibold text-red-700">Hoàn tất trong biên bản trả kho</span>}
           {maintenance?.taskType !== "inventory_check" && maintenance?.recoveryType !== "RETURN_NO_SHOW" && maintenance?.status === "open" && <Button size="sm" disabled={busy} onClick={() => void runMaintenance(() => startMaintenanceTask(maintenance.id), `Đã bắt đầu xử lý gian ${maintenance.unitCode}.`)}>Bắt đầu</Button>}
-          {maintenance?.taskType !== "inventory_check" && maintenance?.recoveryType !== "RETURN_NO_SHOW" && maintenance?.status === "in_progress" && <Button size="sm" disabled={busy} onClick={() => { setMaintenanceCompletionTarget(maintenance); setMaintenanceResult(maintenance.resultReport || ""); setMaintenanceEvidence([]); setRecoveryHandoverLocation(maintenance.recoveryHandoverLocation || ""); setRecoveryWitnessStaffId(maintenance.recoveryWitnessStaffId || ""); setMakeUnitAvailable(!maintenance.recoveryRequired) }}>Hoàn thành</Button>}
+          {maintenance?.taskType !== "inventory_check" && maintenance?.recoveryType !== "RETURN_NO_SHOW" && maintenance?.status === "in_progress" && <Button size="sm" disabled={busy} onClick={() => { setMaintenanceCompletionTarget(maintenance); setMaintenanceResult(maintenance.resultReport || ""); setMaintenanceEvidence([]); setRecoveryHandoverLocation(maintenance.recoveryHandoverLocation || ""); setRecoveryWitnessStaffId(maintenance.recoveryWitnessStaffId || ""); setMakeUnitAvailable(!maintenance.recoveryRequired && !maintenance.unitReadinessCheck) }}>Hoàn thành</Button>}
           {maintenance?.status === "completed" && <span className="text-xs font-semibold text-emerald-700">Đã gửi kết quả</span>}
           {maintenance?.status === "cancelled" && <span className="text-xs font-semibold text-red-700">Đã hủy</span>}
           {operational && <Button size="sm" variant="outline" onClick={() => onOpenOperational(operational)}>Mở hồ sơ</Button>}
@@ -396,15 +398,16 @@ export default function StaffDailyTaskQueue({
 
       <Modal open={Boolean(maintenanceCompletionTarget)} onClose={() => { if (!busy) setMaintenanceCompletionTarget(null) }} title="Hoàn thành nhiệm vụ bảo trì">
         {maintenanceCompletionTarget && <div className="space-y-4 p-1">
-          <div className="rounded-lg bg-stone-50 p-3 text-sm"><b>{formatMaintenanceTaskTitle(maintenanceCompletionTarget)}</b><p className="mt-1 text-xs text-stone-500">Mã nhiệm vụ: {maintenanceCompletionTarget.id}</p></div>
+          <div className="rounded-lg bg-stone-50 p-3 text-sm"><b>{formatMaintenanceTaskTitle(maintenanceCompletionTarget)}</b><p className="mt-1 text-xs text-stone-500">Mã nhiệm vụ: {maintenanceCompletionTarget.displayCode || recordDisplayCode(maintenanceCompletionTarget.id)}</p></div>
           {maintenanceCompletionTarget.recoveryRequired && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-xs font-semibold text-red-900">Cần có bằng chứng kiểm kê và bàn giao hàng. Gian kho chưa được mở lại ở bước này.</p>}
           {maintenanceCompletionTarget.recoveryRequired && <label className="block text-sm font-medium text-stone-700">Khu vực lưu tạm và người nhận bàn giao<input className="mt-1 block w-full rounded border border-stone-300 p-2" maxLength={500} disabled={busy} value={recoveryHandoverLocation} onChange={(event) => setRecoveryHandoverLocation(event.target.value)} placeholder="Ví dụ: Khu lưu tạm A, kệ 02, nhân viên nhận bàn giao" /></label>}
           {['INVENTORY_OVERDUE', 'SETUP_OVERDUE', 'MISMATCH_REMOVAL'].includes(maintenanceCompletionTarget.recoveryType || '') && <label className="block text-sm font-medium text-stone-700">Nhân viên thứ hai xác nhận thu hồi<select className="mt-1 block w-full rounded border border-stone-300 bg-white p-2" disabled={busy || witnessRead.loading} value={recoveryWitnessStaffId} onChange={(event) => setRecoveryWitnessStaffId(event.target.value)}><option value="">Chọn nhân viên cùng cơ sở</option>{witnessOptions.map((witness) => <option key={witness.id} value={witness.id}>{witness.fullName}</option>)}</select></label>}
+          {maintenanceCompletionTarget.unitReadinessCheck && <p className="text-sm">Kiểm tra gian trống, khóa và quyền truy cập cũ. Ghi kết quả vệ sinh, sửa chữa, đính kèm ảnh rồi chọn Đã sẵn sàng khai thác.</p>}
           <label className="block text-sm font-medium text-stone-700">Báo cáo kết quả<textarea className="mt-1 block min-h-24 w-full rounded border border-stone-300 p-2" maxLength={4000} disabled={busy} value={maintenanceResult} onChange={(event) => setMaintenanceResult(event.target.value)} placeholder="Mô tả hạng mục đã kiểm tra, sửa chữa và kết quả nghiệm thu…" /></label>
           <label className="block text-sm font-medium text-stone-700">Ảnh sửa chữa / nghiệm thu<input className="mt-1 block w-full rounded border border-stone-300 p-2 text-sm" type="file" accept="image/*" multiple disabled={busy} onChange={(event) => setMaintenanceEvidence((current) => [...current, ...Array.from(event.target.files || [])].slice(0, 10))} /></label>
           {maintenanceEvidence.length > 0 && <ul className="list-disc pl-5 text-xs text-stone-600">{maintenanceEvidence.map((file, index) => <li key={`${file.name}:${file.lastModified}:${index}`}>{file.name}</li>)}</ul>}
           <label className="block text-sm font-medium text-stone-700">Trạng thái gian sau bảo trì<select className="mt-1 block w-full rounded border border-stone-300 p-2" disabled={busy || maintenanceCompletionTarget.recoveryRequired} value={makeUnitAvailable ? "available" : "maintenance"} onChange={(event) => setMakeUnitAvailable(event.target.value === "available")}><option value="available">Đã sẵn sàng khai thác</option><option value="maintenance">Vẫn cần bảo trì</option></select></label>
-          <div className="flex justify-end gap-2"><Button variant="outline" disabled={busy} onClick={() => setMaintenanceCompletionTarget(null)}>Đóng</Button><Button disabled={busy || !maintenanceResult.trim() || maintenanceCompletionTarget.recoveryRequired && (!recoveryHandoverLocation.trim() || ['INVENTORY_OVERDUE', 'SETUP_OVERDUE', 'MISMATCH_REMOVAL'].includes(maintenanceCompletionTarget.recoveryType || '') && !recoveryWitnessStaffId)} onClick={completeMaintenance}>{busy ? "Đang lưu…" : "Gửi báo cáo và hoàn thành"}</Button></div>
+          <div className="flex justify-end gap-2"><Button variant="outline" disabled={busy} onClick={() => setMaintenanceCompletionTarget(null)}>Đóng</Button><Button disabled={busy || !maintenanceResult.trim() || maintenanceCompletionTarget.unitReadinessCheck && (!makeUnitAvailable || !maintenanceEvidence.length) || maintenanceCompletionTarget.recoveryRequired && (!recoveryHandoverLocation.trim() || ['INVENTORY_OVERDUE', 'SETUP_OVERDUE', 'MISMATCH_REMOVAL'].includes(maintenanceCompletionTarget.recoveryType || '') && !recoveryWitnessStaffId)} onClick={completeMaintenance}>{busy ? "Đang lưu…" : "Gửi báo cáo và hoàn thành"}</Button></div>
         </div>}
       </Modal>
     </div>

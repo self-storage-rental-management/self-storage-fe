@@ -114,6 +114,13 @@ describe('customer reservation layout regression', () => {
     expect(notice('completed')).toContain('Đã hoàn tất kiểm kê')
   })
 
+  it('offers one button for both records once handover is ready', () => {
+    expect(render('READY_FOR_CHECKIN')).not.toContain('>Xem biên bản</button>')
+    for (const status of ['AWAITING_CUSTOMER_RECEIPT', 'PREPARING', 'COMPLETED'] as const) {
+      expect(render(status).match(/>Xem biên bản<\/button>/g)).toHaveLength(1)
+    }
+  })
+
   it('shows the booked inventory time in Vietnam and keeps it distinct from the deadline', () => {
     const detail = {
       reservation: base, setupCompletedAt: '2026-11-01T08:00:00Z', inventoryAppointmentAt: '2026-11-02T09:30:00Z',

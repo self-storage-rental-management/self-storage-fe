@@ -130,7 +130,7 @@ export default function ProcessingLeaseBoundary({ target, id, enabled = true, on
   }, [active, target, id, actorId, url, attempt])
 
   const lease = getProcessingLease(target, id)
-  const owned = active && ready && lease?.token === state.current?.token && !lease.invalid && !!lease.view.expiresAt && Date.parse(lease.view.expiresAt) > Date.now()
+  const owned = active && ready && !!lease && lease.token === state.current?.token && !lease.invalid && !!lease.view.expiresAt && Date.parse(lease.view.expiresAt) > Date.now()
   const release = async () => {
     const current = state.current
     if (!current || current.lease?.inFlight) return

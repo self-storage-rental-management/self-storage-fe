@@ -75,13 +75,13 @@ function ReceiptForm({ role = 'staff', embedded = false, record, view, busy, onC
     && (!view || (view.status === 'IN_PROGRESS' && view.settlementStatus === record.status))
     && !record.settlementBlocker && (record.status === 'payment_due' ? (record.amountDueFromCustomer ?? 0) > 0 : record.status === 'refund_pending' && (record.netRefundAmount ?? 0) > 0)
   const frozen = busy || uploading || command.busy || command.uncertain
-  const autoReceiptCode = !view && record.status === 'payment_due' && method === 'CASH'
+  const requiresTransferReference = method === 'BANK_TRANSFER'
   const submit = () => {
     if (!allowed || busy || uploadLock.current || (command.isLocked() && !command.uncertain) || command.conflict) return
     const request = command.uncertain && pending.current ? pending.current : {
       action: 'settlement-receipts' as const, body: { expectedVersion: view?.expectedVersion ?? 0, paymentMethod: method,
         amount: (record.status === 'payment_due' ? record.amountDueFromCustomer : record.netRefundAmount) ?? 0,
-        transactionReference: autoReceiptCode ? '' : reference.trim(), receiptFileId: files[0], confirmed },
+        transactionReference: requiresTransferReference ? reference.trim() : '', receiptFileId: files[0], confirmed },
     }
     try { if (view) validateRecoveryCommand(request); else validateReturnSettlementReceipt(request.body) } catch (error) { setValidation(returnError(error)); return }
     pending.current = request
@@ -101,8 +101,8 @@ function ReceiptForm({ role = 'staff', embedded = false, record, view, busy, onC
     <fieldset disabled={frozen || !allowed} className="space-y-2">
       {!view && <label className="block">Số tiền theo bảng kê (VND)<input readOnly className="block w-full rounded border p-2" value={(record.status === 'payment_due' ? record.amountDueFromCustomer : record.netRefundAmount)?.toLocaleString('vi-VN') ?? 'Chưa xác định'} /></label>}
       <label className="block">Phương thức thanh toán<select className="block w-full rounded border p-2" value={method} onChange={event => handleMethodChange(event.target.value as typeof method)}><option value="BANK_TRANSFER">Chuyển khoản</option><option value="CASH">Tiền mặt</option></select></label>
-      {!autoReceiptCode && <label className="block">Mã giao dịch hoặc biên nhận<input className="block w-full rounded border p-2" required maxLength={64} value={reference} onChange={event => handleReferenceChange(event.target.value)} /></label>}
-      <EvidenceUpload entityType={view ? 'DUONG_RECOVERY_SETTLEMENT' : 'RETURN_CASE'} entityId={view ? record.recoveryTaskId! : record.id} label="Biên lai quyết toán" limit={1} value={files} onChange={handleFilesChange}
+      {requiresTransferReference && <label className="block">Mã giao dịch chuyển khoản<input className="block w-full rounded border p-2" required maxLength={64} value={reference} onChange={event => handleReferenceChange(event.target.value)} /></label>}
+      <EvidenceUpload compact entityType={view ? 'DUONG_RECOVERY_SETTLEMENT' : 'RETURN_CASE'} entityId={view ? record.recoveryTaskId! : record.id} label="Chọn biên lai quyết toán" limit={1} value={files} onChange={handleFilesChange}
         fileNamePurpose={view ? 'bien-lai-quyet-toan-thu-hoi' : undefined}
         upload={view ? undefined : file => uploadReturnEvidence(record.id, file, role, 'bien-lai-quyet-toan-tra-kho')}
         disabled={frozen || !allowed} onBusy={value => { uploadLock.current = value; setUploading(value); listener.current(value || command.isLocked()) }} />
@@ -141,7 +141,7 @@ function ReceiptForm({ role = 'staff', embedded = false, record, view, busy, onC
           uploading ||
           command.busy ||
           (!command.uncertain &&
-            (!reference.trim() || !files.length || !confirmed))
+            ((requiresTransferReference && !reference.trim()) || !files.length || !confirmed))
         }
       >
         {command.busy
