@@ -74,23 +74,54 @@ function VietnameseDateTimeField({
   onChange,
   minDate,
   maxDate,
+  minDateTime,
+  maxDateTime,
   label = 'Ngày hẹn (dd/mm/yyyy)',
 }: {
   value: string
   onChange: (next: string) => void
   minDate?: string
   maxDate?: string
+  minDateTime?: string
+  maxDateTime?: string
   label?: string
 }) {
+  const effectiveMinDate = minDate ?? minDateTime?.slice(0, 10)
+  const effectiveMaxDate = maxDate ?? maxDateTime?.slice(0, 10)
   const [datePart, timePart] = value ? value.split('T') : ['', '']
-  const [hour, minute] = timePart ? timePart.split(':') : ['09', '00']
+  const [rawHour, rawMinute] = timePart ? timePart.split(':') : ['09', '00']
+
+  const allowedHoursFor = (d: string) => {
+    const minH = minDateTime && d === minDateTime.slice(0, 10) ? minDateTime.slice(11, 13) : '00'
+    const maxH = maxDateTime && d === maxDateTime.slice(0, 10) ? maxDateTime.slice(11, 13) : '23'
+    return HOURS_24.filter(h => h >= minH && h <= maxH)
+  }
+
+  const allowedMinutesFor = (d: string, h: string) => {
+    const minM = minDateTime && d === minDateTime.slice(0, 10) && h === minDateTime.slice(11, 13)
+      ? minDateTime.slice(14, 16)
+      : '00'
+    const maxM = maxDateTime && d === maxDateTime.slice(0, 10) && h === maxDateTime.slice(11, 13)
+      ? maxDateTime.slice(14, 16)
+      : '59'
+    return MINUTES_60.filter(m => m >= minM && m <= maxM)
+  }
+
+  const allowedHours = datePart ? allowedHoursFor(datePart) : HOURS_24
+  const hour = allowedHours.includes(rawHour) ? rawHour : (allowedHours[0] ?? rawHour)
+  const allowedMinutes = datePart ? allowedMinutesFor(datePart, hour) : MINUTES_60
+  const minute = allowedMinutes.includes(rawMinute) ? rawMinute : (allowedMinutes[0] ?? rawMinute)
 
   const update = (nextDate: string, nextHour: string, nextMinute: string) => {
     if (!nextDate) {
       onChange('')
       return
     }
-    onChange(`${nextDate}T${nextHour || '09'}:${nextMinute || '00'}`)
+    const hrs = allowedHoursFor(nextDate)
+    const h = hrs.includes(nextHour) ? nextHour : (hrs[0] ?? nextHour ?? '09')
+    const mins = allowedMinutesFor(nextDate, h)
+    const m = mins.includes(nextMinute) ? nextMinute : (mins[0] ?? nextMinute ?? '00')
+    onChange(`${nextDate}T${h}:${m}`)
   }
 
   return (
@@ -99,8 +130,8 @@ function VietnameseDateTimeField({
         <VietnameseDateInput
           label={label}
           value={datePart || ''}
-          min={minDate}
-          max={maxDate}
+          min={effectiveMinDate}
+          max={effectiveMaxDate}
           onChange={nextDate => update(nextDate, hour || '09', minute || '00')}
         />
       </div>
@@ -110,10 +141,10 @@ function VietnameseDateTimeField({
           <select
             aria-label="Giờ hẹn"
             className="mt-1 block rounded-lg border border-stone-300 bg-white px-2 py-2.5 text-sm text-stone-900"
-            value={hour || '09'}
-            onChange={e => update(datePart, e.target.value, minute || '00')}
+            value={hour}
+            onChange={e => update(datePart, e.target.value, minute)}
           >
-            {HOURS_24.map(h => <option key={h} value={h}>{h}</option>)}
+            {allowedHours.map(h => <option key={h} value={h}>{h}</option>)}
           </select>
         </label>
         <span className="pb-2.5 font-semibold text-stone-500">:</span>
@@ -122,10 +153,10 @@ function VietnameseDateTimeField({
           <select
             aria-label="Phút hẹn"
             className="mt-1 block rounded-lg border border-stone-300 bg-white px-2 py-2.5 text-sm text-stone-900"
-            value={minute || '00'}
-            onChange={e => update(datePart, hour || '09', e.target.value)}
+            value={minute}
+            onChange={e => update(datePart, hour, e.target.value)}
           >
-            {MINUTES_60.map(m => <option key={m} value={m}>{m}</option>)}
+            {allowedMinutes.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
         </label>
       </div>
@@ -298,8 +329,16 @@ export default function IntakeWorkflowPanel({
   const remaining = formatRemaining(activeDeadline ? Date.parse(activeDeadline) - now : null)
   const minimumDateTime = vietnamDateTimeInput(Math.ceil(now / 60_000) * 60_000)
   const minimumDate = minimumDateTime.slice(0, 10)
-  const maxAppointmentDate = arrivalDeadline ? vietnamDateTimeInput(Date.parse(arrivalDeadline)).slice(0, 10) : undefined
+  const readyAtMs = state.readyAt ? Date.parse(state.readyAt) : null
+  const minAppointmentAnchorMs = readyAtMs && Number.isFinite(readyAtMs) ? Math.max(now, readyAtMs) : now
+  const minAppointmentDateTime = vietnamDateTimeInput(Math.ceil((minAppointmentAnchorMs + 6 * 3_600_000) / 60_000) * 60_000)
+  const minAppointmentDate = minAppointmentDateTime.slice(0, 10)
+  const maxAppointmentDateTime = arrivalDeadline ? vietnamDateTimeInput(Date.parse(arrivalDeadline)) : undefined
+  const maxAppointmentDate = maxAppointmentDateTime ? maxAppointmentDateTime.slice(0, 10) : undefined
   const selectedDateTimeIsPast = Boolean(at && at < minimumDateTime)
+  const selectedAppointmentOutOfRange = Boolean(
+    at && (at < minAppointmentDateTime || (maxAppointmentDateTime && at > maxAppointmentDateTime)),
+  )
   const apptBadge = appointmentBadge(state.appointmentStatus)
   const previewExtendedDeadline = arrivalDeadline
     ? show(new Date(Date.parse(arrivalDeadline) + maxDaysPerExtension * 86_400_000).toISOString())
@@ -639,20 +678,24 @@ export default function IntakeWorkflowPanel({
             <p className="text-xs font-semibold text-stone-800">
               {state.appointmentAt && state.appointmentStatus === 'ACTIVE' ? 'Đổi lịch hẹn kiểm kê' : 'Đặt lịch hẹn kiểm kê'}
             </p>
-            <p className="mt-0.5 text-[11px] text-stone-500">Chọn thời gian trước hạn đến kiểm kê và cách hiện tại tối thiểu 6 giờ.</p>
+            <p className="mt-0.5 text-[11px] text-stone-500">
+              Chọn thời gian từ {minAppointmentDateTime.slice(11, 16)} {minAppointmentDate.split('-').reverse().join('/')} đến trước hạn đến kiểm kê ({show(arrivalDeadline)}).
+            </p>
             <div className="mt-2 space-y-2">
               <VietnameseDateTimeField
                 label="Ngày hẹn (dd/mm/yyyy)"
                 value={at}
-                minDate={minimumDate}
+                minDate={minAppointmentDate}
                 maxDate={maxAppointmentDate}
+                minDateTime={minAppointmentDateTime}
+                maxDateTime={maxAppointmentDateTime}
                 onChange={setAt}
               />
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
-                disabled={busy || selectedDateTimeIsPast || !at}
+                disabled={busy || selectedAppointmentOutOfRange || !at}
                 onClick={() => void change('APPOINTMENT')}
               >
                 {state.appointmentAt && state.appointmentStatus === 'ACTIVE' ? 'Đổi lịch hẹn' : 'Đặt lịch kiểm kê'}
@@ -763,6 +806,7 @@ export default function IntakeWorkflowPanel({
                 label="Ngày giờ mới theo giờ Việt Nam (dd/mm/yyyy)"
                 value={at}
                 minDate={minimumDate}
+                minDateTime={minimumDateTime}
                 onChange={setAt}
               />
               <input aria-label="Lý do điều chỉnh do cơ sở" className="block w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5" placeholder="Lý do điều chỉnh do cơ sở" value={reason} onChange={e => setReason(e.target.value)} />
