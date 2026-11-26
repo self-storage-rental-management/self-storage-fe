@@ -14,6 +14,12 @@ export function requiresReturnAttendance(record: ApiReturn) {
     && !(record.returnType === 'INVENTORY_MISMATCH' && record.setupReturnedAt)
 }
 
+export function isReturnIdentityReviewPending(record: ApiReturn, now: number) {
+  const attendance = record.attendance
+  return requiresReturnAttendance(record) && attendance?.reviewAccepted !== false
+    && !!attendance?.reviewStartsAt && now >= Date.parse(attendance.reviewStartsAt)
+}
+
 export default function ReturnAttendance({ record, role, editable, onChanged }: {
   record: ApiReturn
   role: 'staff' | 'manager'
@@ -44,7 +50,7 @@ export default function ReturnAttendance({ record, role, editable, onChanged }: 
     attempt.current = null
     setDocument('')
   }, [attendance?.reverificationStartedAt])
-  const pendingReview = attendance?.reviewAccepted !== false && !!attendance?.reviewStartsAt && now >= Date.parse(attendance.reviewStartsAt)
+  const pendingReview = isReturnIdentityReviewPending({ ...record, attendance }, now)
   const canReopen = pendingReview && !!attendance?.evidenceId && !attendance.verifiedAt && !attendance.reverificationStartedAt
   const canAssign = pendingReview && (!!attendance?.verifiedAt || canReopen)
   useEffect(() => {

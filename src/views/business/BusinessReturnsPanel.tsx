@@ -1,5 +1,6 @@
 import { receiptDisplayCode } from '../../utils/recordDisplayCode'
 import ReturnPolicyNotice from '../../components/ReturnPolicyNotice'
+import { ViolationRecoveryEntry } from '../return-api/ViolationRecoveryPanel'
 import { useReturnRecords } from '../../hooks/useReturnRecords'
 import LocalizedDateInput from '../../components/LocalizedDateInput'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -955,6 +956,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
 
   return (
     <div className="space-y-6">
+      {useApi && <div className="flex justify-end"><ViolationRecoveryEntry /></div>}
       <ReturnPolicyNotice business />
 
       {/* ── THỐNG KÊ TỔNG QUAN KPI TRẢ KHO & QUYẾT TOÁN ── */}
@@ -1213,6 +1215,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
         >
           <div className="space-y-5 text-sm">
             <p className="text-sm text-stone-500">{selectedItem.facilityName}</p>
+            {useApi && selectedItem.status === 'withdrawn_for_recovery' && <ViolationRecoveryEntry sourceReturnId={selectedItem.id} label="Mở hồ sơ thu hồi" />}
             {/* 1. THANH TIẾN TRÌNH 5 BƯỚC QUY TRÌNH CHUẨN HOÁ */}
             <div className="space-y-3">
               <p className="text-sm font-semibold text-stone-800">

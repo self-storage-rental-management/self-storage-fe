@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Button } from '../../components/ui'
+import { Button, Modal } from '../../components/ui'
 import { apiRequest } from '../../services/apiClient'
 import { uploadMaintenanceEvidence } from '../../services/maintenanceApi'
 import { parseVietnamDate } from '../../utils/vietnamTime'
@@ -168,7 +168,17 @@ function RecoveryAction({ entry, action, onBack, onSaved }: {
   </form>
 }
 
-export default function ViolationRecoveryPanel() {
+export function ViolationRecoveryEntry({ label = 'Thu hồi kho', sourceReturnId }: { label?: string; sourceReturnId?: string }) {
+  const [open, setOpen] = useState(false)
+  return <>
+    <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => setOpen(true)}>{label}</Button>
+    {open && <Modal title="Thu hồi kho" size="2xl" open onClose={() => setOpen(false)}>
+      <ViolationRecoveryPanel sourceReturnId={sourceReturnId} />
+    </Modal>}
+  </>
+}
+
+function ViolationRecoveryPanel({ sourceReturnId }: { sourceReturnId?: string }) {
   const [page, setPage] = useState(0)
   const [entries, setEntries] = useState<Entry[]>([])
   const [action, setAction] = useState<{ id: string; action: Action }>()
@@ -179,18 +189,19 @@ export default function ViolationRecoveryPanel() {
     let active = true
     setLoading(true)
     setError('')
-    apiRequest<Envelope<Entry[]>>(`${endpoint}?page=${page}`)
+    const query = sourceReturnId ? `sourceReturnId=${encodeURIComponent(sourceReturnId)}` : `page=${page}`
+    apiRequest<Envelope<Entry[]>>(`${endpoint}?${query}`)
       .then(response => { if (active) setEntries(response.data) })
       .catch(err => { if (active) setError(userFacingError(err, 'Không thể tải hồ sơ thu hồi.')) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [page, refresh])
+  }, [page, refresh, sourceReturnId])
 
   return <div className="space-y-3 text-sm">
     <Button size="sm" variant="outline" disabled={loading || !!action} onClick={() => setRefresh(value => value + 1)}>Tải lại</Button>
     {error && <p role="alert" className="text-red-700">{error}</p>}
     {loading && <p role="status">Đang tải hồ sơ thu hồi…</p>}
-    {!loading && !error && !entries.length && <p>Chưa có hồ sơ thu hồi trong danh sách.</p>}
+    {!loading && !error && !entries.length && <p>{sourceReturnId ? 'Chưa có hồ sơ thu hồi bạn có quyền xem cho yêu cầu trả kho này.' : 'Chưa có hồ sơ thu hồi trong danh sách.'}</p>}
     {!loading && !error && entries.map(entry => <section key={entry.id} className="space-y-3 rounded-lg border border-stone-200 p-3 sm:p-4">
       <div className="flex flex-wrap justify-between gap-2">
         <h3 className="font-semibold">Gian {entry.unitCode} · {stages[entry.stage]}</h3>
@@ -223,7 +234,7 @@ export default function ViolationRecoveryPanel() {
             onClick={() => setAction({ id: entry.id, action: key })}>{actionLabels[key]}</Button>)}
         </div>}
     </section>)}
-    {(page > 0 || entries.length === 30) && <div className="flex gap-2">
+    {!sourceReturnId && (page > 0 || entries.length === 30) && <div className="flex gap-2">
       <Button size="sm" variant="outline" disabled={loading || !!action || page === 0} onClick={() => setPage(value => value - 1)}>Trang trước</Button>
       <Button size="sm" variant="outline" disabled={loading || !!action || entries.length < 30} onClick={() => setPage(value => value + 1)}>Trang sau</Button>
     </div>}
