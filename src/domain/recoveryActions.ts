@@ -6,8 +6,16 @@ export function isManagerOverdueRecovery(entry: { stage: string; escalated?: boo
   return entry.escalated === true && managerStages.has(entry.stage)
 }
 
-export function visibleRecoveryActions<T extends string>(actions: readonly T[], stage: string, responseDueAt: string | null, now = Date.now()): T[] {
+export function visibleRecoveryActions<T extends string>(
+  actions: readonly T[],
+  stage: string,
+  responseDueAt: string | null,
+  now = Date.now(),
+  reply?: string | null,
+): T[] {
   const closed = stage === 'COMPLETED' || stage === 'CANCELLED'
   return actions.filter(action => !retired.has(action)
+    && !(action === 'WILL_ATTEND' && reply === 'WILL_ATTEND')
+    && !(action === 'CANNOT_ATTEND' && reply === 'CANNOT_ATTEND')
     && (closed || !replies.has(action) || !!responseDueAt && now < Date.parse(responseDueAt)))
 }
