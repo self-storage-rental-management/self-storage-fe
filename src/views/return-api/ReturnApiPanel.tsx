@@ -78,7 +78,6 @@ function returnRecoveryCutoff(value: string | null | undefined) {
     ? at.toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short', timeZone: VIETNAM_TIME_ZONE })
     : null
 }
-
 export function returnRecoveryCountdown(value: string | null | undefined, now = Date.now()) {
   if (!value) return null
   const deadline = Date.parse(value)
@@ -158,7 +157,7 @@ export function ReturnSummary({ record, hideTerminationFee = false, hideHeader =
       {['requested', 'scheduled'].includes(record.status) && <p className="text-sm text-stone-600">Số tiền quyết toán sẽ được xác định sau nghiệm thu.</p>}
       {record.setupExitRequested && !inventoryMismatch && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{record.setupEarlyExit
           ? hideTerminationFee ? 'Trả trong thời gian chuẩn bị: hoàn 80% tiền thuê sau ưu đãi, giữ lại 20%; tiền cọc đảm bảo quyết toán riêng sau khi trừ hư hỏng theo bảng giá.' : 'Trả trong thời gian chuẩn bị: hệ thống giữ lại 20% tiền thuê sau ưu đãi và hoàn 80%. Hư hỏng trừ vào cọc một tháng; phần vượt cọc được bù vào tiền thuê chưa sử dụng trước khi yêu cầu khách trả thêm.'
-        : record.setupReturnedAt ? 'Kho được nghiệm thu sau hạn chuẩn bị, áp dụng quyết toán của kỳ thuê đã bắt đầu.' : 'Nhân viên cần xác nhận đã dọn hết hàng và bàn giao kho trống. Điều khoản thời gian chuẩn bị áp dụng theo thời điểm nghiệm thu thực tế.'}</p>}
+          : record.setupReturnedAt ? 'Kho được nghiệm thu sau hạn chuẩn bị, áp dụng quyết toán của kỳ thuê đã bắt đầu.' : 'Nhân viên cần xác nhận đã dọn hết hàng và bàn giao kho trống. Điều khoản thời gian chuẩn bị áp dụng theo thời điểm nghiệm thu thực tế.'}</p>}
       {record.settlementBlocker && (
         <p role="status" className="rounded bg-amber-50 p-3">
           {record.settlementBlocker}
@@ -426,7 +425,7 @@ function RecoveryReturnSummary({ record, hideTerminationFee, hideHeader = false 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {([
           ['Tiền cọc đảm bảo thuê thực thu', record.depositAmount, false], ['Phí đã ghi nhận', record.totalDeductions, awaitingInspection],
-          ...(record.setupEarlyExit ? [['Tiền thuê được hoàn (80%)', record.rentalRefundCredit, false], ...(!hideTerminationFee ? [['Khoản giữ lại theo chính sách chuẩn bị (Phí chấm dứt sớm một lần)', record.earlyTerminationFee, false]] as const : [])] as const : []),
+          ...(record.setupEarlyExit ? [['Tiền thuê được hoàn (80%)', record.rentalRefundCredit, false], ...(!hideTerminationFee ? [[(record.returnType === 'INVENTORY_MISMATCH' ? 'Khoản giữ lại theo chính sách chuẩn bị' : 'Khoản giữ lại theo chính sách chuẩn bị (Phí chấm dứt sớm một lần)'), record.earlyTerminationFee, false]] as const : [])] as const : []),
           ...(!record.setupEarlyExit && record.activeReturnPolicy ? [['Tiền thuê các tháng còn lại chưa sử dụng', record.activeReturnPolicy.rentalRefundAmount, false]] as const : []),
           ['Khoản hoàn tiền', record.netRefundAmount, awaitingInspection], ['Khách cần đóng thêm', record.amountDueFromCustomer, awaitingInspection],
         ] as const).map(([label, amount, pendingInspection]) => <div key={label} className="rounded-lg bg-stone-50 p-3"><p className="text-xs text-stone-500">{label}</p><p className="mt-1 text-sm font-bold text-stone-900">{amount == null ? 'Chưa xác định' : pendingInspection ? 'Chờ nghiệm thu' : rentalMoney(amount, 'VND')}</p></div>)}

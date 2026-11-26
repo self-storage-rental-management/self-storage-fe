@@ -176,6 +176,7 @@ describe("D3 form identity and original retry request", () => {
     let fields = invoke(selected, formSlots)
     expect(JSON.stringify(fields)).not.toContain('Mã biên lai được hệ thống tự động tạo khi ghi nhận thu tiền.')
     expect(JSON.stringify(fields)).not.toContain('Tải biên nhận thu tiền mặt đã lập cho giao dịch này.')
+    expect(JSON.stringify(fields)).toContain('Tải ảnh chụp biên nhận thu tiền mặt làm minh chứng.')
     expect(find(fields, EvidenceUpload)).toBeDefined()
     expect(nodes(fields).some(n => n.type === 'input' && n.props.type === 'checkbox')).toBe(true)
     find(fields, 'select').props.onChange({ target: { value: 'BANK_TRANSFER' } })

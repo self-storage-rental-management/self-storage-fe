@@ -1,4 +1,5 @@
 import { ApiClientError, apiRequest } from './apiClient'
+import type { BusinessRevenueReport } from './businessReportingApi'
 
 export interface ManagerReportActivity {
   id: string
@@ -52,6 +53,9 @@ export interface ManagerReportSummary {
   openMaintenanceTasksCount: number
   unitStatusBreakdown: { status: string; name: string; count: number; percentage: number }[]
   unitTypeBreakdown: { typeCode: string; typeName: string; totalUnits: number; occupiedUnits: number; occupancyRate: number }[]
+  totalRefunds?: number | null
+  grossRevenue?: number | null
+  monthlyRevenue?: { month: string; revenue: number; transactionsCount: number }[]
 }
 
 interface ApiEnvelope<T> {
@@ -75,11 +79,33 @@ export async function getManagerReportSummary(facilityId?: string) {
     Array.isArray(data.unitTypeBreakdown) && data.unitTypeBreakdown.every(row =>
       typeof row.typeCode === 'string' && typeof row.typeName === 'string' &&
       Number.isFinite(row.totalUnits) && Number.isFinite(row.occupiedUnits) && Number.isFinite(row.occupancyRate))
+  const validMonthlyRevenue = !data?.monthlyRevenue || (Array.isArray(data.monthlyRevenue) &&
+    data.monthlyRevenue.every(row => typeof row.month === 'string' && Number.isFinite(row.revenue) && Number.isFinite(row.transactionsCount)))
   if (!data || typeof data.facilityId !== 'string' || typeof data.facilityName !== 'string' ||
     !counts?.every(value => Number.isSafeInteger(value) && value >= 0) ||
     !Number.isFinite(data.occupancyRate) || !Number.isFinite(data.monthlyRecurringRevenue) ||
-    !(data.collectedRevenue === null || Number.isFinite(data.collectedRevenue)) || !validBreakdowns) return invalidResponse()
+    !(data.collectedRevenue === null || Number.isFinite(data.collectedRevenue)) || !validBreakdowns ||
+    !validMonthlyRevenue ||
+    (data.totalRefunds !== undefined && data.totalRefunds !== null && !Number.isFinite(data.totalRefunds)) ||
+    (data.grossRevenue !== undefined && data.grossRevenue !== null && !Number.isFinite(data.grossRevenue))) return invalidResponse()
   return response as ApiEnvelope<ManagerReportSummary>
+}
+
+export async function getManagerRevenueReportApi(
+  months = 6,
+  facilityId?: string
+): Promise<BusinessRevenueReport> {
+  const params = new URLSearchParams({ months: String(months) })
+  if (facilityId) {
+    params.set('facilityId', facilityId)
+  }
+  const res = await apiRequest<{ data: BusinessRevenueReport } | BusinessRevenueReport>(
+    `/api/manager/reports/revenue?${params.toString()}`
+  )
+  if (res && 'data' in res && res.data) {
+    return res.data
+  }
+  return res as BusinessRevenueReport
 }
 
 export async function listManagerReportActivities({
