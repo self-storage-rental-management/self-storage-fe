@@ -87,7 +87,7 @@ export type RenewalOperationCommand = {
   body: Version & { decisionRef: string }
 } | {
   action: "arrival"
-  body: Version & Evidence & { appointmentRef: string }
+  body: Version & Evidence & { appointmentRef: string; identityVerified: true }
 } | {
   action: "noShow"
   body: Version & { appointmentRef: string; reason: string }

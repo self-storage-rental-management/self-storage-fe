@@ -1,6 +1,7 @@
 export type ProcessingTarget = 'RESERVATION' | 'ASSIGNMENT' | 'CHECK_IN' | 'RENTAL' | 'RETURN'
 export interface ProcessingView {
   reservationId: string; ownerId: string | null; ownerName: string | null; expiresAt: string | null
+  maxExpiresAt?: string | null
   revision: number; sourceStamp: string; owned: boolean; occupied: boolean
 }
 export interface LocalProcessingLease {
