@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { canOpenInventory, canAccessInventory, inventoryInspectionBlockReason } from './inventoryAccess'
+import { canOpenInventory, canAccessInventory, inventoryInspectionBlockReason, isCheckInRecoveryTransferred } from './inventoryAccess'
 
 it('keeps inventory locked until customer receipt confirmation', () => {
   for (const status of [null, undefined, 'scheduled', 'identity_verified', 'contract_signed', 'payment_collected', 'handover_pending_receipt', 'no_show', 'rejected']) {
@@ -29,6 +29,18 @@ it('honors the server recovery lock without relying on the check-in status chang
   const item = { ...pending, inventoryVisit: { access: { ...pending.inventoryVisit.access,
     writable: false, blockedReason: 'Hồ sơ đã chuyển sang thu hồi.' } } }
   expect(canAccessInventory(item, completion - 1)).toBe(false)
+})
+
+it('uses the actual recovery transfer to lock even previously published inventory', () => {
+  const item = { ...pending, checkInStatus: 'completed', inventoryResolutionStatus: 'ACCEPTED',
+    inventoryVisit: { access: { ...pending.inventoryVisit.access, writable: false, recoveryTransferred: true } } }
+  expect(isCheckInRecoveryTransferred(item)).toBe(true)
+  expect(canAccessInventory(item, completion + 1)).toBe(false)
+  expect(inventoryInspectionBlockReason(item, completion + 1)).toContain('đã chuyển sang thu hồi')
+  expect(isCheckInRecoveryTransferred(pending)).toBe(false)
+  expect(isCheckInRecoveryTransferred({ ...item, inventoryVisit: {
+    access: { ...item.inventoryVisit.access, recoveryTransferred: false },
+  } })).toBe(false)
 })
 
 it('does not confuse the elapsed arrival deadline with the 72h completion window', () => {

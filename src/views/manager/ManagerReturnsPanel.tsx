@@ -577,17 +577,17 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
       <div className="space-y-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
       <header>
-        <h1 className="text-2xl font-bold text-stone-900">Trả kho và nghiệm thu</h1>
+        <h1 className="text-2xl font-bold text-stone-900">Trả kho &amp; Quyết toán</h1>
         <p className="mt-1 text-sm text-stone-500">Theo dõi nghiệm thu hiện trường, biên bản và quyết toán hồ sơ trả kho.</p>
       </header>
-        <div className="flex w-full items-center gap-2 sm:w-auto">
-          {useApi && (onOpenRecovery ? <Button variant="outline" size="sm" onClick={onOpenRecovery}>Điều phối thu hồi kho</Button> : <ViolationRecoveryEntry />)}
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
+          {useApi && (onOpenRecovery ? <Button className="shrink-0" variant="outline" size="sm" onClick={onOpenRecovery}>Điều phối thu hồi kho</Button> : <ViolationRecoveryEntry />)}
           <input
             type="text"
             placeholder={'Tìm theo mã, khách, gian kho...'}
             value={returnSearch}
             onChange={e => setReturnSearch(e.target.value)}
-            className="min-w-0 flex-1 border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 sm:w-72"
+            className="min-w-[230px] flex-1 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 sm:w-72 sm:flex-none"
           />
           <details className="relative shrink-0">
             <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 rounded-lg border border-stone-300 bg-white px-3 text-sm font-medium text-stone-700 hover:bg-stone-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700">

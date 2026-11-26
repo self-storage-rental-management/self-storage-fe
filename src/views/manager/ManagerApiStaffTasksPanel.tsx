@@ -15,9 +15,6 @@ import { listAllRecoveryTasks, type RecoveryTask } from '../../services/recovery
 import RecoveryTaskDetail, { recoveryStatusLabels } from '../rental-api/RecoveryTaskDetail'
 import { rentalDate } from '../rental-api/presentation'
 import { managerFacilityNotice, singleManagerFacility } from './managerFacilityUi'
-import ManagerCheckInReminderPanel from './ManagerCheckInReminderPanel'
-import ManagerInventoryAppointments from './ManagerInventoryAppointments'
-import ManagerIntakeWorkflowPanel from './ManagerIntakeWorkflowPanel'
 import { ViolationRecoveryPanel } from '../return-api/ViolationRecoveryPanel'
 import {
   assignMaintenanceTask,
@@ -61,10 +58,8 @@ function statusVariant(status: MaintenanceTaskApi['status']) {
 }
 
 export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onInitialUnitConsumed, initialRecovery }: Props) {
-  const [activeTab, setActiveTab] = useState<'tasks' | 'handover'>('tasks')
-  useEffect(() => { if (initialRecovery) setActiveTab('tasks') }, [initialRecovery])
-  const [receiptCount, setReceiptCount] = useState<number | null>(null)
-  const [inventoryCount, setInventoryCount] = useState<number | null>(null)
+  const [activeTab, setActiveTab] = useState<'tasks' | 'recovery'>('tasks')
+  useEffect(() => { if (initialRecovery) setActiveTab('recovery') }, [initialRecovery])
   const actor = getAuthenticatedActor()
   const facilityId = singleManagerFacility(actor)
   const [tasks, setTasks] = useState<MaintenanceTaskApi[]>([])
@@ -123,7 +118,7 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
       if (recoveryResult.reason instanceof ApiClientError && recoveryResult.reason.code === 'FEATURE_DISABLED') setRecoveryDisabled(true)
       else setRecoveryError(recoveryResult.reason)
     }
-    if (taskResult.status === 'fulfilled') setTasks(taskResult.value.data)
+    if (taskResult.status === 'fulfilled') setTasks(taskResult.value.data.filter(task => task.recoveryType !== 'VIOLATION'))
     else {
       setTasks([])
       setTaskError(taskResult.reason)
@@ -284,25 +279,20 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
         <button type="button" role="tab" id="staff-tasks-tab" aria-selected={activeTab === 'tasks'} aria-controls="staff-tasks-panel"
           className={`border-b-2 px-4 py-3 text-sm font-semibold ${activeTab === 'tasks' ? 'border-amber-500 text-stone-900' : 'border-transparent text-stone-600 hover:text-stone-900'}`}
           onClick={() => setActiveTab('tasks')}>Nhiệm vụ</button>
-        <button type="button" role="tab" id="staff-handover-tab" aria-selected={activeTab === 'handover'} aria-controls="staff-handover-panel"
-          className={`border-b-2 px-4 py-3 text-sm font-semibold ${activeTab === 'handover' ? 'border-amber-500 text-stone-900' : 'border-transparent text-stone-600 hover:text-stone-900'}`}
-          onClick={() => setActiveTab('handover')}>Bàn giao &amp; kiểm kê
-          {receiptCount !== null && inventoryCount !== null && <span className="ml-2 rounded-full bg-stone-100 px-2 py-0.5 text-xs tabular-nums">{receiptCount + inventoryCount}</span>}
-        </button>
+        <button type="button" role="tab" id="staff-recovery-tab" aria-selected={activeTab === 'recovery'} aria-controls="staff-recovery-panel"
+          className={`border-b-2 px-4 py-3 text-sm font-semibold ${activeTab === 'recovery' ? 'border-amber-500 text-stone-900' : 'border-transparent text-stone-600 hover:text-stone-900'}`}
+          onClick={() => setActiveTab('recovery')}>Thu hồi kho</button>
       </div>
 
-      <div id="staff-handover-panel" role="tabpanel" aria-labelledby="staff-handover-tab" hidden={activeTab !== 'handover'} className="space-y-5">
-        <ManagerCheckInReminderPanel showToast={showToast} onCountChange={setReceiptCount} />
-        <ManagerInventoryAppointments onCountChange={setInventoryCount} />
-        <ManagerIntakeWorkflowPanel />
+      <div id="staff-recovery-panel" role="tabpanel" aria-labelledby="staff-recovery-tab" hidden={activeTab !== 'recovery'} className="space-y-5">
+        <Card className="recovery-workspace">
+          <h2 className="text-lg font-semibold text-stone-900">Thu hồi kho cần điều phối</h2>
+          <p>Theo dõi và phân công xử lý các hồ sơ thu hồi tại cơ sở.</p>
+          <ViolationRecoveryPanel activeOnly target={initialRecovery} />
+        </Card>
       </div>
 
       <div id="staff-tasks-panel" role="tabpanel" aria-labelledby="staff-tasks-tab" hidden={activeTab !== 'tasks'} className="space-y-5">
-      <Card className="recovery-workspace">
-        <h2 className="text-lg font-semibold text-stone-900">Thu hồi kho cần điều phối</h2>
-        <p>Theo dõi và phân công xử lý các hồ sơ thu hồi tại cơ sở.</p>
-        <ViolationRecoveryPanel activeOnly target={initialRecovery} />
-      </Card>
       {!loading && !taskError && !staffReadFailed && !staff.length && <ManagerActionNotice tone="info">Chưa có nhân viên được phân công để nhận nhiệm vụ tại cơ sở này.</ManagerActionNotice>}
       {!loading && !taskError && !unitReadFailed && !units.length && <ManagerActionNotice tone="info">Chưa có gian kho khả dụng để tạo nhiệm vụ bảo trì.</ManagerActionNotice>}
       {!loading && (unitReadFailed || staffReadFailed) && <p className="text-xs text-stone-500">Chưa tải được danh sách kho hoặc nhân viên để tạo nhiệm vụ. Dữ liệu nhiệm vụ vẫn được tải riêng.</p>}

@@ -36,7 +36,7 @@ const phrases: [RegExp, string][] = [
   [/\bcutoff\b|\bCutoff\b/g, 'mốc thu hồi'], [/\bCASH\b/g, 'tiền mặt'],
   [/\bpolicy\b|\bPolicy\b/g, 'chính sách'], [/\bworkflow\b/g, 'quy trình xử lý'],
   [/\bmodule\b|\bModule\b/g, 'bộ phận'], [/\bbackend\b|\bBackend\b|\bBE\b/g, 'hệ thống'],
-  [/\bFE\b/g, 'giao diện'], [/\bBO\b/g, 'quản lý vận hành'],
+  [/\bFE\b/g, 'giao diện'], [/\bBO\b/g, 'chủ doanh nghiệp'],
   [/\bSLA\b/g, 'hạn xử lý'], [/\bRecovery\b/g, 'thu hồi kho'],
   [/\breceiver\b/g, 'bộ phận tiếp nhận'], [/\bcooldown\b/g, 'thời gian chờ'],
   [/Correlation ID|Correlation/g, 'Mã đối chiếu'], [/\bID\b/g, 'Mã'],

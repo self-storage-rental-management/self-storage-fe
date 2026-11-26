@@ -7,11 +7,16 @@ type InventoryCase = {
   inventoryResolutionStatus?: string | null
   inventoryFinalDeadlineAt?: string | null
   inventoryVisit?: { arrivedAt?: string | null; identityVerifiedAt?: string | null
-    access?: { completionDeadlineAt: string | null; writable: boolean; blockedReason: string | null } | null } | null
+    access?: { completionDeadlineAt: string | null; writable: boolean; blockedReason: string | null; recoveryTransferred?: boolean } | null } | null
+}
+
+export function isCheckInRecoveryTransferred(item: InventoryCase | null | undefined): boolean {
+  return item?.inventoryVisit?.access?.recoveryTransferred === true
 }
 
 export function inventoryInspectionBlockReason(item: InventoryCase | null | undefined, now = Date.now()): string | null {
   if (!item) return null
+  if (isCheckInRecoveryTransferred(item)) return 'Hồ sơ đã chuyển sang thu hồi. Không thể tiếp tục kiểm kê.'
   const access = item.inventoryVisit?.access
   const legacyStart = item.inventoryVisit?.arrivedAt || item.inventoryVisit?.identityVerifiedAt
   const deadline = access?.completionDeadlineAt ? Date.parse(access.completionDeadlineAt)
@@ -25,6 +30,7 @@ export function inventoryInspectionBlockReason(item: InventoryCase | null | unde
 }
 
 export function canAccessInventory(item: InventoryCase, now = Date.now()): boolean {
+  if (isCheckInRecoveryTransferred(item)) return false
   if (!canOpenInventory(item.checkInStatus)) return false
   const published = item.checkInStatus === 'completed'
     || !!item.inventoryResolutionStatus && item.inventoryResolutionStatus !== 'NOT_STARTED'

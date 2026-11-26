@@ -2,7 +2,7 @@ import { CustomerClearance } from '../views/return-api/ReturnClearance'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { setAccessToken, clearAuthTokens } from './apiClient'
-import { setCustomerClearance, completeRefund, recordReturnSettlement, isApiReturn, requestReturn, listReturns, getReturn, inspectReturn, reviewDispute, confirmReturn, paySettlement, reopenReturnVerification, verifyReturnIdentity, returnError, uploadReturnEvidence, type ApiReturn } from './returnApi'
+import { setCustomerClearance, completeRefund, recordReturnSettlement, isApiReturn, requestReturn, listReturns, getReturn, inspectReturn, reviewDispute, confirmReturn, paySettlement, reopenReturnVerification, verifyReturnIdentity, scheduleMismatchReturnAppointment, extendMismatchReturnWindow, recordReturnArrival, reviewReturnArrival, returnError, uploadReturnEvidence, type ApiReturn } from './returnApi'
 import ReturnApiPanel, { ReturnSummary } from '../views/return-api/ReturnApiPanel'
 import ReturnAttendance, { requiresReturnAttendance } from '../views/return-api/ReturnAttendance'
 import { ids, operationsActor } from '../../tests/rentalOperationsApiFixtures'
@@ -39,12 +39,12 @@ describe('real Return transport and unknown settlement presentation', () => {
     expect(html).toContain('quay lại chờ Quản lý rà soát')
     expect(html).not.toContain('Quản lý đã cho phép tiếp tục bàn giao.')
   })
-  it('shows the arrival photo and CCCD in one verification form', () => {
+  it('shows the arrival photo and CCCD in one verification form for normal returns', () => {
     const attendance: NonNullable<ApiReturn['attendance']> = {
       arrivedAt: null, evidenceId: null, expiresAt: null, attempts: 0,
       verifiedAt: null, reviewStartsAt: null, reviewAccepted: null,
     }
-    const pending = { ...record, status: 'scheduled' as const, returnType: 'INVENTORY_MISMATCH' as const, attendance }
+    const pending = { ...record, status: 'scheduled' as const, returnType: 'NORMAL' as const, attendance }
     const render = (item: ApiReturn) => renderToStaticMarkup(<ReturnAttendance record={item} role="staff" editable onChanged={() => {}} />)
     expect(requiresReturnAttendance(pending)).toBe(true)
     expect(render(pending)).not.toContain('Ghi nhận khách đã đến')
@@ -58,6 +58,110 @@ describe('real Return transport and unknown settlement presentation', () => {
     expect(render(arrived)).not.toContain('Ảnh hiện trường chứng minh khách đã đến')
     expect(render({ ...arrived, attendance: { ...arrived.attendance, verifiedAt: arrivedAt } })).toContain('Đã xác minh danh tính')
     expect(requiresReturnAttendance({ ...pending, status: 'recovery_required' })).toBe(false)
+  })
+
+  it('separates arrival capture from identity verification and exposes manager late-review actions for mismatch returns', async () => {
+    const attendance: NonNullable<ApiReturn['attendance']> = {
+      arrivedAt: null, evidenceId: null, expiresAt: null, attempts: 0,
+      verifiedAt: null, reviewStartsAt: null, reviewAccepted: null,
+    }
+    const futureDeadline = new Date(Date.now() + 3_600_000).toISOString()
+    const pendingMismatch: ApiReturn = {
+      ...record, status: 'scheduled', returnType: 'INVENTORY_MISMATCH',
+      inventoryRemovalDeadlineAt: futureDeadline, attendance,
+    }
+    const staffBeforeArrival = renderToStaticMarkup(<ReturnAttendance record={pendingMismatch} role="staff" editable onChanged={() => {}} />)
+    expect(staffBeforeArrival).toContain('Ghi nhận khách đến')
+    expect(staffBeforeArrival).not.toContain('Số CCCD trên giấy tờ gốc')
+
+    const arrivedNow = new Date().toISOString()
+    const afterArrival: ApiReturn = {
+      ...pendingMismatch,
+      attendance: { ...attendance, arrivedAt: arrivedNow, recordedAt: arrivedNow },
+    }
+    const staffAfterArrival = renderToStaticMarkup(<ReturnAttendance record={afterArrival} role="staff" editable onChanged={() => {}} />)
+    expect(staffAfterArrival).toContain('Bước 2 · Xác minh danh tính')
+    expect(staffAfterArrival).toContain('Số CCCD trên giấy tờ gốc')
+
+    const lateReviewItem: ApiReturn = {
+      ...pendingMismatch,
+      attendance: {
+        ...attendance,
+        recordedAt: arrivedNow,
+        lateArrivalClaimedAt: new Date(Date.now() + 1_800_000).toISOString(),
+        evidenceNote: 'Sổ quầy lễ tân',
+        reviewStatus: 'PENDING',
+        reviewStartsAt: arrivedNow,
+      },
+    }
+    const managerLateHtml = renderToStaticMarkup(<ReturnAttendance record={lateReviewItem} role="manager" editable onChanged={() => {}} />)
+    expect(managerLateHtml).toContain('Chấp nhận đến đúng hạn &amp; mở xác minh')
+    expect(managerLateHtml).toContain('Sổ quầy lễ tân')
+
+    const staff = operationsActor('staff')
+    state.actor = { ...staff, permissions: [...staff.permissions, 'returns:read', 'returns:process'] }
+    const arrivalFetch = respond({ data: afterArrival })
+    await recordReturnArrival(record.id, { evidenceNote: 'Có mặt đúng hạn', expectedVersion: 1 })
+    expect(arrivalFetch.mock.calls[0][0]).toContain(`/api/staff/returns/${record.id}/arrival`)
+
+    const manager = operationsActor('manager')
+    state.actor = { ...manager, permissions: [...manager.permissions, 'returns:read', 'rentals:update'] }
+    const reviewFetch = respond({ data: afterArrival })
+    await reviewReturnArrival(record.id, true, 'Đã kiểm tra camera', ids.staff, undefined, 'FACILITY_EXCEPTION')
+    expect(JSON.parse(reviewFetch.mock.calls[0][1].body).decision).toBe('FACILITY_EXCEPTION')
+  })
+
+  it('renders unified Vietnamese mismatch return block with appointment, extension, and clearance actions', async () => {
+    const deadline = new Date(Date.now() + 3 * 86_400_000).toISOString()
+    const mismatchRecord: ApiReturn = {
+      ...record,
+      status: 'requested',
+      returnType: 'INVENTORY_MISMATCH',
+      scheduledDate: null,
+      scheduledAppointmentAt: null,
+      inventoryRemovalDeadlineAt: deadline,
+      returnExtensionDays: 2,
+      returnExtensionCount: 0,
+      maxReturnExtensions: 2,
+      canExtendReturnWindow: true,
+      returnVersion: 2,
+      customerClearedAt: null,
+    }
+    const initialHtml = renderToStaticMarkup(
+      <CustomerClearance record={mismatchRecord} busy={false} run={vi.fn()} ownerId={ids.customer} />,
+    )
+    expect(initialHtml).toContain('Hạn cuối dọn kho')
+    expect(initialHtml).toContain('Đặt lịch bàn giao')
+    expect(initialHtml).toContain('Gia hạn dọn hàng thêm 2 ngày')
+    expect(initialHtml).toContain('Xác nhận đã dọn hàng xong')
+    expect(initialHtml).toContain('Đã dùng 0/2 lần')
+    expect(initialHtml).not.toContain('INVENTORY_MISMATCH')
+    expect(initialHtml).not.toContain('PENDING')
+
+    const scheduledHtml = renderToStaticMarkup(
+      <CustomerClearance
+        record={{
+          ...mismatchRecord,
+          status: 'scheduled',
+          scheduledAppointmentAt: new Date(Date.now() + 86_400_000).toISOString(),
+          returnExtensionCount: 2,
+          canExtendReturnWindow: false,
+        }}
+        busy={false}
+        run={vi.fn()}
+        ownerId={ids.customer}
+      />,
+    )
+    expect(scheduledHtml).toContain('Đổi lịch bàn giao')
+    expect(scheduledHtml).toContain('Đã sử dụng hết 2 lượt gia hạn cho phép')
+    expect(scheduledHtml).not.toContain('Gia hạn dọn hàng thêm 2 ngày')
+
+    const appointmentFetch = respond({ data: mismatchRecord })
+    await scheduleMismatchReturnAppointment(record.id, deadline, 2, 'idem-appt-1')
+    expect(appointmentFetch.mock.calls[0][0]).toContain(`/api/customer/returns/${record.id}/appointment`)
+    const extendFetch = respond({ data: mismatchRecord })
+    await extendMismatchReturnWindow(record.id, 2, 'idem-ext-1')
+    expect(extendFetch.mock.calls[0][0]).toContain(`/api/customer/returns/${record.id}/extend-removal-window`)
   })
 
   it('sends initial arrival evidence directly to the identity endpoint', async () => {

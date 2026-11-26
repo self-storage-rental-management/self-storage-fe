@@ -1,22 +1,27 @@
-import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react'
-import { Button } from '../../components/ui'
+import { Fragment, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { Button, Modal } from '../../components/ui'
 import { apiDownload, apiRequest } from '../../services/apiClient'
 import { uploadMaintenanceEvidence } from '../../services/maintenanceApi'
 import { parseVietnamDate } from '../../utils/vietnamTime'
 import { userFacingError } from '../../presentation/userFacingError'
 import { revealRecord } from '../../utils/revealRecord'
 import './ViolationRecoveryPanel.css'
+import { isManagerOverdueRecovery, visibleRecoveryActions } from '../../domain/recoveryActions'
+import { displayRoleNames } from '../../presentation/displayText'
+import { canHandOverRecovery, type RecoveryVerification } from '../../domain/recoveryVerification'
+import { recoveryPickupBounds, recoveryPickupError } from '../../domain/recoveryPickup'
+import { staffGoodsCategoryLabel as goodsCategoryLabel } from '../staff/staffPresentation'
+import { groupRecoveryItems, groupQuantityLines, isPendingRecoveryItem, pendingRecoveryChoices, recoveryItemCounts, type RecoveryItem } from '../../domain/recoveryItems'
 
 const actionLabels = {
-  CONFIRM_VIOLATION: 'Xác nhận mở thu hồi', ASSIGN: 'Phân công', ACCEPT: 'Tiếp nhận',
-  DECLINE: 'Từ chối nhiệm vụ', WILL_ATTEND: 'Tôi sẽ có mặt',
-  CANNOT_ATTEND: 'Tôi không thể có mặt', DISPUTE: 'Gửi phản đối hoặc khiếu nại', RESCHEDULE: 'Đổi lịch thu hồi',
-  RECORD_PRESENT: 'Ghi nhận có mặt', RECORD_ABSENT: 'Ghi nhận vắng mặt', VERIFY: 'Đối chiếu giấy tờ',
-  APPROVE: 'Phê duyệt thu hồi', START: 'Bắt đầu thu hồi', SAVE_ITEM: 'Ghi nhận kiện hàng',
+  ASSIGN: 'Phân công', WILL_ATTEND: 'Tôi sẽ có mặt',
+  CANNOT_ATTEND: 'Tôi không thể có mặt', DISPUTE: 'Gửi phản đối hoặc khiếu nại',
+  RECORD_PRESENT: 'Ghi nhận có mặt', RECORD_ABSENT: 'Ghi nhận vắng mặt', VERIFY: 'Xác minh khách khi thu hồi',
+  START: 'Bắt đầu thu hồi', SAVE_ITEM: 'Ghi nhận kiện hàng',
   BLOCK: 'Tạm dừng và báo quản lý', RESUME: 'Tiếp tục xử lý', CANCEL: 'Hủy thu hồi',
   CLOSE_REMEDIATION: 'Đóng xử lý khắc phục', COMPLETE: 'Hoàn tất thu hồi',
-  ASSIGN_PICKUP: 'Phân công bàn giao hàng', OPEN_PICKUP: 'Mở phiên nhận hàng',
-  VERIFY_PICKUP: 'Xác minh người nhận', RELEASE_ITEM: 'Ghi nhận đã giao kiện',
+  ASSIGN_PICKUP: 'Phân công bàn giao hàng', SCHEDULE_PICKUP: 'Đặt lịch nhận hàng', OPEN_PICKUP: 'Mở phiên nhận hàng',
+  VERIFY_PICKUP: 'Xác minh người nhận hàng', RELEASE_ITEM: 'Ghi nhận bàn giao hàng',
   FOLLOW_UP_PICKUP: 'Rà soát hàng lưu tạm', REQUEST_FINANCE: 'Yêu cầu đối soát tài chính',
   RESOLVE_FINANCE: 'Ghi kết luận tài chính',
   RECORD_LIQUIDATION: 'Ghi nhận thanh lý hàng lưu tạm',
@@ -24,9 +29,9 @@ const actionLabels = {
 type Action = keyof typeof actionLabels
 
 const stages = {
-  REVIEW_REQUIRED: 'Chờ duyệt mở thu hồi', AWAITING_ASSIGNMENT: 'Chờ phân công',
-  AWAITING_ACCEPTANCE: 'Chờ nhân viên tiếp nhận', AWAITING_ATTENDANCE: 'Chờ lịch hoặc xác minh khách',
-  AWAITING_APPROVAL: 'Chờ phê duyệt', APPROVED: 'Đã phê duyệt', IN_PROGRESS: 'Đang thu hồi',
+  REVIEW_REQUIRED: 'Đang chuyển sang thu hồi', AWAITING_ASSIGNMENT: 'Chờ phân công',
+  AWAITING_ACCEPTANCE: 'Chờ lịch thu hồi', AWAITING_ATTENDANCE: 'Chờ lịch hoặc xác minh khách',
+  AWAITING_APPROVAL: 'Chờ lịch thu hồi', APPROVED: 'Chờ lịch thu hồi', IN_PROGRESS: 'Đang thu hồi',
   BLOCKED: 'Đang tạm dừng', COMPLETED: 'Đã thu hồi', CANCELLED: 'Đã hủy thu hồi',
 }
 const reasons: Record<string, string> = {
@@ -41,15 +46,6 @@ const replies: Record<string, string> = {
 type HistoryEvent = {
   action: string; actorName: string; time: string; stage: keyof typeof stages; note: string | null
 }
-type Liquidation = { recordedAt: string; recordedBy: string | null; note: string | null; evidenceId: string | null }
-type Review = {
-  report: { available: boolean; recordedBy: string | null; publishedAt: string | null; mismatchSummary: string | null
-    decisionNote: string | null; notes: string | null; goodsCondition: string | null; unitCondition: string | null
-    packageCount: number | null; goods: { name: string; quantity: number }[]
-    evidence: { id: string; name: string; contentType: string }[] }
-  removalDeadlineAt: string | null; remediationStatus: string; remediationAt: string | null; remediationNote: string
-  openingAllowed: boolean; blockingReason: string | null
-}
 type Entry = {
   id: string; unitCode: string; taskId: string | null; staffName: string | null
   reservationCode?: string | null; customerName?: string | null
@@ -57,144 +53,53 @@ type Entry = {
   sourceDeadlineAt?: string | null; requiredAt?: string | null
   scheduledAt: string | null; deadlineAt: string | null; actionDueAt: string | null; overdueAt: string | null
   completedAt?: string | null; arrivedAt?: string | null; verifiedAt?: string | null
-  responseDueAt: string | null; reply: string | null; pickupDueAt: string | null
+  responseDueAt: string | null; reply: string | null; pickupDueAt: string | null; pickupAppointmentAt?: string | null
   financePending: boolean; reasonNote: string | null; customerNote: string | null; report: string | null
   attendanceEvidenceId?: string | null; beforeEvidenceId?: string | null; afterEvidenceId?: string | null
   verificationAttempts: number; pickupAttempts: number
-  items: { code: string; name: string; condition: string; location: string | null; evidenceId?: string | null; disposition: string; releasedAt: string | null; releaseEvidenceId?: string | null; liquidation?: Liquidation | null }[]
+  attendance?: 'PRESENT' | 'ABSENT' | null
+  verification?: RecoveryVerification | null; pickupVerification?: RecoveryVerification | null
+  items: RecoveryItem[]
   history?: HistoryEvent[]
-  detectedAt?: string | null; escalated?: boolean; reviewDueAt?: string | null; businessReviewDueAt?: string | null; review?: Review | null
+  detectedAt?: string | null; escalated?: boolean; reviewDueAt?: string | null; businessReviewDueAt?: string | null; review?: unknown
+  canViewSourceGoods?: boolean
   actions: Action[]
 }
 type Staff = { id: string; name: string }
-type Envelope<T> = { data: T }
+type RecoveryPageInfo = { page: number; pageSize: number; totalItems: number; totalPages: number }
+type Envelope<T> = { data: T; pagination?: RecoveryPageInfo }
+const CUSTOMER_PAGE_SIZE = 8
 
 const endpoint = '/api/violation-recoveries'
-const needsNote = new Set<Action>(['CONFIRM_VIOLATION', 'DECLINE', 'DISPUTE', 'RESCHEDULE', 'APPROVE', 'BLOCK', 'RESUME', 'CANCEL', 'CLOSE_REMEDIATION', 'COMPLETE', 'FOLLOW_UP_PICKUP', 'REQUEST_FINANCE', 'RESOLVE_FINANCE', 'RECORD_LIQUIDATION'])
+const needsNote = new Set<Action>(['DISPUTE', 'BLOCK', 'RESUME', 'CANCEL', 'COMPLETE', 'FOLLOW_UP_PICKUP', 'REQUEST_FINANCE', 'RESOLVE_FINANCE', 'RECORD_LIQUIDATION'])
 const needsPhoto = new Set<Action>(['RECORD_PRESENT', 'RECORD_ABSENT', 'START', 'SAVE_ITEM', 'COMPLETE', 'RELEASE_ITEM', 'RECORD_LIQUIDATION'])
-const isPendingItem = (item: Entry['items'][number]) => item.disposition === 'STORED' && !item.releasedAt && !item.liquidation
+const isPendingItem = isPendingRecoveryItem
 const field = 'w-full rounded-md border border-stone-300 bg-white px-2 py-1.5'
 const dateLabel = (value?: string | null) => value
-  ? new Date(value).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  ? parseVietnamDate(value).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   : 'Chưa ghi nhận'
 
 const ownerLabels: Record<string, string> = {
-  MANAGER: 'Quản lý', STAFF: 'Nhân viên', BUSINESS: 'Chủ doanh nghiệp', BO: 'Chủ doanh nghiệp',
+  MANAGER: 'Quản lý cơ sở', STAFF: 'Nhân viên', BUSINESS: 'Chủ doanh nghiệp', BO: 'Chủ doanh nghiệp',
   CUSTOMER: 'Khách hàng', ADMIN: 'Quản trị viên',
 }
 const responsiblePerson = (entry: Entry) => entry.staffName || ownerLabels[entry.owner || ''] || entry.owner || 'Chưa phân công'
-const stageLabel = (entry: Entry) => entry.stage === 'REVIEW_REQUIRED' && entry.escalated ? 'Chờ BO duyệt mở thu hồi' : stages[entry.stage]
+const stageLabel = (entry: Entry) => stages[entry.stage]
 const deadlineLabels: Partial<Record<Entry['stage'], string>> = {
-  REVIEW_REQUIRED: 'Hạn xác nhận', AWAITING_ASSIGNMENT: 'Hạn phân công',
-  AWAITING_ACCEPTANCE: 'Hạn tiếp nhận', AWAITING_ATTENDANCE: 'Hạn xác minh khách',
-  AWAITING_APPROVAL: 'Hạn phê duyệt', BLOCKED: 'Hạn xử lý tạm dừng',
+  AWAITING_ASSIGNMENT: 'Hạn phân công',
+  AWAITING_ATTENDANCE: 'Hạn hoàn tất thu hồi', BLOCKED: 'Hạn xử lý tạm dừng',
 }
 function primaryAction(entry: Entry): Action | undefined {
   const priority: Action[] = [
-    'CONFIRM_VIOLATION', 'RESUME', 'ACCEPT', 'APPROVE', 'START', 'SAVE_ITEM', 'COMPLETE',
-    'VERIFY', 'RECORD_PRESENT', 'VERIFY_PICKUP', 'RELEASE_ITEM', 'OPEN_PICKUP',
+    'RESUME', 'VERIFY', 'START', 'SAVE_ITEM', 'COMPLETE',
+    'RECORD_PRESENT', 'VERIFY_PICKUP', 'RELEASE_ITEM', 'OPEN_PICKUP',
     'ASSIGN_PICKUP', 'FOLLOW_UP_PICKUP', 'RECORD_LIQUIDATION', 'RESOLVE_FINANCE',
     'WILL_ATTEND', 'ASSIGN',
   ]
-  return priority.find(key => entry.actions.includes(key))
+  return priority.find(key => visibleRecoveryActions(entry.actions, entry.stage, entry.responseDueAt).includes(key))
 }
-const entryActionLabel = (entry: Entry, action: Action) => action === 'CANCEL' && entry.stage === 'REVIEW_REQUIRED'
-  ? 'Không mở thu hồi' : action === 'ASSIGN' && entry.staffName ? 'Đổi nhân viên' : actionLabels[action]
-
-const historyLabels: Record<string, string> = {
-  ...actionLabels,
-  NOTICE: 'Đã ghi nhận thông báo cho khách',
-  DETECT: 'Hệ thống phát hiện vi phạm',
-  REVIEW_ESCALATED: 'Quá hạn Manager duyệt, đã báo BO',
-  BO_REVIEW_OVERDUE: 'BO chưa xử lý đúng hạn',
-}
-
-function SourceEvidenceFile({ file }: { file: Review['report']['evidence'][number] }) {
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  if (file.contentType.startsWith('image/')) return <EvidenceImagePreview id={file.id} label={file.name} />
-  return <div>
-    <Button type="button" size="sm" variant="outline" disabled={busy} onClick={async () => {
-      setBusy(true)
-      setError('')
-      try {
-        const asset = await apiDownload(`/api/files/${encodeURIComponent(file.id)}`)
-        const url = URL.createObjectURL(asset.blob)
-        const link = document.createElement('a')
-        link.href = url
-        link.download = asset.fileName || file.name
-        link.click()
-        window.setTimeout(() => URL.revokeObjectURL(url), 1000)
-      } catch (err) { setError(userFacingError(err, 'Không thể tải chứng từ.')) }
-      finally { setBusy(false) }
-    }}>{busy ? 'Đang tải…' : file.name}</Button>
-    {error && <p role="alert">{error}</p>}
-  </div>
-}
-
-function RecoveryReview({ entry, onLoaded }: { entry: Entry; onLoaded?: (updated: Entry | undefined) => void }) {
-  const [current, setCurrent] = useState<Entry>()
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const onLoadedRef = useRef(onLoaded)
-  onLoadedRef.current = onLoaded
-  useEffect(() => {
-    let active = true
-    setLoading(true)
-    setError('')
-    onLoadedRef.current?.(undefined)
-    apiRequest<Envelope<Entry>>(`${endpoint}/${encodeURIComponent(entry.id)}`, { cache: 'no-store' })
-      .then(({ data }) => {
-        if (data.stage !== 'REVIEW_REQUIRED')
-          throw new Error('Hồ sơ đã chuyển bước. Vui lòng làm mới danh sách trước khi xử lý.')
-        if (!data.detectedAt || !data.reviewDueAt || !data.review)
-          throw new Error('Hồ sơ chưa trả đủ thời hạn và dữ liệu đối chiếu. Vui lòng thử tải lại.')
-        if (active) { setCurrent(data); onLoadedRef.current?.(data) }
-      })
-      .catch(reason => { if (active) setError(userFacingError(reason, 'Không tải được thời hạn và dữ liệu đối chiếu.')) })
-      .finally(() => { if (active) setLoading(false) })
-    return () => { active = false }
-  }, [entry.id])
-  const review = current?.review
-  if (loading || error || !current || !review) return <div className="recovery-review">
-    {loading ? <p role="status">Đang tải thời hạn và dữ liệu đối chiếu…</p> : <>
-      <p role="alert" className="recovery-review-warning">{error || 'Chưa tải được hồ sơ để đối chiếu.'}</p>
-    </>}
-  </div>
-  const businessOverdue = !!current.businessReviewDueAt && Date.now() >= Date.parse(current.businessReviewDueAt)
-  return <div className="recovery-review">
-    <div className="recovery-review-deadline">
-      <h4>Thời hạn duyệt</h4>
-      <p>Phát sinh hồ sơ: <strong>{dateLabel(current.detectedAt)}</strong></p>
-      <p>Manager: <strong>{dateLabel(current.reviewDueAt)}</strong> · Trong 1 giờ làm việc từ khi phát sinh hồ sơ.</p>
-      <RecoveryCountdown deadline={current.escalated ? current.businessReviewDueAt : current.reviewDueAt} label={current.escalated ? 'BO xử lý' : 'Manager duyệt'} />
-      {current.escalated ? <p className="recovery-review-warning">{businessOverdue ? 'BO đã quá hạn xử lý. Hồ sơ tiếp tục chờ quyết định mở hoặc không mở thu hồi.' : `Manager đã quá hạn duyệt. Đã báo BO tiếp tục xử lý${current.businessReviewDueAt ? ` trước ${dateLabel(current.businessReviewDueAt)}` : ''}.`}</p>
-        : <p>Quá hạn sẽ báo BO xử lý trong 4 giờ làm việc. Hồ sơ tiếp tục chờ quyết định, không tự mở thu hồi.</p>}
-    </div>
-    <h4>Thông tin đối chiếu</h4>
-    {!review ? <p>Chưa tải được dữ liệu đối chiếu. Vui lòng tải lại hồ sơ.</p> : <>
-      <dl className="recovery-review-facts">
-        <div><dt>{entry.reason === 'REMOVAL_OVERDUE' || entry.reason === 'HANDOVER_FOLLOW_UP' ? 'Hạn dọn hàng hiện tại' : 'Hạn thực hiện trước khi thu hồi'}</dt><dd>{dateLabel(review.removalDeadlineAt || entry.sourceDeadlineAt)}</dd></div>
-        <div><dt>Kết quả kiểm kê công bố lúc</dt><dd>{dateLabel(review.report.publishedAt)}</dd></div>
-        <div><dt>Tình trạng khắc phục đã ghi nhận</dt><dd>{review.remediationNote}{review.remediationAt && <span> · {dateLabel(review.remediationAt)}</span>}</dd></div>
-      </dl>
-      <div className="recovery-review-report">
-        <h4>Biên bản và kết quả kiểm kê</h4>
-        {!review.report.available && <p className="recovery-review-warning">Chưa có biên bản kiểm kê đã công bố trong hồ sơ. Dữ liệu đối chiếu lấy từ biên bản và ảnh/PDF do nhân viên công bố tại Nhận kho &amp; bàn giao → Kiểm kê. Cần đối chiếu chứng từ và hiện trạng trước khi quyết định.</p>}
-        {review.report.recordedBy && <p>Người ghi nhận: {review.report.recordedBy}</p>}
-        {review.report.mismatchSummary && <p>Sai lệch: {review.report.mismatchSummary}</p>}
-        {review.report.decisionNote && <p>Kết luận xử lý: {review.report.decisionNote}</p>}
-        {review.report.packageCount != null && <p>Số kiện thực tế: {review.report.packageCount}</p>}
-        {review.report.goodsCondition && <p>Tình trạng hàng: {review.report.goodsCondition}</p>}
-        {review.report.unitCondition && <p>Tình trạng gian kho: {review.report.unitCondition}</p>}
-        {review.report.notes && <p>Ghi chú biên bản: {review.report.notes}</p>}
-        {!!review.report.goods.length && <ul>{review.report.goods.map((goods, index) => <li key={index}>{goods.name} · {goods.quantity}</li>)}</ul>}
-        {!!review.report.evidence.length && <div className="recovery-review-evidence">{review.report.evidence.map(file => <SourceEvidenceFile key={file.id} file={file} />)}</div>}
-      </div>
-      {!review.openingAllowed && <p role="alert" className="recovery-review-blocked">{review.blockingReason}</p>}
-    </>}
-  </div>
-}
+const entryActionLabel = (entry: Entry, action: Action) => action === 'ASSIGN' && entry.staffName ? 'Đổi nhân viên'
+  : action === 'START' && !canHandOverRecovery(entry) ? 'Thu hồi và lưu tạm' : actionLabels[action]
 
 function RecoveryCountdown({ deadline, label }: { deadline?: string | null; label: string }) {
   const [now, setNow] = useState(Date.now)
@@ -250,33 +155,82 @@ function EvidenceImagePreview({ id, label }: { id: string; label: string }) {
   )
 }
 
-function RecoveryAction({ entry, action, onBack, onSaved }: {
-  entry: Entry; action: Action; onBack: () => void; onSaved: (entry: Entry) => void
+function VerificationNotice({ verification, kind = 'recovery', historical = false }: {
+  verification?: RecoveryVerification | null; kind?: 'recovery' | 'pickup'; historical?: boolean
+}) {
+  if (!verification) return null
+  const message = historical ? verification.matched ? 'Đã xác minh danh tính khách tại thời điểm thu hồi.'
+    : verification.used >= verification.limit
+      ? `Xác minh danh tính không thành công sau ${verification.used}/${verification.limit} lượt khi thu hồi. Hàng được lưu tạm và cần xác minh lại khi nhận hàng.`
+      : 'Chưa xác minh được khách tại thời điểm thu hồi. Cần xác minh danh tính khi nhận hàng lưu tạm.' : verification.message
+  return <div role="status" className={`recovery-verification rounded-md border p-3 text-sm ${historical ? 'border-stone-200 bg-stone-50 text-stone-600' : verification.canReceiveItems
+    ? 'border-green-200 bg-green-50 text-green-800' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
+    <p className="mb-1 font-semibold">{kind === 'pickup' ? 'Xác minh danh tính người nhận hàng' : 'Xác minh khách khi thu hồi'}</p>
+    <p>{message}</p>
+    <p className="mt-1 text-xs">Đã dùng {verification.used}/{verification.limit} lượt{historical ? ' trong chặng thu hồi.' : ` · Còn ${verification.remaining} lượt.`}</p>
+  </div>
+}
+
+export function RecoveryAction({ entry, action, onBack, onSaved }: {
+  entry: Entry; action: Action; onBack: () => void; onSaved: (entry: Entry, keepOpen: boolean) => void
 }) {
   const assigning = action === 'ASSIGN' || action === 'ASSIGN_PICKUP'
-  const witness = action === 'APPROVE' || action === 'START' && entry.needsWitness
+  const witness = action === 'START' && entry.needsWitness
   const verify = action === 'VERIFY' || action === 'VERIFY_PICKUP'
-  const pickDate = action === 'RESCHEDULE' || action === 'FOLLOW_UP_PICKUP' || action === 'RESUME' || action === 'RECORD_PRESENT'
+  const pickDate = action === 'FOLLOW_UP_PICKUP' || action === 'RECORD_PRESENT' || action === 'SCHEDULE_PICKUP'
   const [staff, setStaff] = useState<Staff[]>([])
   const [busy, setBusy] = useState(false)
   const lock = useRef(false)
   const attempt = useRef<string | null>(null)
   const [error, setError] = useState('')
-  const [reviewData, setReviewData] = useState<Entry>()
+  const [goodsNames, setGoodsNames] = useState<string[]>([])
+  const bulkAction = action === 'RELEASE_ITEM' || action === 'RECORD_LIQUIDATION'
+  const itemChoices = pendingRecoveryChoices(entry.items)
+  const [selectedGroup, setSelectedGroup] = useState(() => (bulkAction && itemChoices.length === 1 ? itemChoices[0].key : ''))
+  const [quantity, setQuantity] = useState('1')
+  const [appointmentInput, setAppointmentInput] = useState('')
+  const selectedChoice = itemChoices.find(choice => choice.key === selectedGroup)
+  useEffect(() => {
+    if (!bulkAction) return
+    if (itemChoices.length === 1) {
+      setSelectedGroup(itemChoices[0].key)
+    } else if (selectedGroup && !itemChoices.some(choice => choice.key === selectedGroup)) {
+      setSelectedGroup('')
+    }
+  }, [bulkAction, entry.items])
+  useEffect(() => {
+    if (action !== 'SAVE_ITEM') return
+    let active = true
+    apiRequest<Envelope<Preparation>>(`${endpoint}/${entry.id}/preparation`)
+      .then(response => { if (active) setGoodsNames([...new Set([...response.data.declared.map(item => item.name), ...entry.items.map(item => item.name)])]) })
+      .catch(() => { if (active) setGoodsNames([...new Set(entry.items.map(item => item.name))]) })
+    return () => { active = false }
+  }, [action, entry.id])
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    if (!entry.verifiedAt && action !== 'SCHEDULE_PICKUP') return
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [entry.verifiedAt, action])
+  const canHandOver = canHandOverRecovery(entry, now)
+  const pickupBounds = recoveryPickupBounds(entry.pickupDueAt, now)
+  const pickupError = action === 'SCHEDULE_PICKUP' && (appointmentInput || !pickupBounds.available)
+    ? recoveryPickupError(appointmentInput, entry.pickupDueAt, now) : null
   useEffect(() => {
     if (!assigning && !witness) return
     let active = true
-    apiRequest<Envelope<Staff[]>>(`${endpoint}/${entry.id}/staff`)
+    apiRequest<Envelope<Staff[]>>(`${endpoint}/${entry.id}/staff?pickup=${action === 'ASSIGN_PICKUP'}&witness=${witness}`)
       .then(response => { if (active) setStaff(response.data) })
       .catch(err => { if (active) setError(userFacingError(err, 'Không thể tải danh sách nhân viên.')) })
     return () => { active = false }
-  }, [assigning, witness, entry.id])
+  }, [assigning, witness, entry.id, action])
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const form = event.currentTarget
     if (lock.current) return
-    if (action === 'CONFIRM_VIOLATION' && (!reviewData?.review?.openingAllowed || !reviewData.actions.includes(action))) {
-      setError('Cần tải dữ liệu đối chiếu mới nhất và kiểm tra điều kiện trước khi mở thu hồi.')
+    if (!visibleRecoveryActions(entry.actions, entry.stage, entry.responseDueAt).includes(action)) {
+      setError('Thao tác không còn khả dụng hoặc đã hết hạn phản hồi. Vui lòng làm mới hồ sơ.')
       return
     }
     const data = new FormData(event.currentTarget)
@@ -288,6 +242,19 @@ function RecoveryAction({ entry, action, onBack, onSaved }: {
       return
     }
     const appointmentAt = date?.toISOString()
+    if (action === 'SCHEDULE_PICKUP') {
+      const reason = recoveryPickupError(local || '', entry.pickupDueAt)
+      if (reason) { setError(reason); return }
+    }
+    const count = Number(quantity)
+    if ((action === 'SAVE_ITEM' || bulkAction) && (!Number.isInteger(count) || count < 1 || count > 1000)) {
+      setError('Vui lòng nhập số kiện từ 1 đến 1.000.')
+      return
+    }
+    if (bulkAction && (!selectedChoice || count > selectedChoice.items.length)) {
+      setError('Số kiện cần xử lý vượt quá số đang lưu tạm trong nhóm đã chọn.')
+      return
+    }
     lock.current = true
     setBusy(true)
     setError('')
@@ -298,17 +265,24 @@ function RecoveryAction({ entry, action, onBack, onSaved }: {
         if (!entry.taskId || !(photo instanceof File) || !photo.size) throw new Error('Cần ảnh hiện trường cho đúng nhiệm vụ.')
         evidenceId = (await uploadMaintenanceEvidence(entry.taskId, photo)).id
       }
-      if (verify) attempt.current ??= crypto.randomUUID()
+      if (verify || action === 'SAVE_ITEM') attempt.current ??= crypto.randomUUID()
       const response = await apiRequest<Envelope<Entry>>(`${endpoint}/${entry.id}/actions`, {
         method: 'POST',
         body: JSON.stringify({
           action, evidenceId, appointmentAt, staffId: value('staff'), witnessId: value('witness'),
-          attemptId: verify ? attempt.current : undefined, document: value('document'), note: value('note'),
+          attemptId: verify || action === 'SAVE_ITEM' ? attempt.current : undefined, document: value('document'), note: value('note'),
           itemCode: value('itemCode'), itemName: value('itemName'), condition: value('condition'),
           location: value('location'), disposition: value('disposition'),
+          quantity: action === 'SAVE_ITEM' ? count : undefined,
+          itemCodes: bulkAction ? selectedChoice!.items.slice(0, count).map(item => item.code) : undefined,
         }),
       })
-      onSaved(response.data)
+      if (verify) {
+        attempt.current = null
+        const document = form.elements.namedItem('document')
+        if (document instanceof HTMLInputElement) document.value = ''
+      }
+      onSaved(response.data, verify && response.data.actions.includes(action))
     } catch (err) {
       setError(userFacingError(err, 'Không thể ghi nhận thao tác.'))
     } finally {
@@ -317,18 +291,33 @@ function RecoveryAction({ entry, action, onBack, onSaved }: {
     }
   }
 
-  return <form className="recovery-action-form space-y-3 rounded-lg border border-stone-200 bg-stone-50 p-3" onSubmit={submit}>
+  return <form className="recovery-action-form space-y-3 rounded-lg border border-stone-200 bg-stone-50 p-3" onSubmit={submit}
+    onChange={() => { if (action === 'SAVE_ITEM') attempt.current = null }}>
     <h4 className="text-sm font-semibold">{entryActionLabel(entry, action)}</h4>
-    {action === 'CONFIRM_VIOLATION' && <RecoveryReview entry={entry} onLoaded={setReviewData} />}
+    {verify && <VerificationNotice kind={action === 'VERIFY_PICKUP' ? 'pickup' : 'recovery'} verification={action === 'VERIFY_PICKUP' ? entry.pickupVerification : entry.verification} />}
+    {action === 'START' && !canHandOver && <p className="text-sm text-amber-800">Chưa xác minh được người nhận. Cần nhân chứng để thu hồi và đưa hàng vào khu lưu tạm; chưa được giao hàng cho khách.</p>}
+    {action === 'SAVE_ITEM' && !canHandOver && <p className="text-sm text-amber-800">Chưa có xác minh người nhận còn hiệu lực. Chỉ được ghi nhận lưu tạm.</p>}
+    {action === 'ASSIGN' && <p className="text-xs text-stone-600">Thời gian phụ trách: {dateLabel(entry.scheduledAt)} đến {dateLabel(entry.deadlineAt)}. Nhân viên được giải phóng lịch khi hoàn tất thu hồi.</p>}
+    {action === 'SCHEDULE_PICKUP' && <div className="recovery-pickup-window">
+      <p>Hạn cuối nhận hàng lưu tạm: <strong>{dateLabel(entry.pickupDueAt)}</strong></p>
+      <p>Chỉ chọn từ {dateLabel(pickupBounds.min)} đến {dateLabel(pickupBounds.max)} (giờ Việt Nam).</p>
+      <p>Khi đến nhận hàng, vui lòng mang giấy tờ tùy thân bản gốc để xác minh danh tính.</p>
+    </div>}
     {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
     <fieldset disabled={busy} className="grid gap-3 sm:grid-cols-2">
       {(assigning || witness) && <label>{assigning ? 'Nhân viên phụ trách' : 'Nhân chứng'}
         <select name={assigning ? 'staff' : 'witness'} className={field} required={assigning || action === 'START'}>
           <option value="">Chọn nhân viên</option>
           {staff.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}
-        </select></label>}
-      {pickDate && <label>{action === 'RECORD_PRESENT' ? 'Giờ khách đến (giờ Việt Nam)' : 'Lịch hẹn hoặc rà soát (giờ Việt Nam)'}
-        <input type="datetime-local" name="appointment" className={field} required={action === 'RESCHEDULE' || action === 'FOLLOW_UP_PICKUP'} /></label>}
+        </select><span className="text-xs text-stone-500">Chỉ hiển thị nhân viên đủ quyền tại cơ sở và không trùng lịch xử lý đơn khác.</span>
+        {!staff.length && <span role="status" className="text-xs text-amber-700">Chưa có nhân viên phù hợp với thời gian này.</span>}</label>}
+      {pickDate && <label>{action === 'RECORD_PRESENT' ? 'Giờ khách đến (giờ Việt Nam)' : action === 'SCHEDULE_PICKUP' ? 'Ngày giờ nhận hàng (giờ Việt Nam)' : 'Lịch hẹn rà soát (giờ Việt Nam)'}
+        <input type="datetime-local" name="appointment" className={field} value={appointmentInput}
+          onChange={event => { setAppointmentInput(event.target.value); setError('') }}
+          min={action === 'SCHEDULE_PICKUP' ? pickupBounds.min : undefined}
+          max={action === 'SCHEDULE_PICKUP' ? pickupBounds.max : undefined}
+          required={action === 'FOLLOW_UP_PICKUP' || action === 'SCHEDULE_PICKUP'} />
+        {pickupError && <span role="alert" className="mt-1 block text-red-700">{pickupError}</span>}</label>}
       {verify && <label>Số giấy tờ gốc
         <input type="password" name="document" className={field} maxLength={32} autoComplete="off" required
           onChange={() => { attempt.current = null }} /></label>}
@@ -338,17 +327,59 @@ function RecoveryAction({ entry, action, onBack, onSaved }: {
         <option value="ALREADY_RESOLVED">Hồ sơ thuê và gian đã được xử lý riêng</option>
       </select></label>}
       {action === 'SAVE_ITEM' && <>
-        <label>Mã kiện<input className={field} name="itemCode" maxLength={80} required /></label>
-        <label>Tên kiện<input className={field} name="itemName" maxLength={240} required /></label>
+        <label>Loại hàng<input className={field} name="itemName" list={`recovery-goods-${entry.id}`} maxLength={240} required />
+          <datalist id={`recovery-goods-${entry.id}`}>{goodsNames.map(name => <option key={name} value={name} />)}</datalist>
+          <span className="text-xs text-stone-500">Các kiện cùng loại sẽ được cộng chung số lượng.</span></label>
         <label>Tình trạng<input className={field} name="condition" maxLength={240} required /></label>
         <label>Phương thức<select name="disposition" className={field} required>
-          <option value="STORED">Lưu tạm</option><option value="HANDED_OVER">Bàn giao cho khách</option>
+          <option value="STORED">Lưu tạm</option>{canHandOver && <option value="HANDED_OVER">Bàn giao cho khách</option>}
         </select></label>
       </>}
-      {(action === 'RELEASE_ITEM' || action === 'RECORD_LIQUIDATION') && <label>{action === 'RECORD_LIQUIDATION' ? 'Kiện cần ghi nhận thanh lý' : 'Kiện chờ nhận'}<select name="itemCode" className={field} required>
-        <option value="">Chọn kiện</option>{entry.items.filter(isPendingItem)
-          .map(item => <option key={item.code} value={item.code}>{item.code} · {item.name}</option>)}
+      {bulkAction && <div className="sm:col-span-2 space-y-2 rounded-md border border-stone-200 bg-white p-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-semibold text-stone-700">
+            {action === 'RECORD_LIQUIDATION' ? 'Hàng đang lưu tạm chờ thanh lý' : 'Hàng đang lưu tạm chờ bàn giao'} ({itemChoices.reduce((sum, choice) => sum + choice.items.length, 0)} kiện)
+          </span>
+          {itemChoices.length > 1 && <span className="text-xs text-stone-500">Chọn nhóm hàng bên dưới</span>}
+        </div>
+        {!itemChoices.length ? <p className="text-xs text-stone-500">Không còn kiện hàng nào đang lưu tạm.</p> : (
+          <div className="grid gap-1.5 sm:grid-cols-2">
+            {itemChoices.map(choice => {
+              const active = selectedGroup === choice.key
+              return <button key={choice.key} type="button" onClick={() => { setSelectedGroup(choice.key); setQuantity('1') }}
+                className={`flex flex-col gap-0.5 rounded-md border p-2 text-left text-xs transition ${active
+                  ? 'border-amber-600 bg-amber-50/70 ring-1 ring-amber-500'
+                  : 'border-stone-200 bg-stone-50 hover:border-stone-300'}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-stone-900">{choice.name}</span>
+                  <span className="rounded bg-stone-900 px-1.5 py-0.5 text-[11px] font-medium text-white">{choice.items.length} kiện</span>
+                </div>
+                <span className="text-stone-600">Tình trạng: {choice.condition}{choice.location ? ` · Vị trí: ${choice.location}` : ''}</span>
+                <span className="text-[11px] text-stone-500">Mã kiện: {choice.items.slice(0, 4).map(item => item.code).join(', ')}{choice.items.length > 4 ? ` (+${choice.items.length - 4})` : ''}</span>
+              </button>
+            })}
+          </div>
+        )}
+      </div>}
+      {bulkAction && <label>{action === 'RECORD_LIQUIDATION' ? 'Nhóm hàng cần ghi nhận thanh lý' : 'Nhóm hàng chờ nhận'}<select name="itemGroup" className={field} required value={selectedGroup}
+        onChange={event => { setSelectedGroup(event.target.value); setQuantity('1') }}>
+        <option value="">Chọn nhóm hàng</option>{itemChoices.map(choice => <option key={choice.key} value={choice.key}>
+          {choice.name} · {choice.condition}{choice.location ? ` · ${choice.location}` : ''} · {choice.items.length} kiện
+        </option>)}
       </select></label>}
+      {(action === 'SAVE_ITEM' || bulkAction) && <label>{action === 'SAVE_ITEM' ? 'Số kiện ghi nhận' : action === 'RELEASE_ITEM' ? 'Số kiện bàn giao lần này' : 'Số kiện đã thanh lý'}
+        <input name="quantity" type="number" className={field} min={1} max={bulkAction ? selectedChoice?.items.length || 1000 : 1000} step={1} required value={quantity}
+          onChange={event => setQuantity(event.target.value)} />
+        {bulkAction && selectedChoice && <span className="flex flex-wrap items-center justify-between gap-2 text-xs text-stone-600">
+          <span>Đang chọn: <strong>{selectedChoice.name}</strong> · Còn <strong>{selectedChoice.items.length}</strong> kiện</span>
+          {selectedChoice.items.length > 1 && Number(quantity) !== selectedChoice.items.length && (
+            <button type="button" className="font-medium text-amber-800 underline hover:text-amber-950"
+              onClick={() => setQuantity(String(selectedChoice.items.length))}>
+              {action === 'RELEASE_ITEM' ? `Giao hết ${selectedChoice.items.length} kiện` : `Chọn hết ${selectedChoice.items.length} kiện`}
+            </button>
+          )}
+        </span>}
+      </label>}
       {(action === 'START' || action === 'SAVE_ITEM') && <label>Nơi lưu tạm hoặc người nhận
         <input className={field} name="location" maxLength={240} required /></label>}
       {action === 'COMPLETE' && <label className="flex items-center gap-2">
@@ -357,25 +388,234 @@ function RecoveryAction({ entry, action, onBack, onSaved }: {
       {action === 'RECORD_LIQUIDATION' && <label className="flex items-center gap-2 sm:col-span-2">
         <input type="checkbox" name="disposition" value="LIQUIDATED" required /> Tôi xác nhận kiện hàng đã được xử lý thanh lý theo biên bản
       </label>}
-      {needsNote.has(action) && <label className="sm:col-span-2">{action === 'CONFIRM_VIOLATION' ? 'Căn cứ mở thu hồi' : action === 'CANCEL' && entry.stage === 'REVIEW_REQUIRED' ? 'Lý do không mở thu hồi' : action === 'COMPLETE' ? 'Biên bản và kết quả xử lý khóa' : action === 'RECORD_LIQUIDATION' ? 'Căn cứ, biên bản và kết quả xử lý thanh lý' : 'Ghi chú và căn cứ'}
-        <textarea className={field} name="note" maxLength={4000} rows={3} required placeholder={action === 'CONFIRM_VIOLATION' ? 'Ghi biên bản đã đối chiếu, hạn dọn hàng và kết quả kiểm tra khắc phục.' : undefined} /></label>}
+      {needsNote.has(action) && <label className="sm:col-span-2">{action === 'COMPLETE' ? 'Biên bản và kết quả xử lý khóa' : action === 'RECORD_LIQUIDATION' ? 'Căn cứ, biên bản và kết quả xử lý thanh lý' : 'Ghi chú và căn cứ'}
+        <textarea className={field} name="note" maxLength={4000} rows={3} required /></label>}
     </fieldset>
     <div className="flex justify-end gap-2">
       <Button type="button" variant="outline" size="sm" disabled={busy} onClick={onBack}>Quay lại</Button>
-      <Button type="submit" size="sm" disabled={busy || action === 'CONFIRM_VIOLATION' && (!reviewData?.review?.openingAllowed || !reviewData.actions.includes(action))}>{busy ? 'Đang ghi…' : action === 'CONFIRM_VIOLATION' ? 'Xác nhận mở thu hồi' : 'Xác nhận'}</Button>
+      <Button type="submit" size="sm" disabled={busy || (assigning || witness) && !staff.length || action === 'SCHEDULE_PICKUP' && !!pickupError}>{busy ? 'Đang ghi…' : 'Xác nhận'}</Button>
     </div>
   </form>
 }
 
-function RecoveryDetails({ entry }: { entry: Entry }) {
+type Preparation = {
+  packaging?: string | null
+  declared: { code: string | null; name: string; material: string | null; quantity: number
+    lengthCm: number | null; widthCm: number | null; heightCm: number | null; weightKg: number | null
+    fragile: boolean; description: string | null; note: string | null
+    categoryName?: string | null; category?: string | null; stackable?: boolean; maxStackLayers?: number; allowHorizontalPlacement?: boolean
+    images?: { id: string; name: string; contentType: string }[] }[]
+  inventory: { available: boolean; recordedBy: string | null; publishedAt: string | null; packageCount: number | null
+    mismatchSummary: string | null; decisionNote: string | null; notes: string | null; goodsCondition: string | null; unitCondition: string | null
+    goods: { name: string; quantity: number; material?: string | null; condition?: string | null; note?: string | null }[]
+    evidence: { id: string; name: string; contentType: string }[] }
+}
+
+export function RecoverySourceGoods({ data }: { data: Preparation }) {
+  const inventory = data.inventory
+  const grouped = new Map<string, Preparation['declared'][number] & { codes: string[]; images: NonNullable<Preparation['declared'][number]['images']> }>()
+  for (const line of data.declared) {
+    const { code, quantity, images = [], ...fields } = line
+    const key = JSON.stringify(fields)
+    const current = grouped.get(key)
+    grouped.set(key, { ...line, quantity: (current?.quantity || 0) + quantity,
+      codes: [...new Set([...(current?.codes || []), ...(code ? [code] : [])])],
+      images: [...new Map([...(current?.images || []), ...images].map(file => [file.id, file])).values()] })
+  }
+  const declared = [...grouped.values()]
+  const inspected = groupQuantityLines(inventory.goods, ({ quantity: _quantity, ...fields }) => fields)
+  const number = (value: number) => value.toLocaleString('vi-VN', { maximumFractionDigits: 4 })
+  const yesNo = (value?: boolean) => value == null ? 'Chưa khai báo' : value ? 'Có' : 'Không'
+  const volume = (item: Preparation['declared'][number]) => [item.lengthCm, item.widthCm, item.heightCm].every(value => value != null)
+    ? item.lengthCm! * item.widthCm! * item.heightCm! / 1_000_000 : null
+  const totalQuantity = data.declared.reduce((sum, item) => sum + item.quantity, 0)
+  const totalWeight = data.declared.every(item => item.weightKg != null) ? data.declared.reduce((sum, item) => sum + item.quantity * item.weightKg!, 0) : null
+  const totalVolume = data.declared.every(item => volume(item) != null) ? data.declared.reduce((sum, item) => sum + item.quantity * volume(item)!, 0) : null
+  return <div className="recovery-source-goods">
+    <h5>Hàng khách đã khai báo</h5>
+    {!!data.declared.length && <>
+      <dl className="recovery-source-totals">
+        <div><dt>Tổng số lượng</dt><dd>{number(totalQuantity)} kiện</dd></div>
+        <div><dt>Tổng khối lượng</dt><dd>{totalWeight == null ? 'Chưa khai báo' : `${number(totalWeight)} kg`}</dd></div>
+        <div><dt>Tổng thể tích</dt><dd>{totalVolume == null ? 'Chưa khai báo' : `${number(totalVolume)} m³`}</dd></div>
+      </dl>
+      <p className="recovery-source-packaging"><strong>Phương thức đóng gói chung:</strong> {data.packaging || 'Chưa khai báo'}</p>
+    </>}
+    {!data.declared.length ? <p className="recovery-source-empty">Đơn chưa có danh sách hàng khai báo.</p> : <ul className="recovery-items-grid">
+      {declared.map((item, index) => <li key={index} className="recovery-item-card">
+        <div className="recovery-item-header"><h5>{item.name}</h5><span className="recovery-source-quantity">{number(item.quantity)} kiện</span></div>
+        <dl className="recovery-item-facts recovery-declared-facts">
+          <div><dt>Mã hàng</dt><dd>{item.codes.length ? `${item.codes.slice(0, 3).join(', ')}${item.codes.length > 3 ? ` và ${item.codes.length - 3} mã khác` : ''}` : 'Chưa ghi nhận'}</dd></div>
+          <div><dt>Loại hàng</dt><dd>{item.categoryName || (item.category ? goodsCategoryLabel(item.category) : 'Chưa khai báo')}</dd></div>
+          <div><dt>Chất liệu</dt><dd>{item.material || 'Chưa khai báo'}</dd></div>
+          <div><dt>Kích thước mỗi kiện (dài × rộng × cao)</dt><dd>{[item.lengthCm, item.widthCm, item.heightCm].every(value => value != null)
+            ? `${[item.lengthCm, item.widthCm, item.heightCm].map(value => number(value!)).join(' × ')} cm` : 'Chưa khai báo'}</dd></div>
+          <div><dt>Khối lượng mỗi kiện</dt><dd>{item.weightKg == null ? 'Chưa khai báo' : `${number(item.weightKg)} kg`}</dd></div>
+          <div><dt>Thể tích mỗi kiện</dt><dd>{volume(item) == null ? 'Chưa khai báo' : `${number(volume(item)!)} m³`}</dd></div>
+          <div><dt>Hàng dễ vỡ</dt><dd>{yesNo(item.fragile)}</dd></div>
+          <div><dt>Được phép xếp chồng</dt><dd>{yesNo(item.stackable)}</dd></div>
+          {item.stackable && <div><dt>Số lớp xếp tối đa</dt><dd>{item.maxStackLayers ?? 'Chưa khai báo'}</dd></div>}
+          <div><dt>Được phép đặt nằm ngang</dt><dd>{yesNo(item.allowHorizontalPlacement)}</dd></div>
+          <div><dt>Mô tả hàng hóa</dt><dd>{item.description || 'Chưa khai báo'}</dd></div>
+          <div><dt>Ghi chú của khách</dt><dd>{item.note || 'Chưa khai báo'}</dd></div>
+        </dl>
+        {item.images.length ? <RecoveryGroupEvidence items={item.images.map(file => ({ code: file.id, name: item.name,
+          condition: '', location: null, disposition: 'DECLARED', releasedAt: null, evidenceId: file.id }))} />
+          : <p className="recovery-source-no-image">Ảnh hàng khai báo: Chưa có ảnh.</p>}
+      </li>)}
+    </ul>}
+    <h5>Kết quả kiểm kê đã ghi nhận</h5>
+    {!inventory.available ? <p className="recovery-source-empty">Chưa có kết quả kiểm kê đã ghi nhận trên đơn.</p> : <div className="recovery-source-report">
+      <dl className="recovery-source-report-facts">
+        {inventory.recordedBy && <div><dt>Người ghi nhận</dt><dd>{inventory.recordedBy}</dd></div>}
+        {inventory.publishedAt && <div><dt>Thời gian ghi nhận</dt><dd>{dateLabel(inventory.publishedAt)}</dd></div>}
+        {inventory.packageCount != null && <div><dt>Số kiện đã kiểm kê</dt><dd>{number(inventory.packageCount)} kiện</dd></div>}
+        {inventory.goodsCondition && <div><dt>Tình trạng hàng hóa</dt><dd>{inventory.goodsCondition}</dd></div>}
+        {inventory.unitCondition && <div><dt>Hiện trạng gian kho</dt><dd>{inventory.unitCondition}</dd></div>}
+        {inventory.mismatchSummary && <div className="recovery-source-wide"><dt>Chênh lệch đã ghi nhận</dt><dd>{inventory.mismatchSummary}</dd></div>}
+        {inventory.decisionNote && <div className="recovery-source-wide"><dt>Kết luận kiểm kê</dt><dd>{inventory.decisionNote}</dd></div>}
+        {inventory.notes && <div className="recovery-source-wide"><dt>Ghi chú kiểm kê</dt><dd>{inventory.notes}</dd></div>}
+      </dl>
+      {!!inventory.goods.length && <ul className="recovery-items-grid">
+        {inspected.map((item, index) => <li key={index} className="recovery-item-card">
+          <div className="recovery-item-header"><h5>{item.name}</h5><span className="recovery-source-quantity">{number(item.quantity)} kiện</span></div>
+          {(item.material || item.condition || item.note) && <dl className="recovery-item-facts">
+            {item.material && <div><dt>Chất liệu ghi nhận</dt><dd>{item.material}</dd></div>}
+            {item.condition && <div><dt>Tình trạng ghi nhận</dt><dd>{item.condition}</dd></div>}
+            {item.note && <div><dt>Ghi chú</dt><dd>{item.note}</dd></div>}
+          </dl>}
+        </li>)}
+      </ul>}
+      {inventory.evidence.some(file => file.contentType?.startsWith('image/')) && <div className="grid gap-2 sm:grid-cols-3">
+        {inventory.evidence.filter(file => file.contentType?.startsWith('image/')).map(file => <EvidenceImagePreview key={file.id} id={file.id} label={file.name || 'Ảnh kiểm kê đã lưu'} />)}
+      </div>}
+    </div>}
+  </div>
+}
+
+function RecoveryPreparation({ id }: { id: string }) {
+  const [data, setData] = useState<Preparation>()
+  const [error, setError] = useState('')
+  useEffect(() => {
+    let active = true
+    setData(undefined)
+    setError('')
+    apiRequest<Envelope<Preparation>>(`${endpoint}/${encodeURIComponent(id)}/preparation`, { cache: 'no-store' })
+      .then(response => { if (active) setData(response.data) })
+      .catch(reason => { if (active) setError(userFacingError(reason, 'Không tải được hàng khai báo và kết quả kiểm kê.')) })
+    return () => { active = false }
+  }, [id])
+  return <section className="recovery-source" aria-label="Hàng hóa trước thu hồi">
+    <div className="recovery-items-heading"><h4>Hàng hóa trước thu hồi</h4></div>
+    {error ? <p role="alert" className="recovery-error">{error}</p> : data ? <RecoverySourceGoods data={data} />
+      : <p role="status" className="recovery-source-empty">Đang tải hàng khai báo và kết quả kiểm kê…</p>}
+  </section>
+}
+
+function RecoveryGroupEvidence({ items }: { items: RecoveryItem[] }) {
+  const [open, setOpen] = useState(false)
+  const [page, setPage] = useState(0)
+  const evidence = new Map<string, string>()
+  for (const item of items) {
+    if (item.evidenceId) evidence.set(item.evidenceId, 'Ảnh ghi nhận hàng hóa')
+    if (item.releaseEvidenceId) evidence.set(item.releaseEvidenceId, 'Ảnh bàn giao hàng')
+    if (item.liquidation?.evidenceId) evidence.set(item.liquidation.evidenceId, 'Bằng chứng thanh lý')
+  }
+  if (!evidence.size) return null
+  const photos = [...evidence]
+  const currentPage = Math.min(page, Math.max(0, Math.ceil(photos.length / 6) - 1))
+  return <div className="recovery-group-evidence">
+    <Button type="button" size="sm" variant="ghost" aria-expanded={open} onClick={() => setOpen(value => !value)}>
+      {open ? 'Ẩn ảnh' : 'Xem ảnh'} ({photos.length})
+    </Button>
+    {open && <>
+      <div className="grid gap-2 sm:grid-cols-3">{photos.slice(currentPage * 6, currentPage * 6 + 6).map(([id, label]) => <EvidenceImagePreview key={id} id={id} label={label} />)}</div>
+      {photos.length > 6 && <div className="recovery-pagination">
+        <Button type="button" size="sm" variant="outline" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Ảnh trước</Button>
+        <span>{currentPage + 1}/{Math.ceil(photos.length / 6)}</span>
+        <Button type="button" size="sm" variant="outline" disabled={(currentPage + 1) * 6 >= photos.length} onClick={() => setPage(currentPage + 1)}>Ảnh sau</Button>
+      </div>}
+    </>}
+  </div>
+}
+
+export function RecoveryGroupedItems({ items }: { items: RecoveryItem[] }) {
+  const groups = groupRecoveryItems(items)
+  if (!groups.length) return null
+  return <section className="recovery-items" aria-label="Kiện hàng">
+    <div className="recovery-items-heading"><h4>Kiện hàng</h4><span>{items.length} kiện · {groups.length} loại hàng</span></div>
+    <ul className="recovery-items-grid">
+      {groups.map(group => {
+        const counts = recoveryItemCounts(group.items)
+        return <li key={group.key} className="recovery-item-card">
+          <div className="recovery-item-header">
+            <div><p>Loại hàng</p><h5>{group.name}</h5></div>
+            <span className="recovery-item-quantity">{counts.total} kiện</span>
+          </div>
+          <dl className="recovery-group-counts">
+            <div><dt>Đang lưu tạm</dt><dd>{counts.stored}</dd></div>
+            <div><dt>Đã bàn giao</dt><dd>{counts.released}</dd></div>
+            {counts.liquidated > 0 && <div><dt>Đã thanh lý</dt><dd>{counts.liquidated}</dd></div>}
+          </dl>
+          <div className="recovery-group-variants">{group.variants.map(variant => {
+            const state = recoveryItemCounts(variant.items)
+            return <dl key={variant.key} className="recovery-item-facts">
+              <div><dt>Tình trạng</dt><dd>{variant.condition}</dd></div>
+              {variant.location && <div><dt>{variant.disposition === 'HANDED_OVER' ? 'Người nhận' : 'Vị trí lưu tạm'}</dt><dd>{variant.location}</dd></div>}
+              {group.variants.length > 1 && <div><dt>Số kiện tại vị trí này</dt><dd>{state.total} kiện · {state.stored} lưu tạm · {state.released} đã giao{state.liquidated ? ` · ${state.liquidated} đã thanh lý` : ''}</dd></div>}
+              {[...new Set(variant.items.map(item => item.liquidation?.note).filter(Boolean))].map(note => <div key={note}><dt>Kết quả thanh lý</dt><dd>{displayRoleNames(note!)}</dd></div>)}
+            </dl>
+          })}</div>
+          <RecoveryGroupEvidence items={group.items} />
+        </li>
+      })}
+    </ul>
+  </section>
+}
+
+export function RecoveryAttendance({ entry }: { entry: Entry }) {
+  return <>
+    {entry.attendance === 'ABSENT' && <div className="recovery-attendance-notice" role="status">
+      <strong>Khách vắng mặt khi thu hồi</strong>
+      <p>{entry.stage === 'COMPLETED' ? 'Hàng đã được đưa vào lưu tạm. Cần xác minh danh tính khi đến nhận lại hàng.'
+        : 'Hàng thu hồi sẽ được đưa vào lưu tạm với nhân chứng; chưa bàn giao cho khách khi chưa xác minh danh tính.'}</p>
+    </div>}
+    {entry.verificationAttempts > 0 && <VerificationNotice verification={entry.verification}
+      historical={entry.stage === 'COMPLETED' || entry.stage === 'CANCELLED'} />}
+  </>
+}
+
+export function RecoveryDetails({ entry, actionArea, actionOpen = false }: { entry: Entry; actionArea?: ReactNode; actionOpen?: boolean }) {
+  const finished = entry.stage === 'COMPLETED' || entry.stage === 'CANCELLED'
+  const [phase, setPhase] = useState<1 | 2>(finished ? 2 : 1)
+  useEffect(() => { setPhase(finished ? 2 : 1) }, [finished])
+  const pending = entry.items.filter(isPendingItem).length
+  const activePhase = finished ? 2 : 1
   return <div className="recovery-details">
     <div className="recovery-detail-heading">
       <span className={`recovery-status recovery-status--${entry.stage.toLowerCase()}`}>{stageLabel(entry)}</span>
       <p>{reasons[entry.reason] || 'Cần xử lý thu hồi kho'}</p>
     </div>
-      {entry.stage === 'REVIEW_REQUIRED' && <RecoveryReview entry={entry} />}
+      <ol className="recovery-journey" aria-label="Tiến trình xử lý hồ sơ">
+        <li><button type="button" aria-pressed={phase === 1} disabled={actionOpen} onClick={() => setPhase(1)}>
+          <span className="recovery-journey-number">1</span><span><strong>Thu hồi kho</strong><small>{entry.stage === 'CANCELLED' ? 'Đã hủy' : finished ? 'Đã hoàn tất' : entry.stage === 'BLOCKED' ? 'Đang tạm dừng' : 'Đang xử lý'}</small></span>
+        </button></li>
+        <li><button type="button" aria-pressed={phase === 2} disabled={!finished || actionOpen} onClick={() => setPhase(2)}>
+          <span className="recovery-journey-number">2</span><span><strong>Giao hàng lưu tạm</strong><small>{!finished ? 'Chờ thu hồi xong' : pending ? 'Đang xử lý' : 'Đã xử lý xong'}</small></span>
+        </button></li>
+      </ol>
+      {pending > 0 && <section className="recovery-pickup-deadline" aria-label="Thời hạn nhận hàng lưu tạm">
+        <h4>Hạn cuối nhận hàng lưu tạm</h4>
+        <strong>{dateLabel(entry.pickupDueAt)}</strong>
+        {entry.pickupDueAt ? <RecoveryCountdown deadline={entry.pickupDueAt} label="Nhận hàng" />
+          : <p>Vui lòng liên hệ cơ sở để xác nhận thời hạn nhận hàng.</p>}
+        <p>Vui lòng đặt lịch và đến nhận trước hạn. Khi nhận hàng, cần xác minh lại danh tính bằng giấy tờ bản gốc.</p>
+      </section>}
+      <h4 className="recovery-phase-title">{phase === 1 ? 'Chặng 1 · Thu hồi kho' : 'Chặng 2 · Giao hàng lưu tạm'}</h4>
       <dl className="recovery-detail-facts">
         <div><dt>Phụ trách</dt><dd className="font-medium">{responsiblePerson(entry)}</dd></div>
+        <div><dt>Gian kho</dt><dd>{entry.unitCode}</dd></div>
+        {phase === 1 && <>
         {entry.sourceDeadlineAt && <div><dt>Hạn thực hiện trước khi thu hồi</dt><dd>{dateLabel(entry.sourceDeadlineAt)}</dd></div>}
         {entry.requiredAt && <div><dt>Ngày mở hồ sơ</dt><dd>{dateLabel(entry.requiredAt)}</dd></div>}
         <div><dt>Lịch thu hồi</dt><dd>{dateLabel(entry.scheduledAt)}</dd></div>
@@ -385,53 +625,39 @@ function RecoveryDetails({ entry }: { entry: Entry }) {
         {entry.arrivedAt && <div><dt>Giờ khách đến</dt><dd>{dateLabel(entry.arrivedAt)}</dd></div>}
         {entry.verifiedAt && <div><dt>Giờ xác minh</dt><dd>{dateLabel(entry.verifiedAt)}</dd></div>}
         {entry.completedAt && <div><dt>Hoàn tất thu hồi</dt><dd>{dateLabel(entry.completedAt)}</dd></div>}
-        {entry.pickupDueAt && entry.items.some(isPendingItem) && <div><dt>Hẹn nhận tài sản lưu tạm</dt><dd>{dateLabel(entry.pickupDueAt)}</dd></div>}
+        </>}
+        {phase === 2 && <>
+        {entry.pickupAppointmentAt && <div><dt>Lịch hẹn nhận hàng</dt><dd>{dateLabel(entry.pickupAppointmentAt)}</dd></div>}
+        </>}
       </dl>
-      {entry.verificationAttempts > 0 && <p>Lượt xác minh thu hồi đã dùng {entry.verificationAttempts}/2</p>}
-      {entry.pickupAttempts > 0 && <p>Lượt xác minh nhận hàng đã dùng {entry.pickupAttempts}/2</p>}
-      {entry.financePending && <p>Đang chờ đối soát cọc hoặc công nợ.</p>}
-      {entry.reasonNote && <p className="whitespace-pre-wrap break-words">{entry.reasonNote}</p>}
-      {entry.customerNote && <p className="whitespace-pre-wrap break-words">Phản hồi của khách · {entry.customerNote}</p>}
-      {entry.report && <p className="whitespace-pre-wrap break-words">Biên bản · {entry.report}</p>}
-      {(entry.attendanceEvidenceId || entry.beforeEvidenceId || entry.afterEvidenceId
-        || entry.items.some(item => item.evidenceId || item.releaseEvidenceId || item.liquidation?.evidenceId)) && (
+      {phase === 1 && <>
+      {entry.canViewSourceGoods && <RecoveryPreparation id={entry.id} />}
+      <RecoveryAttendance entry={entry} />
+      {entry.reasonNote && <p className="whitespace-pre-wrap break-words">{displayRoleNames(entry.reasonNote)}</p>}
+      {entry.customerNote && <p className="whitespace-pre-wrap break-words">Phản hồi của khách · {displayRoleNames(entry.customerNote)}</p>}
+      {entry.report && <p className="whitespace-pre-wrap break-words">Biên bản · {displayRoleNames(entry.report)}</p>}
+      {entry.attendanceEvidenceId && <div className="space-y-2 border-t border-stone-200 pt-2">
+        <p className="text-xs font-semibold text-stone-700">Ghi nhận khách đến hoặc vắng mặt</p>
+        <div className="grid gap-2 sm:grid-cols-3"><EvidenceImagePreview id={entry.attendanceEvidenceId}
+          label={entry.attendance === 'ABSENT' ? 'Ảnh ghi nhận khách vắng mặt' : 'Ảnh ghi nhận khách đến'} /></div>
+      </div>}
+      {(entry.beforeEvidenceId || entry.afterEvidenceId) && (
         <div className="space-y-2 border-t border-stone-200 pt-2">
           <p className="text-xs font-semibold text-stone-700">Bằng chứng thu hồi</p>
           <div className="grid gap-2 sm:grid-cols-3">
-            {entry.attendanceEvidenceId && <EvidenceImagePreview id={entry.attendanceEvidenceId} label="Ảnh tiếp nhận khách" />}
             {entry.beforeEvidenceId && <EvidenceImagePreview id={entry.beforeEvidenceId} label="Ảnh trước thu hồi" />}
             {entry.afterEvidenceId && <EvidenceImagePreview id={entry.afterEvidenceId} label="Ảnh sau thu hồi" />}
-            {entry.items.map(item => (
-              <Fragment key={item.code}>
-                {item.evidenceId && <EvidenceImagePreview id={item.evidenceId} label={`Ảnh kiện ${item.code}`} />}
-                {item.releaseEvidenceId && <EvidenceImagePreview id={item.releaseEvidenceId} label={`Ảnh bàn giao ${item.code}`} />}
-                {item.liquidation?.evidenceId && <EvidenceImagePreview id={item.liquidation.evidenceId} label={`Bằng chứng thanh lý ${item.code}`} />}
-              </Fragment>
-            ))}
           </div>
         </div>
       )}
-      {!!entry.items.length && <ul className="space-y-1 border-t border-stone-200 pt-2">
-        {entry.items.map(item => <li key={item.code} className="break-words">
-          {item.code} · {item.name} · {item.condition} · {item.liquidation ? 'Đã thanh lý' : item.releasedAt ? 'Đã giao' : 'Đang lưu tạm'}{item.location && ` · ${item.location}`}
-          {item.liquidation && <p className="text-xs text-stone-600">Ghi nhận thanh lý: {dateLabel(item.liquidation.recordedAt)}{item.liquidation.note && ` · ${item.liquidation.note}`}</p>}
-        </li>)}
-      </ul>}
-      {!!entry.history?.length && (
-        <details className="border-t border-stone-200 pt-2 text-xs text-stone-600">
-          <summary className="cursor-pointer font-medium text-stone-700 hover:text-stone-900">
-            Lịch sử xử lý ({entry.history.length})
-          </summary>
-          <ul className="mt-1.5 space-y-1 border-l-2 border-stone-200 pl-3">
-            {entry.history.map((h, idx) => (
-              <li key={idx}>
-                {dateLabel(h.time)} · <b>{historyLabels[h.action] || 'Cập nhật hồ sơ'}</b> · {h.actorName} ({stages[h.stage] || 'Đã cập nhật'})
-                {h.note ? ` · ${h.note}` : ''}
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
+      </>}
+      {phase === 2 && <>
+        {pending > 0 && <VerificationNotice kind="pickup" verification={entry.pickupVerification} />}
+        {pending === 0 && <p className="recovery-source-empty">Không còn kiện hàng lưu tạm chờ bàn giao.</p>}
+        {entry.financePending && <p>Đang chờ đối soát cọc hoặc công nợ.</p>}
+      </>}
+      <RecoveryGroupedItems items={entry.items} />
+      {phase === activePhase && actionArea}
   </div>
 }
 
@@ -445,11 +671,33 @@ export function ViolationRecoveryEntry({ label = 'Thu hồi kho', sourceReturnId
   </div>
 }
 
-export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, target }: {
-  sourceReturnId?: string; activeOnly?: boolean; target?: { id: string; request: number }
+export function RecoveryPagination({ pagination, disabled, onChange }: {
+  pagination: RecoveryPageInfo; disabled: boolean; onChange: (page: number) => void
+}) {
+  const { page, pageSize, totalItems, totalPages } = pagination
+  if (!totalItems) return null
+  const pages = [...new Set([0, page - 1, page, page + 1, totalPages - 1])]
+    .filter(value => value >= 0 && value < totalPages).sort((a, b) => a - b)
+  return <nav className="recovery-customer-pagination" aria-label="Phân trang hồ sơ thu hồi">
+    <span>Hiển thị {page * pageSize + 1}–{Math.min((page + 1) * pageSize, totalItems)} trong {totalItems} hồ sơ · Trang {page + 1}/{totalPages}</span>
+    <div>
+      <Button size="sm" variant="outline" disabled={disabled || page === 0} onClick={() => onChange(page - 1)}>Trước</Button>
+      {pages.map((value, index) => <Fragment key={value}>
+        {index > 0 && value > pages[index - 1] + 1 && <span>…</span>}
+        <Button size="sm" variant={value === page ? 'primary' : 'outline'} aria-current={value === page ? 'page' : undefined}
+          disabled={disabled} onClick={() => onChange(value)}>{value + 1}</Button>
+      </Fragment>)}
+      <Button size="sm" variant="outline" disabled={disabled || page + 1 >= totalPages} onClick={() => onChange(page + 1)}>Sau</Button>
+    </div>
+  </nav>
+}
+
+export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, managerOverdueOnly = false, customerView = false, target }: {
+  sourceReturnId?: string; activeOnly?: boolean; managerOverdueOnly?: boolean; customerView?: boolean; target?: { id: string; request: number }
 }) {
   const [page, setPage] = useState(0)
   const [entries, setEntries] = useState<Entry[]>([])
+  const [pagination, setPagination] = useState<RecoveryPageInfo>()
   const [action, setAction] = useState<{ id: string; action: Action }>()
   const [refresh, setRefresh] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -459,6 +707,23 @@ export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, tar
   const [detailId, setDetailId] = useState<string>()
   const targetCard = useRef<HTMLElement>(null)
   const revealedTarget = useRef<typeof target>(undefined)
+  const requestUrl = useRef<string | undefined>(undefined)
+  const listTop = useRef<HTMLDivElement>(null)
+  const customerPaging = customerView && !sourceReturnId && !managerOverdueOnly
+  useEffect(() => {
+    if (action) return
+    const refreshVisibleList = () => {
+      if (document.visibilityState !== 'hidden') setRefresh(value => value + 1)
+    }
+    const timer = window.setInterval(refreshVisibleList, 15000)
+    window.addEventListener('focus', refreshVisibleList)
+    document.addEventListener('visibilitychange', refreshVisibleList)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('focus', refreshVisibleList)
+      document.removeEventListener('visibilitychange', refreshVisibleList)
+    }
+  }, [action])
   useEffect(() => {
     setTargetId(target?.id)
     setPage(0)
@@ -466,22 +731,37 @@ export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, tar
     setDetailId(undefined)
   }, [target])
   useEffect(() => {
+    if (action) return
     let active = true
-    setLoading(true)
-    setError('')
-    const query = sourceReturnId ? `sourceReturnId=${encodeURIComponent(sourceReturnId)}` : `page=${page}&activeOnly=${activeOnly && !showClosed}`
+    const query = managerOverdueOnly ? `page=${page}&escalatedOnly=true`
+      : sourceReturnId ? `sourceReturnId=${encodeURIComponent(sourceReturnId)}` : `page=${page}&activeOnly=${activeOnly && !showClosed}`
+    const url = targetId ? `${endpoint}/${encodeURIComponent(targetId)}`
+      : customerPaging ? `${endpoint}/customer?page=${page}&pageSize=${CUSTOMER_PAGE_SIZE}` : `${endpoint}?${query}`
+    if (requestUrl.current !== url) {
+      requestUrl.current = url
+      setLoading(true)
+      setEntries([])
+      setError('')
+    }
     const load = targetId
-      ? apiRequest<Envelope<Entry>>(`${endpoint}/${encodeURIComponent(targetId)}`).then(response => [response.data])
-      : apiRequest<Envelope<Entry[]>>(`${endpoint}?${query}`).then(response => response.data)
-    load.then(rows => {
-      if (rows.some(row => row.stage === 'REVIEW_REQUIRED' && (!row.review || !row.reviewDueAt || !row.detectedAt)))
-        throw new Error('Chưa tải đủ thời hạn và dữ liệu đối chiếu để duyệt hồ sơ. Vui lòng làm mới danh sách.')
-      if (active) setEntries(rows)
+      ? apiRequest<Envelope<Entry>>(url, { cache: 'no-store' }).then(response => ({ data: [response.data], pagination: undefined }))
+      : apiRequest<Envelope<Entry[]>>(url, { cache: 'no-store' })
+    load.then(response => {
+      if (active) {
+        if (customerPaging && !targetId && response.pagination) {
+          const lastPage = Math.max(0, response.pagination.totalPages - 1)
+          if (page > lastPage) { setPage(lastPage); return }
+        }
+        const rows = response.data
+        setEntries(managerOverdueOnly ? rows.filter(isManagerOverdueRecovery) : rows)
+        setPagination(response.pagination)
+        setError('')
+      }
     })
       .catch(err => { if (active) setError(userFacingError(err, 'Không thể tải hồ sơ thu hồi.')) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [page, refresh, sourceReturnId, activeOnly, targetId, showClosed])
+  }, [page, refresh, sourceReturnId, activeOnly, managerOverdueOnly, targetId, showClosed, action, customerPaging])
 
   useEffect(() => {
     if (!target || target.id !== targetId || loading || error || !targetCard.current
@@ -492,42 +772,31 @@ export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, tar
 
   const detailEntry = entries.find(entry => entry.id === detailId)
   const openAction = (entry: Entry, key: Action) => {
-    setDetailId(undefined)
+    setDetailId(entry.id)
     setAction({ id: entry.id, action: key })
   }
 
-  if (detailEntry) return <section className="recovery-panel space-y-4" aria-label="Chi tiết hồ sơ thu hồi">
-    <Button size="sm" variant="outline" onClick={() => setDetailId(undefined)}>Quay lại</Button>
-    <h3 className="text-lg font-semibold">Hồ sơ thu hồi · {detailEntry.reservationCode || detailEntry.unitCode}</h3>
-        <RecoveryDetails entry={detailEntry} />
-        {!!detailEntry.actions.length && <div className="recovery-detail-actions">
-          <h4>Thao tác với hồ sơ</h4>
-          <div>{detailEntry.actions.map(key => <Button key={key} size="sm" variant={key === primaryAction(detailEntry) ? 'primary' : 'outline'}
-            onClick={() => openAction(detailEntry, key)}>{entryActionLabel(detailEntry, key)}</Button>)}</div>
-        </div>}
-  </section>
-
-  return <div className="recovery-panel">
-    <div className="recovery-toolbar">
+  return <div className="recovery-panel" ref={listTop}>
+    {((activeOnly && !managerOverdueOnly) || targetId) && <div className="recovery-toolbar">
       <div className="recovery-view-switch">
-        {activeOnly && !targetId && <>
+        {activeOnly && !managerOverdueOnly && !targetId && <>
           <button type="button" aria-pressed={!showClosed} disabled={!!action} onClick={() => { setShowClosed(false); setPage(0) }}>Đang xử lý</button>
           <button type="button" aria-pressed={showClosed} disabled={!!action} onClick={() => { setShowClosed(true); setPage(0) }}>Tất cả hồ sơ</button>
         </>}
         {targetId && <Button size="sm" variant="outline" disabled={!!action} onClick={() => setTargetId(undefined)}>Về danh sách thu hồi</Button>}
       </div>
-      <Button size="sm" variant="ghost" disabled={loading || !!action} onClick={() => setRefresh(value => value + 1)}>Làm mới</Button>
-    </div>
+    </div>}
     {error && <p role="alert" className="recovery-error">{error}</p>}
     {loading && <p role="status" className="recovery-empty">Đang tải hồ sơ thu hồi…</p>}
-    {!loading && !error && !entries.length && <p className="recovery-empty">{sourceReturnId ? 'Chưa có hồ sơ thu hồi cho yêu cầu trả kho này.' : 'Chưa có hồ sơ thu hồi trong danh sách.'}</p>}
-    {!loading && !error && entries.map(entry => {
-      const mainAction = primaryAction(entry)
+    {!loading && !error && !entries.length && <p className="recovery-empty">{managerOverdueOnly
+      ? targetId ? 'Hồ sơ này chưa quá hạn xử lý hoặc đã được xử lý tại cơ sở.' : 'Không có hồ sơ thu hồi quá hạn phân công hoặc rà soát.'
+      : sourceReturnId ? 'Chưa có hồ sơ thu hồi cho yêu cầu trả kho này.' : 'Chưa có hồ sơ thu hồi trong danh sách.'}</p>}
+    {!loading && entries.map(entry => {
       const pendingItems = entry.items.filter(isPendingItem).length
       const closed = entry.stage === 'COMPLETED' || entry.stage === 'CANCELLED'
-      const currentDueAt = entry.stage === 'REVIEW_REQUIRED'
-        ? entry.escalated ? entry.businessReviewDueAt : entry.reviewDueAt : entry.actionDueAt
-      const reviewOverdue = entry.stage === 'REVIEW_REQUIRED' && !!currentDueAt && Date.now() >= Date.parse(currentDueAt)
+      const currentDueAt = entry.actionDueAt || entry.deadlineAt
+      const replyActions = visibleRecoveryActions(entry.actions, entry.stage, entry.responseDueAt)
+        .filter(key => key === 'WILL_ATTEND' || key === 'CANNOT_ATTEND' || key === 'DISPUTE')
       return <section key={entry.id} ref={entry.id === targetId ? targetCard : undefined} tabIndex={-1} className="recovery-case" aria-label={`Hồ sơ thu hồi ${entry.reservationCode || entry.unitCode}`}>
         <div className="recovery-case-header">
           <div>
@@ -536,42 +805,60 @@ export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, tar
           </div>
           <div className="recovery-status-group">
             <span className={`recovery-status recovery-status--${entry.stage.toLowerCase()}`}>{stageLabel(entry)}</span>
-            {(entry.overdueAt || reviewOverdue) && !closed && <span className="recovery-overdue">{reviewOverdue ? 'Quá hạn duyệt' : 'Quá hạn xử lý'}</span>}
+            {entry.overdueAt && !closed && <span className="recovery-overdue">Quá hạn xử lý</span>}
           </div>
         </div>
         <dl className="recovery-case-facts">
           <div><dt>Khách hàng</dt><dd>{entry.customerName || 'Chưa cập nhật'}</dd></div>
           <div><dt>Gian kho</dt><dd>{entry.unitCode}</dd></div>
           <div><dt>Nhân viên phụ trách</dt><dd>{entry.staffName || 'Chưa phân công'}</dd></div>
-          <div><dt>{entry.stage === 'REVIEW_REQUIRED' ? 'Phát sinh hồ sơ' : entry.stage === 'COMPLETED' ? 'Hoàn tất thu hồi' : 'Lịch thu hồi'}</dt><dd>{dateLabel(entry.stage === 'REVIEW_REQUIRED' ? entry.detectedAt : entry.stage === 'COMPLETED' ? entry.completedAt : entry.scheduledAt)}</dd></div>
+          <div><dt>Phát sinh thu hồi</dt><dd>{dateLabel(entry.requiredAt || entry.detectedAt)}</dd></div>
+          <div><dt>{entry.stage === 'COMPLETED' ? 'Hoàn tất thu hồi' : 'Lịch thu hồi'}</dt><dd>{dateLabel(entry.stage === 'COMPLETED' ? entry.completedAt : entry.scheduledAt)}</dd></div>
+          {!closed && <div><dt>Hạn hoàn tất</dt><dd>{dateLabel(entry.deadlineAt)}</dd></div>}
         </dl>
-        {pendingItems > 0 && <p className="recovery-item-notice">{pendingItems} kiện hàng đang lưu tạm{entry.pickupDueAt ? ` · Hẹn nhận: ${dateLabel(entry.pickupDueAt)}` : ''}</p>}
+        {!!replyActions.length && !closed && <p className="recovery-item-notice">Vui lòng phản hồi trong 6 giờ từ khi nhận thông báo. {entry.reply ? `Phản hồi: ${replies[entry.reply] || entry.reply}. ` : ''}<RecoveryCountdown deadline={entry.responseDueAt} label="Phản hồi" /></p>}
+        {!!entry.items.length && <ul className="recovery-goods-summary" aria-label="Hàng hóa đã thu hồi">
+          {groupRecoveryItems(entry.items).map(group => <li key={group.key}><span>{group.name}</span><strong>{group.items.length} kiện</strong></li>)}
+        </ul>}
+        {pendingItems > 0 && <p className="recovery-item-notice">{pendingItems} kiện hàng đang lưu tạm{entry.pickupDueAt ? ` · Hạn nhận hàng: ${dateLabel(entry.pickupDueAt)}` : ''}</p>}
         {entry.financePending && <p className="recovery-item-notice">Đang chờ đối soát cọc hoặc công nợ.</p>}
         <div className="recovery-case-footer">
           <p className="recovery-next-step">
             {entry.stage === 'AWAITING_ASSIGNMENT' ? 'Cần phân công nhân viên' :
-              entry.stage === 'AWAITING_ACCEPTANCE' ? `Chờ ${entry.staffName || 'nhân viên'} tiếp nhận` :
+              entry.stage === 'AWAITING_ACCEPTANCE' || entry.stage === 'AWAITING_ATTENDANCE' ? 'Thực hiện thu hồi theo lịch đã thông báo' :
               entry.stage === 'BLOCKED' ? 'Đang tạm dừng, chờ quản lý xử lý' : ''}
-            {!closed && currentDueAt && <span>{entry.stage === 'REVIEW_REQUIRED' && entry.escalated ? 'Hạn BO xử lý' : deadlineLabels[entry.stage] || 'Hạn xử lý'}: {dateLabel(currentDueAt)}</span>}
-            {!closed && currentDueAt && <RecoveryCountdown deadline={currentDueAt} label={entry.stage === 'REVIEW_REQUIRED' ? entry.escalated ? 'BO xử lý' : 'Manager duyệt' : 'Xử lý'} />}
+            {!closed && currentDueAt && <span>{deadlineLabels[entry.stage] || 'Hạn hoàn tất'}: {dateLabel(currentDueAt)}</span>}
+            {!closed && currentDueAt && <RecoveryCountdown deadline={currentDueAt} label="Xử lý" />}
           </p>
           <div className="recovery-case-actions">
             <Button size="sm" variant="outline" disabled={!!action} onClick={() => setDetailId(entry.id)}>Chi tiết</Button>
-            {entry.stage === 'REVIEW_REQUIRED' && entry.actions.includes('CANCEL') && <Button size="sm" variant="outline" disabled={!!action} onClick={() => openAction(entry, 'CANCEL')}>Không mở thu hồi</Button>}
-            {mainAction && <Button size="sm" disabled={!!action} onClick={() => openAction(entry, mainAction)}>{entryActionLabel(entry, mainAction)}</Button>}
           </div>
         </div>
-        {action?.id === entry.id && <RecoveryAction key={action.action} entry={entry} action={action.action}
-          onBack={() => setAction(undefined)} onSaved={updated => {
-            setEntries(current => current.map(item => item.id === updated.id ? updated : item))
-            setAction(undefined)
-          }} />}
       </section>
     })}
-    {!sourceReturnId && !targetId && (page > 0 || entries.length === 30) && <div className="recovery-pagination">
+    {customerPaging && !targetId && pagination && <RecoveryPagination pagination={pagination} disabled={loading || !!action}
+      onChange={next => { setDetailId(undefined); setPage(next); listTop.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }} />}
+    {!customerPaging && !sourceReturnId && !targetId && (page > 0 || entries.length === 30) && <div className="recovery-pagination">
       <Button size="sm" variant="outline" disabled={loading || !!action || page === 0} onClick={() => setPage(value => value - 1)}>Trang trước</Button>
       <Button size="sm" variant="outline" disabled={loading || !!action || entries.length < 30} onClick={() => setPage(value => value + 1)}>Trang sau</Button>
     </div>}
-
+    {detailEntry && <Modal open size="2xl" title={`Hồ sơ thu hồi · ${detailEntry.reservationCode || detailEntry.unitCode}`}
+      closeLabel="Đóng chi tiết thu hồi" onClose={() => { setDetailId(undefined); setAction(undefined) }}>
+      <div className="recovery-detail-modal">
+        {error && <p role="alert" className="recovery-error">{error}</p>}
+        <RecoveryDetails key={detailEntry.id} entry={detailEntry} actionOpen={action?.id === detailEntry.id} actionArea={action && action.id === detailEntry.id ? <RecoveryAction key={action.action} entry={detailEntry} action={action.action}
+          onBack={() => setAction(undefined)} onSaved={(updated, keepOpen) => {
+            setEntries(current => {
+              const next = current.map(item => item.id === updated.id ? updated : item)
+              return managerOverdueOnly ? next.filter(isManagerOverdueRecovery) : next
+            })
+            if (!keepOpen) setAction(undefined)
+          }} /> : !!detailEntry.actions.length && <div className="recovery-detail-actions">
+            <h4>Thao tác với hồ sơ</h4>
+            <div>{visibleRecoveryActions(detailEntry.actions, detailEntry.stage, detailEntry.responseDueAt).map(key => <Button key={key} size="sm" variant={key === primaryAction(detailEntry) ? 'primary' : 'outline'}
+              onClick={() => openAction(detailEntry, key)}>{entryActionLabel(detailEntry, key)}</Button>)}</div>
+          </div>} />
+      </div>
+    </Modal>}
   </div>
 }
