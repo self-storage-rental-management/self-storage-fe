@@ -106,6 +106,9 @@ export interface ApiReturn {
     reviewAccepted: boolean | null
     handoverDueAt?: string | null
     handoverStaffId?: string | null
+    reverificationStartedAt?: string | null
+    reverificationStaffId?: string | null
+    handoverAppointmentAt?: string | null
   } | null
   returnPolicyVersion?: string | null
   returnType?: 'CANCELLED_IN_SETUP' | 'RETURN_IN_SETUP' | 'INVENTORY_MISMATCH' | 'EARLY_RETURN' | 'NORMAL'
@@ -340,11 +343,11 @@ function fees(body: ReturnFees) { if (!feeKeys.every(k => money(body[k]))) throw
 export function setCustomerClearance(record: ApiReturn, cleared: boolean) {
   return mutate('customer', record.id, 'clearance', { cleared, clearanceRevision: record.clearanceRevision ?? 0 })
 }
-export function recordReturnArrival(id: string, evidenceId: string) {
-  return mutate('staff', id, 'arrival', { evidenceId })
+export function verifyReturnIdentity(id: string, attemptId: string, documentNumber: string, reverificationStartedAt?: string | null, evidenceId?: string) {
+  return mutate('staff', id, 'identity', { attemptId, documentNumber, reverificationStartedAt, evidenceId })
 }
-export function verifyReturnIdentity(id: string, attemptId: string, documentNumber: string) {
-  return mutate('staff', id, 'identity', { attemptId, documentNumber })
+export function reopenReturnVerification(id: string, staffId: string, reason: string) {
+  return mutate('manager', id, 'identity-reopen', { staffId, reason })
 }
 export function reviewReturnArrival(id: string, accepted: boolean, reason: string, staffId?: string, appointmentAt?: string) {
   return mutate('manager', id, 'arrival-review', { accepted, reason, staffId, appointmentAt })

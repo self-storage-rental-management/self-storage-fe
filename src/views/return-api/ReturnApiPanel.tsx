@@ -1,6 +1,6 @@
 import { recordDisplayCode, receiptDisplayCode } from '../../utils/recordDisplayCode'
 import { ClearanceStatus, CustomerClearance, ReturnContract, ReturnPreparation } from './ReturnClearance'
-import ReturnAttendance from './ReturnAttendance'
+import ReturnAttendance, { requiresReturnAttendance } from './ReturnAttendance'
 import { listMaintenanceStaff } from '../../services/maintenanceApi'
 import { getRental } from '../../services/rentalApi'
 import ReturnPolicyNotice from '../../components/ReturnPolicyNotice'
@@ -13,7 +13,7 @@ import LockInspectionSelect, { lockInspectionLabels } from '../../components/Loc
 import { getAuthenticatedActor } from '../../services/authApi'
 import { useRentalApiResource } from '../../hooks/useRentalApiResource'
 import { rentalDate, rentalMoney } from '../rental-api/presentation'
-import { vietnamDateInput } from '../../utils/vietnamTime'
+import { VIETNAM_TIME_ZONE, vietnamDateInput } from '../../utils/vietnamTime'
 import RecoveryReturnSettlement from './RecoveryReturnSettlement'
 import RecoveryTaskLink from '../rental-api/RecoveryTaskLink'
 import {
@@ -82,7 +82,7 @@ function returnRecoveryCutoff(value: string | null | undefined) {
   if (!value) return null
   const at = new Date(value)
   return Number.isFinite(at.getTime())
-    ? at.toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
+    ? at.toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short', timeZone: VIETNAM_TIME_ZONE })
     : null
 }
 
@@ -118,6 +118,7 @@ export function ReturnSummary({ record, hideTerminationFee = false, hideHeader =
   if (record.sourceType === "RECOVERY") return <RecoveryReturnSummary record={record} hideTerminationFee={hideTerminationFee} hideHeader={hideHeader} />
   const inventoryMismatch = record.returnType === 'INVENTORY_MISMATCH'
   const afterInspection = !['requested', 'scheduled', 'recovery_required'].includes(record.status)
+  const handoverAppointment = ['requested', 'scheduled'].includes(record.status) ? record.attendance?.handoverAppointmentAt : null
   const showFixedTerminationFee = !hideTerminationFee && !inventoryMismatch
   const badgeClass =
     record.status === 'disputed'
@@ -134,10 +135,10 @@ export function ReturnSummary({ record, hideTerminationFee = false, hideHeader =
             <div><h4 className="text-lg font-bold text-stone-900">{record.unitNumber}</h4><p className="mt-1 text-sm text-stone-500">{record.facilityName}</p></div>
             <span className={`rounded-full px-3 py-1 text-xs font-semibold ${badgeClass}`}>{statusLabel(record)}</span>
           </div>
-          <p className="text-sm text-stone-600">{'Ngày dự kiến trả: '}<strong className="text-stone-900">{rentalDate(record.scheduledDate)}</strong></p>
+          {!handoverAppointment && <p className="text-sm text-stone-600">{'Ngày dự kiến trả: '}<strong className="text-stone-900">{rentalDate(record.scheduledDate)}</strong></p>}
         </>
       )}
-      {['requested', 'scheduled'].includes(record.status) && record.recoveryEligibleAt && <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">Nếu khách chưa đến và chưa hoàn tất trả kho, hồ sơ sẽ chuyển sang nhiệm vụ xử lý sau <strong>{returnRecoveryCountdown(record.recoveryEligibleAt, now) || returnRecoveryCutoff(record.recoveryEligibleAt)}</strong>. Hàng chưa được tự động di chuyển.</p>}
+      {['requested', 'scheduled'].includes(record.status) && record.recoveryEligibleAt && !record.attendance?.arrivedAt && <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">Nếu khách chưa đến và chưa hoàn tất trả kho, hồ sơ sẽ chuyển sang nhiệm vụ xử lý sau <strong>{returnRecoveryCountdown(record.recoveryEligibleAt, now) || returnRecoveryCutoff(record.recoveryEligibleAt)}</strong>. Hàng chưa được tự động di chuyển.</p>}
       {inventoryMismatch && <div className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-950">
         <p className="font-bold">Đơn trả kho do kiểm kê sai lệch</p>
         <p className="mt-1">Tính tiền theo số ngày sử dụng thực tế (Đơn giá tháng × Số ngày / 30).</p>
@@ -145,6 +146,9 @@ export function ReturnSummary({ record, hideTerminationFee = false, hideHeader =
       </div>}
       {record.status === 'recovery_required' && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-950">Khách chưa đến theo lịch và đã hết thời gian ân hạn. Hàng chưa được tự động di chuyển. Cơ sở cần lập biên bản, kiểm kê và bàn giao hai người trước khi thu hồi.</p>}
       {record.status === 'recovery_required' && record.recoveryTaskDeadlineAt && <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-950">Hạn xử lý nhiệm vụ thu hồi: {returnRecoveryCutoff(record.recoveryTaskDeadlineAt)}</p>}
+      {handoverAppointment && !hideHeader && (
+        <p className="text-sm font-medium">Lịch bàn giao sau đối soát · {returnRecoveryCutoff(handoverAppointment)}</p>
+      )}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {([
           ['Cọc theo hợp đồng', record.depositAmount],
@@ -638,7 +642,9 @@ function ReturnWorkspace({
                 </span>
               )}
               <span className="text-xs text-stone-500">
-                Hạn trả: <strong className="text-stone-700">{rentalDate(selectedRecord.scheduledDate)}</strong>
+                {selectedRecord.attendance?.handoverAppointmentAt ? <>
+                  Lịch bàn giao sau đối soát · <strong className="text-stone-700">{returnRecoveryCutoff(selectedRecord.attendance.handoverAppointmentAt)}</strong>
+                </> : <>Hạn trả: <strong className="text-stone-700">{rentalDate(selectedRecord.scheduledDate)}</strong></>}
               </span>
             </div>
 
@@ -670,7 +676,7 @@ function ReturnWorkspace({
           {/* Form Actions / 2-Column Inspection */}
           {role === 'staff' && <ReturnAttendance key={selectedRecord.id} record={selectedRecord} role="staff"
             editable={!!actor?.permissions.includes('returns:process')} onChanged={read.refresh} />}
-          <ReturnActions
+          {(role !== 'staff' || !requiresReturnAttendance(selectedRecord) || (!!selectedRecord.attendance?.arrivedAt && !!selectedRecord.attendance.verifiedAt)) && <ReturnActions
             key={selectedRecord.id + ":" + (selectedRecord.clearanceRevision ?? 0) + ":" + (selectedRecord.settlementVersion ?? 0)}
             role={role}
             record={selectedRecord}
@@ -688,9 +694,9 @@ function ReturnWorkspace({
               read.refresh()
               onChanged?.()
             }}
-          />
+          />}
 
-          {role === 'customer' && (selectedRecord.status === 'requested' || (selectedRecord.returnType === 'INVENTORY_MISMATCH' && selectedRecord.status === 'scheduled')) && editing !== selectedRecord.id && (
+          {role === 'customer' && !selectedRecord.attendance?.arrivedAt && (selectedRecord.status === 'requested' || (selectedRecord.returnType === 'INVENTORY_MISMATCH' && selectedRecord.status === 'scheduled')) && editing !== selectedRecord.id && (
             <div className="mt-3 flex justify-end border-t border-stone-100 pt-3">
               <Button
                 type="button"
@@ -1106,16 +1112,23 @@ function getNextStepText(status: ApiReturn['status'], role: ReturnRole, recovery
 }
 
 function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLocked, onRecoveryChanged }: { role: ReturnRole; record: ApiReturn; run: (work: () => Promise<ApiReturn>) => Promise<void>; busy: boolean; recoveryLocked: boolean; onRecoveryLocked: (locked: boolean) => void; onRecoveryChanged: () => void }) {
-  const expiresAt = record.attendance?.reviewAccepted ? record.attendance.handoverDueAt : record.attendance?.expiresAt
+  const attendance = record.attendance
+  const handoverApproved = attendance?.reviewAccepted === true
+  const appointmentAt = attendance?.handoverAppointmentAt
+  const expiresAt = handoverApproved ? attendance.handoverDueAt : attendance?.expiresAt
   const [inspectionNow, setInspectionNow] = useState(Date.now)
   useEffect(() => {
-    setInspectionNow(Date.now())
-    if (!expiresAt) return
-    const delay = Date.parse(expiresAt) - Date.now()
-    if (delay <= 0) return
-    const timer = window.setTimeout(() => setInspectionNow(Date.now()), delay + 10)
+    const milestones = [Date.parse(appointmentAt ?? ''), Date.parse(expiresAt ?? '')]
+    let timer: number | undefined
+    const updateInspectionClock = () => {
+      const now = Date.now()
+      setInspectionNow(now)
+      const next = Math.min(...milestones.filter(time => time > now))
+      if (Number.isFinite(next)) timer = window.setTimeout(updateInspectionClock, Math.min(next - now, 2_147_483_647))
+    }
+    updateInspectionClock()
     return () => window.clearTimeout(timer)
-  }, [expiresAt])
+  }, [appointmentAt, expiresAt])
   const id = record.id
   const [acceptedSettlement, setAcceptedSettlement] = useState(false)
   const [confirmationError, setConfirmationError] = useState('')
@@ -1179,20 +1192,21 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
   const write = role === 'customer' || !!actor?.permissions.includes(role === 'manager' ? 'rentals:update' : 'returns:process')
   const recovery = record.sourceType === 'RECOVERY'
   const mismatch = record.returnType === 'INVENTORY_MISMATCH'
-  const mismatchRecovery = mismatch && record.status === 'recovery_required'
+  const noShowRecovery = !recovery && record.status === 'recovery_required'
   const [recoveryLocation, setRecoveryLocation] = useState('')
   const [recoveryWitness, setRecoveryWitness] = useState('')
-  const witnessRead = useRentalApiResource(`return-witness:${record.facilityId}:${mismatchRecovery && role === 'staff' && write}`,
-    () => mismatchRecovery && role === 'staff' && write ? listMaintenanceStaff(record.facilityId) : Promise.resolve([]))
-  const recoveryIncomplete = mismatchRecovery && (!recoveryWitness || !recoveryLocation.trim() || !note.trim())
-  const canInspect = !recovery && write && role === 'staff' && (mismatchRecovery ||
+  const needsWitness = noShowRecovery && role === 'staff' && write
+  const witnessRead = useRentalApiResource(`return-witness:${record.facilityId}:${needsWitness}`,
+    () => needsWitness ? listMaintenanceStaff(record.facilityId) : Promise.resolve([]))
+  const recoveryIncomplete = noShowRecovery && (!recoveryWitness || !recoveryLocation.trim() || !note.trim())
+  const assignedStaffId = handoverApproved ? attendance.handoverStaffId : attendance?.reverificationStaffId
+  const canInspect = !recovery && write && role === 'staff' && (noShowRecovery ||
     (['requested', 'scheduled'].includes(record.status)
-      && (!record.attendance || (mismatch && !!record.setupReturnedAt)
-        || (!!record.attendance.verifiedAt && record.attendance.reviewAccepted !== false
-          && (record.attendance.reviewAccepted === true
-            ? (!record.attendance.handoverDueAt || inspectionNow < Date.parse(record.attendance.handoverDueAt))
-              && (!record.attendance.handoverStaffId || record.attendance.handoverStaffId === actor?.id)
-            : inspectionNow < Date.parse(expiresAt ?? ''))))))
+      && (!assignedStaffId || assignedStaffId === actor?.id)
+      && (!appointmentAt || inspectionNow >= Date.parse(appointmentAt))
+      && (!attendance || (mismatch && !!record.setupReturnedAt)
+        || (!!attendance.verifiedAt && attendance.reviewAccepted !== false
+          && ((!expiresAt && handoverApproved) || inspectionNow < Date.parse(expiresAt ?? ''))))))
   const canReview = write && role === 'manager' && record.status === 'disputed'
   const recoveryNextStep = !recovery ? null : record.recoveryTaskStatus === 'CLOSED'
     ? 'Thu hồi đã hoàn tất. Hồ sơ thuê đã kết thúc và trạng thái kho đã được cập nhật.'
@@ -1229,7 +1243,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       lockInspectionResult: returnedLock ? 'RETURNED_USABLE' : 'MISSING_OR_INCOMPLETE',
       proposedUnitStatus: requiresMaintenance ? 'maintenance' : unit,
       unitVacated: true,
-      ...(mismatchRecovery ? { recoveryHandoverLocation: recoveryLocation.trim(), recoveryWitnessStaffId: recoveryWitness } : {}),
+      ...(noShowRecovery ? { customerPresent: false, recoveryHandoverLocation: recoveryLocation.trim(), recoveryWitnessStaffId: recoveryWitness } : {}),
     }, record.clearanceRevision ?? 0)
   }
 
@@ -1406,8 +1420,10 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                             </label>)}
                           </fieldset>
                         </div>
-                        {goodsLeft && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950">Gian kho vẫn còn tài sản của khách hàng. Vui lòng yêu cầu khách di chuyển toàn bộ tài sản trước khi hoàn tất nghiệm thu.</p>}
-                        {mismatchRecovery && <fieldset className="space-y-2 rounded border p-3">
+                        {goodsLeft && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950">{noShowRecovery
+                          ? 'Cần kiểm kê và bàn giao hàng vào khu lưu tạm trước khi xác nhận gian trống.'
+                          : 'Gian kho vẫn còn tài sản của khách hàng. Vui lòng yêu cầu khách di chuyển toàn bộ tài sản trước khi hoàn tất nghiệm thu.'}</p>}
+                        {noShowRecovery && <fieldset className="space-y-2 rounded border p-3">
                           <legend>Biên bản thu hồi hàng</legend>
                           <label className="block">Nhân viên thứ hai<select className="block w-full rounded border p-2" value={recoveryWitness}
                             disabled={busy || witnessRead.loading} onChange={e => setRecoveryWitness(e.target.value)}>
@@ -1422,11 +1438,11 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                           </label>
                           <p>Ghi danh mục hàng và tình trạng niêm phong trong ghi chú biên bản.</p>
                         </fieldset>}
-                        {!mismatchRecovery && empty !== null && <Button type="button" variant="outline" disabled={busy || (goodsLeft && !note.trim())}
+                        {!noShowRecovery && empty !== null && <Button type="button" variant="outline" disabled={busy || (goodsLeft && !note.trim())}
                           onClick={() => void run(async () => savePropertyCheck(record, empty, note, await uploadPhotos()))}>
                           {goodsLeft ? 'Lưu ghi chú và thông báo khách dọn kho' : 'Lưu kết quả kiểm tra kho trống'}
                         </Button>}
-                        {goodsLeft && !note.trim() && <p className="text-xs text-stone-600">Nhập mô tả tài sản còn lại vào ô ghi chú bên dưới để lưu.</p>}
+                        {!noShowRecovery && goodsLeft && !note.trim() && <p className="text-xs text-stone-600">Nhập mô tả tài sản còn lại vào ô ghi chú bên dưới để lưu.</p>}
                       </div>
 
                       {/* KHỐI 2: ĐÁNH GIÁ HIỆN TRẠNG, VỆ SINH & HƯ HẠI */}
@@ -1489,7 +1505,9 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                             </label>
                             <p className="text-xs">Thu hồi: {record.equipment.palletCount - missingPalletCount} / {record.equipment.palletCount} tấm. Phí thiếu: {rentalMoney(palletFee, 'VND')}.</p>
                             {missingPalletCount > 0 && !record.equipment.palletUnitPrice && <p className="text-xs text-amber-700">Chưa cấu hình đơn giá bồi thường tấm kê; cần bổ sung trước khi nghiệm thu.</p>}
-                          </> : <p className="text-xs text-amber-700">Hồ sơ chưa có cấu hình thiết bị bàn giao. Cần đối soát số tấm kê trước khi nghiệm thu.</p>}
+                          </> : <p className="text-xs text-amber-700">{noShowRecovery
+                            ? 'Hồ sơ chưa có số tấm kê bàn giao. Ghi thiết bị đếm được trong biên bản.'
+                            : 'Hồ sơ chưa có cấu hình thiết bị bàn giao. Cần đối soát số tấm kê trước khi nghiệm thu.'}</p>}
                         </div>
 
                         {/* Mức độ hư hại */}
@@ -1701,7 +1719,8 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                         <div>
                           <span className="font-semibold text-stone-800 block">Phí thiếu tấm kê đã bàn giao</span>
                           <span className="text-[10px] text-stone-400">{canInspect
-                            ? missingPalletCount > 0 ? `Thiếu ${missingPalletCount} tấm × ${rentalMoney(record.equipment?.palletUnitPrice || 0, 'VND')}` : 'Đã thu hồi đủ tấm kê'
+                            ? missingPalletCount > 0 ? `Thiếu ${missingPalletCount} tấm × ${rentalMoney(record.equipment?.palletUnitPrice || 0, 'VND')}`
+                              : record.equipment?.palletCount == null ? 'Chưa có số tấm kê để đối chiếu' : 'Đã thu hồi đủ tấm kê'
                             : (record.missingPalletCount || 0) > 0 ? `Thiếu ${record.missingPalletCount} tấm kê` : 'Không ghi nhận thiếu tấm kê'}</span>
                         </div>
                         <span className={`font-mono font-bold ${displayedPalletFee > 0 ? 'text-rose-700' : 'text-stone-700'}`}>
@@ -1790,7 +1809,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                       <Button
                         type="submit"
                         variant="primary"
-                        disabled={busy || recoveryIncomplete || (canInspect && (record.equipment?.palletCount == null || (missingPalletCount > 0 && !record.equipment?.palletUnitPrice))) || (canReview && !note.trim()) || missingDamageItems || (canInspect && !hasEvidence) || (canInspect && empty !== true)}
+                        disabled={busy || recoveryIncomplete || (canInspect && ((!noShowRecovery && record.equipment?.palletCount == null) || (missingPalletCount > 0 && !record.equipment?.palletUnitPrice))) || (canReview && !note.trim()) || missingDamageItems || (canInspect && !hasEvidence) || (canInspect && empty !== true)}
                         className="w-full font-bold py-3 text-sm shadow-xs flex items-center justify-center gap-2 cursor-pointer"
                       >
                         <span>{canInspect ? 'Ghi nhận kết quả nghiệm thu' : 'Ghi nhận xem xét khiếu nại'}</span>

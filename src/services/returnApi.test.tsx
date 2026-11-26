@@ -2,8 +2,9 @@ import { CustomerClearance } from '../views/return-api/ReturnClearance'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { setAccessToken, clearAuthTokens } from './apiClient'
-import { setCustomerClearance, completeRefund, recordReturnSettlement, isApiReturn, requestReturn, listReturns, getReturn, inspectReturn, reviewDispute, confirmReturn, paySettlement, returnError, uploadReturnEvidence, type ApiReturn } from './returnApi'
+import { setCustomerClearance, completeRefund, recordReturnSettlement, isApiReturn, requestReturn, listReturns, getReturn, inspectReturn, reviewDispute, confirmReturn, paySettlement, reopenReturnVerification, verifyReturnIdentity, returnError, uploadReturnEvidence, type ApiReturn } from './returnApi'
 import ReturnApiPanel, { ReturnSummary } from '../views/return-api/ReturnApiPanel'
+import ReturnAttendance, { requiresReturnAttendance } from '../views/return-api/ReturnAttendance'
 import { ids, operationsActor } from '../../tests/rentalOperationsApiFixtures'
 import type { ApiActor } from './authApi'
 const state = vi.hoisted(() => ({ actor: null as ApiActor | null }))
@@ -24,6 +25,61 @@ function respond(data: unknown, status = 200) {
 beforeEach(() => { state.actor = operationsActor('customer'); setAccessToken('TEST-token') })
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); clearAuthTokens() })
 describe('real Return transport and unknown settlement presentation', () => {
+  it('shows the arrival photo and CCCD in one verification form', () => {
+    const attendance: NonNullable<ApiReturn['attendance']> = {
+      arrivedAt: null, evidenceId: null, expiresAt: null, attempts: 0,
+      verifiedAt: null, reviewStartsAt: null, reviewAccepted: null,
+    }
+    const pending = { ...record, status: 'scheduled' as const, returnType: 'INVENTORY_MISMATCH' as const, attendance }
+    const render = (item: ApiReturn) => renderToStaticMarkup(<ReturnAttendance record={item} role="staff" editable onChanged={() => {}} />)
+    expect(requiresReturnAttendance(pending)).toBe(true)
+    expect(render(pending)).not.toContain('Ghi nhận khách đã đến')
+    expect(render(pending)).toContain('Số CCCD trên giấy tờ gốc')
+    expect(render(pending)).toContain('Ảnh hiện trường chứng minh khách đã đến')
+    expect(render(pending)).toMatch(/<button(?=[^>]*type="submit")(?=[^>]*disabled="")[^>]*>Xác minh danh tính<\/button>/)
+
+    const arrivedAt = new Date().toISOString()
+    const arrived = { ...pending, attendance: { ...attendance, arrivedAt, evidenceId: ids.file } }
+    expect(render(arrived)).toContain('Số CCCD trên giấy tờ gốc')
+    expect(render(arrived)).not.toContain('Ảnh hiện trường chứng minh khách đã đến')
+    expect(render({ ...arrived, attendance: { ...arrived.attendance, verifiedAt: arrivedAt } })).toContain('Đã xác minh danh tính')
+    expect(requiresReturnAttendance({ ...pending, status: 'recovery_required' })).toBe(false)
+  })
+
+  it('sends initial arrival evidence directly to the identity endpoint', async () => {
+    const staff = operationsActor('staff')
+    state.actor = { ...staff, permissions: [...staff.permissions, 'returns:read', 'returns:process'] }
+    const fetch = respond({ data: record })
+    await verifyReturnIdentity(record.id, ids.event, 'TEST99999', undefined, ids.file)
+    expect(fetch.mock.calls[0][0]).toContain(`/api/staff/returns/${record.id}/identity`)
+    expect(JSON.parse(fetch.mock.calls[0][1].body).evidenceId).toBe(ids.file)
+  })
+
+  it('allows the manager to reopen a failed verification once and lets staff submit against that session', async () => {
+    const attendance: NonNullable<ApiReturn['attendance']> = {
+      arrivedAt: '2026-10-20T01:00:00Z', expiresAt: '2026-10-20T01:30:00Z', evidenceId: ids.event,
+      attempts: 2, verifiedAt: null, reviewStartsAt: new Date(Date.now() - 60_000).toISOString(), reviewAccepted: null,
+    }
+    const waiting = { ...record, status: 'scheduled' as const, attendance }
+    const manager = operationsActor('manager')
+    state.actor = { ...manager, permissions: [...manager.permissions, 'returns:read'] }
+    const managerHtml = renderToStaticMarkup(<ReturnAttendance record={waiting} role="manager" editable onChanged={() => {}} />)
+    expect(managerHtml).toContain('Mở lại phiên xác minh')
+    const session = '2026-10-20T02:00:00.123456Z'
+    const updated = { ...waiting, attendance: { ...attendance, reverificationStartedAt: session } }
+    const managerFetch = respond({ data: updated })
+    await reopenReturnVerification(record.id, ids.staff, 'Khách có giấy tờ gốc')
+    expect(managerFetch.mock.calls[0][0]).toContain(`/api/manager/returns/${record.id}/identity-reopen`)
+    expect(renderToStaticMarkup(<ReturnAttendance record={updated} role="manager" editable onChanged={() => {}} />))
+      .not.toContain('Mở lại phiên xác minh')
+
+    const staff = operationsActor('staff')
+    state.actor = { ...staff, permissions: [...staff.permissions, 'returns:read', 'returns:process'] }
+    const staffFetch = respond({ data: updated })
+    await verifyReturnIdentity(record.id, ids.event, 'TEST99999', session)
+    expect(JSON.parse(staffFetch.mock.calls[0][1].body).reverificationStartedAt).toBe(session)
+  })
+
   it('accepts and displays the backend inspected state', () => {
     const inspected: ApiReturn = { ...record, status: 'inspected' }
     expect(isApiReturn(inspected)).toBe(true)
