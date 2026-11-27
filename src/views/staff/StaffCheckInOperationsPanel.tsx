@@ -1,3 +1,4 @@
+import ProcessingLeaseBoundary from '../../components/ProcessingLeaseBoundary'
 import StaffRecordDocuments from './StaffRecordDocuments'
 import IntakeWorkflowPanel from '../../components/IntakeWorkflowPanel'
 import HandoverEvidenceRow from './HandoverEvidenceRow'
@@ -8,7 +9,6 @@ import { PACKAGING_METHOD_OPTIONS } from '../../domain/packagingMethods'
 import InventoryFieldDifference from './InventoryFieldDifference'
 import InventoryResultNotice from './InventoryResultNotice'
 import { getGoodsCatalog, type GoodsCatalog } from '../../services/customerReservationApi'
-import ProcessingLeaseBoundary from '../../components/ProcessingLeaseBoundary'
 import { validateCccd, normalizeCccd, maskCccd } from '../../domain/cccd'
 import { normalizeRentalIdentity, validateRentalIdentity } from '../../domain/rentalIdentity'
 import StaffInventoryVisitPanel from './StaffInventoryVisitPanel'
@@ -71,6 +71,7 @@ import {
 
 import {
   extractStaffFieldErrors,
+  formatStaffDate,
   formatStaffDateTime,
   parseEmptyStorageHandover,
   inventoryReportNote,
@@ -2134,7 +2135,7 @@ export default function StaffCheckInOperationsPanel({
   }
 
   const workflowForm = handoverTarget && (
-          <ProcessingLeaseBoundary target="CHECK_IN" id={handoverTarget.checkInId!} enabled={!!handoverTarget.checkInId && handoverTarget.checkInStatus !== 'completed'} onAcquired={async () => {
+          <ProcessingLeaseBoundary target="CHECK_IN" id={handoverTarget.checkInId!} enabled={!!handoverTarget.checkInId && !awaitngCustomerTransition && handoverTarget.checkInStatus !== 'completed'} onAcquired={async () => {
             const response = await listCheckIns({ page: 0, pageSize: 100, q: handoverTarget.reservationCode })
             const latest = response.data.find(item => item.checkInId === handoverTarget.checkInId)
             if (!latest) throw new Error('Không còn tìm thấy hồ sơ bàn giao. Đóng cửa sổ và tải lại danh sách.')
@@ -2623,7 +2624,7 @@ export default function StaffCheckInOperationsPanel({
                     </div>
                     <div className="rounded-lg border border-violet-200 bg-white p-3">
                       <span className="text-stone-500">Tính cước kỳ thuê từ:</span>
-                      <p className="font-bold text-stone-900 mt-0.5">{handoverTarget.paidRentalStartsOn || `Bàn giao + ${handoverTarget.freeSetupDays} ngày`}</p>
+                      <p className="font-bold text-stone-900 mt-0.5">{handoverTarget.paidRentalStartsOn ? formatStaffDate(handoverTarget.paidRentalStartsOn) : `Bàn giao + ${handoverTarget.freeSetupDays} ngày`}</p>
                     </div>
                   </div>
                   <div className="mt-3 rounded-xl border border-stone-200 bg-white p-4 text-sm text-stone-700 space-y-2">
@@ -2662,7 +2663,7 @@ export default function StaffCheckInOperationsPanel({
                         </div>
                         <div className="rounded-lg border border-violet-200 bg-white p-3">
                           <span className="text-stone-500">Tính cước kỳ thuê từ:</span>
-                          <p className="font-bold text-stone-900 mt-0.5">{handoverTarget.paidRentalStartsOn || `Bàn giao + ${handoverTarget.freeSetupDays} ngày`}</p>
+                          <p className="font-bold text-stone-900 mt-0.5">{handoverTarget.paidRentalStartsOn ? formatStaffDate(handoverTarget.paidRentalStartsOn) : `Bàn giao + ${handoverTarget.freeSetupDays} ngày`}</p>
                         </div>
                       </div>
                     </div>
@@ -2691,7 +2692,7 @@ export default function StaffCheckInOperationsPanel({
                         </div>
                         <div className="rounded-lg border border-emerald-200 bg-white p-3">
                           <span className="text-stone-500">Tính cước kỳ thuê từ:</span>
-                          <p className="font-bold text-stone-900 mt-0.5">{handoverTarget.paidRentalStartsOn || `Bàn giao + ${handoverTarget.freeSetupDays} ngày`}</p>
+                          <p className="font-bold text-stone-900 mt-0.5">{handoverTarget.paidRentalStartsOn ? formatStaffDate(handoverTarget.paidRentalStartsOn) : `Bàn giao + ${handoverTarget.freeSetupDays} ngày`}</p>
                         </div>
                       </div>
                     </div>
