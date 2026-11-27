@@ -6,7 +6,6 @@ import UnitTypeReviewModal from "./UnitTypeReviewModal"
 import { listFacilityContentPolicies, saveFacilityContentPolicies, type FacilityContentPolicy } from "../../services/facilityContentPolicyApi"
 import BusinessReturnsPanel from "./BusinessReturnsPanel"
 import { ViolationRecoveryPanel } from '../return-api/ViolationRecoveryPanel'
-import BusinessRefundRequestsPanel from "./BusinessRefundRequestsPanel"
 import BusinessDamageIncidentsPanel from "./BusinessDamageIncidentsPanel"
 import CentralizedPolicyWorkspace from "./CentralizedPolicyWorkspace"
 import BusinessRentalRegulationsPanel from "./BusinessRentalRegulationsPanel"
@@ -3721,7 +3720,6 @@ export default function BusinessApp({
               </Button>
             }
           />
-          <BusinessRefundRequestsPanel refreshVersion={returnsRefreshVersion} />
           <BusinessReturnsPanel user={user} refreshVersion={returnsRefreshVersion} />
         </div>
       )}

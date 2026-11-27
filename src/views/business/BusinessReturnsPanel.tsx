@@ -295,9 +295,9 @@ const SAMPLE_RETURNS: Array<{
     returnedLock: true,
     inspectionNotes: 'Thay thế 01 bản lề cửa kho bị xệ. Bàn giao đủ khóa.',
     customerDecisionNote: 'Đã xác nhận quyết toán.',
-    managerResolutionNote: 'Đã hoàn tiền cọc thành công vào tài khoản khách hàng qua cổng VNPay.',
+    managerResolutionNote: 'Đã ghi nhận hoàn tiền cọc bằng chuyển khoản.',
     proposedUnitStatus: 'available',
-    settlementPaymentId: 'VNPAY-REFUND-88992211',
+    settlementPaymentId: 'BANK-REFUND-88992211',
     completedAt: '2026-10-06 14:30:00',
   },
 ]
@@ -554,7 +554,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
     setProposedUnit(item.proposedUnitStatus || 'available')
     setInspectProposedUnit(item.proposedUnitStatus || 'available')
     setResolutionNote(item.managerResolutionNote ?? (useApi ? '' : 'Ban Điều Hành xem xét: Chấp thuận miễn giảm phí vệ sinh cho khách hàng sau khi kiểm tra biên nhận.'))
-    setRefundReference(useApi ? '' : `VNPAY-REFUND-${Date.now().toString().slice(-6)}`)
+    setRefundReference(useApi ? '' : `BANK-REFUND-${Date.now().toString().slice(-6)}`)
     setRefundNotes(useApi ? '' : `Đã chuyển hoàn tiền cọc cho khách hàng ${item.customerName} theo quyết toán thanh lý hợp đồng.`)
     setSetupRefundAmount(item.netRefundAmount || item.depositAmount || 0)
     setSetupRentalRefundAmount(item.earlyTerminationPolicy?.rentalRefundAmount || 0)
@@ -846,7 +846,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
           ? {
               ...r,
               status: 'completed',
-              settlementPaymentId: refundReference.trim() || `VNPAY-REFUND-${Date.now().toString().slice(-6)}`,
+              settlementPaymentId: refundReference.trim() || `BANK-REFUND-${Date.now().toString().slice(-6)}`,
               completedAt: new Date().toLocaleString('vi-VN'),
             }
           : r
@@ -858,7 +858,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
           ? {
               ...prev,
               status: 'completed',
-              settlementPaymentId: refundReference.trim() || `VNPAY-REFUND-${Date.now().toString().slice(-6)}`,
+              settlementPaymentId: refundReference.trim() || `BANK-REFUND-${Date.now().toString().slice(-6)}`,
               completedAt: new Date().toLocaleString('vi-VN'),
             }
           : null

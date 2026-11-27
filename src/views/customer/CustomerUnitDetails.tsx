@@ -172,7 +172,7 @@ export default function CustomerUnitDetails({
       <h4 className="font-bold text-stone-900">3. Quy trình đặt kho và thanh toán</h4>
       <ol className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[
         ['Chọn kho', 'Chọn loại kho phù hợp và kỳ thuê.'],
-        ['Xác nhận hồ sơ', 'Khai báo hàng, nhận báo giá và xác minh email.'],
+        ['Xác nhận hồ sơ', 'Khai báo hàng, nhận báo giá.'],
         ['Thanh toán cọc', 'Duyệt hồ sơ nếu cần. Thanh toán cọc theo báo giá.'],
         ['Nhận kho', 'Quản lý cơ sở phân gian kho. Khách hàng nhận kho và ký hồ sơ.'],
       ].map(([title, description], i) => <li key={title} className="rounded-xl border border-amber-100 bg-white p-4 shadow-sm">

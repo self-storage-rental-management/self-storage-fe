@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { clearAuthTokens, setAccessToken } from './apiClient'
-import { getReturnFeeSchedule, getReturnFeeScheduleForReturn, publishReturnFeeSchedule, type ReturnFeeSchedule } from './returnApi'
+import { getReturnFeeSchedule, getReturnFeeScheduleForRental, getReturnFeeScheduleForReturn, publishReturnFeeSchedule, type ReturnFeeSchedule } from './returnApi'
 
 const returnId = '11111111-1111-4111-8111-111111111111'
 const oldSchedule: ReturnFeeSchedule = {
@@ -52,5 +52,16 @@ describe('versioned return fee transport', () => {
     vi.stubGlobal('fetch', fetch)
     await expect(getReturnFeeScheduleForReturn('../latest')).rejects.toThrow('Mã hồ sơ không hợp lệ.')
     expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('reads the rental-specific version with authentication and rejects invalid rental ids', async () => {
+    setAccessToken('test-token')
+    const fetch = vi.fn().mockResolvedValue(response(oldSchedule))
+    vi.stubGlobal('fetch', fetch)
+    expect(await getReturnFeeScheduleForRental(returnId)).toEqual(oldSchedule)
+    expect(fetch.mock.calls[0][0]).toMatch(new RegExp(`/api/return-fee-schedule/rentals/${returnId}$`))
+    expect(new Headers(fetch.mock.calls[0][1].headers).get('Authorization')).toBe('Bearer test-token')
+    await expect(getReturnFeeScheduleForRental('../latest')).rejects.toThrow()
+    expect(fetch).toHaveBeenCalledTimes(1)
   })
 })
