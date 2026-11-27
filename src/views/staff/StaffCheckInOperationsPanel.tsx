@@ -71,6 +71,7 @@ import {
 
 import {
   extractStaffFieldErrors,
+  formatStaffDate,
   formatStaffDateTime,
   parseEmptyStorageHandover,
   inventoryReportNote,
@@ -2623,7 +2624,7 @@ export default function StaffCheckInOperationsPanel({
                     </div>
                     <div className="rounded-lg border border-violet-200 bg-white p-3">
                       <span className="text-stone-500">Tính cước kỳ thuê từ:</span>
-                      <p className="font-bold text-stone-900 mt-0.5">{handoverTarget.paidRentalStartsOn || `Bàn giao + ${handoverTarget.freeSetupDays} ngày`}</p>
+                      <p className="font-bold text-stone-900 mt-0.5">{handoverTarget.paidRentalStartsOn ? formatStaffDate(handoverTarget.paidRentalStartsOn) : `Bàn giao + ${handoverTarget.freeSetupDays} ngày`}</p>
                     </div>
                   </div>
                   <div className="mt-3 rounded-xl border border-stone-200 bg-white p-4 text-sm text-stone-700 space-y-2">
@@ -2662,7 +2663,7 @@ export default function StaffCheckInOperationsPanel({
                         </div>
                         <div className="rounded-lg border border-violet-200 bg-white p-3">
                           <span className="text-stone-500">Tính cước kỳ thuê từ:</span>
-                          <p className="font-bold text-stone-900 mt-0.5">{handoverTarget.paidRentalStartsOn || `Bàn giao + ${handoverTarget.freeSetupDays} ngày`}</p>
+                          <p className="font-bold text-stone-900 mt-0.5">{handoverTarget.paidRentalStartsOn ? formatStaffDate(handoverTarget.paidRentalStartsOn) : `Bàn giao + ${handoverTarget.freeSetupDays} ngày`}</p>
                         </div>
                       </div>
                     </div>
@@ -2691,7 +2692,7 @@ export default function StaffCheckInOperationsPanel({
                         </div>
                         <div className="rounded-lg border border-emerald-200 bg-white p-3">
                           <span className="text-stone-500">Tính cước kỳ thuê từ:</span>
-                          <p className="font-bold text-stone-900 mt-0.5">{handoverTarget.paidRentalStartsOn || `Bàn giao + ${handoverTarget.freeSetupDays} ngày`}</p>
+                          <p className="font-bold text-stone-900 mt-0.5">{handoverTarget.paidRentalStartsOn ? formatStaffDate(handoverTarget.paidRentalStartsOn) : `Bàn giao + ${handoverTarget.freeSetupDays} ngày`}</p>
                         </div>
                       </div>
                     </div>

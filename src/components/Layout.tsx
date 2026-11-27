@@ -9,6 +9,7 @@ import { useDisplayPunctuation } from '../presentation/useDisplayPunctuation'
 import { managerDisplayText } from '../views/manager/managerPresentation'
 import { mergeNotificationFeed } from './notificationFeed'
 import { displayRoleNames } from '../presentation/displayText'
+import { businessNotificationText } from '../services/notificationApi'
 
 export interface NavItem {
   id: string
@@ -626,7 +627,7 @@ export default function Layout({
                             : item.message)
                           : item.title === 'BO từ chối thay đổi loại kho' && !item.message.includes('Lý do:')
                             ? item.message.replace(/^([^·]+ · [^·]+) · /, '$1\nLý do: ')
-                            : item.message
+                            : user.role === 'business' ? businessNotificationText(item.message) : item.message
                         )}</span>}
                       {item.date && <span className="mt-1.5 block text-[10px] text-stone-400">{formatNotificationDate(item.date)}</span>}
                     </button>
