@@ -358,7 +358,7 @@ export default function AdminLoginHistoryApiPanel({
     const newStatus: ApiUserStatus = userToLock.isLocked ? 'ACTIVE' : 'SUSPENDED'
     try {
       setActionInProgress(true)
-      await updateAdminUserStatus(userToLock.id, newStatus)
+      await updateAdminUserStatus(userToLock.id, newStatus, userToLock.isLocked ? 'Quản trị viên mở khóa từ màn hình an ninh.' : 'Quản trị viên tạm khóa từ cảnh báo đăng nhập.')
       showToast(userToLock.isLocked ? `Đã mở khóa tài khoản ${userToLock.email}.` : `Đã tạm khóa tài khoản ${userToLock.email}.`)
       setUserToLock(null)
       load(true)

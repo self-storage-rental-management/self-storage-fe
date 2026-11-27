@@ -294,9 +294,43 @@ export async function updateReturnRequest(id: string, scheduledDate: string, not
 export const feeKeys = ['damageFee', 'cleaningFee', 'lostItemFee', 'overdueFee', 'outstandingFee'] as const
 export type ReturnFees = Record<typeof feeKeys[number], number>
 
+export const returnCleaningOptions = [
+  { id: 'clean', label: 'Kho sạch sẽ', fee: 0, desc: 'Đạt chuẩn vệ sinh (0 ₫)' },
+  { id: 'minor', label: 'Cần quét dọn bụi', fee: 100000, desc: 'Bẩn nhẹ (+100.000 ₫)' },
+  { id: 'major', label: 'Cần tổng vệ sinh', fee: 200000, desc: 'Bẩn nặng / Rác (+200.000 ₫)' },
+]
+
+export interface ReturnFeeDetails { label: string; trigger: string; applies: string }
+export interface ReturnFeeSchedule {
+  revision: number
+  prices: Record<string, number>
+  details: Record<string, ReturnFeeDetails>
+  publishedAt?: string | null
+}
+export async function getReturnFeeSchedule(): Promise<ReturnFeeSchedule> {
+  const result = await apiRequest<{ data: ReturnFeeSchedule }>('/api/return-fee-schedule')
+  return result.data
+}
+export async function getReturnFeeScheduleForReturn(returnId: string): Promise<ReturnFeeSchedule> {
+  if (!isUuid(returnId)) throw new Error('Mã hồ sơ không hợp lệ.')
+  const result = await apiRequest<{ data: ReturnFeeSchedule }>(`/api/return-fee-schedule/returns/${returnId}`)
+  return result.data
+}
+export async function getReturnFeeScheduleForRental(rentalId: string): Promise<ReturnFeeSchedule> {
+  if (!isUuid(rentalId)) throw new Error('Mã hồ sơ không hợp lệ.')
+  const result = await apiRequest<{ data: ReturnFeeSchedule }>(`/api/return-fee-schedule/rentals/${rentalId}`)
+  return result.data
+}
+export async function publishReturnFeeSchedule(schedule: ReturnFeeSchedule): Promise<ReturnFeeSchedule> {
+  const result = await apiRequest<{ data: ReturnFeeSchedule }>('/api/return-fee-schedule', { method: 'PUT', body: JSON.stringify(schedule) })
+  return result.data
+}
+
 export interface DamagePricingItem {
   code: string
   label: string
+  trigger?: string
+  applies?: string
   category: 'minor' | 'major'
   unit: string
   suggestedMin: number
@@ -323,10 +357,30 @@ export const returnDamageCatalog: DamagePricingItem[] = [
   { code: 'major_unusable_door', label: 'Cửa kho không thể sử dụng', category: 'major', unit: 'cái', suggestedMin: 1500000, suggestedMax: 4000000, unitPrice: 2750000 },
 ]
 
+// Descriptions are display metadata; fee codes continue to drive inspection rules.
+export const returnFeeRows = [
+  ...returnCleaningOptions.map(option => ({
+    code: option.id, price: option.fee, unit: '',
+    label: option.label,
+    trigger: option.id === 'clean' ? 'Kho đạt chuẩn vệ sinh' : option.id === 'minor' ? 'Bẩn nhẹ' : 'Bẩn nặng hoặc còn rác',
+    applies: 'Nghiệm thu trả kho',
+  })),
+  ...returnDamageCatalog.map(item => ({
+    code: item.code, price: item.unitPrice, unit: item.unit, label: item.label,
+    trigger: `Hư hỏng ${item.category === 'minor' ? 'nhẹ' : 'nặng'} được ghi nhận khi nghiệm thu; tính theo số lượng thực tế.`,
+    applies: 'Nghiệm thu trả kho',
+  })),
+]
+
+export function getReturnFeeDetails(schedule: ReturnFeeSchedule | null, code: string): ReturnFeeDetails {
+  return schedule?.details?.[code] ?? returnFeeRows.find(row => row.code === code)
+    ?? { label: code, trigger: '', applies: '' }
+}
+
 export interface DamageItemInput { code: string; quantity: number }
-export function calculateDamageFee(items: DamageItemInput[]): number {
+export function calculateDamageFee(items: DamageItemInput[], catalog = returnDamageCatalog): number {
   return Math.round(items.reduce((sum, item) => {
-    const price = returnDamageCatalog.find((entry) => entry.code === item.code)
+    const price = catalog.find((entry) => entry.code === item.code)
     return sum + (price ? price.unitPrice * Math.max(0, Number(item.quantity) || 0) : 0)
   }, 0))
 }
@@ -410,15 +464,7 @@ export function inspectReturn(id: string, body: InspectionInput, clearanceRevisi
     })))) throw new Error('Kiểm tra thông tin nghiệm thu.')
   return mutate('staff', id, clearanceRevision == null ? 'inspection' : `inspection?clearanceRevision=${clearanceRevision}`, { ...safeBody, inspectionNotes: body.staffNotes })
 }
-export async function completeRefund(id: string, body: {
-  transactionReference?: string
-  notes?: string
-  receiptFileId?: string
-  paymentMethod?: 'CASH' | 'BANK_TRANSFER' | 'VNPAY'
-  originalPaymentId?: string
-  amount?: number
-  confirmed?: boolean
-} = {}) {
+export async function completeRefund(id: string, body: ReturnSettlementReceipt & { notes?: string }) {
   const business = getAuthenticatedActor()?.roles.includes('BUSINESS') === true
   const role: ReturnRole = business ? 'business' : 'staff'
   const a = actor(role, true)
@@ -426,11 +472,10 @@ export async function completeRefund(id: string, body: {
     throw new ApiClientError('Bạn chưa có quyền thực hiện hoàn tiền.', { status: 403 })
   }
   if (!isUuid(id)) throw new Error('Mã hồ sơ hoặc giao dịch gốc hoàn tiền không hợp lệ.')
+  validateReturnSettlementReceipt(body)
   const safeBody = {
-    paymentMethod: body.paymentMethod || 'BANK_TRANSFER',
-    notes: body.notes || 'Xác nhận hoàn tất nghĩa vụ tài chính và đóng hồ sơ trả kho',
-    confirmed: true,
     ...body,
+    notes: body.notes || 'Xác nhận hoàn tất nghĩa vụ tài chính và đóng hồ sơ trả kho',
     transactionReference: body.paymentMethod === 'CASH' ? undefined : body.transactionReference?.trim(),
   }
   return bound(await apiRequest(`/api/${role}/returns/${id}/complete-refund`, {

@@ -1,3 +1,4 @@
+import ProcessingLeaseBoundary from '../../components/ProcessingLeaseBoundary'
 import ReturnAppointment from './ReturnAppointment'
 import { recordDisplayCode, receiptDisplayCode } from '../../utils/recordDisplayCode'
 import { compareReturnQueue } from '../../utils/returnQueueSort'
@@ -7,7 +8,6 @@ import { ViolationRecoveryEntry, ViolationRecoveryPanel } from './ViolationRecov
 import { listMaintenanceStaff } from '../../services/maintenanceApi'
 import { getRental } from '../../services/rentalApi'
 import { getCustomerReservation, extendCustomerInventoryReturnWindow, resolveCustomerInventory } from '../../services/customerReservationApi'
-import ProcessingLeaseBoundary from '../../components/ProcessingLeaseBoundary'
 import ReturnPolicyNotice from '../../components/ReturnPolicyNotice'
 import EmergencyContactsPanel from '../../components/EmergencyContactsPanel'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -39,6 +39,11 @@ import {
   uploadReturnEvidence,
   calculateDamageFee,
   returnDamageCatalog,
+  returnCleaningOptions,
+  getReturnFeeScheduleForReturn,
+  getReturnFeeDetails,
+  type ReturnFeeSchedule,
+  type DamagePricingItem,
   type ApiReturn,
   type DamageItemInput,
   type InspectionInput,
@@ -1147,13 +1152,15 @@ function DamagePricingSelector({
   items,
   onChange,
   disabled,
+  prices,
 }: {
   category: 'minor' | 'major'
   items: DamageItemInput[]
   onChange: (items: DamageItemInput[]) => void
   disabled?: boolean
+  prices: DamagePricingItem[]
 }) {
-  const catalog = returnDamageCatalog.filter((item) => item.category === category)
+  const catalog = prices.filter((item) => item.category === category)
   const addItem = () => {
     const first = catalog[0]
     if (first) onChange([...items, { code: first.code, quantity: 1 }])
@@ -1205,10 +1212,12 @@ function DamagePricingSelector({
               Xóa
             </button>
             <p className="col-span-full -mt-1 text-[10px] text-stone-500">
-              Giá chuẩn: {price ? `${rentalMoney(price.unitPrice, 'VND')} / ${price.unit} (khung ${rentalMoney(price.suggestedMin, 'VND')}–${rentalMoney(price.suggestedMax, 'VND')})` : ''}
+              Giá chuẩn: {price ? `${rentalMoney(price.unitPrice, 'VND')} / ${price.unit}` : ''}
             </p>
+            {price?.trigger && <p className="col-span-full text-[11px] text-stone-500">Điều kiện: {price.trigger}</p>}
+            {price?.applies && <p className="col-span-full text-[11px] text-stone-500">Đối tượng: {price.applies}</p>}
             <p className="col-span-full text-[10px] font-semibold text-stone-800">
-              Tính: {item.quantity || 0} × {price ? rentalMoney(price.unitPrice, 'VND') : '0 ₫'} = {rentalMoney(calculateDamageFee([item]), 'VND')}
+              Tính: {item.quantity || 0} × {price ? rentalMoney(price.unitPrice, 'VND') : '0 ₫'} = {rentalMoney(calculateDamageFee([item], prices), 'VND')}
             </p>
           </div>
         )
@@ -1217,7 +1226,7 @@ function DamagePricingSelector({
         <button type="button" disabled={disabled} onClick={addItem} className="rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-stone-800 hover:bg-stone-50">
           + Thêm hạng mục
         </button>
-        <span className="text-sm font-extrabold text-stone-900">{rentalMoney(calculateDamageFee(items), 'VND')}</span>
+        <span className="text-sm font-extrabold text-stone-900">{rentalMoney(calculateDamageFee(items, prices), 'VND')}</span>
       </div>
     </div>
   )
@@ -1271,6 +1280,18 @@ function LeasedReturnActions(props: Parameters<typeof ReturnActions>[0]) {
 }
 
 function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLocked, onRecoveryChanged }: { role: ReturnRole; record: ApiReturn; run: (work: () => Promise<ApiReturn>) => Promise<void>; busy: boolean; recoveryLocked: boolean; onRecoveryLocked: (locked: boolean) => void; onRecoveryChanged: () => void }) {
+  const [applicableSchedule, setApplicableSchedule] = useState<{ returnId: string; value: ReturnFeeSchedule } | null>(null)
+  const feeSchedule = applicableSchedule?.returnId === record.id ? applicableSchedule.value : null
+  useEffect(() => {
+    setApplicableSchedule(null)
+    if (role !== 'staff') return
+    let active = true
+    getReturnFeeScheduleForReturn(record.id).then(value => { if (active) setApplicableSchedule({ returnId: record.id, value }) }).catch(() => { if (active) setApplicableSchedule(null) })
+    return () => { active = false }
+  }, [role, record.id])
+  const damagePrices = returnDamageCatalog.map(item => ({ ...item, ...getReturnFeeDetails(feeSchedule, item.code), unitPrice: feeSchedule?.prices[item.code] ?? item.unitPrice }))
+  const cleaningOptions = returnCleaningOptions.map(item => ({ ...item, ...getReturnFeeDetails(feeSchedule, item.id), fee: feeSchedule?.prices[item.id] ?? item.fee }))
+  const majorCleaningFee = feeSchedule?.prices.major ?? 200000
   const attendance = record.attendance
   const handoverApproved = attendance?.reviewAccepted === true
   const appointmentAt = attendance?.handoverAppointmentAt
@@ -1293,7 +1314,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
   const [confirmationError, setConfirmationError] = useState('')
   const actor = getAuthenticatedActor()
   const [note, setNote] = useState(record.inspectionNotes || record.staffNotes || '')
-  const [fees, setFees] = useState<ReturnFees>({ damageFee: 0, cleaningFee: 0, lostItemFee: 0, overdueFee: 0, outstandingFee: 0 })
+  const [fees, setFees] = useState<ReturnFees>(() => ({ damageFee: record.damageFee, cleaningFee: record.cleaningFee, lostItemFee: record.lostItemFee, overdueFee: record.overdueFee, outstandingFee: record.outstandingFee }))
   const [damageItems, setDamageItems] = useState<DamageItemInput[]>([])
   const [empty, setEmpty] = useState<boolean | null>(record.warehouseEmptyVerified === false ? false : null)
   const goodsLeft = empty === false
@@ -1329,7 +1350,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
   }
 
   const handleCleaningChange = (fee: number) => {
-    if (goodsLeft) fee = 200000
+    if (goodsLeft) fee = majorCleaningFee
     setFees((f) => ({ ...f, cleaningFee: fee }))
     if (fee > 0) {
       setUnit('maintenance')
@@ -1386,6 +1407,9 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
     return evidencePhotos
   }
   const submitInspection = async () => {
+    if (!feeSchedule) throw new Error('Không tải được biểu phí trả kho. Vui lòng tải lại trang.')
+    const applicable = await getReturnFeeScheduleForReturn(id)
+    if (applicable.revision !== feeSchedule.revision) throw new Error('Biểu phí áp dụng cho đơn đã thay đổi. Vui lòng tải lại trang trước khi nghiệm thu.')
     if (recoveryIncomplete) throw new Error('Cần ghi danh mục hàng, tình trạng niêm phong, nhân chứng và thông tin lưu tạm.')
     if (empty !== true) throw new Error('Vui lòng xác minh gian kho đã trống hoàn toàn.')
     if (!hasEvidence) throw new Error('Cần ít nhất một ảnh hiện trường để hoàn tất nghiệm thu.')
@@ -1394,7 +1418,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       ...sanitizeFees(fees),
       missingPalletCount,
       lostItemFee: (returnedLock ? 0 : 150000) + palletFee,
-      damageFee: calculateDamageFee(damageItems),
+      damageFee: calculateDamageFee(damageItems, damagePrices),
       damageItems,
       inventoryMatch: missingPalletCount > 0 ? 'missing' : 'match',
       damageClassification: goodsLeft ? 'abandoned_goods' : damage,
@@ -1489,7 +1513,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       {/* ─── OPTION 1: MODERN 2-COLUMN INSPECTION & LIVE SETTLEMENT ─── */}
       {(canInspect || canReview) && (() => {
         const deposit = record.depositAmount ?? 0
-        const calculatedDamage = canInspect ? calculateDamageFee(damageItems) : fees.damageFee
+        const calculatedDamage = canInspect ? calculateDamageFee(damageItems, damagePrices) : fees.damageFee
         const effectiveFees = { ...fees, damageFee: calculatedDamage, lostItemFee: fees.lostItemFee + (canInspect ? palletFee : 0) }
         const displayedPalletFee = canInspect ? palletFee : (record.palletLossFee || 0)
         const displayedLockFee = Math.max(0, effectiveFees.lostItemFee - displayedPalletFee)
@@ -1633,17 +1657,13 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                             )}
                           </div>
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                            {[
-                              { id: 'clean', label: 'Kho sạch sẽ', fee: 0, desc: 'Đạt chuẩn vệ sinh (0 ₫)' },
-                              { id: 'minor', label: 'Cần quét dọn bụi', fee: 100000, desc: 'Bẩn nhẹ (+100.000 ₫)' },
-                              { id: 'major', label: 'Cần tổng vệ sinh', fee: 200000, desc: 'Bẩn nặng / Rác (+200.000 ₫)' },
-                            ].map((opt) => {
+                            {cleaningOptions.map((opt) => {
                               const active = fees.cleaningFee === opt.fee
                               return (
                                 <button
                                   key={opt.id}
                                   type="button"
-                                  disabled={busy || (goodsLeft && opt.fee !== 200000)}
+                                  disabled={busy || !feeSchedule || (goodsLeft && opt.id !== 'major')}
                                   onClick={() => handleCleaningChange(opt.fee)}
                                   className={`rounded-xl border p-2.5 text-center transition cursor-pointer select-none ${
                                     active
@@ -1652,7 +1672,9 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                                   }`}
                                 >
                                   <div className="text-xs font-bold mt-0.5">{opt.label}</div>
-                                  <div className={`text-[10px] mt-0.5 ${active ? 'text-stone-600' : 'text-stone-400'}`}>{opt.desc}</div>
+                                  <div className={`text-[10px] mt-0.5 ${active ? 'text-stone-600' : 'text-stone-400'}`}>{rentalMoney(opt.fee, 'VND')}</div>
+                                  <div className="mt-1 text-[11px] font-normal">Điều kiện: {opt.trigger}</div>
+                                  <div className="mt-1 text-[11px] font-normal">Đối tượng: {opt.applies}</div>
                                 </button>
                               )
                             })}
@@ -1860,7 +1882,8 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                           category={damage === 'major_damage' ? 'major' : 'minor'}
                           items={damageItems}
                           onChange={setDamageItems}
-                          disabled={busy}
+                          disabled={busy || !feeSchedule}
+                          prices={damagePrices}
                         />
                       ) : (
                         <div className="rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs text-stone-600 flex items-center justify-between">
@@ -1899,7 +1922,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                       <div className="rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs text-stone-600 flex items-center justify-between">
                         <div>
                           <span className="font-semibold text-stone-800 block">Phí vệ sinh gian kho</span>
-                          <span className="text-[10px] text-stone-400">{fees.cleaningFee === 0 ? 'Kho sạch sẽ' : fees.cleaningFee <= 100000 ? 'Bẩn nhẹ' : 'Bẩn nặng / Rác'}</span>
+                          <span className="text-[10px] text-stone-400">{cleaningOptions.find(option => option.fee === fees.cleaningFee)?.label ?? 'Phí vệ sinh đã ghi nhận'}</span>
                         </div>
                         <span className={`font-mono font-bold ${fees.cleaningFee > 0 ? 'text-rose-700' : 'text-stone-700'}`}>
                           {fees.cleaningFee > 0 ? `− ${rentalMoney(fees.cleaningFee, 'VND')}` : '0 ₫'}
@@ -1968,6 +1991,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
 
                     {/* Nút hành động chính */}
                     <div className="space-y-2 pt-1">
+                      {canInspect && !feeSchedule && <p role="status" className="text-xs text-amber-900">Chưa tải được biểu phí áp dụng cho đơn này. Nếu tình trạng kéo dài, vui lòng tải lại trang trước khi nghiệm thu.</p>}
                       {canInspect && !hasEvidence && (
                         <p className="rounded-xl border border-amber-200 bg-amber-50 p-2 text-center text-xs text-amber-900 font-semibold">
                           Cần tải lên ít nhất 1 ảnh hiện trường để làm bằng chứng nghiệm thu.
@@ -1976,7 +2000,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                       <Button
                         type="submit"
                         variant="primary"
-                        disabled={busy || recoveryIncomplete || (canInspect && ((!noShowRecovery && record.equipment?.palletCount == null) || (missingPalletCount > 0 && !record.equipment?.palletUnitPrice))) || (canReview && !note.trim()) || missingDamageItems || (canInspect && !hasEvidence) || (canInspect && empty !== true)}
+                        disabled={busy || recoveryIncomplete || (canInspect && !feeSchedule) || (canInspect && ((!noShowRecovery && record.equipment?.palletCount == null) || (missingPalletCount > 0 && !record.equipment?.palletUnitPrice))) || (canReview && !note.trim()) || missingDamageItems || (canInspect && !hasEvidence) || (canInspect && empty !== true)}
                         className="w-full font-bold py-3 text-sm shadow-xs flex items-center justify-center gap-2 cursor-pointer"
                       >
                         <span>{canInspect ? 'Ghi nhận kết quả nghiệm thu' : 'Ghi nhận xem xét khiếu nại'}</span>
