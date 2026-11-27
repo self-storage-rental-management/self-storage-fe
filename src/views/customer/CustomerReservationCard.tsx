@@ -1,4 +1,5 @@
 import InventoryDecisionSummary from '../../components/InventoryDecisionSummary'
+import InventoryGoodsNotice from '../../components/InventoryGoodsNotice'
 import InventoryMismatchEvidence, { parseInventoryInspectionReport } from '../staff/InventoryMismatchEvidence'
 import { intakeDecisionLabels } from '../../services/inventoryDecision'
 import { rentalEndDateForDisplay } from '../../domain/rentalTimeline'
@@ -804,6 +805,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
         {documentGroups.map(group => <section key={group.key} className="space-y-3">
           {group.title && <h3 className="border-b border-stone-200 pb-2 text-sm font-semibold">{group.title}</h3>}
           {group.key === 'inventory' && detail && <>
+            {(inspectionReport || detail.inventoryDecision) && <InventoryGoodsNotice />}
             {detail.inventoryDecision && <InventoryDecisionSummary decision={detail.inventoryDecision} />}
             {inspectionReport && <InventoryMismatchEvidence item={{
               handover: inspectionReport,
