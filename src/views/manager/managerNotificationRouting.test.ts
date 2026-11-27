@@ -10,6 +10,9 @@ describe('manager recovery notification destination', () => {
       expect(managerNotificationPage({ ...notice, title, relatedEntityType: 'VIOLATION_RECOVERY' })).toBe('staff-tasks')
     }
   })
+  it('opens the referenced suspicion report from a system notice', () => {
+    expect(managerNotificationPage({ ...notice, type: 'SYSTEM', title: 'Báo cáo nghi vấn hàng cấm' })).toBe('suspicion-report')
+  })
   it('keeps ordinary return notices on the return workspace', () => {
     expect(managerNotificationPage(notice)).toBe('returns')
   })

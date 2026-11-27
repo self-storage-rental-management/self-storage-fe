@@ -41,6 +41,7 @@ import StaffCredentialReissuePanel from "./StaffCredentialReissuePanel"
 import StaffMaintenanceOperationsPanel from "./StaffMaintenanceOperationsPanel"
 import StaffRenewalOperationsApiPanel from "./StaffRenewalOperationsApiPanel"
 import StaffDailyTaskQueue from "./StaffDailyTaskQueue"
+import StaffFacilityRentals from "./StaffFacilityRentals"
 import RecoveryTaskDetail from "../rental-api/RecoveryTaskDetail"
 import ReturnApiPanel from "../return-api/ReturnApiPanel"
 import {
@@ -867,6 +868,13 @@ export default function StaffApp({
       permission: "reservations:read",
     },
 
+    ...(isApiAuthenticated() ? [{
+      id: "facility-rentals",
+      label: "Hồ sơ thuê",
+      icon: Icon.clipboard,
+      group: "Vận hành",
+      permission: "rentals:read" as const,
+    }] : []),
     {
       id: "return",
 
@@ -2182,6 +2190,7 @@ export default function StaffApp({
     if (type === "OVERDUE") return "dashboard"
     if (type === "PAYMENT") return "checkin"
     if (type === "RESERVATION") return "checkin"
+    if (type === 'SYSTEM' && notification.title === 'Đã gửi báo cáo nghi vấn hàng cấm') return 'facility-rentals'
     if (type === "SYSTEM") return "tasks"
     return "dashboard"
   }
@@ -2956,6 +2965,10 @@ export default function StaffApp({
       {/* ── CHECK-IN / HANDOVER ───────────────────────────────── */}
       {page === "checkin" && <StaffCheckInOperationsPanel showToast={showToast} onOpenReturns={() => setPage("return")} />}
       {page === "credentials" && isApiAuthenticated() && <StaffCredentialReissuePanel showToast={showToast} />}
+
+      {page === "facility-rentals" && isApiAuthenticated() && (
+        <StaffFacilityRentals key={user.id} />
+      )}
 
       {/* ── RETURN INSPECTION ────────────────────────────────── */}
 
