@@ -6,6 +6,9 @@ import { invoiceNumberLabel } from '../customer/paymentLabels'
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { useEffect, useRef, useState } from "react"
 import RenewalRiskNotice from "./RenewalRiskNotice"
+import RentalSuspicionForm from "./RentalSuspicionForm"
+import { apiRequest } from '../../services/apiClient'
+import { useRentalApiResource } from '../../hooks/useRentalApiResource'
 import RentalHandoverFiles from "./RentalHandoverFiles"
 import { Badge, Button, Card, Modal } from "../../components/ui"
 import BookingTransactionReceipt from "./BookingTransactionReceipt"
@@ -108,12 +111,14 @@ export default function RentalDetail({
   role = "customer",
   showTechnicalWarnings = true,
   onRentalStartConfirmed,
+  onSuspicionReportSubmitted,
 }: {
   rental: RentalApiDetail
   onRequest?: (blockedReason?: string) => void
   role?: RentalApiRole
   showTechnicalWarnings?: boolean
   onRentalStartConfirmed?: () => void
+  onSuspicionReportSubmitted?: (reportId: string) => void
 }) {
   const { copy } = useManagerPresentation()
   const [section, setSection] = useState<'documents' | 'payments' | 'inventory'>('documents')
@@ -548,6 +553,9 @@ export default function RentalDetail({
           </div>
         </dl>
       </Card>
+      {role === 'manager' && rental.status === 'active' && onSuspicionReportSubmitted &&
+        getAuthenticatedActor()?.facilityScopes[rental.facility.id] === 'MANAGE' &&
+        <ManagerRentalSuspicionAction rentalId={rental.id} onOpenReport={onSuspicionReportSubmitted} />}
       <RentalHandoverFiles key={`${role}:${rental.id}`} role={role === "manager" ? "manager" : "customer"} id={rental.id} />
       {onRequest && (
         <div className="sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center justify-end gap-3 border-t border-stone-200 bg-white/95 px-1 py-3 backdrop-blur">
@@ -707,4 +715,31 @@ export default function RentalDetail({
       )}
     </div>
   )
+}
+
+function ManagerRentalSuspicionAction({ rentalId, onOpenReport }: {
+  rentalId: string
+  onOpenReport: (id: string) => void
+}) {
+  const actor = getAuthenticatedActor()
+  const [open, setOpen] = useState(false)
+  const reports = useRentalApiResource(JSON.stringify([actor?.id, actor?.facilityScopes, rentalId]), () =>
+    apiRequest<{ data: Array<{ id: string; status: string }> }>(
+      `/api/manager/rentals/${encodeURIComponent(rentalId)}/suspicion-reports`))
+  const unresolved = reports.data?.data.find(report => report.status === 'PENDING_MANAGER' || report.status === 'INVESTIGATING')
+
+  if (reports.loading) return <p role="status" className="text-sm text-stone-600">Đang kiểm tra báo cáo nghi vấn…</p>
+  if (reports.error != null) return <div className="flex flex-wrap items-center gap-2 text-sm text-red-700" role="alert">
+    Không thể kiểm tra báo cáo đang xử lý.
+    <Button variant="outline" size="sm" onClick={reports.refresh}>Thử lại</Button>
+  </div>
+  if (unresolved) return <div className="flex flex-wrap items-center gap-2">
+    <p className="text-sm text-amber-800">Hồ sơ đang có báo cáo nghi vấn chưa xử lý xong.</p>
+    <Button variant="outline" onClick={() => onOpenReport(unresolved.id)}>Xem báo cáo</Button>
+  </div>
+  return <div>
+    <Button variant="outline" aria-expanded={open} aria-controls={open ? 'rental-suspicion-form' : undefined}
+      onClick={() => setOpen(value => !value)}>Tạo báo cáo nghi vấn hàng cấm</Button>
+    {open && <RentalSuspicionForm rentalId={rentalId} role="manager" onSubmitted={onOpenReport} />}
+  </div>
 }
