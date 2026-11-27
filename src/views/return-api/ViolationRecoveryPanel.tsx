@@ -72,6 +72,7 @@ type Entry = {
   managerRespondedAt?: string | null
   customerAttachmentIds?: string[]
   managerAttachmentIds?: string[]
+  inventoryEvidenceIds?: string[]
   communications?: CommunicationEntry[]
   actions: Action[]
 }
@@ -859,6 +860,10 @@ export function RecoveryDetails({ entry, actionArea, actionOpen = false }: { ent
         </>
       )}
       {entry.report && <p className="whitespace-pre-wrap break-words">Biên bản · {displayRoleNames(entry.report)}</p>}
+      {!!entry.inventoryEvidenceIds?.length && <section className="space-y-2 border-t border-stone-200 pt-2">
+        <p className="text-xs font-semibold text-stone-700">Bằng chứng hàng cấm khi kiểm kê</p>
+        <div className="grid gap-2 sm:grid-cols-3">{entry.inventoryEvidenceIds.map((id, index) => <EvidenceImagePreview key={id} id={id} label={`Bằng chứng kiểm kê ${index + 1}`} />)}</div>
+      </section>}
       {entry.attendanceEvidenceId && <div className="space-y-2 border-t border-stone-200 pt-2">
         <p className="text-xs font-semibold text-stone-700">Ghi nhận khách đến hoặc vắng mặt</p>
         <div className="grid gap-2 sm:grid-cols-3"><EvidenceImagePreview id={entry.attendanceEvidenceId}
@@ -1048,7 +1053,7 @@ export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, man
         {entry.financePending && <p className="recovery-item-notice">Đang chờ đối soát cọc hoặc công nợ.</p>}
         <div className="recovery-case-footer">
           <p className="recovery-next-step">
-            {entry.stage === 'AWAITING_ASSIGNMENT' ? 'Cần phân công nhân viên' :
+            {entry.stage === 'AWAITING_ASSIGNMENT' ? 'Đang chờ quản lý phân công nhân viên thu hồi' :
               entry.stage === 'AWAITING_ACCEPTANCE' || entry.stage === 'AWAITING_ATTENDANCE' ? 'Thực hiện thu hồi theo lịch đã thông báo' :
               entry.stage === 'BLOCKED' ? 'Đang tạm dừng, chờ quản lý xử lý' : ''}
             {!closed && currentDueAt && <span>{deadlineLabels[entry.stage] || 'Hạn hoàn tất'}: {dateLabel(currentDueAt)}</span>}

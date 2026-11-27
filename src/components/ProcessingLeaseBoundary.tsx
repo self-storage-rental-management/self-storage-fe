@@ -56,7 +56,7 @@ export default function ProcessingLeaseBoundary({ target, id, enabled = true, on
       try {
         const result = (await apiRequest<{ data: ProcessingView }>(url + '/acquire', { method: 'POST', body: JSON.stringify({ token: current.token, reclaimSameOwner: reclaimRequested.current }) })).data
         if (current.stopped) {
-          if (result.owned) void apiRequest(url + '/release', { method: 'POST', body: JSON.stringify({ token: current.token }) }).catch(() => {})
+          if (result.owned) void apiRequest(url + '/release', { method: 'POST', body: JSON.stringify({ token: current.token, reclaimSameOwner: false }) }).catch(() => {})
           return
         }
         setView(result)
@@ -89,7 +89,7 @@ export default function ProcessingLeaseBoundary({ target, id, enabled = true, on
       if (current.stopped || document.hidden || !current.lease || current.lease.invalid || !readyRef.current) return
       if (Date.now() - lastActivity.current > 10 * 60_000) { setIdle(true); return }
       try {
-        const result = (await apiRequest<{ data: ProcessingView }>(url + '/heartbeat', { method: 'POST', body: JSON.stringify({ token: current.token }) })).data
+        const result = (await apiRequest<{ data: ProcessingView }>(url + '/heartbeat', { method: 'POST', body: JSON.stringify({ token: current.token, reclaimSameOwner: false }) })).data
         if (current.stopped) return
         if (current.lease.invalid || current.lease.inFlight || result.revision < current.lease.view.revision) return
         if (result.revision !== current.lease.view.revision || result.sourceStamp !== current.lease.view.sourceStamp) {
@@ -112,7 +112,7 @@ export default function ProcessingLeaseBoundary({ target, id, enabled = true, on
     const onActivity = () => markActivity()
     const onPageHide = () => {
       if (current.lease) void apiRequest(url + '/release', {
-        method: 'POST', body: JSON.stringify({ token: current.token }), keepalive: true,
+        method: 'POST', body: JSON.stringify({ token: current.token, reclaimSameOwner: false }), keepalive: true,
       }).catch(() => {})
     }
     window.addEventListener('pagehide', onPageHide)
@@ -149,7 +149,7 @@ export default function ProcessingLeaseBoundary({ target, id, enabled = true, on
       unwatch()
       forgetProcessingLease(target, id, current.token)
       // A write already in flight owns the DB lock. Release is serialized behind it.
-      if (current.lease) void apiRequest(url + '/release', { method: 'POST', body: JSON.stringify({ token: current.token }), keepalive: true }).catch(() => {})
+      if (current.lease) void apiRequest(url + '/release', { method: 'POST', body: JSON.stringify({ token: current.token, reclaimSameOwner: false }), keepalive: true }).catch(() => {})
     }
   }, [active, target, id, actorId, url, attempt])
 
@@ -160,7 +160,7 @@ export default function ProcessingLeaseBoundary({ target, id, enabled = true, on
     if (!current || current.lease?.inFlight) return
     setPending(true); setReady(false)
     try {
-      const result = (await apiRequest<{ data: ProcessingView }>(url + '/release', { method: 'POST', body: JSON.stringify({ token: current.token }) })).data
+      const result = (await apiRequest<{ data: ProcessingView }>(url + '/release', { method: 'POST', body: JSON.stringify({ token: current.token, reclaimSameOwner: false }) })).data
       if (current.lease) invalidateProcessing(current.lease)
       forgetProcessingLease(target, id, current.token)
       current.lease = undefined

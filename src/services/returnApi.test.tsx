@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { setAccessToken, clearAuthTokens } from './apiClient'
 import { setCustomerClearance, completeRefund, recordReturnSettlement, isApiReturn, requestReturn, listReturns, getReturn, inspectReturn, reviewDispute, confirmReturn, paySettlement, reopenReturnVerification, verifyReturnIdentity, scheduleMismatchReturnAppointment, extendMismatchReturnWindow, recordReturnArrival, reviewReturnArrival, returnError, uploadReturnEvidence, type ApiReturn } from './returnApi'
-import ReturnApiPanel, { ReturnSummary } from '../views/return-api/ReturnApiPanel'
+import ReturnApiPanel, { ReturnSummary, SettlementCalculationBreakdown, mismatchRentalUsageFee } from '../views/return-api/ReturnApiPanel'
 import ReturnAttendance, { requiresReturnAttendance } from '../views/return-api/ReturnAttendance'
 import { ids, operationsActor } from '../../tests/rentalOperationsApiFixtures'
 import type { ApiActor } from './authApi'
@@ -32,6 +32,24 @@ beforeEach(() => {
 })
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); clearAuthTokens() })
 describe('real Return transport and unknown settlement presentation', () => {
+  it('separates inventory-mismatch rental usage from inspection fees without double-counting pallets', () => {
+    expect(mismatchRentalUsageFee({ ...record, returnType: 'INVENTORY_MISMATCH', damageFee: 1000000,
+      cleaningFee: 100000, lostItemFee: 0, totalDeductions: 1600000 })).toBe(500000)
+    expect(mismatchRentalUsageFee({ ...record, returnType: 'INVENTORY_MISMATCH', damageFee: 1000000,
+      cleaningFee: 100000, lostItemFee: 300000, totalDeductions: 1900000 })).toBe(500000)
+    expect(mismatchRentalUsageFee({ ...record, returnType: 'NORMAL', totalDeductions: 1600000 })).toBe(0)
+  })
+  it('deducts inspection charges from deposit and daily usage from prepaid rent for mismatch returns', () => {
+    const item: ApiReturn = { ...record, returnType: 'INVENTORY_MISMATCH', damageFee: 1000000,
+      cleaningFee: 100000, lostItemFee: 0, totalDeductions: 1600000, depositAmount: 2000000,
+      rentalRefundCredit: 85500000, netRefundAmount: 85900000 }
+    const html = renderToStaticMarkup(<SettlementCalculationBreakdown record={item} />)
+    expect(html).toContain('1.100.000')
+    expect(html).toContain('900.000')
+    expect(html).toContain('85.000.000')
+    expect(html).toContain('85.900.000')
+    expect(html).not.toContain('khác số tính lại')
+  })
   it('explains when an approved handover returns to manager review', () => {
     const overdue = new Date(Date.now() - 60_000).toISOString()
     const item: ApiReturn = {

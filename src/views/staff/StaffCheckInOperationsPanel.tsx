@@ -28,8 +28,8 @@ import {
   getInventoryDraft,
   saveInventoryDraft,
   prepareInventoryResolution,
+  transferProhibitedGoods,
   resolveInventoryAtSite,
-  submitInventoryRefusal,
   confirmCheckInPayment,
   downloadCheckInEvidence,
   listStaffAccessCredentials,
@@ -765,6 +765,12 @@ export default function StaffCheckInOperationsPanel({
   const [varianceAccepted, setVarianceAccepted] = useState(false)
 
   const [varianceReason, setVarianceReason] = useState("")
+  const [prohibitedGoods, setProhibitedGoods] = useState(false)
+  const [prohibitedFiles, setProhibitedFiles] = useState<File[]>([])
+  const [prohibitedError, setProhibitedError] = useState<string | null>(null)
+  const [prohibitedName, setProhibitedName] = useState("")
+  const [prohibitedDescription, setProhibitedDescription] = useState("")
+  const [prohibitedConfirmed, setProhibitedConfirmed] = useState(false)
 
   const [measurementChecks, setMeasurementChecks] = useState(emptyMeasurementChecks)
 
@@ -1528,6 +1534,29 @@ export default function StaffCheckInOperationsPanel({
     finally { inventoryCommandLock.current = false; setSubmitting(false) }
   }
 
+  const submitProhibitedRecovery = async () => {
+    if (!handoverTarget?.checkInId || submitting || inventoryCommandLock.current) return
+    if (!prohibitedName.trim() || !prohibitedDescription.trim() || !prohibitedConfirmed || !prohibitedFiles.length || prohibitedFiles.length > 10) {
+      setProhibitedError('Cần nhập tên hàng, căn cứ, từ 1 đến 10 bằng chứng và xác nhận chuyển thu hồi.')
+      return
+    }
+    inventoryCommandLock.current = true
+    setSubmitting(true); setProhibitedError(null)
+    try {
+      const ids: string[] = []
+      for (const file of prohibitedFiles) {
+        const asset = await uploadCheckInEvidence(handoverTarget.checkInId, file, 'CHECK_IN', 'bang-chung-hang-cam-kiem-ke', handoverTarget.reservationCode)
+        ids.push(asset.id)
+      }
+      await transferProhibitedGoods(handoverTarget.checkInId, `Hàng hóa: ${prohibitedName.trim()}\nCăn cứ: ${prohibitedDescription.trim()}`, ids)
+      setProhibitedGoods(false)
+      setHandoverTarget(null)
+      refresh()
+      showToast('Đã ghi nhận hàng cấm và chuyển hồ sơ sang thu hồi kho.')
+    } catch (reason) { setProhibitedError(staffErrorMessage(reason, 'Không thể chuyển hồ sơ sang thu hồi.')) }
+    finally { inventoryCommandLock.current = false; setSubmitting(false) }
+  }
+
   const recordHandoverArrival = async () => {
     if (submitting || !handoverTarget?.checkInId || !needsHandoverArrival) return
     setSubmitting(true)
@@ -1864,6 +1893,12 @@ export default function StaffCheckInOperationsPanel({
     setAdulthoodConfirmed(false)
 
     setEvidenceFiles([])
+    setProhibitedGoods(false)
+    setProhibitedFiles([])
+    setProhibitedError(null)
+    setProhibitedName("")
+    setProhibitedDescription("")
+    setProhibitedConfirmed(false)
 
     setContractFile(null)
     setConfirmedSetupTerms(null)
@@ -2787,8 +2822,15 @@ export default function StaffCheckInOperationsPanel({
                             {line.weightPerPackageKg != null && ` · ${line.weightPerPackageKg} kg/kiện`}
                           </p></details>
                           <div className="grid gap-3 sm:grid-cols-2">
-                            <div><Select label="Loại hàng hóa *" value={entry.catalogCategoryId || ''} disabled={absent} onChange={event => updateInventoryLine(line, { catalogCategoryId: event.target.value, catalogMaterialId: '' })}>
-                              <option value="">Chọn loại hàng trong danh mục</option>{(inventoryCatalog?.categories ?? []).map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                            <div><Select label="Loại hàng hóa *" value={entry.catalogCategoryId || ''} disabled={absent} onChange={event => {
+                              if (event.target.value === '__prohibited_goods__') {
+                                setProhibitedError(null)
+                                setProhibitedGoods(true)
+                                return
+                              }
+                              updateInventoryLine(line, { catalogCategoryId: event.target.value, catalogMaterialId: '' })
+                            }}>
+                              <option value="">Chọn loại hàng trong danh mục</option>{(inventoryCatalog?.categories ?? []).map(c => <option key={c.id} value={c.id}>{c.label}</option>)}<option value="__prohibited_goods__">Hàng hóa không được cho phép lưu trữ</option>
                             </Select><InventoryFieldDifference actual={entry.catalogCategoryId} declared={line.catalogCategoryId} declaredLabel={line.categoryName || line.name || "Loại hàng đã khai"} disabled={absent} />{fieldErrors[`${errorKey}-category`] && <p className="text-xs text-red-700">{fieldErrors[`${errorKey}-category`]}</p>}</div>
                             {!actualCategory?.custom && <div><Select label="Chất liệu chính" value={entry.catalogMaterialId || ''} disabled={absent || !actualCategory} onChange={event => updateInventoryLine(line, { catalogMaterialId: event.target.value })}>
                               <option value="">Chọn chất liệu hoặc không áp dụng</option>{actualCategory?.materials.filter(m => m.status === 'ACTIVE').map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
@@ -3150,6 +3192,9 @@ export default function StaffCheckInOperationsPanel({
                         {handoverTarget?.inventoryMismatchSummary && handoverTarget.inventoryResolutionStatus && handoverTarget.inventoryResolutionStatus !== "NOT_STARTED" && <p className="mt-3 border-t border-black/10 pt-3 text-xs text-stone-700"><b>Kết quả lần kiểm kê gần nhất:</b> {handoverTarget.inventoryMismatchSummary}</p>}
                       </section>
                     )}
+                </>}
+                {!isReviewingCompletedStep && !lineInventory && <Button variant="outline" disabled={submitting} onClick={() => { setProhibitedError(null); setProhibitedGoods(true) }}>Ghi nhận hàng hóa không được phép lưu trữ</Button>}
+                {lineInventory && !isReviewingCompletedStep && <>
                     <label className={`flex items-start gap-3 rounded-xl border p-4 text-sm text-amber-950 ${fieldErrors.inventoryReview ? "border-red-400 bg-red-50" : "border-amber-300 bg-amber-50"}`}>
                       <input type="checkbox" className="mt-1" checked={inventoryReviewConfirmed} disabled={submitting || isReviewingCompletedStep || !inventoryLinesComplete} onChange={event => { clearFieldError("inventoryReview"); setConfirmedInventoryReview(event.target.checked ? inventoryReviewKey : null) }} />
                       <span><b>Xác nhận hàng hóa kiểm kê</b><span className="mt-1 block">Đã đối chiếu hàng thực tế, các chênh lệch và kết quả sức chứa bên trên. Tôi xác nhận số liệu kiểm kê để tiếp tục gửi kết quả.</span></span>
@@ -3220,19 +3265,6 @@ export default function StaffCheckInOperationsPanel({
             {inventoryMode && inventoryStage === 4 && <InventoryResolutionPanel item={handoverTarget} busy={submitting}
               onOpenReturns={onOpenReturns}
               onPreview={assetId => void previewEvidenceFile(assetId)}
-              onRefusal={async request => {
-                if (!handoverTarget?.checkInId || inventoryCommandLock.current) return
-                inventoryCommandLock.current = true
-                setSubmitting(true)
-                try {
-                  setHandoverTarget(await submitInventoryRefusal(handoverTarget.checkInId, request))
-                  refresh()
-                  showToast('Đã gửi biên bản cho Quản lý xem xét.')
-                } finally {
-                  inventoryCommandLock.current = false
-                  setSubmitting(false)
-                }
-              }}
               onResolve={async request => {
                 if (!handoverTarget?.checkInId || inventoryCommandLock.current) return
                 inventoryCommandLock.current = true; setSubmitting(true)
@@ -3258,7 +3290,7 @@ export default function StaffCheckInOperationsPanel({
                     <>
                       {inventoryStage === 1 && <Button disabled={submitting || Boolean(inventoryBlockedReason) || handoverTarget.checkInStatus === 'setup_in_progress' || !handoverTarget.inventoryVisit?.identityVerifiedAt} onClick={() => advanceInventoryStage(2)}>Tiếp tục kiểm kê hàng hóa</Button>}
                       {inventoryStage === 2 && inventoryStageReadOnly && <Button onClick={() => advanceInventoryStage(4)}>Xem lại kết quả kiểm kê</Button>}
-                      {inventoryStage === 2 && !inventoryStageReadOnly && <Button disabled={submitting} onClick={() => void submitHandover()}>{submitting ? "Đang lưu kiểm kê…" : "Xác nhận hàng hóa kiểm kê"}</Button>}
+                      {inventoryStage === 2 && !inventoryStageReadOnly && <Button disabled={submitting || prohibitedGoods} onClick={() => void submitHandover()}>{submitting ? "Đang lưu kiểm kê…" : "Xác nhận hàng hóa kiểm kê"}</Button>}
                       {inventoryStage === 3 && !inventoryPublished && <Button disabled={submitting || Boolean(inventoryBlockedReason) || (lineInventory && !inventoryReviewConfirmed)} onClick={() => void continueInventoryResolution()}>{submitting ? "Đang kiểm tra sức chứa…" : "Tiếp tục đến kết quả tiếp nhận"}</Button>}
                       {inventoryStage === 3 && inventoryPublished && <Button onClick={() => advanceInventoryStage(4)}>Xem kết quả tiếp nhận</Button>}
                     </>
@@ -3451,6 +3483,24 @@ export default function StaffCheckInOperationsPanel({
         size="3xl"
       >
         {workflowForm}
+      </Modal>
+
+      <Modal open={Boolean(handoverTarget) && prohibitedGoods} onClose={() => { if (!submitting) { setProhibitedGoods(false); setProhibitedConfirmed(false); setProhibitedFiles([]) } }} title="Ghi nhận hàng hóa không được phép lưu trữ" size="lg">
+        <div className="space-y-4 text-sm">
+          <p>Ghi nhận hàng phát sinh và bằng chứng. Sau khi xác nhận, hồ sơ sẽ chuyển sang quy trình thu hồi kho.</p>
+          <Input label="Tên hàng cấm phát hiện *" value={prohibitedName} maxLength={200} onChange={event => setProhibitedName(event.target.value)} />
+          <label className="block font-medium">Mô tả hàng hóa và căn cứ xác nhận hàng cấm *<textarea className="mt-1 block min-h-20 w-full rounded-lg border border-stone-300 bg-white p-2" maxLength={1700} value={prohibitedDescription} onChange={event => setProhibitedDescription(event.target.value)} /></label>
+          <label className="block font-medium">Bằng chứng (ảnh hoặc PDF, tối đa 10 tệp, 25MB/tệp) *<input className="mt-1 block w-full rounded-lg border border-stone-300 p-2" type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf" onChange={event => {
+            const selected = Array.from(event.target.files || [])
+            setProhibitedError(null)
+            if (selected.length > 10) { setProhibitedError('Chỉ được chọn tối đa 10 tệp bằng chứng.'); event.target.value = ''; setProhibitedFiles([]); return }
+            if (selected.some(file => !validateUploadFile(file, 'kiểm kê', setProhibitedError))) { event.target.value = ''; setProhibitedFiles([]); return }
+            setProhibitedFiles(selected)
+          }} /></label>
+          <label className="flex items-start gap-2"><input type="checkbox" checked={prohibitedConfirmed} onChange={event => setProhibitedConfirmed(event.target.checked)} />Tôi xác nhận hàng cấm đã được kiểm tra và đồng ý chuyển thẳng hồ sơ sang thu hồi kho.</label>
+          {prohibitedError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-red-800">{prohibitedError}</p>}
+          <div className="flex justify-end gap-2"><Button variant="outline" disabled={submitting} onClick={() => { setProhibitedGoods(false); setProhibitedConfirmed(false); setProhibitedFiles([]) }}>Hủy</Button><Button disabled={submitting || Boolean(inventoryBlockedReason)} onClick={() => void submitProhibitedRecovery()}>{submitting ? 'Đang chuyển thu hồi…' : 'Xác nhận chuyển thu hồi kho'}</Button></div>
+        </div>
       </Modal>
 
       <Modal

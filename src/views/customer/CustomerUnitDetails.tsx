@@ -154,12 +154,14 @@ export default function CustomerUnitDetails({
       <h4 className="font-bold text-emerald-900">2. Ưu đãi và báo giá theo kỳ thuê</h4>
       <p className="mt-2 text-sm leading-6 text-stone-700">Chọn kỳ thuê ở bước đặt kho để nhận báo giá chính thức, khoản trả trước 20% (giữ chỗ), tiền thuê còn lại và tiền cọc đảm bảo kho.</p>
       {rentalPackages.length > 0 ? (
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="mt-2.5 grid gap-2 sm:grid-cols-2">
           {rentalPackages.map(item => (
-            <article key={item.code} className="rounded-xl border border-emerald-200 bg-white p-4 text-sm">
+            <article key={item.code} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-white p-2.5 text-xs text-stone-800 shadow-xs">
               <b>{item.name || `Thuê ${item.rentalMonths} tháng`}</b>
-              <p className="mt-1 font-semibold text-emerald-700">Giảm {Math.round(item.discountRate * 100)}% tiền thuê</p>
-              <p className="mt-1 text-xs text-stone-600">Tặng {item.freeSetupDays ?? 0} ngày chuẩn bị miễn phí khi nhận kho</p>
+              <div className="ml-auto flex items-center gap-1.5">
+                {item.discountRate > 0 ? <span className="font-bold text-emerald-700">Giảm {Math.round(item.discountRate * 100)}% tiền thuê</span> : <span className="text-stone-500">Giá gốc</span>}
+                {(item.freeSetupDays ?? 0) > 0 && <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-900">+{item.freeSetupDays} ngày miễn phí</span>}
+              </div>
             </article>
           ))}
         </div>

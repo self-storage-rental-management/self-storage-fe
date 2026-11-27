@@ -812,6 +812,11 @@ export async function prepareInventoryResolution(checkInId: string, expectedRevi
     { method: 'POST', body: JSON.stringify({ expectedRevision }) }))
 }
 
+export async function transferProhibitedGoods(checkInId: string, description: string, evidenceIds: string[]) {
+  return (await apiRequest<{ data: string }>(`/api/staff/check-ins/${encodeURIComponent(checkInId)}/prohibited-goods-recovery`,
+    { method: 'POST', body: JSON.stringify({ description, evidenceIds }) })).data
+}
+
 export const publishInventoryDraft = prepareInventoryResolution
 export type AtSiteInventoryDecision = 'REQUEST_TRANSFER' | 'ACCEPT_FULL' | 'CANCEL_AND_RETURN'
 export async function resolveInventoryAtSite(checkInId: string, request: { decision: AtSiteInventoryDecision; customerPresent: boolean; note?: string; scheduledDate?: string; evidenceReferences?: string[]; resultVersion?: number }) {

@@ -178,19 +178,29 @@ export function ReturnSummary({ record, hideTerminationFee = false, hideHeader =
   )
 }
 
-function SettlementCalculationBreakdown({ record }: { record: ApiReturn }) {
+export function mismatchRentalUsageFee(record: Pick<ApiReturn, 'returnType' | 'totalDeductions' | 'damageFee' | 'cleaningFee' | 'lostItemFee' | 'overdueFee' | 'outstandingFee'>) {
+  if (record.returnType !== 'INVENTORY_MISMATCH') return 0
+  const inspectionFees = feeKeys.reduce((sum, key) => sum + (record[key] || 0), 0)
+  return Math.max(0, (record.totalDeductions ?? 0) - inspectionFees)
+}
+
+export function SettlementCalculationBreakdown({ record }: { record: ApiReturn }) {
   const isMismatch = record.returnType === 'INVENTORY_MISMATCH'
   const mismatchUsedDays = record.earlyTerminationPolicy?.billableSetupDays ?? null
   const deposit = record.depositAmount ?? 0
   const feeValues = [record.damageFee, record.cleaningFee, record.lostItemFee, record.overdueFee, record.outstandingFee]
-  const totalFees = record.totalDeductions ?? feeValues.reduce((sum, value) => sum + (value || 0), 0)
+  const inspectionFees = feeValues.reduce((sum, value) => sum + (value || 0), 0)
+  const totalFees = isMismatch ? inspectionFees : (record.totalDeductions ?? inspectionFees)
+  const usageFee = mismatchRentalUsageFee(record)
   const setupExit = !!record.setupEarlyExit
   const useEarlyPolicy = setupExit || isMismatch
-  const rentalCredit = useEarlyPolicy
+  const rentalCredit = isMismatch
+    ? (record.earlyTerminationPolicy?.rentalRefundAmount ?? Math.max(0, (record.rentalRefundCredit ?? 0) - usageFee))
+    : useEarlyPolicy
     ? (record.earlyTerminationPolicy?.rentalRefundAmount ?? record.rentalRefundCredit ?? 0)
     : (record.activeReturnPolicy?.rentalRefundAmount ?? record.earlyTerminationPolicy?.rentalRefundAmount ?? 0)
   const usedRental = useEarlyPolicy
-    ? (record.earlyTerminationPolicy?.totalRentalCharge ?? record.earlyTerminationFee ?? 0)
+    ? (record.earlyTerminationPolicy?.totalRentalCharge ?? (isMismatch ? usageFee : record.earlyTerminationFee) ?? 0)
     : (record.activeReturnPolicy?.totalRentalCharge ?? record.earlyTerminationPolicy?.totalRentalCharge ?? 0)
   const totalRental = usedRental + rentalCredit
   const activePolicy = record.activeReturnPolicy
@@ -226,8 +236,10 @@ function SettlementCalculationBreakdown({ record }: { record: ApiReturn }) {
   const refundableDeposit = Math.max(0, depositAfterFees)
   const depositShortfall = Math.max(0, -depositAfterFees)
   const rentalRefundAfterOffset = Math.max(0, rentalCredit - depositShortfall)
-  const calculatedRefund = refundableDeposit + rentalRefundAfterOffset
-  const calculatedDue = Math.max(0, depositShortfall - rentalCredit)
+  const calculatedRefund = refundableDeposit + (isMismatch ? rentalCredit : rentalRefundAfterOffset)
+  const calculatedDue = isMismatch
+    ? depositShortfall + Math.max(0, usageFee - (record.rentalRefundCredit ?? totalRental))
+    : Math.max(0, depositShortfall - rentalCredit)
   const storedAmount = record.netRefundAmount ?? null
   const hasDifference = record.status !== 'requested' && storedAmount != null && Math.abs(storedAmount - calculatedRefund) >= 0.01
   const formulaClass = 'mt-1 text-xs font-normal leading-5 text-stone-500'
@@ -290,24 +302,14 @@ function SettlementCalculationBreakdown({ record }: { record: ApiReturn }) {
               <span className="shrink-0 text-right font-mono text-amber-900">{mismatchUsedDays != null ? `${mismatchUsedDays} ngày` : 'Chờ xác nhận'}</span>
             </div>
 
+            <div className="flex justify-between gap-3 rounded-lg bg-amber-50 px-3 py-2 text-sm"><div><p className="font-semibold text-amber-900">Tiền sử dụng kho theo ngày</p><p className="mt-1 text-xs text-amber-800">{monthlyPrice != null && mismatchUsedDays != null && Math.abs(Math.round(monthlyPrice * mismatchUsedDays / 30) - usageFee) <= 1 ? `${rentalMoney(monthlyPrice, 'VND')} × ${mismatchUsedDays} ngày / 30 = ${rentalMoney(usageFee, 'VND')}.` : 'Tính theo đơn giá tháng và số ngày sử dụng thực tế trong báo giá.'} Khoản này được trừ vào tiền thuê đã thanh toán.</p></div><span className="shrink-0 font-semibold text-amber-950">{rentalMoney(usageFee, 'VND')}</span></div>
+
             <div className="flex justify-between gap-4 text-xs sm:text-sm">
               <div>
                 <span className="font-semibold text-stone-800">Tiền thuê theo kỳ đã chốt</span>
                 <p className={formulaClass}>Tổng tiền thuê đã thanh toán theo báo giá.</p>
               </div>
               <span className="shrink-0 font-mono text-sm text-stone-900">{rentalMoney(totalRental, 'VND')}</span>
-            </div>
-
-            <div className="flex justify-between gap-4 text-xs sm:text-sm">
-              <div>
-                <span className="font-semibold text-stone-800">Tiền sử dụng theo ngày</span>
-                <p className={formulaClass}>
-                  {monthlyPrice != null && mismatchUsedDays != null
-                    ? `${rentalMoney(monthlyPrice, 'VND')} × ${mismatchUsedDays} ngày / 30 = ${rentalMoney(usedRental, 'VND')}.`
-                    : 'Đơn giá tháng × số ngày sử dụng / 30.'}
-                </p>
-              </div>
-              <span className="shrink-0 font-mono text-sm text-rose-700">− {rentalMoney(usedRental, 'VND')}</span>
             </div>
 
             <div className="flex justify-between gap-4 rounded-lg bg-emerald-50 px-3 py-2.5 text-xs text-emerald-800 sm:text-sm">
@@ -373,19 +375,19 @@ function SettlementCalculationBreakdown({ record }: { record: ApiReturn }) {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-sm font-bold">Kết quả quyết toán</p>
-            <p className="text-xs leading-5 text-stone-300">Tiền hoàn = phí hoàn cọc sau phát sinh + tiền thuê còn lại sau bù trừ.</p>
+            <p className="text-xs leading-5 text-stone-300">{isMismatch ? 'Tiền hoàn = tiền cọc còn lại + tiền thuê còn lại sau khi trừ tiền sử dụng.' : 'Tiền hoàn = phí hoàn cọc sau phát sinh + tiền thuê còn lại sau bù trừ.'}</p>
           </div>
           <span className="shrink-0 font-mono text-xl font-bold">{rentalMoney(calculatedRefund, 'VND')}</span>
         </div>
         <p className="mt-2 text-xs leading-5 text-stone-300">
-          {depositAfterFees >= 0
+          {isMismatch || depositAfterFees >= 0
             ? `${rentalMoney(refundableDeposit, 'VND')} + ${rentalMoney(rentalCredit, 'VND')} = ${rentalMoney(calculatedRefund, 'VND')}.`
             : `${rentalMoney(rentalCredit, 'VND')} − ${rentalMoney(depositShortfall, 'VND')} = ${rentalMoney(calculatedRefund, 'VND')}.`}
         </p>
         <p className="mt-1 text-xs leading-5 text-stone-300">
           Tổng phí khấu trừ = {feeValues.map((value) => rentalMoney(value || 0, 'VND')).join(' + ')} = {rentalMoney(totalFees, 'VND')}.
         </p>
-        {depositShortfall > 0 && (
+        {!isMismatch && depositShortfall > 0 && (
           <p className="mt-1 text-xs leading-5 text-stone-300">
             Phí phát sinh vượt tiền cọc {rentalMoney(depositShortfall, 'VND')}; đã dùng tiền thuê còn lại để bù trừ {rentalMoney(Math.min(rentalCredit, depositShortfall), 'VND')}.
           </p>
@@ -1495,7 +1497,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                 </>}
                 {feeKeys.map((key, index) => <div key={key} className="flex justify-between gap-3 py-2"><dt className="text-stone-500">{['Phí hư hỏng', 'Phí vệ sinh', 'Phí thiếu khóa', 'Phí quá hạn', 'Phí còn thiếu'][index]}</dt><dd className="shrink-0 font-medium">{rentalMoney(key === 'lostItemFee' ? Math.max(0, record.lostItemFee - (record.palletLossFee || 0)) : record[key], 'VND')}</dd></div>)}
                 <div className="flex justify-between gap-3 py-2"><dt className="text-stone-500">Phí thiếu tấm kê</dt><dd className="shrink-0 font-medium">{rentalMoney(record.palletLossFee || 0, 'VND')}</dd></div>
-                <div className="flex justify-between gap-3 py-3 font-bold"><dt>Tổng phí ghi nhận</dt><dd>{rentalMoney(record.totalDeductions, 'VND')}</dd></div>
+                <div className="flex justify-between gap-3 py-3 font-bold"><dt>Tổng phí nghiệm thu</dt><dd>{rentalMoney(feeKeys.reduce((sum, key) => sum + (record[key] || 0), 0), 'VND')}</dd></div>
               </dl>
               {!['requested', 'scheduled', 'recovery_required'].includes(record.status) && <SettlementCalculationBreakdown record={record} />}
             </div>
@@ -1708,7 +1710,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                                 }}
                                 className="ml-3 w-24 rounded-lg border p-2" />
                             </label>
-                            <p className="text-xs">Thu hồi: {record.equipment.palletCount - missingPalletCount} / {record.equipment.palletCount} tấm. Phí thiếu: {rentalMoney(palletFee, 'VND')}.</p>
+                            <p className="text-xs">Thu hồi: {record.equipment.palletCount - missingPalletCount} / {record.equipment.palletCount} tấm. Phí thiếu: {missingPalletCount} × {rentalMoney(record.equipment.palletUnitPrice || 0, 'VND')} = {rentalMoney(palletFee, 'VND')}.</p>
                             {missingPalletCount > 0 && !record.equipment.palletUnitPrice && <p className="text-xs text-amber-700">Chưa cấu hình đơn giá bồi thường tấm kê; cần bổ sung trước khi nghiệm thu.</p>}
                           </> : <p className="text-xs text-amber-700">{noShowRecovery
                             ? 'Hồ sơ chưa có số tấm kê bàn giao. Ghi thiết bị đếm được trong biên bản.'

@@ -1,8 +1,8 @@
 import InventoryDecisionSummary from '../../components/InventoryDecisionSummary'
 import { useRef, useState } from 'react'
 import { userFacingError } from '../../presentation/userFacingError'
-import type { AtSiteInventoryDecision, InventoryRefusalInput, RefusalWitness } from '../../services/checkInApi'
-import { listRefusalWitnesses, uploadCheckInEvidence } from '../../services/checkInApi'
+import type { AtSiteInventoryDecision } from '../../services/checkInApi'
+import { uploadCheckInEvidence } from '../../services/checkInApi'
 import { Button } from '../../components/ui'
 import type { CheckInCase } from '../../services/checkInApi'
 import { InventoryAlternatives } from './InventoryResultNotice'
@@ -13,10 +13,9 @@ const MAX_EVIDENCE_FILES = 1
 const MAX_EVIDENCE_SIZE_BYTES = 25 * 1024 * 1024
 const EVIDENCE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
-export default function InventoryResolutionPanel({ item, busy, onOpenReturns, onResolve, onPreview, onRefusal }: {
+export default function InventoryResolutionPanel({ item, busy, onOpenReturns, onResolve, onPreview }: {
   item: CheckInCase; busy: boolean; onOpenReturns?: () => void
   onPreview?: (assetId: string) => void
-  onRefusal?: (request: InventoryRefusalInput) => Promise<void>
   onResolve?: (request: { decision: AtSiteInventoryDecision; customerPresent: boolean; note?: string; scheduledDate?: string; evidenceReferences?: string[]; resultVersion?: number }) => Promise<void>
 }) {
   const [decision, setDecision] = useState<AtSiteInventoryDecision | ''>('')
@@ -26,17 +25,11 @@ export default function InventoryResolutionPanel({ item, busy, onOpenReturns, on
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
-  const [refused, setRefused] = useState(false)
-  const [witnesses, setWitnesses] = useState<RefusalWitness[]>([])
-  const [witnessId, setWitnessId] = useState('')
-  const [discussion, setDiscussion] = useState('')
-  const [customerReason, setCustomerReason] = useState('')
   const locked = useRef(false)
   const otherGoods = item.declaredGoodsLines?.some(line => line.category === 'OTHER') ?? false
   const singleForcedReturn = !item.inventoryFullFit && !otherGoods
   const effectiveDecision: AtSiteInventoryDecision | '' = singleForcedReturn ? 'CANCEL_AND_RETURN' : decision
   const rejectionReasonRequired = effectiveDecision === 'CANCEL_AND_RETURN'
-  const reportRefusal = refused && rejectionReasonRequired
   const refusalPending = item.inventoryRefusalStatus === 'PENDING'
   const disabled = busy || saving || uploading
   const uploadEvidence = async (files: File[]) => {
@@ -53,7 +46,7 @@ export default function InventoryResolutionPanel({ item, busy, onOpenReturns, on
         if (!EVIDENCE_TYPES.includes(file.type)) throw new Error(`Tệp "${file.name}" không phải ảnh JPEG, PNG hoặc WebP.`)
         if (!file.size || file.size > MAX_EVIDENCE_SIZE_BYTES) throw new Error(`Ảnh "${file.name}" vượt quá dung lượng tối đa 25MB.`)
         const asset = await uploadCheckInEvidence(item.checkInId, file, 'CHECK_IN',
-          reportRefusal ? 'bien-ban-tu-choi-ky' : 'bien-ban-xu-ly-chenh-lech-hang-hoa', item.reservationCode)
+          'bien-ban-xu-ly-chenh-lech-hang-hoa', item.reservationCode)
         uploaded.push(asset.id)
       }
       if (uploaded.length) setEvidence(current => Array.from(new Set([...current, ...uploaded])))
@@ -67,15 +60,8 @@ export default function InventoryResolutionPanel({ item, busy, onOpenReturns, on
     if (!onResolve || !effectiveDecision || !present || disabled || locked.current || evidence.length !== MAX_EVIDENCE_FILES || (rejectionReasonRequired && !note.trim())) return
     locked.current = true; setSaving(true); setError('')
     try {
-      if (reportRefusal) {
-        if (!onRefusal || !witnessId || !discussion.trim() || item.inventoryResultVersion == null) return
-        await onRefusal({ customerPresent: true, witnessId, evidenceId: evidence[0],
-          grounds: note.trim(), discussion: discussion.trim(), customerReason: customerReason.trim() || undefined,
-          resultVersion: item.inventoryResultVersion })
-      } else {
-        await onResolve({ decision: effectiveDecision, customerPresent: true, note: note.trim() || undefined,
-          evidenceReferences: evidence, resultVersion: item.inventoryResultVersion })
-      }
+      await onResolve({ decision: effectiveDecision, customerPresent: true, note: note.trim() || undefined,
+        evidenceReferences: evidence, resultVersion: item.inventoryResultVersion })
     }
     catch (error) { setError(userFacingError(error, 'Không thể ghi nhận phương án xử lý.')) }
     finally { locked.current = false; setSaving(false) }
@@ -124,27 +110,12 @@ export default function InventoryResolutionPanel({ item, busy, onOpenReturns, on
         ] as const).filter(([, , enabled]) => enabled).map(([value, label]) => <label key={value} className="flex items-center gap-2"><input type="radio" name={`resolution-${item.checkInId}`} checked={effectiveDecision === value} onChange={() => setDecision(value)} />{label}</label>)}
         <label className="grid gap-1">{rejectionReasonRequired ? 'Lý do từ chối tiếp nhận *' : 'Ghi chú phương án (không bắt buộc)'}<textarea className="rounded-lg border p-2" required={rejectionReasonRequired} maxLength={1500} value={note} onChange={event => setNote(event.target.value)} /></label>
         <label className="flex items-start gap-2"><input type="checkbox" className="mt-1" checked={present} onChange={event => setPresent(event.target.checked)} />Đã trao đổi phương án với chính chủ đang có mặt tại cơ sở.</label>
-        {rejectionReasonRequired && onRefusal && !item.inventoryRemovalDeadlineAt && <label className="flex items-center gap-2">
-          <input type="checkbox" checked={refused} onChange={event => {
-            setRefused(event.target.checked); setEvidence([]); setError('')
-            if (event.target.checked && item.checkInId) void listRefusalWitnesses(item.checkInId).then(setWitnesses)
-              .catch(error => setError(userFacingError(error, 'Chưa tải được danh sách nhân chứng.')))
-          }} />Khách từ chối ký biên bản
-        </label>}
-        {reportRefusal && <>
-          <label className="grid gap-1">Nhân chứng tại cơ sở<select className="rounded border p-2" value={witnessId} onChange={e => setWitnessId(e.target.value)}>
-            <option value="">Chọn một nhân viên khác</option>
-            {witnesses.map(witness => <option key={witness.id} value={witness.id}>{witness.name}</option>)}
-          </select></label>
-          <label className="grid gap-1">Nội dung đã trao đổi với khách<textarea className="rounded border p-2" maxLength={1500} value={discussion} onChange={e => setDiscussion(e.target.value)} /></label>
-          <label className="grid gap-1">Lý do khách từ chối ký, nếu khách có nêu<textarea className="rounded border p-2" maxLength={1000} value={customerReason} onChange={e => setCustomerReason(e.target.value)} /></label>
-        </>}
         <div className="grid gap-2">
-          <label className="grid gap-1">{reportRefusal ? 'Ảnh biên bản từ chối ký có xác nhận của nhân chứng' : 'Biên bản xác nhận phương án hàng hóa có chữ ký khách *'}
+          <label className="grid gap-1">Biên bản xác nhận phương án hàng hóa có chữ ký khách *
             <input className="block w-full rounded-lg border border-stone-300 bg-white p-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-stone-100 file:px-3 file:py-2 file:font-medium" type="file"
               accept="image/jpeg,image/png,image/webp" disabled={disabled || evidence.length >= MAX_EVIDENCE_FILES}
               onChange={event => { const files = Array.from(event.target.files || []); event.target.value = ''; if (files.length) void uploadEvidence(files) }} />
-            <span className="text-xs text-stone-500">{reportRefusal ? 'Đính kèm 1 ảnh biên bản thay thế, tối đa 25 MB.' : 'Chỉ đính kèm 1 ảnh biên bản giấy có chữ ký xác nhận của khách (tối đa 25MB). Xóa ảnh hiện tại để chọn ảnh khác. Ảnh xác minh danh tính chỉ chứng minh khách có mặt, không chứng minh khách đồng ý phương án.'}</span>
+            <span className="text-xs text-stone-500">Chỉ đính kèm 1 ảnh biên bản giấy có chữ ký xác nhận của khách (tối đa 25MB). Xóa ảnh hiện tại để chọn ảnh khác. Ảnh xác minh danh tính chỉ chứng minh khách có mặt, không chứng minh khách đồng ý phương án.</span>
           </label>
           {uploading && <p role="status" className="text-xs text-stone-600">Đang tải ảnh biên bản lên…</p>}
           {evidence.length > 0 && <ul className="grid gap-2">{evidence.map((assetId, index) => <li key={assetId} className="flex flex-wrap items-center gap-2 rounded-lg border border-stone-200 bg-stone-50 p-2">
@@ -154,7 +125,7 @@ export default function InventoryResolutionPanel({ item, busy, onOpenReturns, on
           </li>)}</ul>}
         </div>
         {error && <p role="alert" className="text-red-700">{error}</p>}
-        <Button disabled={!onResolve || !effectiveDecision || !present || evidence.length !== MAX_EVIDENCE_FILES || (rejectionReasonRequired && !note.trim()) || (reportRefusal && (!witnessId || !discussion.trim())) || disabled} onClick={() => void submit()}>{saving ? 'Đang lưu…' : reportRefusal ? 'Gửi Quản lý xem xét' : effectiveDecision === 'ACCEPT_FULL' ? 'Ghi nhận vào hồ sơ thuê' : 'Xác nhận buộc trả kho và tạo hồ sơ trả kho'}</Button>
+        <Button disabled={!onResolve || !effectiveDecision || !present || evidence.length !== MAX_EVIDENCE_FILES || (rejectionReasonRequired && !note.trim()) || disabled} onClick={() => void submit()}>{saving ? 'Đang lưu…' : effectiveDecision === 'ACCEPT_FULL' ? 'Ghi nhận vào hồ sơ thuê' : 'Xác nhận buộc trả kho và tạo hồ sơ trả kho'}</Button>
       </fieldset>}
       {returning && !done && <div className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">
         {(item.inventoryDecision?.decidedAt || item.inventoryRemovalPublishedAt) && (
