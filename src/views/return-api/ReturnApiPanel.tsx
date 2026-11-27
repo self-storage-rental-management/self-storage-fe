@@ -975,8 +975,8 @@ function ReturnWorkspace({
           )}
           {role !== 'customer' && listMode === 'recovery' ? (
             <>
-              {role === 'staff' && <AssignedRecoveryTasks identity={identity} />}
               <ViolationRecoveryPanel key={violationTarget?.id ?? 'list'} target={violationTarget}
+                compact={role === 'staff'} leadingCards={role === 'staff' ? <AssignedRecoveryTasks identity={identity} /> : undefined}
                 detailOnly={!!violationTarget} onDetailClosed={() => setViolationTarget(undefined)} />
               {role === 'staff' && recoveryTaskId && <Modal open size="xl" title="Chi tiết nhiệm vụ thu hồi"
                 onClose={() => { if (!recoveryTaskGuard.current()) setRecoveryTaskId(undefined) }}>

@@ -5,6 +5,7 @@ import ManagerRecoveryCards from './ManagerRecoveryCards'
 const state = vi.hoisted(() => ({
   recovery: [] as unknown[],
   overdue: [] as unknown[],
+  tasks: [] as unknown[],
   recoveryError: undefined as unknown,
 }))
 vi.mock('../../services/authApi', () => ({
@@ -17,7 +18,9 @@ vi.mock('./ManagerOverdueApiPanel', async importOriginal => ({
 vi.mock('../../hooks/useRentalApiResource', () => ({
   useRentalApiResource: (key: string) => key.includes(':recovery:')
     ? { data: state.recovery, error: state.recoveryError, loading: false, refresh: () => {} }
-    : { data: { rows: state.overdue, partial: false }, loading: false, refresh: () => {} },
+    : key.includes(':overdue-recovery-tasks:')
+      ? { data: state.tasks, loading: false, refresh: () => {} }
+      : { data: { rows: state.overdue, partial: false }, loading: false, refresh: () => {} },
 }))
 
 const recovery = {
@@ -36,6 +39,7 @@ describe('combined manager recovery cards', () => {
   beforeEach(() => {
     state.recovery = [{ ...recovery }]
     state.overdue = [{ ...overdue }]
+    state.tasks = []
     state.recoveryError = undefined
   })
   it('shows both sources together as cards', () => {
@@ -54,6 +58,19 @@ describe('combined manager recovery cards', () => {
     expect(html).toContain('RSV-RECOVERY')
     expect(html).not.toContain(overdue.rentalDisplayCode)
   })
+  it('shows a recovery task absent from the overdue feed and deduplicates linked tasks', () => {
+    state.tasks = [
+      { id: 'q02', storageUnitCode: 'DEMO-Q02', facilityId: 'facility', status: 'OPEN', reason: 'AUTO_OVERDUE_DAY_8' },
+      { id: 'q03', storageUnitCode: 'DEMO-Q03', facilityId: 'facility', status: 'OPEN', reason: 'AUTO_OVERDUE_DAY_8', assignedStaffName: 'Demo Staff' },
+    ]
+    state.overdue = [{ ...overdue, recoveryTaskId: 'q02' }]
+    const html = render()
+    expect(html).toContain(overdue.rentalDisplayCode)
+    expect(html).not.toContain('DEMO-Q02')
+    expect(html).toContain('DEMO-Q03')
+    expect(html).toContain('Demo Staff')
+    expect(html).toContain('Xem nhiệm vụ thu hồi')
+  })
   it('keeps overdue cards visible when recovery loading fails', () => {
     state.recovery = []
     state.recoveryError = new Error('Network unavailable')
@@ -62,9 +79,23 @@ describe('combined manager recovery cards', () => {
     expect(html).toContain('Chưa tải được hồ sơ thu hồi')
     expect(html).not.toContain('Không có hồ sơ phù hợp')
   })
-  it('initially hides completed cases from the active list', () => {
+  it('includes completed cases by default', () => {
     state.overdue = [{ ...overdue, workflowStatus: 'COMPLETED' }]
-    expect(render()).not.toContain(overdue.rentalDisplayCode)
+    expect(render()).toContain(overdue.rentalDisplayCode)
+  })
+  it('shows pickup dates for stored goods and completion for handed-over goods', () => {
+    state.recovery = [
+      { ...recovery, stage: 'COMPLETED', items: [{ disposition: 'STORED' }],
+        pickupAppointmentAt: '2099-12-01T03:00:00Z', pickupDueAt: '2099-12-02T03:00:00Z' },
+      { ...recovery, id: 'recovery-2', reservationCode: 'RSV-HANDED-OVER', stage: 'COMPLETED',
+        items: [{ disposition: 'STORED', releasedAt: '2099-12-01T03:00:00Z' }] },
+    ]
+    const html = render()
+    expect(html).toContain('RSV-RECOVERY')
+    expect(html).toContain('Lịch nhận hàng')
+    expect(html).toContain('Hạn nhận hàng')
+    expect(html).toContain('RSV-HANDED-OVER')
+    expect(html).toContain('Đã kết thúc xử lý')
   })
   it('opens the notification target even when the case is absent from the current list', () => {
     const caseRef = 'RENTAL_TERM:00000000-0000-4000-8000-000000000002'

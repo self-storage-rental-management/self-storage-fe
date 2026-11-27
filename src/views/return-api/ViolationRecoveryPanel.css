@@ -1,5 +1,6 @@
-.recovery-workspace {
-  container: business-recoveries / inline-size;
+.recovery-workspace,
+.recovery-compact-panel {
+  container: recovery-cards / inline-size;
 }
 
 .recovery-workspace > h2 {
@@ -74,7 +75,8 @@
   padding: 18px 20px 14px;
 }
 
-.recovery-case-header h3 {
+.recovery-case-header h3,
+.recovery-case-title {
   margin: 0;
   color: #1c1917;
   font-size: 15px;
@@ -536,11 +538,11 @@
   gap: 16px;
 }
 
-@container business-recoveries (min-width: 44rem) {
+@container recovery-cards (min-width: 44rem) {
   .recovery-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-@container business-recoveries (min-width: 72rem) {
+@container recovery-cards (min-width: 72rem) {
   .recovery-card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
@@ -589,3 +591,10 @@
 .recovery-card-grid .recovery-next-step > span:not(.recovery-countdown) { color: #57534e; }
 .recovery-card-grid .recovery-case-actions { margin-left: auto; }
 .recovery-card-grid .recovery-case-actions > button { min-height: 44px; }
+
+.recovery-compact-panel .recovery-card-grid { gap: 12px; }
+.recovery-compact-panel .recovery-case-header { padding-block: 12px 8px; }
+.recovery-compact-panel .recovery-case-facts { padding-bottom: 12px; }
+.recovery-compact-panel .recovery-case-footer { padding-block: 6px; }
+.recovery-compact-panel .recovery-next-step:empty { display: none; }
+.recovery-pending-count { display: block; color: #854d0e; }

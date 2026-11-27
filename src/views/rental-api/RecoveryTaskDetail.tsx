@@ -9,6 +9,9 @@ import { getRecoveryOperations } from "../../services/recoveryTaskOperationsApi"
 import RecoveryTaskOperationsPanel, { type RecoveryCloseGuard } from "./RecoveryTaskOperationsPanel"
 
 export const recoveryStatusLabels = { OPEN: "Chờ xử lý", IN_PROGRESS: "Đang xử lý", CLOSED: "Đã đóng" }
+export const recoveryTaskReason = (reason: string) => reason === "AUTO_OVERDUE_DAY_8"
+  ? "Quá hạn thuê từ ngày thứ 8, chưa hoàn tất gia hạn."
+  : reason
 export default function RecoveryTaskDetail({ role, id, facilityId, rentalDisplayCode, onChanged, closeGuard }: { role: RecoveryAudience; id: string; facilityId?: string; rentalDisplayCode?: string; onChanged?: () => void; closeGuard?: RecoveryCloseGuard }) {
   const actor = getAuthenticatedActor()
   const identity = `${actor?.id}:${JSON.stringify(actor?.permissions)}:${JSON.stringify(actor?.facilityScopes)}:${role}:${facilityId}:recovery-task:${id}`
@@ -29,7 +32,7 @@ export default function RecoveryTaskDetail({ role, id, facilityId, rentalDisplay
           ...(task.assignedStaffName ? [["Nhân viên phụ trách", task.assignedStaffName]] : [])].map(([label,value]) =>
           <div key={label} className="min-w-0"><dt className="text-stone-500">{label}</dt><dd className="mt-1 break-words font-medium text-stone-900">{value}</dd></div>)}
       </dl>
-      <div className="rounded-lg bg-stone-50 p-4 text-sm"><p className="font-semibold">Lý do chuyển thu hồi</p><p className="mt-1 whitespace-pre-wrap break-words">{task.reason === "AUTO_OVERDUE_DAY_8" ? "Hợp đồng quá hạn từ ngày thứ 8, chưa hoàn tất gia hạn." : task.reason}</p></div>
+      <div className="rounded-lg bg-stone-50 p-4 text-sm"><p className="font-semibold">Lý do chuyển thu hồi</p><p className="mt-1 whitespace-pre-wrap break-words">{recoveryTaskReason(task.reason)}</p></div>
       <RecoveryTaskOperationsPanel key={identity} identity={identity} role={role} task={task} view={read.data!.operations} refresh={read.refresh} closeGuard={closeGuard}
         onSuccess={message => { setSuccess(message); read.refresh(); onChanged?.() }} />
     </>}
