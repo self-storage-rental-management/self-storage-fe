@@ -147,7 +147,7 @@ function StaffRentalDetails({ identity, rental, onClose, onOpenReport, canReadFi
       {reports.data?.data.length === 0 && <p className="text-sm text-stone-600">Chưa có báo cáo.</p>}
       {reports.data?.data.map(report => <div key={report.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 p-3">
         <div><p className="text-sm font-semibold">{report.code}</p>
-          <p className="text-xs text-stone-600">{report.status === 'INVESTIGATING' ? 'Đang xác minh' : report.status === 'TRANSFERRED_TO_RECOVERY' ? 'Đã chuyển thu hồi' : 'Chờ quản lý tiếp nhận'}</p></div>
+          <p className="text-xs text-stone-600">{report.status === 'INVESTIGATING' ? 'Đang xác minh' : report.status === 'TRANSFERRED_TO_RECOVERY' ? 'Đã chuyển thu hồi' : report.status === 'CLOSED_NO_VIOLATION' ? 'Đã đóng' : 'Chờ quản lý tiếp nhận'}</p></div>
         <Button variant="outline" size="sm" onClick={() => onOpenReport(report.id)}>Xem báo cáo</Button>
       </div>)}
     </section>
