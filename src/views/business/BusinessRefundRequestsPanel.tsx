@@ -1,4 +1,5 @@
 import { recordDisplayCode } from '../../utils/recordDisplayCode'
+import { compareWorkQueue } from '../../utils/workQueueSort'
 import { useCallback, useEffect, useState } from 'react'
 import { Button } from '../../components/ui'
 import { getAuthenticatedActor } from '../../services/authApi'
@@ -27,7 +28,9 @@ export default function BusinessRefundRequestsPanel({ refreshVersion = 0 }: { re
         listRefundRequests('REQUESTED'),
         listRefundRequests('PENDING_ESCALATION'),
       ])
-      setRows([...requested, ...escalated])
+      setRows([...new Map([...requested, ...escalated].map(row => [row.id, row])).values()].sort((a, b) =>
+        compareWorkQueue({ id: a.id, urgent: a.status === 'PENDING_ESCALATION', waitingSince: a.createdAt },
+          { id: b.id, urgent: b.status === 'PENDING_ESCALATION', waitingSince: b.createdAt })))
     } catch (error) {
       setFeedback(errorMessage(error))
     } finally {

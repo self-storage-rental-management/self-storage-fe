@@ -1,4 +1,6 @@
 import { recordDisplayCode, receiptDisplayCode } from '../../utils/recordDisplayCode'
+import { revealRecord } from '../../utils/revealRecord'
+import { compareCustomerReservations } from '../../utils/reservationQueueSort'
 import { HANDOVER_TERMS_VERSION, LEGACY_HANDOVER_TERMS_NOTICE } from '../../domain/reservationCheckInPolicy'
 import { displayStatusLabel } from '../../presentation/statusLabels'
 import { getRentalRenewalEligibility } from '../rental-api/RentalDeadlineNotice'
@@ -41,7 +43,6 @@ import { goodsCatalogIssue, resolveDraftMaterial } from '../../domain/goodsCatal
 import { listNotifications, markNotificationRead, type ApiNotification } from '../../services/notificationApi'
 import { goodsReviewLabels, reservationProgress } from './reservationPresentation'
 import ReturnApiPanel from '../return-api/ReturnApiPanel'
-import { ViolationRecoveryPanel } from '../return-api/ViolationRecoveryPanel'
 import ReturnSettlementModal from '../../components/ReturnSettlementModal'
 import { isGeneratedDefaultRentalPackageList, resolveRentalPackagesForUnit } from '../../domain/packageRules'
 import { LEGACY_RENEWAL_NOTICE, LEGACY_RENEWAL_HISTORY_NOTICE, legacyRenewalMoney, isLegacyRenewalPayment } from '../../domain/legacyRenewal'
@@ -1072,7 +1073,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     setPage('overview')
     if (!isApiAuthenticated()) setSupportChatbotOpen(true)
   }, [])
-  const [focusedNotificationTarget, setFocusedNotificationTarget] = useState<string | null>(null)
   const [recoveryNotificationTarget, setRecoveryNotificationTarget] = useState<{ id: string; request: number }>()
   const notificationRevealTimers = useRef<number[]>([])
   const [supportTab, setSupportTab] = useState('All')
@@ -1224,15 +1224,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     const holdSize = storageSizeCode(assignedUnit?.type || hold.unitTypeName || hold.unitId)
     if (!matchesReservationSearch(reservationSearch, [hold.id, hold.unitTypeName, facilities.find(item => item.id === hold.facilityId)?.name])) return false
     return reservationSizeFilter === 'all' || holdSize === reservationSizeFilter
-  }).sort((left, right) => {
-    const rank = (status: string) => status === 'EXPIRED' ? 1 : ['COMPLETED', 'completed'].includes(status) ? 2 : 0
-    return rank(left.status) - rank(right.status)
-  })
-  const pendingHandoverReservations = backendReservations
-    .sort((left, right) => {
-      const rank = (status: CustomerReservation['status']) => status === 'EXPIRED' ? 1 : status === 'COMPLETED' ? 2 : 0
-      return rank(left.status) - rank(right.status)
-    })
+  }).sort(compareCustomerReservations)
+  // Server orders every page by the customer's next action and its authoritative deadline.
+  const pendingHandoverReservations = [...backendReservations]
   const filteredBackendReservations = pendingHandoverReservations.filter(reservation => {
     if (reservationFacilityFilter !== 'all' && reservation.facilityId !== reservationFacilityFilter) return false
     const unitType = backendUnitTypes.find(item => item.id === reservation.unitTypeId)
@@ -1436,6 +1430,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   }
 
   const navigateTo = (nextPage: string, options?: { facilityId?: string | null }) => {
+    setRecoveryNotificationTarget(undefined)
     if (window.location.hash === '#booking-prohibited-rules') { const url = new URL(window.location.href); url.hash = ''; window.history.replaceState(window.history.state, '', url) }
     if (nextPage === 'support') { openSupportWidget(); return }
     setPreviousPage(page)
@@ -1446,10 +1441,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   }
 
   const handleLayoutNavigate = (nextPage: string) => {
+    setRecoveryNotificationTarget(undefined)
     if (nextPage === 'support') { openSupportWidget(); return }
     notificationRevealTimers.current.forEach(timer => window.clearTimeout(timer))
     notificationRevealTimers.current = []
-    setFocusedNotificationTarget(null)
     setReceiptRentalTarget(undefined)
     if (nextPage === 'rental-records') setRentalMenuVisit(visit => visit + 1)
     if (nextPage === page) return
@@ -1883,28 +1878,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     }
     notificationRevealTimers.current.forEach(timer => window.clearTimeout(timer))
     notificationRevealTimers.current = []
-    setFocusedNotificationTarget(null)
 
     const scrollTimer = window.setTimeout(() => {
       const target = document.getElementById(`customer-record-${targetId}`)
         || document.getElementById(`customer-reservation-${targetId}`)
         || document.getElementById(`rental-api-record-${targetId}`)
-      const scrollContainer = target?.closest('[data-layout-scroll-container]') as HTMLElement | null
-      if (!target || !scrollContainer) return
-      const targetRect = target.getBoundingClientRect()
-      const containerRect = scrollContainer.getBoundingClientRect()
-      const centeredTop = scrollContainer.scrollTop
-        + targetRect.top
-        - containerRect.top
-        - Math.max(0, (scrollContainer.clientHeight - targetRect.height) / 2)
-      scrollContainer.scrollTo({ top: Math.max(0, centeredTop), behavior: 'smooth' })
-      const highlightTimer = window.setTimeout(() => {
-        setFocusedNotificationTarget(targetId)
-        target.focus({ preventScroll: true })
-        const clearTimer = window.setTimeout(() => setFocusedNotificationTarget(null), 2000)
-        notificationRevealTimers.current.push(clearTimer)
-      }, 700)
-      notificationRevealTimers.current.push(highlightTimer)
+      if (target) revealRecord(target)
     }, 100)
     notificationRevealTimers.current.push(scrollTimer)
   }
@@ -2820,7 +2799,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                 const linkedRentalEnded = rentals.some(rental => rental.holdId === hold.id && rental.status === 'completed')
                 const holdInactive = ['CANCELLED', 'EXPIRED'].includes(hold.status) || linkedRentalEnded
                 return (<div key={hold.id} className="contents">
-                <Card id={`customer-record-${hold.id}`} tabIndex={-1} className={`p-6 border-l-4 ${holdInactive ? 'inactive-record-card border-l-stone-300 bg-white text-stone-500' : 'border-l-amber-500'} ${focusedNotificationTarget === hold.id ? 'notification-target-reveal' : ''}`}>
+                <Card id={`customer-record-${hold.id}`} tabIndex={-1} className={`p-6 border-l-4 ${holdInactive ? 'inactive-record-card border-l-stone-300 bg-white text-stone-500' : 'border-l-amber-500'}`}>
                   <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_240px]">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -3152,7 +3131,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       )}
 
       {/* ── MY RENTALS (HỒ SƠ THUÊ CỦA TÔI) ───────────────────── */}
-      {page === 'rental-records' && isApiAuthenticated() && <CustomerRentalsApiPanel key={`${user.id}:${rentalMenuVisit}`}
+      {page === 'rental-records' && isApiAuthenticated() && <CustomerRentalsApiPanel key={`${user.id}:${rentalMenuVisit}:${recoveryNotificationTarget?.request ?? ''}`}
+        recoveryTarget={recoveryNotificationTarget}
         focusStorageUnitId={receiptRentalTarget}
         onBrowseUnits={() => navigateTo('browse-units')}
         onRequestSupport={(id, unitCode) => openRecordSupport({ linkedRecord: { type: 'RENTAL', id }, label: `hồ sơ thuê gian ${unitCode}` })} />}
@@ -3177,7 +3157,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           {filteredAndSortedRentals.length ? (
             <div className="grid gap-4">
               {filteredAndSortedRentals.map(rental => (
-                <Card id={`customer-record-${rental.id}`} tabIndex={-1} key={rental.id} className={`overflow-hidden ${focusedNotificationTarget === rental.id ? 'notification-target-reveal' : ''}`}>
+                <Card id={`customer-record-${rental.id}`} tabIndex={-1} key={rental.id} className="overflow-hidden">
                   <div className="grid gap-5 p-5 md:grid-cols-[1fr_auto] md:items-center">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
@@ -4361,9 +4341,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       </Modal>
 
       {isApiAuthenticated() && <CustomerSupportWidget openRequest={supportWidgetRequest} />}
-      {isApiAuthenticated() && recoveryNotificationTarget && <Modal title="Thông báo thu hồi kho" size="2xl" open onClose={() => setRecoveryNotificationTarget(undefined)}>
-        <ViolationRecoveryPanel target={recoveryNotificationTarget} />
-      </Modal>}
 
       {!isApiAuthenticated() && <CustomerSupportChatbot
         user={user}

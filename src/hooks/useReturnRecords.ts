@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getAuthenticatedActor } from '../services/authApi'
+import { compareReturnQueue } from '../utils/returnQueueSort'
 import { listReturns, returnError, type ApiReturn, type ReturnRole } from '../services/returnApi'
 
 /** Supplies existing list screens without substituting demo data on API failure. */
@@ -18,7 +19,8 @@ export function useReturnRecords(role: ReturnRole, enabled: boolean) {
       if (generation.current !== version) return
       const records = [...first.data, ...remaining.flatMap(page => page.data)]
       const unique = new Map(records.map(record => [record.id, record]))
-      setState({ identity, rows: [...unique.values()], loading: false, error: null })
+      const now = Date.now()
+      setState({ identity, rows: [...unique.values()].sort((a, b) => compareReturnQueue(a, b, role, now)), loading: false, error: null })
     } catch (error) {
       if (generation.current === version) setState({ identity, rows: [], loading: false, error: returnError(error) })
     }
