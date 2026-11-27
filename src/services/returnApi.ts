@@ -349,6 +349,7 @@ export const returnDamageCatalog: DamagePricingItem[] = [
   { code: 'minor_metal_dent', label: 'Móp nhẹ vách kim loại', category: 'minor', unit: 'vị trí', suggestedMin: 100000, suggestedMax: 250000, unitPrice: 175000 },
   { code: 'minor_small_accessory', label: 'Hỏng phụ kiện nhỏ', category: 'minor', unit: 'cái', suggestedMin: 50000, suggestedMax: 200000, unitPrice: 125000 },
   { code: 'equipment_frame_damage', label: 'Hư hỏng khung kệ', category: 'equipment', unit: 'khung', suggestedMin: 0, suggestedMax: 0, unitPrice: 0 },
+  { code: 'equipment_pallet_missing', label: 'Thiếu tấm kê', category: 'equipment', unit: 'tấm', suggestedMin: 300000, suggestedMax: 300000, unitPrice: 300000 },
   { code: 'major_bent_door', label: 'Cửa kho bị cong vênh', category: 'major', unit: 'cái', suggestedMin: 500000, suggestedMax: 2000000, unitPrice: 1250000 },
   { code: 'major_broken_lock', label: 'Khóa cửa bị hỏng', category: 'major', unit: 'bộ', suggestedMin: 300000, suggestedMax: 1000000, unitPrice: 650000 },
   { code: 'major_cracked_floor', label: 'Sàn kho bị nứt', category: 'major', unit: 'm²', suggestedMin: 300000, suggestedMax: 800000, unitPrice: 550000 },
@@ -369,7 +370,9 @@ export const returnFeeRows = [
   })),
   ...returnDamageCatalog.map(item => ({
     code: item.code, price: item.unitPrice, unit: item.unit, label: item.label,
-    trigger: item.category === 'equipment' ? 'Khung kệ bàn giao bị hư khi nghiệm thu trả kho.' : `Hư hỏng ${item.category === 'minor' ? 'nhẹ' : 'nặng'} được ghi nhận khi nghiệm thu; tính theo số lượng thực tế.`,
+    trigger: item.code === 'equipment_pallet_missing'
+      ? 'Tấm kê bàn giao bị thiếu khi nghiệm thu trả kho.'
+      : item.category === 'equipment' ? 'Khung kệ bàn giao bị hư khi nghiệm thu trả kho.' : `Hư hỏng ${item.category === 'minor' ? 'nhẹ' : 'nặng'} được ghi nhận khi nghiệm thu; tính theo số lượng thực tế.`,
     applies: 'Nghiệm thu trả kho',
   })),
 ]

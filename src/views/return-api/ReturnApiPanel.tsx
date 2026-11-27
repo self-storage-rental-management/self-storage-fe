@@ -2,7 +2,7 @@ import ProcessingLeaseBoundary from '../../components/ProcessingLeaseBoundary'
 import ReturnAppointment from './ReturnAppointment'
 import { recordDisplayCode, receiptDisplayCode } from '../../utils/recordDisplayCode'
 import { compareReturnQueue } from '../../utils/returnQueueSort'
-import { ClearanceStatus, CustomerClearance, ReturnContract, ReturnPreparation } from './ReturnClearance'
+import { CustomerClearance, ReturnContract, ReturnPreparation } from './ReturnClearance'
 import ReturnAttendance, { requiresReturnAttendance } from './ReturnAttendance'
 import { ViolationRecoveryEntry, ViolationRecoveryPanel } from './ViolationRecoveryPanel'
 import { listMaintenanceStaff } from '../../services/maintenanceApi'
@@ -29,7 +29,6 @@ import {
   extendMismatchReturnWindow,
   feeKeys,
   inspectReturn,
-  savePropertyCheck,
   sanitizeFees,
   listReturns,
   requestReturn,
@@ -1617,8 +1616,6 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
 
                           <fieldset className="space-y-3 rounded-xl border border-stone-200 p-3.5 text-sm">
                             <legend className="px-1 font-semibold">Tình trạng tài sản trong gian kho</legend>
-                            <ClearanceStatus record={record} />
-                            {record.warehouseEmptyVerifiedAt && <p className="text-xs text-stone-600">Lần kiểm tra đã lưu · {returnRecoveryCutoff(record.warehouseEmptyVerifiedAt)} · {record.warehouseEmptyVerified ? 'Kho trống' : 'Còn tài sản'}</p>}
                             {[true, false].map(value => <label key={String(value)} className="flex items-start gap-2">
                               <input type="radio" name="unitVacated" checked={empty === value} disabled={busy} onChange={() => setEmpty(value)} />
                               {value ? 'Gian kho đã trống hoàn toàn' : 'Gian kho vẫn còn tài sản của khách hàng'}
@@ -1643,11 +1640,6 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                           </label>
                           <p>Ghi danh mục hàng và tình trạng niêm phong trong ghi chú biên bản.</p>
                         </fieldset>}
-                        {!noShowRecovery && empty !== null && <Button type="button" variant="outline" disabled={busy || (goodsLeft && !note.trim())}
-                          onClick={() => void run(async () => savePropertyCheck(record, empty, note, await uploadPhotos()))}>
-                          {goodsLeft ? 'Lưu ghi chú và thông báo khách dọn kho' : 'Lưu kết quả kiểm tra kho trống'}
-                        </Button>}
-                        {!noShowRecovery && goodsLeft && !note.trim() && <p className="text-xs text-stone-600">Nhập mô tả tài sản còn lại vào ô ghi chú bên dưới để lưu.</p>}
                       </div>
 
                       {/* KHỐI 2: ĐÁNH GIÁ HIỆN TRẠNG, VỆ SINH & HƯ HẠI */}
@@ -1708,14 +1700,14 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                           </>}
                           {record.equipment?.palletCount != null ? <>
                             <label className="text-xs font-semibold block">Số tấm kê bị thiếu
-                              <input type="number" min={0} max={record.equipment.palletCount} step={1} value={missingPalletCount} disabled={busy}
-                                onChange={(event) => { setMissingPalletCount(Math.min(record.equipment!.palletCount!, Math.max(0, Math.trunc(Number(event.target.value) || 0)))); setUnit('maintenance') }}
+                              <input type="number" min={0} max={record.equipment.palletCount} step={1} value={missingPalletCount}
+                                disabled={busy || !feeSchedule || !record.equipment.palletCount}
+                                onChange={event => {
+                                  setMissingPalletCount(Math.min(record.equipment!.palletCount!, Math.max(0, Math.trunc(Number(event.target.value) || 0))))
+                                  setUnit('maintenance')
+                                }}
                                 className="ml-3 w-24 rounded-lg border p-2" />
                             </label>
-                            <div className="flex items-center gap-2 py-1">
-                              <button type="button" aria-label="Giảm số tấm kê bị thiếu" disabled={busy || missingPalletCount === 0} onClick={() => setMissingPalletCount((n) => Math.max(0, n - 1))} className="flex h-10 w-10 shrink-0 items-center justify-center rounded border">−</button>
-                              <button type="button" aria-label="Tăng số tấm kê bị thiếu" disabled={busy || missingPalletCount >= record.equipment.palletCount} onClick={() => { setMissingPalletCount((n) => Math.min(record.equipment!.palletCount!, n + 1)); setUnit('maintenance') }} className="flex h-10 w-10 shrink-0 items-center justify-center rounded border">+</button>
-                            </div>
                             <p className="text-xs">Thu hồi: {record.equipment.palletCount - missingPalletCount} / {record.equipment.palletCount} tấm. Phí thiếu: {rentalMoney(palletFee, 'VND')}.</p>
                             {missingPalletCount > 0 && !record.equipment.palletUnitPrice && <p className="text-xs text-amber-700">Chưa cấu hình đơn giá bồi thường tấm kê; cần bổ sung trước khi nghiệm thu.</p>}
                           </> : <p className="text-xs text-amber-700">{noShowRecovery
