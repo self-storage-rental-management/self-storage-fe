@@ -87,6 +87,7 @@ export default function RenewalCoordinationPanel({
   return (
     <Card className="p-4 space-y-3 text-sm">
       <h4 className="font-semibold">Xác minh lỗi cơ sở</h4>
+      <p className="text-sm text-stone-600">Kết luận này quyết định hồ sơ có được đổi lịch hoặc xem xét hoàn khoản trả trước hay không.</p>
       <form
         className="space-y-3"
         onSubmit={(e) => {

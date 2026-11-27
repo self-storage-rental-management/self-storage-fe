@@ -1,4 +1,4 @@
 import RentalApiWorkspace from "../rental-api/RentalApiWorkspace"
-export default function ManagerRentalsApiPanel({ initialRentalId }: { initialRentalId?: string }) {
-  return <RentalApiWorkspace role="manager" initialRentalId={initialRentalId} />
+export default function ManagerRentalsApiPanel({ initialRentalId, initialRenewalId }: { initialRentalId?: string; initialRenewalId?: string }) {
+  return <RentalApiWorkspace role="manager" initialRentalId={initialRentalId} initialRenewalId={initialRenewalId} />
 }

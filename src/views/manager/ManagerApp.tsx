@@ -93,6 +93,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
   const [page, setPage] = useState(() => getInitialPage(nav, 'dashboard'))
   const [supportTarget, setSupportTarget] = useState<{ id: string; request: number }>()
   const [recoveryTarget, setRecoveryTarget] = useState<{ id: string; request: number }>()
+  const [renewalTarget, setRenewalTarget] = useState<{ id: string; request: number }>()
   useEffect(() => { if (page !== 'staff-tasks') setRecoveryTarget(undefined) }, [page])
   const notificationFeed = useBackendNotifications(user.id, isApiAuthenticated())
   const { items: backendNotifications, setItems: setBackendNotifications } = notificationFeed
@@ -104,6 +105,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
   const [inventoryMaintenanceDraft, setInventoryMaintenanceDraft] = useState<{ unitId: string; unitCode: string } | null>(null)
   useEffect(() => {
     if (page !== 'rentals') setInventoryRentalId(undefined)
+    if (page !== 'rentals') setRenewalTarget(undefined)
   }, [page])
   useEffect(() => {
     if (page !== 'returns') setReturnReviewTarget(undefined)
@@ -211,6 +213,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
         setReturnReviewTarget({ id: notification.targetId, request: Date.now() })
       }
       if (notification.page === 'support' && notification.targetId) setSupportTarget({ id: notification.targetId, request: Date.now() })
+      if (notification.page === 'rentals' && notification.targetId) setRenewalTarget({ id: notification.targetId, request: Date.now() })
       setBackendNotifications(current => current.map(item =>
         item.id === notificationId ? { ...item, isRead: true } : item
       ))
@@ -227,7 +230,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
       ? <ManagerInventoryApiPanel onOpenRental={rentalId => { setInventoryRentalId(rentalId); setPage('rentals') }} onOpenMaintenance={(unitId, unitCode) => { setInventoryMaintenanceDraft({ unitId, unitCode }); setPage('staff-tasks') }} />
       : <ManagerInventoryPanel user={user} units={hub.units} rentals={hub.rentals} reservations={hub.holds} checkins={hub.checkins} returns={hub.returns} activities={hub.activities} maintenanceTasks={hub.maintenanceTasks} unitTypes={hub.unitTypes} facilityId={managerFacilityId || ''} facilityName={facility?.name || user.facility || ''} createUnit={hub.createUnit} updateUnit={hub.updateUnit} deleteUnit={hub.deleteUnit} updateUnitStatus={hub.updateUnitStatus} onCreateMaintenanceWork={draft => { setStaffTaskDraft(draft); setPage('staff-tasks') }} onOpenRental={rentalId => { setInventoryRentalId(rentalId); setPage('rentals') }} onOpenMaintenance={(unitId, unitCode) => { setInventoryMaintenanceDraft({ unitId, unitCode }); setPage('staff-tasks') }} showToast={showToast} />)}
     {page === 'unit-assignment' && isApiAuthenticated() && <ManagerAssignmentWorkspace showToast={showToast} onOpenRental={rentalId => { setInventoryRentalId(rentalId); setPage('rentals') }} onOpenMaintenance={(unitId, unitCode) => { setInventoryMaintenanceDraft({ unitId, unitCode }); setPage('staff-tasks') }} />}
-    {page === 'rentals' && (isApiAuthenticated() ? <ManagerRentalsApiPanel key={`${user.id}:${JSON.stringify(getAuthenticatedActor()?.facilityScopes)}`} initialRentalId={inventoryRentalId} /> : <ManagerRentalsPanel user={user} rentals={hub.rentals} renewals={hub.renewals} reservations={hub.holds} units={hub.units} unitTypes={hub.unitTypes} assignUnitToHold={hub.assignUnitToHold} showToast={showToast} />)}
+    {page === 'rentals' && (isApiAuthenticated() ? <ManagerRentalsApiPanel key={`${user.id}:${JSON.stringify(getAuthenticatedActor()?.facilityScopes)}:${renewalTarget?.request ?? 0}`} initialRentalId={inventoryRentalId} initialRenewalId={renewalTarget?.id} /> : <ManagerRentalsPanel user={user} rentals={hub.rentals} renewals={hub.renewals} reservations={hub.holds} units={hub.units} unitTypes={hub.unitTypes} assignUnitToHold={hub.assignUnitToHold} showToast={showToast} />)}
     {page === 'returns' && (
       <ManagerReturnsPanel
         reviewTarget={returnReviewTarget}

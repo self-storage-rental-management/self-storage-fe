@@ -128,18 +128,19 @@ type WorkspaceProps = {
   role: RentalApiRole
   focusStorageUnitId?: string
   initialRentalId?: string
+  initialRenewalId?: string
   onRequestSupport?: (id: string, unitCode: string) => void
   onBrowseUnits?: () => void
 }
 
 export default function RentalApiWorkspace(props: WorkspaceProps) {
-  const { role, initialRentalId } = props
+  const { role, initialRentalId, initialRenewalId } = props
   const actor = getAuthenticatedActor()
   const identity = `${actor?.id}:${role}:${JSON.stringify(actor?.facilityScopes)}:${JSON.stringify(actor?.permissions)}`
-  return <WorkspaceSession key={`${identity}:${initialRentalId ?? ''}`} {...props} />
+  return <WorkspaceSession key={`${identity}:${initialRentalId ?? ''}:${initialRenewalId ?? ''}`} {...props} />
 }
 
-function WorkspaceSession({ recoveryTarget, role, focusStorageUnitId, initialRentalId, onRequestSupport, onBrowseUnits }: WorkspaceProps) {
+function WorkspaceSession({ recoveryTarget, role, focusStorageUnitId, initialRentalId, initialRenewalId, onRequestSupport, onBrowseUnits }: WorkspaceProps) {
   const actor = getAuthenticatedActor()
   const facilityId = role === "manager" ? singleManagerFacility(actor) : undefined
   const identity = `${actor?.id}:${role}:${JSON.stringify(actor?.facilityScopes)}:${JSON.stringify(actor?.permissions)}`
@@ -150,7 +151,7 @@ function WorkspaceSession({ recoveryTarget, role, focusStorageUnitId, initialRen
     return role==="customer"&&params.get("vnpayReturn")==="true"&&renewalId
       ? {renewalId,status:params.get("status")} : null
   })
-  const [tab, setTab] = useState<WorkspaceTab>(recoveryTarget ? "recovery" : paymentReturn ? "renewal" : "rental")
+  const [tab, setTab] = useState<WorkspaceTab>(recoveryTarget ? "recovery" : paymentReturn || initialRenewalId ? "renewal" : "rental")
   const [focusedRecovery, setFocusedRecovery] = useState(recoveryTarget)
   const [rq, setRq] = useState<RentalApiQuery>({
     page: 0,
@@ -165,7 +166,7 @@ function WorkspaceSession({ recoveryTarget, role, focusStorageUnitId, initialRen
     sort: "priority,asc",
   })
   const [search, setSearch] = useState("")
-  const [detail, setDetail] = useState<Detail|undefined>(paymentReturn?{kind:"renewal",id:paymentReturn.renewalId}:initialRentalId?{kind:"rental",id:initialRentalId}:undefined)
+  const [detail, setDetail] = useState<Detail|undefined>(paymentReturn?{kind:"renewal",id:paymentReturn.renewalId}:initialRenewalId?{kind:"renewal",id:initialRenewalId}:initialRentalId?{kind:"rental",id:initialRentalId}:undefined)
   const [action, setAction] = useState<Action>()
   const permitted =
     actor?.status === "ACTIVE" &&
