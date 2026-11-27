@@ -60,9 +60,8 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
           {q.rentalPeriodConfirmed ? 'Kỳ thuê có tính phí (đã chốt):' : 'Kỳ thuê có tính phí (dự kiến):'} <b className="text-stone-900">{formatDisplayDate(q.startDate)} đến {formatDisplayDate(q.endDate, true)}</b> · {q.rentalMonths} tháng
         </p>
         <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-950">
-          <b>{q.freeSetupDays ?? 0} ngày chuẩn bị miễn phí</b> tính từ lịch hẹn nhận kho đã chọn. Ngày bắt đầu tính tiền thuê = ngày hẹn nhận kho + số ngày chuẩn bị miễn phí. Kỳ thuê bắt đầu theo mốc đã chốt sau khi hết thời gian miễn phí; hoàn tất chuẩn bị hoặc kiểm kê sớm không tự động làm đổi ngày tính tiền.
+          <b>{q.freeSetupDays ?? 0} ngày chuẩn bị miễn phí</b> tính từ khi bạn xác nhận nhận kho trống. Kỳ thuê bắt đầu theo mốc đã chốt sau khi hết thời gian miễn phí; hoàn tất chuẩn bị hoặc kiểm kê sớm không làm đổi ngày tính tiền.
         </div>
-
       </div>
 
       </>}

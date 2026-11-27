@@ -22,6 +22,7 @@ describe('processingTarget covers every staff check-in write', () => {
     'inventory-arrival',
     'inventory-identity',
     'inventory-draft',
+    'prohibited-goods-recovery',
     'inventory-draft/resolve',
     'inventory-draft/publish',
     'inventory-resolution-at-site',

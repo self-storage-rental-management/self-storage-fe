@@ -1,12 +1,12 @@
+import ProcessingLeaseBoundary from '../../components/ProcessingLeaseBoundary'
 import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import { compareWorkQueue, compareQueueTime } from '../../utils/workQueueSort'
 import { compareReturnQueue } from '../../utils/returnQueueSort'
-import ProcessingLeaseBoundary from '../../components/ProcessingLeaseBoundary'
 import { displayStatusLabel } from '../../presentation/statusLabels'
 import { isApiAuthenticated } from '../../services/authApi'
 import { useReturnRecords } from '../../hooks/useReturnRecords'
 import { returnScreenRecord } from '../../services/returnScreenAdapter'
-import { approveInventoryMismatch, getReturn, reviewDispute, recordReturnSettlement, uploadReturnEvidence, returnError } from '../../services/returnApi'
+import { approveInventoryMismatch, getReturn, reviewDispute, returnError } from '../../services/returnApi'
 import { getAuthenticatedActor } from '../../services/authApi'
 import ReturnAttendance, { isReturnIdentityReviewPending } from '../return-api/ReturnAttendance'
 import { ViolationRecoveryEntry } from '../return-api/ViolationRecoveryPanel'
@@ -59,7 +59,6 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
     createFacilityTask,
     updateUnitStatus,
     reviewReturnDispute,
-    completeReturnRefund,
     payments
   } = useStorageHub()
 
@@ -68,11 +67,6 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
   const storeReturns = useApi ? apiRead.rows.filter(row => row.sourceType !== 'RECOVERY').map(returnScreenRecord) : legacyReturns
   const [apiBusy, setApiBusy] = useState(false)
   const apiLock = useRef(false)
-  const [refundMethod, setRefundMethod] = useState<'CASH' | 'BANK_TRANSFER'>('BANK_TRANSFER')
-  const [refundFile, setRefundFile] = useState<File | null>(null)
-  const [refundConfirmed, setRefundConfirmed] = useState(false)
-  const refundUpload = useRef<{ returnId: string; file: File; id: string } | null>(null)
-  const refundKey = useRef<string | null>(null)
   const formatManagerMoney = (value?: number) => useApi
     ? value == null || !Number.isFinite(value) ? 'Chưa xác định' : formatVnd(value)
     : legacyManagerMoney(value)
@@ -89,12 +83,10 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
   const [selectedReturn, setSelectedReturn] = useState<ReturnCase | null>(null)
   const [detailModalOpen, setDetailModalOpen] = useState(false)
   const [disputeModalOpen, setDisputeModalOpen] = useState(false)
-  const [refundModalOpen, setRefundModalOpen] = useState(false)
   const [disputeResolutionNote, setDisputeResolutionNote] = useState('')
   const [disputePreset, setDisputePreset] = useState<'facility_fault_full_refund' | 'customer_fault_deduct' | 'mutual_settlement' | undefined>(undefined)
   const [facilityCompensation, setFacilityCompensation] = useState<number>(0)
   const [disputeSettlement, setDisputeSettlement] = useState<ManagerReturnSettlementFees>({ damageFee: 0, cleaningFee: 0, lostItemFee: 0, overdueFee: 0, outstandingFee: 0 })
-  const [refundTxnRef, setRefundTxnRef] = useState('')
   const returnHistory = useManagerSoftDelete(`storagehub:manager:${user.id}:hidden-returns`)
 
   // Settlement document modal state (invoice, receipt, payment history)
@@ -126,8 +118,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
   const [completeNotes, setCompleteNotes] = useState('')
 
   useEffect(() => {
-    setSelectedReturn(null); setDetailModalOpen(false); setDisputeModalOpen(false); setRefundModalOpen(false); setSettlementModalOpen(false)
-    setRefundFile(null); setRefundConfirmed(false); refundUpload.current = null; refundKey.current = null
+    setSelectedReturn(null); setDetailModalOpen(false); setDisputeModalOpen(false); setSettlementModalOpen(false)
   }, [apiRead.identity])
 
   const openedReviewTarget = useRef<typeof reviewTarget>(undefined)
@@ -201,7 +192,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
     if (useApi && rawLeft && rawRight) return compareReturnQueue(rawLeft, rawRight, 'manager', reviewNow)
     const order = (record: ReturnCase) => ({
       id: record.id, closed: record.status === 'completed',
-      actionable: pendingIdentityReviews.has(record.id) || isAwaitingManagerReview(record) || record.status === 'disputed' || record.status === 'refund_pending',
+      actionable: pendingIdentityReviews.has(record.id) || isAwaitingManagerReview(record) || record.status === 'disputed',
       dueAt: record.managerReviewDueAt,
       waitingSince: record.requestedAt, completedAt: record.completedAt,
     })
@@ -521,44 +512,6 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
     }
   }
 
-  const handleCompleteRefund = async () => {
-    if (!selectedReturn) return
-    if (useApi) {
-      if (apiLock.current) return
-      apiLock.current = true; setApiBusy(true)
-      try {
-        if (!refundFile || !refundConfirmed || (refundMethod === 'BANK_TRANSFER' && !refundTxnRef.trim())) throw new Error('Cần biên lai và xác nhận thực hoàn. Nếu chuyển khoản, vui lòng nhập mã giao dịch.')
-        const latest = await getReturn('manager', selectedReturn.id)
-        if (latest.status !== 'refund_pending' || latest.sourceType === 'RECOVERY' || latest.settlementBlocker || latest.netRefundAmount == null || latest.netRefundAmount <= 0) throw new Error(latest.settlementBlocker || 'Hồ sơ chưa đủ điều kiện hoàn tiền.')
-        const expected = Math.round(selectedReturn.netRefundAmount * 100) / 100
-        if (latest.netRefundAmount !== expected) { setSelectedReturn(returnScreenRecord(latest)); setRefundConfirmed(false); throw new Error('Số tiền đã thay đổi. Vui lòng đối chiếu và xác nhận lại.') }
-        let receiptFileId = refundUpload.current?.returnId === latest.id && refundUpload.current.file === refundFile ? refundUpload.current.id : null
-        if (!receiptFileId) { const uploaded = await uploadReturnEvidence(latest.id, refundFile, 'manager', 'bien-lai-thuc-hoan-tra-kho'); receiptFileId = uploaded.id; refundUpload.current = { returnId: latest.id, file: refundFile, id: receiptFileId } }
-        refundKey.current ??= crypto.randomUUID()
-        const updated = await recordReturnSettlement(latest.id, { amount: latest.netRefundAmount, paymentMethod: refundMethod, transactionReference: refundMethod === 'BANK_TRANSFER' ? refundTxnRef.trim() : '', receiptFileId, confirmed: refundConfirmed }, refundKey.current, 'manager')
-        await apiRead.refresh(); setSelectedReturn(returnScreenRecord(updated)); setRefundModalOpen(false)
-        showToast('Đã ghi nhận chứng từ theo kết quả của hệ thống.')
-      } catch (error) { showToast(returnError(error)) }
-      finally { apiLock.current = false; setApiBusy(false) }
-      return
-    }
-    if (!refundTxnRef.trim()) {
-      showToast('Vui lòng nhập mã giao dịch hoàn cọc.')
-      return
-    }
-    try {
-      completeReturnRefund(selectedReturn.id, user, refundTxnRef.trim())
-      showToast(
-        `Đã xác nhận hoàn tiền cọc ${formatManagerMoney(selectedReturn.netRefundAmount)} cho ${selectedReturn.customerName}!`
-      )
-      setRefundModalOpen(false)
-      setRefundTxnRef(''); setRefundFile(null); setRefundConfirmed(false); refundUpload.current = null; refundKey.current = null
-      setSelectedReturn(null)
-    } catch (err: any) {
-      showToast(formatReturnManagerError(err, 'Có lỗi khi hoàn cọc.'))
-    }
-  }
-
   const settlementInVnd: ManagerReturnSettlementFees = {
     damageFee: disputeSettlement.damageFee,
     cleaningFee: disputeSettlement.cleaningFee,
@@ -830,20 +783,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                           </Button>
                         )}
 
-                        {ret.status === 'refund_pending' && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-emerald-700 border-emerald-500 hover:bg-emerald-50 font-medium whitespace-nowrap"
-                            onClick={() => {
-                              setSelectedReturn(ret)
-                              setRefundTxnRef('')
-                              setRefundModalOpen(true)
-                            }}
-                          >
-                            {'Hoàn cọc'}
-                          </Button>
-                        )}
+
 
                       </div>
                     </Td>
@@ -1113,19 +1053,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                   {'Xử lý khiếu nại'}
                 </Button>
               )}
-              {selectedReturn.status === 'refund_pending' && (
-                <Button
-                  variant="primary"
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                  onClick={() => {
-                    setDetailModalOpen(false)
-                    setRefundTxnRef('')
-                    setRefundModalOpen(true)
-                  }}
-                >
-                  {'Hoàn cọc ngay'}
-                </Button>
-              )}
+
             </div>
           </div>
         )}
@@ -1260,57 +1188,6 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                 disabled={apiBusy || (useApi && !disputeResolutionNote.trim())} onClick={handleReviewDispute}
               >
                 {'Gửi kết luận cho khách'}
-              </Button>
-            </div>
-          </div></ProcessingLeaseBoundary>
-        )}
-      </Modal>
-
-      {/* Complete Refund Modal */}
-      <Modal
-        open={refundModalOpen}
-        onClose={() => { if (!apiBusy) setRefundModalOpen(false) }}
-        title={'Xác Nhận Hoàn Tiền Cọc Cho Khách'}
-      >
-        {selectedReturn && (
-          <ProcessingLeaseBoundary target="RETURN" id={selectedReturn.id} enabled={useApi} onAcquired={async () => { setSelectedReturn(returnScreenRecord(await getReturn('manager', selectedReturn.id))); setRefundConfirmed(false) }}><div className="space-y-4">
-            <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl text-xs space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-emerald-800">{'Khách thụ hưởng'}</span>
-                <span className="font-bold text-emerald-950 text-sm">{selectedReturn.customerName}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-emerald-800">{'Mã gian kho thanh lý'}</span>
-                <span className="font-mono font-bold text-emerald-950">{selectedReturn.unitId}</span>
-              </div>
-              <div className="flex justify-between items-center pt-2 border-t border-emerald-200 text-sm">
-                <span className="font-bold text-emerald-900">{'Số tiền hoàn cọc'}</span>
-                <span className="font-mono font-extrabold text-emerald-700 text-lg">{formatManagerMoney(selectedReturn.netRefundAmount)}</span>
-              </div>
-            </div>
-
-            {(!useApi || refundMethod === 'BANK_TRANSFER') && <Input
-              label={'Mã chứng từ / Tham chiếu chuyển khoản ngân hàng'}
-              value={refundTxnRef}
-              disabled={apiBusy} onChange={e => { setRefundTxnRef(e.target.value); setRefundConfirmed(false) }}
-              placeholder="VD: VCB-REF-849204"
-            />}
-            {useApi && <>
-              <label className="block text-xs font-semibold text-stone-700">Phương thức hoàn tiền<select value={refundMethod} disabled={apiBusy} onChange={event => { setRefundMethod(event.target.value as 'CASH' | 'BANK_TRANSFER'); setRefundConfirmed(false) }} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2"><option value="BANK_TRANSFER">Chuyển khoản</option><option value="CASH">Tiền mặt</option></select></label>
-              <label className="block text-xs font-semibold text-stone-700">Biên lai thực hoàn trả kho<input key={selectedReturn.id} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" disabled={apiBusy} className="mt-1 block w-full rounded-lg border border-stone-300 px-3 py-2" onChange={event => { setRefundFile(event.target.files?.[0] ?? null); setRefundConfirmed(false); refundUpload.current = null; refundKey.current = null }} /></label>
-              <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={refundConfirmed} disabled={apiBusy || !refundFile} onChange={event => setRefundConfirmed(event.target.checked)} /><span>Đã thực hoàn đúng số tiền và đối chiếu biên lai.</span></label>
-            </>}
-
-            <div className="flex gap-2 justify-end pt-3 border-t">
-              <Button variant="outline" onClick={() => setRefundModalOpen(false)}>
-                {'Hủy'}
-              </Button>
-              <Button
-                variant="primary"
-                className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                disabled={apiBusy || (useApi && (!refundFile || !refundConfirmed || (refundMethod === 'BANK_TRANSFER' && !refundTxnRef.trim())))} onClick={handleCompleteRefund}
-              >
-                {'Xác nhận hoàn cọc'}
               </Button>
             </div>
           </div></ProcessingLeaseBoundary>

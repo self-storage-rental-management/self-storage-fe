@@ -2,6 +2,18 @@ import { cccdProvinceCodes } from '../config/cccdProvinceCodes'
 // Historical birthplace codes: TT 59/2021/TT-BCA, appendix I. Existing IDs retain their birthplace code.
 const PROVINCES = new Set(cccdProvinceCodes)
 export const normalizeCccd = (raw: string) => raw.replace(/[\s.\-]/g, '')
+export function cccdCorrectionError(saved: string, actual: string): string | null {
+  const previous = normalizeCccd(saved)
+  const corrected = normalizeCccd(actual)
+  if (!previous) return null
+  if (!/^\d{12}$/.test(previous) || !/^\d{12}$/.test(corrected))
+    return 'CCCD phải có đủ 12 chữ số để đối chiếu.'
+  if (previous.slice(0, 6) !== corrected.slice(0, 6))
+    return 'Không được sửa 6 số đầu CCCD gồm mã tỉnh, giới tính/thế kỷ và năm sinh.'
+  if (Array.from(previous).filter((digit, index) => digit !== corrected[index]).length > 3)
+    return 'Chỉ được sửa tối đa 3 chữ số trong 6 số cuối CCCD.'
+  return null
+}
 export function validateCccd(raw: string): { ok: boolean; error?: string; warning?: string } {
   const value = normalizeCccd(raw)
   if (!/^\d+$/.test(value)) return { ok: false, error: 'CCCD chỉ được chứa chữ số.' }

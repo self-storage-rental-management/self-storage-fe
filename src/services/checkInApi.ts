@@ -610,17 +610,6 @@ export async function rejectCheckIn(
   ))
 }
 
-export async function confirmPartialInventoryRemoval(checkInId: string, request: {
-  remainderRemoved: boolean
-  evidenceReferences: string[]
-  notes: string
-}) {
-  return assertEnvelope(await apiRequest<unknown>(
-    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/inventory-partial-removal`,
-    { method: 'POST', body: JSON.stringify(request) },
-  ))
-}
-
 export async function recordInventoryArrival(checkInId: string) {
   return assertEnvelope(await apiRequest<unknown>(
     `/api/staff/check-ins/${encodeURIComponent(checkInId)}/inventory-arrival`,
@@ -817,6 +806,11 @@ export async function saveInventoryDraft(checkInId: string, request: CompleteChe
 export async function prepareInventoryResolution(checkInId: string, expectedRevision: number) {
   return assertEnvelope(await apiRequest<unknown>(`/api/staff/check-ins/${encodeURIComponent(checkInId)}/inventory-draft/resolve`,
     { method: 'POST', body: JSON.stringify({ expectedRevision }) }))
+}
+
+export async function transferProhibitedGoods(checkInId: string, description: string, evidenceIds: string[]) {
+  return (await apiRequest<{ data: string }>(`/api/staff/check-ins/${encodeURIComponent(checkInId)}/prohibited-goods-recovery`,
+    { method: 'POST', body: JSON.stringify({ description, evidenceIds }) })).data
 }
 
 export const publishInventoryDraft = prepareInventoryResolution

@@ -240,7 +240,7 @@ export async function apiRequest<T>(path: string, options: RequestInit & { skipA
       throw new ApiClientError('Bạn đang chỉ xem hồ sơ. Cần nhận quyền xử lý trước khi lưu thay đổi.', { status: 409, code: 'CONFLICT' })
     temporary = true
     const token = crypto.randomUUID()
-    const view = (await rawApiRequest<{ data: ProcessingView }>(lockUrl + '/acquire', { method: 'POST', body: JSON.stringify({ token }) })).data
+    const view = (await rawApiRequest<{ data: ProcessingView }>(lockUrl + '/acquire', { method: 'POST', body: JSON.stringify({ token, reclaimSameOwner: false }) })).data
     if (!view.owned) throw new ApiClientError(`Hồ sơ đang được ${view.ownerName || 'nhân sự khác'} xử lý. Bạn chỉ có thể xem.`, { status: 409, code: 'CONFLICT' })
     lease = { target: target.target, id: target.id, token, view, invalid: false, inFlight: false, ready: true }
     putProcessingLease(lease)
@@ -267,7 +267,7 @@ export async function apiRequest<T>(path: string, options: RequestInit & { skipA
     notifyProcessing()
     if (temporary) {
       forgetProcessingLease(lease.target, lease.id, lease.token)
-      try { await rawApiRequest(lockUrl + '/release', { method: 'POST', body: JSON.stringify({ token: lease.token }) }) } catch { /* TTL handles lost cleanup. */ }
+      try { await rawApiRequest(lockUrl + '/release', { method: 'POST', body: JSON.stringify({ token: lease.token, reclaimSameOwner: false }) }) } catch { /* TTL handles lost cleanup. */ }
     }
   }
 }

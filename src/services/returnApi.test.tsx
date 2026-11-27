@@ -1,10 +1,11 @@
-import { CustomerClearance } from '../views/return-api/ReturnClearance'
+import ReturnAppointment from '../views/return-api/ReturnAppointment'
+import { awaitsCustomerClearance, CustomerClearance } from '../views/return-api/ReturnClearance'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { setAccessToken, clearAuthTokens } from './apiClient'
 import { putProcessingLease, clearProcessingLeases } from './processingLeaseState'
 import { setCustomerClearance, completeRefund, recordReturnSettlement, isApiReturn, requestReturn, listReturns, getReturn, inspectReturn, reviewDispute, confirmReturn, paySettlement, reopenReturnVerification, verifyReturnIdentity, scheduleMismatchReturnAppointment, extendMismatchReturnWindow, recordReturnArrival, reviewReturnArrival, returnError, uploadReturnEvidence, type ApiReturn } from './returnApi'
-import ReturnApiPanel, { ReturnSummary } from '../views/return-api/ReturnApiPanel'
+import ReturnApiPanel, { ReturnSummary, SettlementCalculationBreakdown, mismatchRentalUsageFee } from '../views/return-api/ReturnApiPanel'
 import ReturnAttendance, { requiresReturnAttendance } from '../views/return-api/ReturnAttendance'
 import { ids, operationsActor } from '../../tests/rentalOperationsApiFixtures'
 import type { ApiActor } from './authApi'
@@ -55,6 +56,24 @@ beforeEach(() => {
 })
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); clearAuthTokens(); clearProcessingLeases() })
 describe('real Return transport and unknown settlement presentation', () => {
+  it('separates inventory-mismatch rental usage from inspection fees without double-counting pallets', () => {
+    expect(mismatchRentalUsageFee({ ...record, returnType: 'INVENTORY_MISMATCH', damageFee: 1000000,
+      cleaningFee: 100000, lostItemFee: 0, totalDeductions: 1600000 })).toBe(500000)
+    expect(mismatchRentalUsageFee({ ...record, returnType: 'INVENTORY_MISMATCH', damageFee: 1000000,
+      cleaningFee: 100000, lostItemFee: 300000, totalDeductions: 1900000 })).toBe(500000)
+    expect(mismatchRentalUsageFee({ ...record, returnType: 'NORMAL', totalDeductions: 1600000 })).toBe(0)
+  })
+  it('deducts inspection charges from deposit and daily usage from prepaid rent for mismatch returns', () => {
+    const item: ApiReturn = { ...record, returnType: 'INVENTORY_MISMATCH', damageFee: 1000000,
+      cleaningFee: 100000, lostItemFee: 0, totalDeductions: 1600000, depositAmount: 2000000,
+      rentalRefundCredit: 85500000, netRefundAmount: 85900000 }
+    const html = renderToStaticMarkup(<SettlementCalculationBreakdown record={item} />)
+    expect(html).toContain('1.100.000')
+    expect(html).toContain('900.000')
+    expect(html).toContain('85.000.000')
+    expect(html).toContain('85.900.000')
+    expect(html).not.toContain('khác số tính lại')
+  })
   it('explains when an approved handover returns to manager review', () => {
     const overdue = new Date(Date.now() - 60_000).toISOString()
     const item: ApiReturn = {
@@ -88,6 +107,29 @@ describe('real Return transport and unknown settlement presentation', () => {
     expect(render(arrived)).not.toContain('Ảnh hiện trường chứng minh khách đã đến')
     expect(render({ ...arrived, attendance: { ...arrived.attendance, verifiedAt: arrivedAt } })).toContain('Đã xác minh danh tính')
     expect(requiresReturnAttendance({ ...pending, status: 'recovery_required' })).toBe(false)
+  })
+
+  it.each(['CANCELLED_IN_SETUP', 'RETURN_IN_SETUP', 'INVENTORY_MISMATCH', 'EARLY_RETURN', 'NORMAL'] as const)(
+    'waits for customer clearance before inspection for %s',
+    returnType => {
+      const pending = { ...record, status: 'scheduled' as const, returnType }
+      expect(awaitsCustomerClearance(pending)).toBe(true)
+      expect(awaitsCustomerClearance({ ...pending, customerClearedAt: new Date().toISOString() })).toBe(false)
+      expect(awaitsCustomerClearance({ ...pending, customerClearedAt: null })).toBe(true)
+      expect(awaitsCustomerClearance({ ...pending, status: 'recovery_required' })).toBe(false)
+      expect(awaitsCustomerClearance({ ...pending, sourceType: 'RECOVERY' })).toBe(false)
+    },
+  )
+
+  it('locks identity verification fields until the customer confirms clearance', () => {
+    const now = new Date().toISOString()
+    const pending: ApiReturn = { ...record, status: 'scheduled', returnType: 'INVENTORY_MISMATCH',
+      attendance: { arrivedAt: now, evidenceId: ids.file, expiresAt: null, attempts: 0,
+        verifiedAt: null, reviewStartsAt: null, reviewAccepted: null } }
+    const render = (item: ApiReturn) => renderToStaticMarkup(<ReturnAttendance record={item} role="staff" editable onChanged={() => {}} />)
+    expect(render(pending)).toContain('Chờ khách xác nhận đã dọn kho để xác minh danh tính.')
+    expect(render(pending)).toMatch(/<input(?=[^>]*type="password")(?=[^>]*disabled="")/)
+    expect(render({ ...pending, customerClearedAt: now })).not.toMatch(/<input(?=[^>]*type="password")(?=[^>]*disabled="")/)
   })
 
   it('separates arrival capture from identity verification and exposes manager late-review actions for mismatch returns', async () => {
@@ -354,6 +396,15 @@ describe('real Return transport and unknown settlement presentation', () => {
     expect(fetch.mock.calls[0][0]).toContain(`/api/business/returns/${ids.event}/complete-refund`)
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual(proof)
   })
+  it('rejects gateway refunds and missing receipt evidence before sending a Business payout', async () => {
+    state.actor = { ...operationsActor('manager'), roles: ['BUSINESS'], permissions: ['returns:read', 'refunds:execute'], facilityScopes: { [ids.facility]: 'MANAGE' } }
+    const fetch = respond({ data: record })
+    const proof = { amount: 5700000, paymentMethod: 'BANK_TRANSFER' as const, transactionReference: 'REF-1', receiptFileId: ids.file, confirmed: true }
+    await expect(completeRefund(ids.event, { ...proof, paymentMethod: 'VNPAY' } as unknown as typeof proof)).rejects.toThrow()
+    await expect(completeRefund(ids.event, { ...proof, receiptFileId: '' })).rejects.toThrow()
+    await expect(completeRefund(ids.event, { ...proof, transactionReference: ' ' })).rejects.toThrow()
+    expect(fetch).not.toHaveBeenCalled()
+  })
   it('sends the server statement amount and saved proof when recording a Staff payout', async () => {
     state.actor = operationsActor('staff')
     state.actor.permissions.push('returns:process', 'returns:read', 'refunds:execute')
@@ -429,4 +480,14 @@ describe('real Return transport and unknown settlement presentation', () => {
     expect(html).not.toContain('Thu gọn')
     expect(html).not.toContain('Trải ra')
   })
+})
+
+it('places the mismatch return date picker on the return case and hides it after inspection', () => {
+  const returning: ApiReturn = { ...record, returnType: 'INVENTORY_MISMATCH', status: 'requested',
+    inventoryRemovalDeadlineAt: '2099-12-06T00:00:00Z' }
+  const html = renderToStaticMarkup(<ReturnAppointment record={returning} busy={false} run={() => {}} />)
+  expect(html).toContain('Ngày hẹn trả kho (dd/mm/yyyy)')
+  expect(html).toContain('Đặt lịch trả kho')
+  expect(html).not.toContain('Chưa tìm thấy hồ sơ')
+  expect(renderToStaticMarkup(<ReturnAppointment record={{ ...returning, inspectedAt: '2026-11-27T00:00:00Z' }} busy={false} run={() => {}} />)).toBe('')
 })

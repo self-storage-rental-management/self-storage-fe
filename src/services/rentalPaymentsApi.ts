@@ -24,6 +24,7 @@ const RENTAL_PAYMENT_PURPOSES: RentalPaymentPurpose[] = [
 ]
 
 export interface RentalPaymentReceipt {
+  receiptFileId?: string | null
   rentalDisplayCode?: string | null
   paymentId: string; rentalId: string; renewalId: string | null; purpose: RentalPaymentPurpose
   status: 'PENDING' | 'PROCESSING' | 'PAID' | 'NOT_RECEIVED' | 'FAILED' | 'CANCELLED'
@@ -42,6 +43,7 @@ export async function listRentalPayments(id: string) {
       && Number.isFinite(p.amount) && p.amount>=0 && Number.isFinite(p.refundedAmount) && p.refundedAmount>=0
       && p.currency==='VND' && typeof p.initiatedByName==='string' && isInstant(p.createdAt)
       && (p.receiptCode == null || typeof p.receiptCode === 'string')
+      && (p.receiptFileId == null || isUuid(p.receiptFileId))
       && [p.paidAt,p.processedAt].every(date=>date===null || isInstant(date))
       && [p.transactionReference,p.gatewayTransactionNo,p.paymentMethod,p.gatewayPayDate].every(x=>x===null || typeof x==='string')))
 }
