@@ -5,7 +5,7 @@ import { actorToUser, getAuthenticatedActor } from '../../services/authApi'
 import { formatCustomerDateTime } from '../../i18n/customerDate'
 import { userFacingError } from '../../presentation/userFacingError'
 import { useEffect, useRef, useState } from 'react'
-import { savedReservationQuote, MISSING_RESERVATION_SNAPSHOT } from '../../services/reservationSnapshot'
+import { savedReservationQuote } from '../../services/reservationSnapshot'
 import { Button, Modal } from '../../components/ui'
 import { formatVndAmount as formatVnd } from '../../i18n/currency'
 import { ApiClientError } from '../../services/apiClient'
@@ -174,7 +174,7 @@ export default function CustomerReservationPayment({ receiptSlot, user, reservat
     setReceiptOpen(true)
   }
   const selectedReceipt = receiptSection === 'deposit' ? payment : remainingPayment
-  if (!snapshot) return <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{MISSING_RESERVATION_SNAPSHOT}</p>
+  if (!snapshot) return null
   const receiptButton = <Button variant="outline" size="sm" className="reservation-action reservation-action-receipt min-h-10 w-full justify-center" onClick={openReceipts}>Xem biên lai thanh toán</Button>
   return <>
     {reservation.status === 'AWAITING_PAYMENT' && <div className={`mt-3 w-fit max-w-full rounded-lg p-3 text-left text-xs ${timerTone}`}>

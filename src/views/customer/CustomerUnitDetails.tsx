@@ -149,7 +149,7 @@ export default function CustomerUnitDetails({
       ['Tiền cọc đảm bảo kho', formatVndAmount(securityDepositAmount)],
     ].map(([label, value]) => <li key={label} className="grid gap-1 px-4 py-3 sm:grid-cols-[220px_1fr]"><span className="text-stone-500">{label}</span><b>{value}</b></li>)}</ul>
     <CustomerRackLayout key={t.id} facilityId={t.facilityId} unitTypeId={t.id} />
-    <section className="rounded-xl border border-stone-200 p-5"><h4 className="font-bold">Kỳ thuê và chi phí</h4><p className="mt-2 text-sm">Chọn thời gian thuê và khai báo hàng hóa ở bước đặt kho. Báo giá sẽ hiển thị tiền thuê, ưu đãi, khoản trả trước 20% (giữ chỗ), tiền cọc đảm bảo kho và số tiền còn lại. Không áp dụng ưu đãi minh họa để tính tiền.</p><h4 className="mt-4 font-bold">Hàng hóa cần xét duyệt</h4><p className="mt-2 text-sm">Hàng thuộc nhóm “Khác” cần nhập tên, chất liệu, mô tả, kích thước và cân nặng. Nhân viên tại cơ sở sẽ xét duyệt sau khi xác minh email.</p></section>
+    <section className="rounded-xl border border-stone-200 p-5"><h4 className="font-bold">Kỳ thuê và chi phí</h4><p className="mt-2 text-sm">Chọn thời gian thuê và khai báo hàng hóa ở bước đặt kho. Báo giá sẽ hiển thị tiền thuê, ưu đãi, khoản trả trước 20% (giữ chỗ), tiền cọc đảm bảo kho và số tiền còn lại.</p><h4 className="mt-4 font-bold">Hàng hóa cần xét duyệt</h4><p className="mt-2 text-sm">Hàng thuộc nhóm “Khác” cần nhập tên, chất liệu, mô tả, kích thước và cân nặng. Nhân viên cơ sở sẽ xem xét và duyệt.</p></section>
     <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
       <h4 className="font-bold text-emerald-900">2. Ưu đãi và báo giá theo kỳ thuê</h4>
       <p className="mt-2 text-sm leading-6 text-stone-700">Chọn kỳ thuê ở bước đặt kho để nhận báo giá chính thức, khoản trả trước 20% (giữ chỗ), tiền thuê còn lại và tiền cọc đảm bảo kho.</p>
@@ -166,13 +166,13 @@ export default function CustomerUnitDetails({
       ) : (
         <CustomerFacilityPackages facilityId={t.facilityId} />
       )}
-      <p className="mt-3 text-xs leading-5 text-stone-600">Mức áp dụng và số tiền cuối cùng được xác nhận trên báo giá của đơn. Không cộng ưu đãi hai lần.</p>
+      <p className="mt-3 text-xs leading-5 text-stone-600">Mức áp dụng và số tiền cuối cùng được xác nhận trên báo giá của đơn.</p>
     </section>
     <section className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50/70 to-white p-5 sm:p-6">
       <h4 className="font-bold text-stone-900">3. Quy trình đặt kho và thanh toán</h4>
       <ol className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[
         ['Chọn kho', 'Chọn loại kho phù hợp và kỳ thuê.'],
-        ['Xác nhận hồ sơ', 'Khai báo hàng, nhận báo giá.'],
+        ['Xác nhận hồ sơ', 'Khai báo hàng và nhận báo giá.'],
         ['Thanh toán cọc', 'Duyệt hồ sơ nếu cần. Thanh toán cọc theo báo giá.'],
         ['Nhận kho', 'Quản lý cơ sở phân gian kho. Khách hàng nhận kho và ký hồ sơ.'],
       ].map(([title, description], i) => <li key={title} className="rounded-xl border border-amber-100 bg-white p-4 shadow-sm">
