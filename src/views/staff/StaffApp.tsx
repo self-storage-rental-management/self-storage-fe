@@ -1498,7 +1498,7 @@ export default function StaffApp({
       setCheckinModal(false)
 
       showToast(
-        "Đã kích hoạt hợp đồng thuê. Khách hàng có thể xác nhận đã nhận kho trong Đơn đặt giữ kho.",
+        "Đã hoàn tất bàn giao và bắt đầu thời gian chuẩn bị hàng.",
       )
     } catch (error) {
       setPendingCheckinCompletionId(null)
@@ -4536,7 +4536,7 @@ export default function StaffApp({
             </div>
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
               {
-                "Nhân viên hoàn tất nhận kho để kích hoạt hợp đồng thuê. Khách hàng sẽ tự bấm “Tôi đã nhận kho”. Trước thời điểm đó, hồ sơ mang nhãn “Chờ khách hàng xác nhận bàn giao”."
+                "Nhân viên lưu biên bản và hoàn tất bàn giao để tạo hồ sơ thuê, bắt đầu thời gian chuẩn bị. Khách không cần xác nhận nhận kho thêm."
               }
             </div>
             <div className="space-y-1">

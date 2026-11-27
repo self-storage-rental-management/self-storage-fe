@@ -58,6 +58,17 @@ export default function StaffFacilityRentals() {
           {statuses.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
       </label>
+      <label className="text-sm font-medium text-stone-700">
+        Sắp xếp
+        <select className="mt-1 block w-full min-w-44 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
+          value={query.sort ?? 'createdAt,desc'} onChange={event => {
+            const sort = event.target.value === 'createdAt,asc' ? 'createdAt,asc' : 'createdAt,desc'
+            setQuery(current => ({ ...current, sort, page: 0 }))
+          }}>
+          <option value="createdAt,desc">Đơn mới nhất</option>
+          <option value="createdAt,asc">Đơn cũ nhất</option>
+        </select>
+      </label>
     </form>
 
     {list.loading && <p role="status" className="text-sm text-stone-600">Đang tải hồ sơ thuê…</p>}

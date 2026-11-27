@@ -3,6 +3,7 @@ export interface ProcessingView {
   reservationId: string; ownerId: string | null; ownerName: string | null; expiresAt: string | null
   maxExpiresAt?: string | null
   revision: number; sourceStamp: string; owned: boolean; occupied: boolean
+  requests?: { id: string; requesterId: string; requesterName: string; status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED'; requestedAt: string }[]
 }
 export interface LocalProcessingLease {
   target: ProcessingTarget; id: string; token: string; view: ProcessingView; invalid: boolean; inFlight: boolean; ready: boolean

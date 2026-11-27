@@ -44,7 +44,7 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
 
   return (
     <section className="space-y-5 rounded-2xl border border-stone-200 bg-white p-5 text-sm sm:p-6">
-      <details className="rounded-lg border border-stone-200 p-3"><summary className="cursor-pointer font-semibold">Điều khoản giữ kho, hủy, trả kho và hoàn tiền</summary><div className="mt-3"><CustomerTransactionTerms handoverTermsVersion={context === 'quote' ? HANDOVER_TERMS_VERSION : handoverTermsVersion ?? null} depositAmount={q.reservationDepositAmount} showReturnPolicy={context !== 'quote'} /></div></details>
+      <details className="rounded-lg border border-stone-200 p-3"><summary className="cursor-pointer font-semibold">Điều khoản giữ kho, hủy, trả kho và hoàn tiền</summary><div className="mt-3"><CustomerTransactionTerms handoverTermsVersion={context === 'quote' ? HANDOVER_TERMS_VERSION : handoverTermsVersion ?? null} depositAmount={q.reservationDepositAmount} /></div></details>
       {/* ── HEADER BÁO GIÁ ── */}
       {context === 'quote' && <>
       <div className="border-b border-stone-200 pb-4">
@@ -57,10 +57,10 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
           )}
         </div>
         <p className="mt-1 text-xs text-stone-600">
-          {q.rentalPeriodConfirmed ? 'Kỳ thuê đã chốt:' : 'Kỳ thuê dự kiến sau thời gian chuẩn bị:'} <b className="text-stone-900">{formatDisplayDate(q.startDate)} đến {formatDisplayDate(q.endDate, true)}</b> · {q.rentalMonths} tháng
+          {q.rentalPeriodConfirmed ? 'Kỳ thuê có tính phí (đã chốt):' : 'Kỳ thuê có tính phí (dự kiến):'} <b className="text-stone-900">{formatDisplayDate(q.startDate)} đến {formatDisplayDate(q.endDate, true)}</b> · {q.rentalMonths} tháng
         </p>
         <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-950">
-          <b>{q.freeSetupDays ?? 0} ngày chuẩn bị miễn phí</b> tính từ khi bạn xác nhận nhận kho trống. Kỳ thuê bắt đầu theo mốc đã chốt sau khi hết thời gian miễn phí; hoàn tất chuẩn bị hoặc kiểm kê sớm không làm đổi ngày tính tiền.
+          <b>{q.freeSetupDays ?? 0} ngày chuẩn bị miễn phí</b> tính từ lịch hẹn nhận kho đã chọn. Ngày bắt đầu tính tiền thuê = ngày hẹn nhận kho + số ngày chuẩn bị miễn phí. Kỳ thuê bắt đầu theo mốc đã chốt sau khi hết thời gian miễn phí; hoàn tất chuẩn bị hoặc kiểm kê sớm không tự động làm đổi ngày tính tiền.
         </div>
       </div>
 

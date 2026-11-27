@@ -1,3 +1,4 @@
+import ApiPager from '../rental-api/ApiPager'
 import { displayStatusLabel } from '../../presentation/statusLabels'
 import { formatCustomerDateTime } from '../../i18n/customerDate'
 import { receiptDisplayCode } from '../../utils/recordDisplayCode'
@@ -106,6 +107,8 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
   const [revision, setRevision] = useState(0)
   const selectedReceipt = entries.find(entry => entry.id === receiptId)
   const receipt = !loading && !error && selectedReceipt && canViewCustomerHistoryReceipt(selectedReceipt) ? selectedReceipt : null
+  const [page, setPage] = useState(0)
+  const pageSize = 10
   const [search, setSearch] = useState('')
   const [historyFilter, setHistoryFilter] = useState<'all' | 'payments' | 'settlement'>('all')
   const visibleEntries = entries.filter(entry => {
@@ -115,6 +118,12 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
     const matchesSearch = !query || [historyTransactionCode(entry), entry.id, entry.paymentReference, entry.reservationPayment?.transactionReference, entry.reference, entry.unitCode, entry.facilityName].some(value => value?.toLocaleLowerCase('vi-VN').includes(query))
     return matchesFilter && matchesSearch
   })
+  const totalPages = Math.ceil(visibleEntries.length / pageSize)
+  const currentPage = Math.min(page, Math.max(0, totalPages - 1))
+  const pageEntries = visibleEntries.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
+  useEffect(() => {
+    if (!loading && !error) setPage(current => Math.min(current, Math.max(0, totalPages - 1)))
+  }, [loading, error, totalPages])
   useEffect(() => {
     let disposed = false
     setLoading(true)
@@ -192,11 +201,11 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             <label className="min-w-0 flex-1 sm:w-72">
               <span className="sr-only">Tìm giao dịch</span>
-              <input className="h-10 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-900 focus:border-amber-600 focus:outline-none focus:ring-1 focus:ring-amber-600" value={search} onChange={event => setSearch(event.target.value)} placeholder="Mã giao dịch, hồ sơ hoặc gian kho" />
+              <input className="h-10 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-900 focus:border-amber-600 focus:outline-none focus:ring-1 focus:ring-amber-600" value={search} onChange={event => { setSearch(event.target.value); setPage(0) }} placeholder="Mã giao dịch, hồ sơ hoặc gian kho" />
             </label>
             <label>
               <span className="sr-only">Lọc giao dịch</span>
-              <select className="h-10 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-700" value={historyFilter} onChange={event => setHistoryFilter(event.target.value as typeof historyFilter)}>
+              <select className="h-10 rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-700" value={historyFilter} onChange={event => { setHistoryFilter(event.target.value as typeof historyFilter); setPage(0) }}>
                 <option value="all">Tất cả</option><option value="payments">Lịch sử thanh toán</option><option value="settlement">Quyết toán</option>
               </select>
             </label>
@@ -216,7 +225,7 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
             </tr>
           </Thead>
           <Tbody>
-            {visibleEntries.map((entry) => {
+            {pageEntries.map((entry) => {
               const label = statusLabel(entry)
               return (
                 <Tr key={entry.id}>
@@ -262,6 +271,9 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
             )}
           </Tbody>
         </Table>
+        {!loading && !error && <nav aria-label="Phân trang lịch sử thanh toán" className="border-t border-stone-200 px-4">
+          <ApiPager pagination={{ page: currentPage, pageSize, totalItems: visibleEntries.length, totalPages, sort: '' }} onPage={setPage} />
+        </nav>}
       </Card>
       <Modal
         open={Boolean(receipt)}
