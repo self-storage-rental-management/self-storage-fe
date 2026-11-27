@@ -19,7 +19,7 @@ const actionLabels = {
   CANNOT_ATTEND: 'Tôi không thể có mặt', DISPUTE: 'Gửi phản đối hoặc khiếu nại',
   RECORD_PRESENT: 'Ghi nhận có mặt', RECORD_ABSENT: 'Ghi nhận vắng mặt', VERIFY: 'Xác minh khách khi thu hồi',
   START: 'Bắt đầu thu hồi', SAVE_ITEM: 'Ghi nhận kiện hàng',
-  BLOCK: 'Tạm dừng và báo quản lý', RESUME: 'Tiếp tục xử lý', CANCEL: 'Hủy thu hồi',
+  BLOCK: 'Tạm dừng và báo quản lý', RESUME: 'Duyệt phản hồi và tiếp tục', CANCEL: 'Hủy thu hồi',
   CLOSE_REMEDIATION: 'Đóng xử lý khắc phục', COMPLETE: 'Hoàn tất thu hồi',
   ASSIGN_PICKUP: 'Phân công bàn giao hàng', SCHEDULE_PICKUP: 'Đặt lịch nhận hàng', OPEN_PICKUP: 'Mở phiên nhận hàng',
   VERIFY_PICKUP: 'Xác minh người nhận hàng', RELEASE_ITEM: 'Ghi nhận bàn giao hàng',
@@ -1038,6 +1038,7 @@ export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, man
           <div><dt>{entry.stage === 'COMPLETED' ? 'Hoàn tất thu hồi' : 'Lịch thu hồi'}</dt><dd>{dateLabel(entry.stage === 'COMPLETED' ? entry.completedAt : entry.scheduledAt)}</dd></div>
           {!closed && <div><dt>Hạn hoàn tất</dt><dd>{dateLabel(entry.deadlineAt)}</dd></div>}
         </dl>
+        {customerView && !closed && entry.reply && entry.reply !== 'NO_RESPONSE' && !replyActions.length && entry.responseDueAt && Date.now() < Date.parse(entry.responseDueAt) && <p role="status" className="recovery-item-notice">Đã gửi phản hồi. Vui lòng chờ quản lý duyệt trước khi gửi phản hồi tiếp theo.</p>}
         {!!replyActions.length && !closed && <p className="recovery-item-notice">Vui lòng phản hồi trong 6 giờ từ khi nhận thông báo. {entry.reply ? `Phản hồi: ${replies[entry.reply] || entry.reply}. ` : ''}<RecoveryCountdown deadline={entry.responseDueAt} label="Phản hồi" /></p>}
         {!!entry.items.length && <ul className="recovery-goods-summary" aria-label="Hàng hóa đã thu hồi">
           {groupRecoveryItems(entry.items).map(group => <li key={group.key}><span>{group.name}</span><strong>{group.items.length} kiện</strong></li>)}

@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { staffCheckInActions, firstBookableCheckInMinute, firstBookableCheckInSlot, firstCheckInMinute, firstCheckInSlot, submissionCheckInWindow, isCheckInAppointmentAllowed, isCheckInHandoverExpired, plannedCheckInWindow, policyDateInput, policyTimeInput } from './reservationCheckInPolicy'
 
-it('expires handover at midnight in Vietnam on the eighth calendar day', () => {
+it('expires handover after 168 elapsed hours plus the staff arrival review', () => {
   const appointment = '2026-11-21T15:00:00+07:00'
-  expect(isCheckInHandoverExpired(appointment, Date.parse('2026-11-27T16:59:59.999Z'))).toBe(false)
-  expect(isCheckInHandoverExpired(appointment, Date.parse('2026-11-27T17:30:00Z'))).toBe(false)
-  expect(isCheckInHandoverExpired(appointment, Date.parse('2026-11-27T17:30:00.001Z'))).toBe(true)
+  expect(isCheckInHandoverExpired(appointment, Date.parse('2026-11-28T07:59:59.999Z'))).toBe(false)
+  expect(isCheckInHandoverExpired(appointment, Date.parse('2026-11-28T08:30:00Z'))).toBe(false)
+  expect(isCheckInHandoverExpired(appointment, Date.parse('2026-11-28T08:30:00.001Z'))).toBe(true)
   expect(isCheckInHandoverExpired(null)).toBe(false)
 })
 
@@ -95,7 +95,7 @@ describe('staff intake actions', () => {
   it('blocks actions for missing appointments, elapsed deadlines and API-ineligible cases', () => {
     for (const actions of [
       staffCheckInActions({ ...scheduled, appointmentAt: null, scheduledAt: null }, at),
-      staffCheckInActions(scheduled, at + 7 * 86400_000),
+      staffCheckInActions(scheduled, at + 7 * 86400_000 + 30 * 60_000 + 1),
       staffCheckInActions({ ...scheduled, intakeAction: 'NONE' }, at),
     ]) expect(actions).toMatchObject({ canOpen: false, canReject: false })
   })

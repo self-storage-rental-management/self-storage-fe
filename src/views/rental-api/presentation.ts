@@ -4,6 +4,7 @@ import type { RenewalApiAction, RenewalApiRecord } from "../../types/renewalApi"
 import type { ApiActor } from "../../services/authApi"
 import type { RentalApiRecord, RentalApiRole } from "../../types/rentalApi"
 import { renewalDisplayLabel } from "../../presentation/renewalIdentity"
+import { incompleteIntakeRenewalReason, isRentalIntakePending, type RentalIntakeProgress } from './rentalIntake'
 
 export { renewalDisplayLabel } from "../../presentation/renewalIdentity"
 
@@ -29,8 +30,13 @@ export const rentalLabels: Record<string, string> = {
   completed: "Hoàn tất",
 }
 
-export function rentalStatusLabel(rental: Pick<RentalApiRecord, "status" | "inventoryVerifiedAt" | "canConfirmRentalStart">) {
+export function rentalStatusLabel(rental: RentalIntakeProgress & Pick<RentalApiRecord, "status" | "canConfirmRentalStart" | "inventoryMismatchReturn">) {
+  if (['setup', 'active'].includes(rental.status) && rental.inventoryMismatchReturn)
+    return 'Chờ trả kho do kiểm kê sai lệch'
   if (rental.canConfirmRentalStart) return "Đã kiểm kê · Chờ xác nhận"
+  if (['setup', 'active'].includes(rental.status) && isRentalIntakePending(rental))
+    return rental.inventoryVerifiedAt ? 'Chờ hoàn tất tiếp nhận hàng'
+      : rental.moveInCompletedAt ? 'Chờ kiểm kê và tiếp nhận hàng' : 'Đang chuẩn bị hàng'
   return rental.status === "setup" && rental.inventoryVerifiedAt
     ? "Đã kiểm kê · Chờ kỳ thuê"
     : rentalLabels[rental.status]
@@ -79,6 +85,7 @@ export function rentalError(error: unknown) {
     if (error.status === 404)
       return "Không có"
     const renewalErrors: Array<[string, string]> = [
+      ["Rental inventory and intake are not completed", incompleteIntakeRenewalReason],
       ["Renewal cutoff has passed", "Đã qua hạn gia hạn. Bạn không thể gửi yêu cầu mới, vui lòng liên hệ cơ sở để được hỗ trợ."],
       ["Recovery handoff blocks renewal", "Hồ sơ đã chuyển sang xử lý thu hồi nên không thể gia hạn trực tuyến. Vui lòng liên hệ cơ sở."],
       ["Recorded Recovery handoff blocks Renewal payment", "Hồ sơ đã chuyển sang xử lý thu hồi nên không thể tiếp tục thanh toán gia hạn. Vui lòng liên hệ cơ sở."],

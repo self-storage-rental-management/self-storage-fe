@@ -7,11 +7,11 @@ export const CHECK_IN_WINDOW_DAYS = 7
 export const CHECK_IN_SLOT_MINUTES = 30
 export const HANDOVER_TERMS_VERSION = 'HANDOVER_7D_V2'
 export const LEGACY_HANDOVER_TERMS_VERSION = 'HANDOVER_7D_V1'
-export const HANDOVER_WINDOW_NOTICE = 'Bạn có 7 ngày để đến nhận kho và cung cấp CCCD gốc hợp lệ. Ngày hẹn là ngày thứ nhất, tính theo giờ Việt Nam. Cơ sở có 30 phút để đối soát lượt đến đúng hạn. Bàn giao phải hoàn tất trong 72 giờ từ lần đối chiếu CCCD đầu tiên.'
-export const HANDOVER_IDENTITY_NOTICE = 'CCCD phải có 12 chữ số, mã tỉnh/thành hợp lệ và thể hiện người thuê đủ 18 tuổi. Nếu lệch tối đa 3 chữ số, nhân viên chỉ được sửa một lần sau khi xác minh đúng người đặt kho. Nếu lệch từ 4 chữ số, cơ sở sẽ từ chối bàn giao.'
+export const HANDOVER_WINDOW_NOTICE = 'Bạn có đủ 7 × 24 giờ kể từ giờ hẹn để đến nhận kho và cung cấp CCCD gốc hợp lệ. Bàn giao phải hoàn tất trong 72 giờ kể từ khi nhân viên xác nhận khách đã đến nhận kho.'
+export const HANDOVER_IDENTITY_NOTICE = 'CCCD phải có 12 chữ số, mã tỉnh/thành hợp lệ và thể hiện người thuê đủ 18 tuổi.'
 export const HANDOVER_FORFEITURE_NOTICE = 'Nếu không đáp ứng điều kiện nhận kho đúng hạn hoặc bị từ chối bàn giao do sai lệch CCCD vượt giới hạn, khoản trả trước giữ chỗ 20% sẽ không được hoàn lại. Nếu đơn bị hủy hoặc bị từ chối, bạn phải đặt và thanh toán đơn mới để thuê kho.'
 export const HANDOVER_TERMS_NOTICE = `${HANDOVER_WINDOW_NOTICE} ${HANDOVER_IDENTITY_NOTICE} ${HANDOVER_FORFEITURE_NOTICE}`
-export const LEGACY_HANDOVER_TERMS_NOTICE = 'Ngày hẹn là ngày thứ nhất. Nếu hết ngày thứ bảy theo giờ Việt Nam mà bạn chưa đến, đơn sẽ tự hủy và khoản trả trước giữ chỗ không được hoàn lại.'
+export const LEGACY_HANDOVER_TERMS_NOTICE = 'Nếu quá 7 × 24 giờ kể từ giờ hẹn mà bạn chưa đến, đơn sẽ tự hủy và khoản trả trước giữ chỗ không được hoàn lại.'
 export interface HandoverAttendance {
   deadline: string | null
   arrivalUnderReview?: boolean
@@ -32,8 +32,7 @@ export const ARRIVAL_REVIEW_MS = 30 * 60 * 1000
 
 export function isCheckInHandoverExpired(appointmentAt: string | null | undefined, now = Date.now()) {
   if (!appointmentAt) return false
-  const appointmentDay = Math.floor(policyClock(new Date(appointmentAt)).getTime() / DAY_MS)
-  const deadline = (appointmentDay + CHECK_IN_WINDOW_DAYS) * DAY_MS - VIETNAM_OFFSET_MS
+  const deadline = Date.parse(appointmentAt) + CHECK_IN_WINDOW_DAYS * DAY_MS
   return now > deadline + ARRIVAL_REVIEW_MS
 }
 

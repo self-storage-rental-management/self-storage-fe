@@ -4269,7 +4269,7 @@ export default function StaffApp({
                   {formatTime(selectedCheckin.appointmentTime)}
                 </span>
                 <span>
-                  <b>{"Hạn nhận kho"}:</b>{" "}
+                  <b>{"Hạn đến nhận kho"}:</b>{" "}
                   {formatDate(selectedCheckin.checkInDeadline)}
                 </span>
               </div>

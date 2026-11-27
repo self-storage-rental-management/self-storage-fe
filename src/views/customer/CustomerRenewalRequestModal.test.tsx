@@ -55,6 +55,23 @@ describe("CustomerRenewalRequestModal UI improvement", () => {
     vi.clearAllMocks()
   })
 
+  it('shows the blocked reason inside the dialog and disables every renewal control', () => {
+    const reason = 'Hồ sơ đang chờ trả kho do kiểm kê sai lệch nên không thể gia hạn.'
+    const html = renderToStaticMarkup(<CustomerRenewalRequestModal
+      actorId="cust-1" rentalId="rent-1" blockedReason={reason} onClose={vi.fn()} onSuccess={vi.fn()}
+    />)
+    expect(html).toContain(reason)
+    expect(html).toMatch(/<fieldset[^>]*disabled=""[^>]*aria-describedby="renewal-blocked-reason"/)
+    expect(html).toMatch(/<select[^>]*disabled=""/)
+    expect(html).toMatch(/<input[^>]*disabled=""[^>]*type="checkbox"/)
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Xác nhận và xem yêu cầu<\/button>/)
+    const cancel = html.match(/<button[^>]*>Hủy<\/button>/)?.[0]
+    expect(cancel).toBeDefined()
+    expect(cancel).not.toContain('disabled=""')
+    expect(html).not.toContain('PKG_1M')
+    expect(html).not.toContain('Lấy báo giá mới')
+  })
+
   it("renders dedicated alert card and clean buttons when open renewal conflict occurs", () => {
     commandState.error = new ApiClientError(
       "Rental already has an open or unresolved legacy renewal",

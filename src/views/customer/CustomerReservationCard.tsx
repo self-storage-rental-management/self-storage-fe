@@ -173,7 +173,7 @@ export function InventoryResolutionNotice({ detail, now, submitting, onResolve, 
       {!partialAccepted && !returnRequested && !confirmReturnOpen && <div className="mt-3 flex flex-wrap justify-end gap-2">
         {detail.inventoryFullFit && <Button size="sm" disabled={submitting} onClick={() => onResolve('ACCEPT_FULL')}>Nhận toàn bộ hàng</Button>}
         {!detail.inventoryFullFit && detail.inventoryReturnCanExtend && onExtendReturnWindow && (
-          <Button size="sm" variant="outline" disabled={submitting} onClick={onExtendReturnWindow}>Gia hạn thêm 2 ngày</Button>
+          <Button size="sm" variant="outline" disabled={submitting} onClick={onExtendReturnWindow}>{detail.inventoryReturnExtensionDays != null ? `Gia hạn thêm ${detail.inventoryReturnExtensionDays} ngày` : 'Gia hạn trả kho'}</Button>
         )}
         {!detail.inventoryFullFit && <Button size="sm" variant="danger" disabled={submitting || !canPlanReturn} onClick={() => { setConfirmReturnOpen(true) }}>Tạo yêu cầu trả kho ngay</Button>}
       </div>}
@@ -182,7 +182,7 @@ export function InventoryResolutionNotice({ detail, now, submitting, onResolve, 
         <p className="text-red-950">Vui lòng dọn hết hàng trong thời hạn trả kho và báo cơ sở khi sẵn sàng bàn giao.</p>
         <div className="flex flex-wrap justify-end gap-2">
           {detail.inventoryReturnCanExtend && onExtendReturnWindow && (
-            <Button size="sm" variant="outline" disabled={submitting} onClick={onExtendReturnWindow}>Gia hạn thêm 2 ngày</Button>
+            <Button size="sm" variant="outline" disabled={submitting} onClick={onExtendReturnWindow}>{detail.inventoryReturnExtensionDays != null ? `Gia hạn thêm ${detail.inventoryReturnExtensionDays} ngày` : 'Gia hạn trả kho'}</Button>
           )}
           <Button size="sm" variant="outline" disabled={submitting} onClick={() => setConfirmReturnOpen(false)}>Hủy</Button>
           <Button size="sm" variant="danger" disabled={submitting || !canPlanReturn} onClick={() => { setConfirmReturnOpen(false); onResolve('CANCEL_AND_RETURN') }}>{submitting ? 'Đang gửi…' : 'Xác nhận yêu cầu trả kho'}</Button>
