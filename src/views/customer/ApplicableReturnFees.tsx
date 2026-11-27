@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { formatVndAmount } from '../../i18n/currency'
 import { formatCustomerDateTime } from '../../i18n/customerDate'
-import { getReturnFeeScheduleForRental, getReturnFeeScheduleForReturn, returnFeeRows, type ReturnFeeSchedule } from '../../services/returnApi'
+import { getReturnFeeScheduleForRental, getReturnFeeScheduleForReturn, scheduleRows, type ReturnFeeSchedule } from '../../services/returnApi'
 
 type Props = { rentalId: string; returnId?: never } | { returnId: string; rentalId?: never }
 type State = { key: string; schedule?: ReturnFeeSchedule; error?: boolean }
@@ -44,7 +44,7 @@ export default function ApplicableReturnFees(props: Props) {
         {codes.map(code => {
           const detail = schedule.details[code]
           const price = schedule.prices[code]
-          const unit = returnFeeRows.find(row => row.code === code)?.unit
+          const unit = scheduleRows(schedule).find(row => row.code === code)?.unit
           return <div key={code} className="min-w-0 rounded-lg border border-stone-200 p-3 text-sm">
             <div className="flex flex-wrap justify-between gap-2"><h4 className="break-words font-semibold text-stone-900">{detail?.label || code}</h4><span className="font-bold text-stone-900">{typeof price === 'number' && Number.isFinite(price) && price >= 0 ? `${formatVndAmount(price)}${unit ? ` / ${unit}` : ''}` : 'Chưa có đơn giá'}</span></div>
             <p className="mt-2 break-words text-stone-600">Điều kiện: {detail?.trigger || 'Chưa có thông tin'}</p>

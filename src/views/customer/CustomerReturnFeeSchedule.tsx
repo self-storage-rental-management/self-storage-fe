@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getReturnFeeDetails, getReturnFeeSchedule, returnFeeRows, type ReturnFeeSchedule } from '../../services/returnApi'
+import { getReturnFeeDetails, getReturnFeeSchedule, scheduleRows, type ReturnFeeSchedule } from '../../services/returnApi'
 
 type ScheduleState = { status: 'loading' } | { status: 'error' } | { status: 'ready'; schedule: ReturnFeeSchedule }
 
@@ -10,7 +10,7 @@ export function ReturnFeeScheduleTable({ schedule }: { schedule: ReturnFeeSchedu
         <tr><th scope="col" className="p-3">Loại phí</th><th scope="col" className="p-3">Mức phí</th><th scope="col" className="p-3">Điều kiện áp dụng</th><th scope="col" className="p-3">Đối tượng</th></tr>
       </thead>
       <tbody className="divide-y divide-stone-200">
-        {returnFeeRows.map(row => {
+        {scheduleRows(schedule).map(row => {
           const details = getReturnFeeDetails(schedule, row.code)
           const price = schedule.prices?.[row.code]
           const validPrice = typeof price === 'number' && Number.isFinite(price) && price >= 0

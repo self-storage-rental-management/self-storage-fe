@@ -20,6 +20,18 @@ describe('customer return fee schedule', () => {
     expect((html.match(/<tr/g) ?? []).length).toBe(returnFeeRows.length + 1)
   })
 
+  it('shows only the items in a newly published catalog', () => {
+    const code = 'custom_minor_' + '1'.repeat(32)
+    const html = renderToStaticMarkup(<ReturnFeeScheduleTable schedule={{
+      revision: 3, editableCatalog: true, prices: { [code]: 60000 },
+      details: { [code]: { label: 'Sửa bản lề', trigger: 'Bản lề hỏng', applies: 'Kho trả' } },
+    }} />)
+    expect(html).toContain('Sửa bản lề')
+    expect(html).toContain('60.000 ₫ / lần')
+    expect(html).not.toContain('Trầy xước tường')
+    expect((html.match(/<tr/g) ?? []).length).toBe(2)
+  })
+
   it('initially shows a loading state and explains the schedule scope', () => {
     const html = renderToStaticMarkup(<CustomerReturnFeeSchedule />)
     expect(html).toContain('Đang tải biểu phí trả kho')
