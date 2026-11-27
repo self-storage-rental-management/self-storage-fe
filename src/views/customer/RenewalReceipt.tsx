@@ -9,6 +9,7 @@ import { rentalDate } from '../rental-api/presentation'
 import ApiReadState from '../rental-api/ApiReadState'
 import { invoiceNumberLabel, paymentCurrencyLabel, paymentMethodLabel } from './paymentLabels'
 import PaymentReceiptCard from './PaymentReceiptCard'
+import { EvidenceDownload } from '../rental-support-integration/EvidenceControls'
 
 import type { RentalApiRole } from '../../types/rentalApi'
 
@@ -18,7 +19,15 @@ export default function RenewalReceipt({ id,paymentId,role='customer' }: { id: s
   const read=useRentalApiResource(`${actor?.id}:${JSON.stringify(actor?.permissions)}:${JSON.stringify(actor?.facilityScopes)}:${receiptRole}:${id}:receipt:${paymentId}`,()=>getRenewalReceipt(receiptRole,id,paymentId))
   const p=read.data
   if(!p)return <ApiReadState {...read} retry={read.refresh} />
-  return <PaymentReceiptCard {...renewalReceiptExport(p)} />
+  return <div className="space-y-4">
+    {p.receiptFileId
+      ? <section className="space-y-3 rounded-xl border border-stone-200 bg-white p-4">
+        <h3 className="font-semibold">Biên lai gốc do nhân viên đính kèm</h3>
+        <EvidenceDownload id={p.receiptFileId} previewLabel="Xem biên lai gốc" label="Tải biên lai gốc" />
+      </section>
+      : p.kind === 'REMAINING_RENT' && <p role="status" className="text-sm text-amber-900">Giao dịch này chưa có biên lai gốc đính kèm. Vui lòng liên hệ cơ sở để đối chiếu.</p>}
+    <PaymentReceiptCard {...renewalReceiptExport(p)} />
+  </div>
 }
 
 export function renewalReceiptExport(p: RenewalReceiptData): PaymentReceiptExport {
@@ -29,7 +38,7 @@ export function renewalReceiptExport(p: RenewalReceiptData): PaymentReceiptExpor
     ? `${p.gatewayPayDate.slice(8,10)}:${p.gatewayPayDate.slice(10,12)}:${p.gatewayPayDate.slice(12,14)} ${p.gatewayPayDate.slice(6,8)}/${p.gatewayPayDate.slice(4,6)}/${p.gatewayPayDate.slice(0,4)}`
     : rentalDate(p.paidAt)
   return {
-    title: p.kind==='DEPOSIT'?'Biên lai tiền thuê gia hạn trả trước':remaining?'Biên lai thanh toán khi ký gia hạn':'Biên lai tiền thuê gia hạn',
+    title: remaining ? 'Phiếu ghi nhận thanh toán khi ký gia hạn' : 'Phiếu xác nhận thanh toán gia hạn',
     reference: receiptDisplayCode(p.receiptCode, p.transactionReference, p.paymentId),
     status: 'Khoản thu đã đối soát',
     fields: [
@@ -41,6 +50,6 @@ export function renewalReceiptExport(p: RenewalReceiptData): PaymentReceiptExpor
       ['Số hóa đơn',invoiceNumberLabel(p.invoiceNumber)],['Trạng thái hóa đơn',displayStatusLabel(p.invoiceStatus)],
       ['Ngày phát hành hóa đơn',p.invoiceIssuedAt ? rentalDate(p.invoiceIssuedAt) : '-'],
     ],
-    footer: p.environment==='SANDBOX'?'Biên lai VNPay thử nghiệm được lưu cùng yêu cầu gia hạn để đối chiếu thanh toán.':'Biên lai được lưu cùng yêu cầu gia hạn để đối chiếu thanh toán.',
+    footer: p.environment==='SANDBOX'?'Phiếu xác nhận VNPay thử nghiệm được lưu cùng yêu cầu gia hạn để đối chiếu thanh toán.':'Phiếu ghi nhận được lưu cùng yêu cầu gia hạn để đối chiếu thanh toán.',
   }
 }

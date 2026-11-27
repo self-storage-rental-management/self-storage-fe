@@ -39,6 +39,7 @@ import {
   uploadReturnEvidence,
   calculateDamageFee,
   returnDamageCatalog,
+  isCustomFee,
   returnCleaningOptions,
   getReturnFeeScheduleForReturn,
   getReturnFeeDetails,
@@ -1223,7 +1224,7 @@ function DamagePricingSelector({
         )
       })}
       <div className="flex items-center justify-between gap-2 border-t border-stone-200 pt-2">
-        <button type="button" disabled={disabled} onClick={addItem} className="rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-stone-800 hover:bg-stone-50">
+        <button type="button" disabled={disabled || !catalog.length} onClick={addItem} className="rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-stone-800 hover:bg-stone-50">
           + Thêm hạng mục
         </button>
         <span className="text-sm font-extrabold text-stone-900">{rentalMoney(calculateDamageFee(items, prices), 'VND')}</span>
@@ -1276,7 +1277,7 @@ function LeasedReturnActions(props: Parameters<typeof ReturnActions>[0]) {
     : props.role === 'manager' && fresh.status === 'disputed'
   return <ProcessingLeaseBoundary target="RETURN" id={props.record.id} enabled={actionable && fresh.sourceType !== 'RECOVERY'} onAcquired={async () => {
     setFresh(await getReturn(props.role, props.record.id))
-  }}><ReturnActions {...props} record={fresh} /></ProcessingLeaseBoundary>
+  }}><ReturnActions key={fresh.id} {...props} record={fresh} /></ProcessingLeaseBoundary>
 }
 
 function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLocked, onRecoveryChanged }: { role: ReturnRole; record: ApiReturn; run: (work: () => Promise<ApiReturn>) => Promise<void>; busy: boolean; recoveryLocked: boolean; onRecoveryLocked: (locked: boolean) => void; onRecoveryChanged: () => void }) {
@@ -1289,9 +1290,16 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
     getReturnFeeScheduleForReturn(record.id).then(value => { if (active) setApplicableSchedule({ returnId: record.id, value }) }).catch(() => { if (active) setApplicableSchedule(null) })
     return () => { active = false }
   }, [role, record.id])
-  const damagePrices = returnDamageCatalog.map(item => ({ ...item, ...getReturnFeeDetails(feeSchedule, item.code), unitPrice: feeSchedule?.prices[item.code] ?? item.unitPrice }))
-  const cleaningOptions = returnCleaningOptions.map(item => ({ ...item, ...getReturnFeeDetails(feeSchedule, item.id), fee: feeSchedule?.prices[item.id] ?? item.fee }))
-  const majorCleaningFee = feeSchedule?.prices.major ?? 200000
+  const customDamage: DamagePricingItem[] = Object.entries(feeSchedule?.prices ?? {}).filter(([code]) => isCustomFee(code) && !code.startsWith('custom_cleaning_')).map(([code, amount]) => ({
+    code, category: code.startsWith('custom_minor_') ? 'minor' : 'major', unit: 'lần',
+    label: feeSchedule!.details[code].label, suggestedMin: amount, suggestedMax: amount, unitPrice: amount,
+  }))
+  const damagePrices = [...returnDamageCatalog, ...customDamage].filter(item => !feeSchedule?.editableCatalog || item.code in feeSchedule.prices).map(item => ({ ...item, ...getReturnFeeDetails(feeSchedule, item.code), unitPrice: feeSchedule?.prices[item.code] ?? item.unitPrice }))
+  const cleaningOptions = returnCleaningOptions.filter(item => !feeSchedule?.editableCatalog || item.id in feeSchedule.prices).map(item => ({ ...item, ...getReturnFeeDetails(feeSchedule, item.id), fee: feeSchedule?.prices[item.id] ?? item.fee }))
+  for (const [id, fee] of Object.entries(feeSchedule?.prices ?? {})) {
+    if (id.startsWith('custom_cleaning_')) cleaningOptions.push({ id, fee, desc: '', ...getReturnFeeDetails(feeSchedule, id) })
+  }
+  const majorCleaningFee = feeSchedule?.prices.major ?? 0
   const attendance = record.attendance
   const handoverApproved = attendance?.reviewAccepted === true
   const appointmentAt = attendance?.handoverAppointmentAt
@@ -1319,10 +1327,15 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
   const [empty, setEmpty] = useState<boolean | null>(record.warehouseEmptyVerified === false ? false : null)
   const goodsLeft = empty === false
   const [missingPalletCount, setMissingPalletCount] = useState(0)
+  const [damagedFrames, setDamagedFrames] = useState(0)
+  const framePrice = feeSchedule?.prices.equipment_frame_damage ?? 0
+  const inspectionItems = damagedFrames > 0
+    ? [...damageItems, { code: 'equipment_frame_damage', quantity: damagedFrames }]
+    : damageItems
   const palletFee = missingPalletCount * (record.equipment?.palletUnitPrice || 0)
   const [damage, setDamage] = useState<InspectionInput['damageClassification']>('no_damage')
   const [unit, setUnit] = useState<'available' | 'maintenance'>('available')
-  const requiresMaintenance = goodsLeft || fees.cleaningFee > 0 || damage !== 'no_damage' || missingPalletCount > 0
+  const requiresMaintenance = goodsLeft || fees.cleaningFee > 0 || damage !== 'no_damage' || missingPalletCount > 0 || damagedFrames > 0
   const [returnedLock, setReturnedLock] = useState((record.lostItemFee ?? 0) <= 0)
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([])
   const initialized = useRef(false)
@@ -1418,10 +1431,10 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       ...sanitizeFees(fees),
       missingPalletCount,
       lostItemFee: (returnedLock ? 0 : 150000) + palletFee,
-      damageFee: calculateDamageFee(damageItems, damagePrices),
-      damageItems,
+      damageFee: calculateDamageFee(inspectionItems, damagePrices),
+      damageItems: inspectionItems,
       inventoryMatch: missingPalletCount > 0 ? 'missing' : 'match',
-      damageClassification: goodsLeft ? 'abandoned_goods' : damage,
+      damageClassification: goodsLeft ? 'abandoned_goods' : damagedFrames > 0 && damage === 'no_damage' ? 'minor_damage' : damage,
       staffNotes: note,
       evidencePhotos,
       returnedKey: returnedLock,
@@ -1513,7 +1526,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       {/* ─── OPTION 1: MODERN 2-COLUMN INSPECTION & LIVE SETTLEMENT ─── */}
       {(canInspect || canReview) && (() => {
         const deposit = record.depositAmount ?? 0
-        const calculatedDamage = canInspect ? calculateDamageFee(damageItems, damagePrices) : fees.damageFee
+        const calculatedDamage = canInspect ? calculateDamageFee(inspectionItems, damagePrices) : fees.damageFee
         const effectiveFees = { ...fees, damageFee: calculatedDamage, lostItemFee: fees.lostItemFee + (canInspect ? palletFee : 0) }
         const displayedPalletFee = canInspect ? palletFee : (record.palletLossFee || 0)
         const displayedLockFee = Math.max(0, effectiveFees.lostItemFee - displayedPalletFee)
@@ -1528,6 +1541,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
           ? Math.max(0, totalFees - deposit)
           : Math.max(0, totalFees - deposit - rentalCredit)
         const missingDamageItems = canInspect && !goodsLeft && damage !== 'no_damage' && damage !== 'abandoned_goods'
+          && damagePrices.some(item => item.category === (damage === 'major_damage' ? 'major' : 'minor'))
           && (damageItems.length === 0 || damageItems.some((item) => item.quantity <= 0))
 
         return (
@@ -1683,15 +1697,25 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
 
                         <div className="rounded-xl border border-stone-200 p-3 space-y-2">
                           <p className="text-xs font-bold">Kiểm kê thiết bị đã bàn giao</p>
+                          {record.equipment && <>
+                            <label className="text-xs font-semibold block">Số khung kệ bị hư
+                              <input type="number" min={0} max={record.equipment.frameCount} step={1} value={damagedFrames}
+                                disabled={busy || !feeSchedule || !record.equipment.frameCount}
+                                onChange={event => setDamagedFrames(Math.min(record.equipment!.frameCount, Math.max(0, Math.trunc(Number(event.target.value) || 0))))}
+                                className="ml-3 w-24 rounded-lg border p-2" />
+                            </label>
+                            <p className="text-xs">Khung hư: {damagedFrames}/{record.equipment.frameCount}. Phí hư khung: {damagedFrames} × {rentalMoney(framePrice, 'VND')} = {rentalMoney(damagedFrames * framePrice, 'VND')}.</p>
+                          </>}
                           {record.equipment?.palletCount != null ? <>
-                            <p className="text-xs">Theo cấu hình bàn giao: {record.equipment.rackCount} bộ kệ / {record.equipment.frameCount} khung, {record.equipment.palletCount} tấm kê.</p>
                             <label className="text-xs font-semibold block">Số tấm kê bị thiếu
                               <input type="number" min={0} max={record.equipment.palletCount} step={1} value={missingPalletCount} disabled={busy}
                                 onChange={(event) => { setMissingPalletCount(Math.min(record.equipment!.palletCount!, Math.max(0, Math.trunc(Number(event.target.value) || 0)))); setUnit('maintenance') }}
                                 className="ml-3 w-24 rounded-lg border p-2" />
-                              <button type="button" disabled={busy || missingPalletCount === 0} onClick={() => setMissingPalletCount((n) => Math.max(0, n - 1))} className="ml-2 rounded border px-3 py-2">−</button>
-                              <button type="button" disabled={busy || missingPalletCount >= record.equipment.palletCount} onClick={() => { setMissingPalletCount((n) => Math.min(record.equipment!.palletCount!, n + 1)); setUnit('maintenance') }} className="ml-2 rounded border px-3 py-2">+</button>
                             </label>
+                            <div className="flex items-center gap-2 py-1">
+                              <button type="button" aria-label="Giảm số tấm kê bị thiếu" disabled={busy || missingPalletCount === 0} onClick={() => setMissingPalletCount((n) => Math.max(0, n - 1))} className="flex h-10 w-10 shrink-0 items-center justify-center rounded border">−</button>
+                              <button type="button" aria-label="Tăng số tấm kê bị thiếu" disabled={busy || missingPalletCount >= record.equipment.palletCount} onClick={() => { setMissingPalletCount((n) => Math.min(record.equipment!.palletCount!, n + 1)); setUnit('maintenance') }} className="flex h-10 w-10 shrink-0 items-center justify-center rounded border">+</button>
+                            </div>
                             <p className="text-xs">Thu hồi: {record.equipment.palletCount - missingPalletCount} / {record.equipment.palletCount} tấm. Phí thiếu: {rentalMoney(palletFee, 'VND')}.</p>
                             {missingPalletCount > 0 && !record.equipment.palletUnitPrice && <p className="text-xs text-amber-700">Chưa cấu hình đơn giá bồi thường tấm kê; cần bổ sung trước khi nghiệm thu.</p>}
                           </> : <p className="text-xs text-amber-700">{noShowRecovery
@@ -1887,7 +1911,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                         />
                       ) : (
                         <div className="rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs text-stone-600 flex items-center justify-between">
-                          <span className="font-semibold text-stone-800">Phí hư hỏng kết cấu</span>
+                          <span className="font-semibold text-stone-800">Phí hư hỏng</span>
                           <span className={`font-mono font-bold ${effectiveFees.damageFee > 0 ? 'text-rose-700' : 'text-stone-700'}`}>
                             {effectiveFees.damageFee > 0 ? `− ${rentalMoney(effectiveFees.damageFee, 'VND')}` : '0 ₫'}
                           </span>
@@ -2014,6 +2038,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                           setDamageItems([])
                           setDamage('no_damage')
                           setEmpty(null)
+                          setDamagedFrames(0)
                           setMissingPalletCount(0)
                           setReturnedLock(true)
                           setUnit('available')
