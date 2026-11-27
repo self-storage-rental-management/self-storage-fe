@@ -7,6 +7,7 @@ import { validRenewalRisk, type Risk } from './RenewalRiskNotice'
 import { rentalDate, rentalMoney } from './presentation'
 import OverdueRentalCard from './OverdueRentalCard'
 import UpcomingRentalCard from './UpcomingRentalCard'
+import { incompleteIntakeRenewalReason, isRentalIntakePending, type RentalIntakeProgress } from './rentalIntake'
 
 export function rentalDaysUntilDeadline(rental: RentalApiRecord, now = new Date()) {
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
@@ -28,7 +29,7 @@ export interface RenewalEligibilityItem {
 }
 
 export function getRentalRenewalEligibility<
-  R extends { id?: string; status: string; contractEndDate?: string | null; dateSemantics?: { lastPermittedDate?: string | null } | null },
+  R extends RentalIntakeProgress & { id?: string; status: string; inventoryMismatchReturn?: boolean; contractEndDate?: string | null; dateSemantics?: { lastPermittedDate?: string | null } | null },
   N extends RenewalEligibilityItem
 >(
   rental: R,
@@ -56,10 +57,17 @@ export function getRentalRenewalEligibility<
   const remainingDays = last ? Math.round((Date.parse(last) - Date.parse(today)) / 86400000) : NaN
   const hasDeadline = Number.isFinite(remainingDays)
 
-  const canRenew = isRentalActive && hasDeadline && !hasOpenRenewal
+  const intakePending = isRentalIntakePending(rental)
+  const canRenew = isRentalActive && !intakePending && !rental.inventoryMismatchReturn && hasDeadline && !hasOpenRenewal
+  const canOpenRequest = canRenew || (!hasOpenRenewal && rental.status !== 'completed'
+    && (intakePending || rental.inventoryMismatchReturn === true))
 
   let reason: string | undefined
-  if (!isRentalActive) {
+  if (rental.inventoryMismatchReturn) {
+    reason = 'Hồ sơ đang chờ trả kho do kiểm kê sai lệch nên không thể gia hạn.'
+  } else if (intakePending && ['setup', 'active'].includes(rental.status)) {
+    reason = incompleteIntakeRenewalReason
+  } else if (!isRentalActive) {
     reason = 'Chỉ có thể gia hạn khi hợp đồng đang hoạt động.'
   } else if (hasOpenRenewal) {
     reason = 'Hợp đồng này đã có yêu cầu gia hạn đang được xử lý.'
@@ -69,6 +77,7 @@ export function getRentalRenewalEligibility<
 
   return {
     canRenew,
+    canOpenRequest,
     hasOpenRenewal,
     openRenewal,
     remainingDays,

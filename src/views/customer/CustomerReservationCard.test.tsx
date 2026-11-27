@@ -210,7 +210,7 @@ it('pre-handover reservation shows setup-adjusted estimated dates without repric
    const html = renderToStaticMarkup(
      <InventoryResolutionNotice detail={detailBase} now={now} submitting={false} onResolve={() => {}} onExtendReturnWindow={() => {}} />,
    )
-   expect(html).toContain('Yêu cầu kéo dài thời gian')
+   expect(html).toContain('Gia hạn thêm 5 ngày')
    expect(html).not.toContain('20 ngày')
    expect(html).not.toContain('tối đa 2 lần')
 
@@ -224,7 +224,7 @@ it('pre-handover reservation shows setup-adjusted estimated dates without repric
      />,
    )
    expect(extendedOnce).toContain('Đã kéo dài thời gian trả kho: 1 lần.')
-   expect(extendedOnce).toContain('Yêu cầu kéo dài thời gian')
+   expect(extendedOnce).toContain('Gia hạn thêm 5 ngày')
 
    const exhausted = renderToStaticMarkup(
      <InventoryResolutionNotice
@@ -236,5 +236,5 @@ it('pre-handover reservation shows setup-adjusted estimated dates without repric
      />,
    )
    expect(exhausted).toContain('Đã kéo dài thời gian trả kho: 2 lần.')
-   expect(exhausted).not.toContain('Yêu cầu kéo dài thời gian')
+   expect(exhausted).not.toContain('Gia hạn thêm 5 ngày')
  })

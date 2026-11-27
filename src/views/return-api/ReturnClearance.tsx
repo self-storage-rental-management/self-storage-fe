@@ -72,7 +72,7 @@ export function ClearanceStatus({ record }: { record: ApiReturn }) {
 }
 
 export function CustomerClearance({ record, busy, run, ownerId, countdown, extension }: { record: ApiReturn; busy: boolean; ownerId?: string; countdown?: string | null;
-  extension?: { count: number; onExtend?: () => void };
+  extension?: { count: number; days?: number | null; onExtend?: () => void };
   run: (work: () => Promise<ApiReturn>) => Promise<void> }) {
   const isMismatch = record.returnType === 'INVENTORY_MISMATCH'
   const [confirming, setConfirming] = useState(false)
@@ -118,7 +118,7 @@ export function CustomerClearance({ record, busy, run, ownerId, countdown, exten
           {countdown && <p role="timer" className="font-medium tabular-nums">{countdown}</p>}
           {extension && <div className="flex w-full flex-wrap items-center justify-between gap-2 border-t border-amber-200 pt-2">
             <p className="text-xs">Đã gia hạn {extension.count}/2 lần</p>
-            {extension.onExtend && <Button type="button" size="sm" variant="outline" disabled={busy} onClick={extension.onExtend}>Gia hạn dọn kho thêm 2 ngày</Button>}
+            {extension.onExtend && <Button type="button" size="sm" variant="outline" disabled={busy} onClick={extension.onExtend}>{extension.days != null ? `Gia hạn dọn kho thêm ${extension.days} ngày` : 'Gia hạn dọn kho'}</Button>}
           </div>}
         </div>}
         <ReturnPreparation />
@@ -148,7 +148,7 @@ export function CustomerClearance({ record, busy, run, ownerId, countdown, exten
   const maxExtensions = record.maxReturnExtensions ?? 2
   const usedExtensions = extension?.count ?? record.returnExtensionCount ?? 0
   const remainingExtensions = Math.max(0, maxExtensions - usedExtensions)
-  const extensionDays = record.returnExtensionDays ?? 2
+  const extensionDays = record.returnExtensionDays ?? extension?.days ?? null
   const arrivalLocked = Boolean(
     record.attendance?.arrivedAt
     || record.attendance?.lateArrivalClaimedAt
@@ -161,9 +161,9 @@ export function CustomerClearance({ record, busy, run, ownerId, countdown, exten
     appointmentAt && (appointmentAt < minDateTime || (maxDateTime && appointmentAt > maxDateTime)),
   )
   const canSchedule = editable && !arrivalLocked && !expired && hasDeadline
-  const canExtend = editable && !arrivalLocked && !expired && hasDeadline && remainingExtensions > 0
+  const canExtend = extensionDays != null && extensionDays > 0 && editable && !arrivalLocked && !expired && hasDeadline && remainingExtensions > 0
     && (extension?.onExtend != null || record.canExtendReturnWindow !== false)
-  const previewExtendedDeadline = hasDeadline
+  const previewExtendedDeadline = hasDeadline && extensionDays != null
     ? formatCustomerDateTime(new Date(deadlineMs + extensionDays * 86_400_000).toISOString())
     : null
 
@@ -234,7 +234,7 @@ export function CustomerClearance({ record, busy, run, ownerId, countdown, exten
           <dd className="mt-0.5 font-semibold text-stone-900">
             {remainingExtensions}/{maxExtensions} lần{' '}
             <span className="text-xs font-normal text-stone-500">
-              (Đã dùng {usedExtensions}/{maxExtensions} lần · {extensionDays} ngày/lần)
+              (Đã dùng {usedExtensions}/{maxExtensions} lần · {extensionDays != null ? `${extensionDays} ngày/lần` : 'Chưa có số ngày gia hạn'})
             </span>
           </dd>
         </div>
@@ -297,7 +297,7 @@ export function CustomerClearance({ record, busy, run, ownerId, countdown, exten
               {remainingExtensions > 0 ? (
                 <>
                   <p className="font-semibold text-stone-800">
-                    Cần thêm thời gian? Gia hạn thêm {extensionDays} ngày (còn {remainingExtensions}/{maxExtensions} lượt)
+                    {extensionDays != null ? `Cần thêm thời gian? Gia hạn thêm ${extensionDays} ngày (còn ${remainingExtensions}/${maxExtensions} lượt)` : 'Chưa có thông tin số ngày gia hạn. Vui lòng tải lại hồ sơ hoặc liên hệ cơ sở.'}
                   </p>
                   {previewExtendedDeadline && (
                     <p className="text-[11px] text-stone-600">
@@ -325,7 +325,7 @@ export function CustomerClearance({ record, busy, run, ownerId, countdown, exten
                   }
                 }}
               >
-                Gia hạn dọn hàng thêm 2 ngày
+                Gia hạn dọn hàng thêm {extensionDays} ngày
               </Button>
             )}
           </div>

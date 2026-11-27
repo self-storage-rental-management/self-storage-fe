@@ -44,7 +44,48 @@ function isOpenRenewalConflict(error: unknown): boolean {
   )
 }
 
-export default function CustomerRenewalRequestModal({
+type CustomerRenewalRequestModalProps = {
+  actorId: string
+  rentalId: string
+  revision?: RenewalApiRecord
+  blockedReason?: string
+  onClose: () => void
+  onSuccess: (record?: RenewalApiRecord) => void
+  onNavigateToRenewals?: (renewalId?: string) => void
+  onBrowseUnits?: () => void
+}
+
+export default function CustomerRenewalRequestModal(props: CustomerRenewalRequestModalProps) {
+  if (props.blockedReason) return (
+    <Modal open title="Yêu cầu gia hạn" onClose={props.onClose} size="lg">
+      <div className="space-y-5 text-sm text-stone-900">
+        <p id="renewal-blocked-reason" role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 leading-6 text-amber-950">
+          {props.blockedReason}
+        </p>
+        <fieldset disabled aria-describedby="renewal-blocked-reason" className="space-y-4 opacity-50">
+          <legend className="mb-3 font-semibold">Thông tin gia hạn</legend>
+          <label className="block">
+            <span className="font-medium">Gói gia hạn</span>
+            <select disabled className="mt-2 h-11 w-full rounded-lg border border-stone-300 bg-stone-100 px-3" defaultValue="">
+              <option value="">Chọn gói gia hạn</option>
+            </select>
+          </label>
+          <label className="flex items-start gap-2 leading-5">
+            <input disabled type="checkbox" className="mt-1 h-4 w-4" />
+            Tôi đã đọc và đồng ý với giá thuê cùng điều khoản gia hạn.
+          </label>
+        </fieldset>
+        <div className="flex flex-wrap justify-end gap-2.5 pt-2">
+          <Button variant="outline" onClick={props.onClose}>Hủy</Button>
+          <Button disabled aria-describedby="renewal-blocked-reason">Xác nhận và xem yêu cầu</Button>
+        </div>
+      </div>
+    </Modal>
+  )
+  return <RenewalRequestForm {...props} />
+}
+
+function RenewalRequestForm({
   actorId,
   rentalId,
   revision,
@@ -52,15 +93,7 @@ export default function CustomerRenewalRequestModal({
   onSuccess,
   onNavigateToRenewals,
   onBrowseUnits,
-}: {
-  actorId: string
-  rentalId: string
-  revision?: RenewalApiRecord
-  onClose: () => void
-  onSuccess: (record?: RenewalApiRecord) => void
-  onNavigateToRenewals?: (renewalId?: string) => void
-  onBrowseUnits?: () => void
-}) {
+}: CustomerRenewalRequestModalProps) {
   const options = useRentalApiResource(`${actorId}:${rentalId}:options`, () =>
     getRenewalOptions(rentalId),
   )

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Badge } from '../../components/ui'
 import type { RentalApiRecord } from '../../types/rentalApi'
 import { RentalDeadlineBanner, rentalDaysUntilDeadline, rentalDeadlineState } from './RentalDeadlineNotice'
+import { isRentalIntakePending } from './rentalIntake'
 import { rentalDate, rentalMoney, rentalRecordLabel, rentalStatusLabel } from './presentation'
 import './rentalRecordList.css'
 
@@ -46,8 +47,10 @@ export function RentalRecordRow({ rental, role, focused, actions, unitTypeName }
   const days = rentalDaysUntilDeadline(rental, now)
   const nearDeadline = rentalDeadlineState(rental, now) !== null
   const isForcedOrReturning = ['return_requested', 'return_inspection', 'closing'].includes(rental.status)
-  const tone = rental.status === 'active' ? 'success'
-    : isForcedOrReturning ? 'danger' : 'muted'
+  const intakePending = isRentalIntakePending(rental)
+  const tone = rental.status === 'active' && !intakePending && !rental.inventoryMismatchReturn ? 'success'
+    : isForcedOrReturning || rental.inventoryMismatchReturn ? 'danger'
+      : intakePending && ['setup', 'active'].includes(rental.status) ? 'warning' : 'muted'
 
   return <article id={`rental-api-record-${rental.id}`} tabIndex={-1}
     className={`rental-record-row rounded-xl border border-l-[3px] ${isForcedOrReturning ? 'border-red-300 border-l-4 border-l-red-600 bg-red-50/40' : 'border-stone-200 bg-white'} ${nearDeadline && !isForcedOrReturning ? 'border-l-amber-500' : ''} ${focused ? 'outline-2 outline-amber-500' : ''}`}>
@@ -86,7 +89,9 @@ export function RentalRecordRow({ rental, role, focused, actions, unitTypeName }
         <span className="rental-record-label">Giá thuê / tháng</span>
         {rental.monthlyPrice == null ? 'Chưa xác định' : rentalMoney(rental.monthlyPrice, rental.currency)}
       </div>
-      <div className="rental-record-actions grid grid-cols-2 gap-1.5">{actions}</div>
+      <div className="rental-record-actions grid grid-cols-2 gap-1.5">
+        {actions}
+      </div>
     </div>
     {nearDeadline && <div className="px-3 pb-3"><RentalDeadlineBanner rental={rental} role={role} now={now} compact /></div>}
   </article>
