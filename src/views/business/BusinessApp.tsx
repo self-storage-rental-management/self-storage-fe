@@ -67,7 +67,7 @@ import {
 } from "../../data/demoDatabase"
 
 import { formatVnd, formatVndAmount } from "../../i18n/currency"
-import { returnCleaningOptions, returnDamageCatalog, returnFeeRows, getReturnFeeDetails, getReturnFeeSchedule, publishReturnFeeSchedule, type ReturnFeeDetails, type ReturnFeeSchedule } from "../../services/returnApi"
+import { scheduleRows, returnFeeRows, getReturnFeeDetails, getReturnFeeSchedule, publishReturnFeeSchedule, type ReturnFeeDetails, type ReturnFeeSchedule } from "../../services/returnApi"
 
 import { exportRevenueExcel } from "../../utils/excelExport"
 
@@ -726,10 +726,33 @@ export default function BusinessApp({
       .catch(() => { if (active) setFeeError("Không tải được biểu phí. Vui lòng tải lại trang.") })
     return () => { active = false }
   }, [page, !!feeDraft])
+  const [newFeeKind, setNewFeeKind] = useState('custom_minor')
+  const feeCodes = feeDraft ? Object.keys(feeDraft) : feeSchedule ? scheduleRows(feeSchedule).map(row => row.code) : []
+  const addFee = () => {
+    if (!feeDraft || !feeDetailsDraft) return
+    const standard = returnFeeRows.find(row => row.code === newFeeKind)
+    const code = standard?.code ?? newFeeKind + '_' + crypto.randomUUID().replace(/-/g, '')
+    setFeeDraft({ ...feeDraft, [code]: String(standard?.price ?? 0) })
+    setFeeDetailsDraft({ ...feeDetailsDraft, [code]: standard
+      ? { label: standard.label, trigger: standard.trigger, applies: standard.applies }
+      : { label: '', trigger: '', applies: 'Nghiệm thu trả kho' } })
+    setNewFeeKind('custom_minor')
+    setFeeScheduleCollapsed(false)
+    requestAnimationFrame(() => document.getElementById('fee-label-' + code)?.focus())
+  }
+  const removeFee = (code: string) => {
+    if (!feeDraft || !feeDetailsDraft) return
+    const prices = { ...feeDraft }, details = { ...feeDetailsDraft }
+    delete prices[code]
+    delete details[code]
+    setFeeDraft(prices)
+    setFeeDetailsDraft(details)
+  }
   const editFeeSchedule = () => {
     if (!feeSchedule) return
-    setFeeDraft(Object.fromEntries(returnFeeRows.map(row => [row.code, String(feeSchedule.prices[row.code] ?? row.price)])))
-    setFeeDetailsDraft(Object.fromEntries(returnFeeRows.map(row => [row.code, { ...getReturnFeeDetails(feeSchedule, row.code) }])))
+    setNewFeeKind('custom_minor')
+    setFeeDraft(Object.fromEntries(scheduleRows(feeSchedule).map(row => [row.code, String(feeSchedule.prices[row.code] ?? row.price)])))
+    setFeeDetailsDraft(Object.fromEntries(scheduleRows(feeSchedule).map(row => [row.code, { ...getReturnFeeDetails(feeSchedule, row.code) }])))
     setFeeError("")
   }
   const editFeeDetail = (code: string, field: keyof ReturnFeeDetails, value: string) => {
@@ -741,8 +764,8 @@ export default function BusinessApp({
     if (Object.values(feeDetailsDraft).some(detail => Object.values(detail).some(value => !value.trim()))) { setFeeError("Vui lòng điền tên phí, điều kiện và đối tượng cho mỗi hạng mục."); return }
     setFeeSaving(true); setFeeError("")
     try {
-      const prices = { ...feeSchedule.prices, ...Object.fromEntries(Object.entries(feeDraft).map(([key, value]) => [key, Number(value)])), clean: 0 }
-      const details = { ...feeSchedule.details, ...feeDetailsDraft }
+      const prices = Object.fromEntries(Object.entries(feeDraft).map(([key, value]) => [key, Number(value)]))
+      const details = feeDetailsDraft
       const saved = await publishReturnFeeSchedule({ revision: feeSchedule.revision, prices, details })
       setFeeSchedule(saved); setFeeDraft(null); setFeeDetailsDraft(null)
     } catch (error) { setFeeError(error instanceof Error ? error.message : "Không công bố được biểu phí.") }
@@ -4917,10 +4940,17 @@ export default function BusinessApp({
                   <h3 className="font-semibold text-slate-800">
                     {lang === "vi" ? "Biểu Phí Dịch Vụ Quy Định" : "Fee Schedule"}
                   </h3>
-                  <Badge variant="muted">{visibleRuntimeFees.length + returnCleaningOptions.length + returnDamageCatalog.length} hạng mục</Badge>
+                  <Badge variant="muted">{visibleRuntimeFees.length + feeCodes.length} hạng mục</Badge>
                 </div>
                 <div className="flex flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
                   {feeSchedule && (feeDraft ? <>
+                    <select aria-label="Nhóm phí cần thêm" value={newFeeKind} disabled={feeSaving} onChange={e => setNewFeeKind(e.target.value)} className="rounded-lg border p-2 text-sm">
+                      <option value="custom_cleaning">Hạng mục vệ sinh</option>
+                      <option value="custom_minor">Hạng mục hư hỏng nhẹ</option>
+                      <option value="custom_major">Hạng mục hư hỏng nặng</option>
+                      {returnFeeRows.filter(row => !(row.code in feeDraft)).map(row => <option key={row.code} value={row.code}>{row.label}</option>)}
+                    </select>
+                    <Button size="sm" variant="outline" disabled={feeSaving} onClick={addFee}>Thêm hạng mục</Button>
                     <Button size="sm" disabled={feeSaving} onClick={submitFeeSchedule}>{feeSaving ? 'Đang công bố…' : 'Công bố biểu phí'}</Button>
                     <Button size="sm" variant="outline" disabled={feeSaving} onClick={() => { setFeeDraft(null); setFeeDetailsDraft(null); setFeeError("") }}>Hủy</Button>
                   </> : <Button size="sm" variant="outline" onClick={() => { editFeeSchedule(); setFeeScheduleCollapsed(false) }}>Chỉnh sửa biểu phí</Button>)}
@@ -4938,8 +4968,8 @@ export default function BusinessApp({
                 </div>
               </div>
 
-              <p className="mb-2 text-sm text-slate-600">Đơn đã tạo giữ biểu phí cũ; biểu phí mới áp dụng cho đơn tạo sau khi công bố.</p>
-              <p className="mb-3 text-xs text-slate-500">Điều kiện và đối tượng là mô tả của phí, không tạo quy tắc tính phí tự động. Nhóm vệ sinh và hư hỏng trong quy trình nghiệm thu được giữ nguyên. Hạng mục kho sạch có mức phí cố định 0 ₫; tên và mô tả vẫn chỉnh sửa được.</p>
+              <p className="mb-2 text-sm text-slate-600">Các thay đổi áp dụng cho đơn đặt sau khi công bố. Đơn đã tạo giữ biểu phí cũ.</p>
+              <p className="mb-3 text-xs text-slate-500">Chọn nhóm phí để thêm hạng mục vào phần nghiệm thu tương ứng. Mức phí kho sạch là 0 ₫.</p>
               {feeError && <p role="alert" className="mb-3 text-sm text-red-700">{feeError}</p>}
 
               {!feeScheduleCollapsed && (
@@ -4950,6 +4980,7 @@ export default function BusinessApp({
                       <Th>{lang === "vi" ? "Mức Phí" : "Amount"}</Th>
                       <Th>{lang === "vi" ? "Điều Kiện Áp Dụng" : "Trigger"}</Th>
                       <Th>{lang === "vi" ? "Đối Tượng" : "Applies To"}</Th>
+                      {feeDraft && <Th>Thao tác</Th>}
                     </tr>
                   </Thead>
                   <Tbody>
@@ -4971,10 +5002,11 @@ export default function BusinessApp({
                           </Td>
                         </Tr>
                       ))}
-                    {feeSchedule && returnFeeRows.map(row => {
+                    {feeSchedule && feeCodes.map(code => {
+                      const row = returnFeeRows.find(item => item.code === code) ?? { code, unit: code.startsWith('custom_cleaning_') ? '' : 'lần', label: feeDetailsDraft?.[code]?.label || feeSchedule.details[code]?.label || 'Hạng mục mới', price: 0 }
                       const detail = feeDetailsDraft?.[row.code] ?? getReturnFeeDetails(feeSchedule, row.code)
                       const textEditor = (field: keyof ReturnFeeDetails, title: string) => feeDetailsDraft
-                        ? <textarea aria-label={`${title}: ${row.label}`} disabled={feeSaving} className="w-full min-w-40 rounded border p-2" rows={2} value={detail[field]} onChange={e => editFeeDetail(row.code, field, e.target.value)} />
+                        ? <textarea id={field === 'label' ? 'fee-label-' + row.code : undefined} aria-label={`${title}: ${row.label}`} disabled={feeSaving} className="w-full min-w-40 rounded border p-2" rows={2} value={detail[field]} onChange={e => editFeeDetail(row.code, field, e.target.value)} />
                         : detail[field]
                       return <Tr key={row.code}>
                         <Td className="font-medium text-slate-900">{textEditor('label', 'Tên phí')}</Td>
@@ -4984,6 +5016,7 @@ export default function BusinessApp({
                         </Td>
                         <Td className="text-slate-600">{textEditor('trigger', 'Điều kiện áp dụng')}</Td>
                         <Td>{textEditor('applies', 'Đối tượng')}</Td>
+                        {feeDraft && <Td><Button size="sm" variant="outline" disabled={feeSaving} aria-label={`Xóa ${detail.label || 'hạng mục mới'}`} onClick={() => removeFee(row.code)}>Xóa</Button></Td>}
                       </Tr>
                     })}
                   </Tbody>

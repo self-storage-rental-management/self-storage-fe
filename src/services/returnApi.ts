@@ -305,6 +305,7 @@ export interface ReturnFeeSchedule {
   revision: number
   prices: Record<string, number>
   details: Record<string, ReturnFeeDetails>
+  editableCatalog?: boolean
   publishedAt?: string | null
 }
 export async function getReturnFeeSchedule(): Promise<ReturnFeeSchedule> {
@@ -331,7 +332,7 @@ export interface DamagePricingItem {
   label: string
   trigger?: string
   applies?: string
-  category: 'minor' | 'major'
+  category: 'minor' | 'major' | 'equipment'
   unit: string
   suggestedMin: number
   suggestedMax: number
@@ -347,6 +348,7 @@ export const returnDamageCatalog: DamagePricingItem[] = [
   { code: 'minor_floor_scratch', label: 'Trầy xước sàn', category: 'minor', unit: 'm²', suggestedMin: 100000, suggestedMax: 200000, unitPrice: 150000 },
   { code: 'minor_metal_dent', label: 'Móp nhẹ vách kim loại', category: 'minor', unit: 'vị trí', suggestedMin: 100000, suggestedMax: 250000, unitPrice: 175000 },
   { code: 'minor_small_accessory', label: 'Hỏng phụ kiện nhỏ', category: 'minor', unit: 'cái', suggestedMin: 50000, suggestedMax: 200000, unitPrice: 125000 },
+  { code: 'equipment_frame_damage', label: 'Hư hỏng khung kệ', category: 'equipment', unit: 'khung', suggestedMin: 0, suggestedMax: 0, unitPrice: 0 },
   { code: 'major_bent_door', label: 'Cửa kho bị cong vênh', category: 'major', unit: 'cái', suggestedMin: 500000, suggestedMax: 2000000, unitPrice: 1250000 },
   { code: 'major_broken_lock', label: 'Khóa cửa bị hỏng', category: 'major', unit: 'bộ', suggestedMin: 300000, suggestedMax: 1000000, unitPrice: 650000 },
   { code: 'major_cracked_floor', label: 'Sàn kho bị nứt', category: 'major', unit: 'm²', suggestedMin: 300000, suggestedMax: 800000, unitPrice: 550000 },
@@ -367,10 +369,21 @@ export const returnFeeRows = [
   })),
   ...returnDamageCatalog.map(item => ({
     code: item.code, price: item.unitPrice, unit: item.unit, label: item.label,
-    trigger: `Hư hỏng ${item.category === 'minor' ? 'nhẹ' : 'nặng'} được ghi nhận khi nghiệm thu; tính theo số lượng thực tế.`,
+    trigger: item.category === 'equipment' ? 'Khung kệ bàn giao bị hư khi nghiệm thu trả kho.' : `Hư hỏng ${item.category === 'minor' ? 'nhẹ' : 'nặng'} được ghi nhận khi nghiệm thu; tính theo số lượng thực tế.`,
     applies: 'Nghiệm thu trả kho',
   })),
 ]
+
+export function scheduleRows(schedule: ReturnFeeSchedule) {
+  const known = returnFeeRows.filter(row => !schedule.editableCatalog || row.code in schedule.prices)
+  return [...known, ...Object.keys(schedule.prices).filter(code => isCustomFee(code)).map(code => ({
+    code, unit: code.startsWith('custom_cleaning_') ? '' : 'lần', price: schedule.prices[code], ...schedule.details[code],
+  }))]
+}
+
+export function isCustomFee(code: string) {
+  return /^custom_(minor|major|cleaning)_[0-9a-f]{32}$/.test(code)
+}
 
 export function getReturnFeeDetails(schedule: ReturnFeeSchedule | null, code: string): ReturnFeeDetails {
   return schedule?.details?.[code] ?? returnFeeRows.find(row => row.code === code)
@@ -460,7 +473,7 @@ export function inspectReturn(id: string, body: InspectionInput, clearanceRevisi
     !['returnedKey', 'returnedCard', 'returnedLock'].every(k => typeof body[k as keyof InspectionInput] === 'boolean') ||
     (body.damageItems !== undefined && (!Array.isArray(body.damageItems) || body.damageItems.some(item => {
       const price = returnDamageCatalog.find((entry) => entry.code === item.code)
-      return !price || !Number.isFinite(item.quantity) || item.quantity <= 0
+      return (!price && (!isCustomFee(item.code) || item.code.startsWith('custom_cleaning_'))) || !Number.isFinite(item.quantity) || item.quantity <= 0
     })))) throw new Error('Kiểm tra thông tin nghiệm thu.')
   return mutate('staff', id, clearanceRevision == null ? 'inspection' : `inspection?clearanceRevision=${clearanceRevision}`, { ...safeBody, inspectionNotes: body.staffNotes })
 }
