@@ -55,6 +55,16 @@ beforeEach(() => {
 })
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); clearAuthTokens(); clearProcessingLeases() })
 describe('real Return transport and unknown settlement presentation', () => {
+  it('opens a return with fractional overdue fees and still requires whole overdue days', async () => {
+    const overdueSettlement = {
+      accruedAmount: 4275000.09, settlementAmount: 4275000.09, overdueDays: 9,
+      calculatedAt: '2026-11-27T20:03:13Z', requiresReconciliation: false,
+    }
+    respond({ data: { ...record, overdueSettlement } })
+    await expect(getReturn('customer', record.id)).resolves.toMatchObject({ overdueSettlement })
+    expect(isApiReturn({ ...record, overdueSettlement: { ...overdueSettlement, overdueDays: 9.5 } })).toBe(false)
+    expect(isApiReturn({ ...record, overdueSettlement: { ...overdueSettlement, settlementAmount: 4275000.001 } })).toBe(false)
+  })
   it('explains when an approved handover returns to manager review', () => {
     const overdue = new Date(Date.now() - 60_000).toISOString()
     const item: ApiReturn = {

@@ -51,11 +51,13 @@ export interface ActiveReturnPolicyView {
 export function isOverdueSettlement(value: unknown): value is OverdueSettlement {
   if (!value || typeof value !== 'object') return false
   const v = value as OverdueSettlement
-  const amount = (n: unknown) => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0
+  const amount = (n: unknown): n is number =>
+    typeof n === 'number' && n >= 0 && n <= Number.MAX_SAFE_INTEGER / 100 && Number(n.toFixed(2)) === n
   return typeof v.requiresReconciliation === 'boolean' && (v.requiresReconciliation
     ? v.accruedAmount === null && v.settlementAmount === null && v.overdueDays === null && v.calculatedAt === null
     : amount(v.accruedAmount) && amount(v.settlementAmount) && v.settlementAmount! <= v.accruedAmount!
-      && amount(v.overdueDays) && typeof v.calculatedAt === 'string' && Number.isFinite(Date.parse(v.calculatedAt)))
+      && v.overdueDays !== null && Number.isSafeInteger(v.overdueDays) && v.overdueDays >= 0
+      && typeof v.calculatedAt === 'string' && Number.isFinite(Date.parse(v.calculatedAt)))
 }
 export interface ApiReturn {
   settlementVersion?: number

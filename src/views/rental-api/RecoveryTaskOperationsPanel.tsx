@@ -192,13 +192,20 @@ export default function RecoveryTaskOperationsPanel({ role, task, view, identity
     {validation && <p role="alert" className="text-sm text-red-700">{validation}</p>}
     {!!command.error && <p role="alert" className="text-sm text-red-700">{recoveryOperationError(command.error)}</p>}
     {view.status === 'CLOSED' && <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">Đã hoàn tất thu hồi{view.completedAt ? ` lúc ${rentalDate(view.completedAt)}` : ''}.</p>}
-    {(view.evidenceFileIds.length > 0 || view.receiptFileId || view.completionFileId) && <details className="rounded-lg border border-stone-200 p-4">
-      <summary className="cursor-pointer font-semibold">Chứng từ</summary>
-      <div className="mt-3 space-y-4">
-        {view.evidenceFileIds.map((id, i) => <div key={id}><p className="mb-2 text-sm font-medium">Kiểm kê {i + 1}</p><EvidenceDownload id={id} previewLabel="Xem trước" label="Tải chứng từ" /></div>)}
-        {view.receiptFileId && <div><p className="mb-2 text-sm font-medium">Biên lai quyết toán</p><EvidenceDownload id={view.receiptFileId} previewLabel="Xem trước" label="Tải biên lai" /></div>}
-        {view.completionFileId && <div><p className="mb-2 text-sm font-medium">Biên bản hoàn tất thu hồi</p><EvidenceDownload id={view.completionFileId} previewLabel="Xem trước" label="Tải biên bản" /></div>}
-      </div>
-    </details>}
+    {(view.evidenceFileIds.length > 0 || view.receiptFileId || view.completionFileId) && <section aria-label="Chứng từ thu hồi" className="rounded-xl border border-stone-200">
+      <h4 className="border-b border-stone-200 px-4 py-3 text-sm font-semibold">Chứng từ</h4>
+      <ul className="divide-y divide-stone-100">
+        {[
+          ...view.evidenceFileIds.map((id, index) => ({
+            id, title: view.evidenceFileIds.length === 1 ? 'Minh chứng kiểm kê' : `Minh chứng kiểm kê ${index + 1}`,
+          })),
+          ...(view.receiptFileId ? [{ id: view.receiptFileId, title: 'Biên lai quyết toán' }] : []),
+          ...(view.completionFileId ? [{ id: view.completionFileId, title: 'Biên bản hoàn tất thu hồi' }] : []),
+        ].map(({ id, title }) => <li key={id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2.5">
+          <span className="text-sm font-medium text-stone-900">{title}</span>
+          <EvidenceDownload id={id} previewLabel="Xem trước" label="Tải xuống" compact />
+        </li>)}
+      </ul>
+    </section>}
   </div>
 }
