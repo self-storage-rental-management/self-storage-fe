@@ -31,15 +31,9 @@ const valueClass = "mt-1 text-sm font-medium text-slate-900"
 function InventoryTimeframe({
   detail,
   now,
-  busy,
-  onExtend,
-  returnCase,
 }: {
   detail: CustomerReservationDetail
   now: number
-  busy: boolean
-  onExtend: () => void
-  returnCase?: ApiReturn
 }) {
   const returning = detail.inventoryResolutionStatus === 'RETURN_REQUESTED'
   const awaitingResponse = detail.inventoryResolutionStatus === 'PENDING_CUSTOMER'
@@ -49,14 +43,6 @@ function InventoryTimeframe({
     : awaitingResponse ? responseDeadline : detail.inventoryFinalDeadlineAt || detail.inventoryDueAt
   const deadlineMs = deadline ? Date.parse(deadline) : NaN
   const overdue = Boolean(Number.isFinite(deadlineMs) && deadlineMs <= now)
-  const arrivalLocked = Boolean(
-    returnCase?.attendance?.arrivedAt
-    || returnCase?.attendance?.lateArrivalClaimedAt
-    || returnCase?.attendance?.reviewStatus === 'PENDING'
-    || returnCase?.warehouseEmptyVerified === true
-    || returnCase?.inspectedAt
-    || returnCase?.noShowAt,
-  )
   const milestones = returning
     ? [
       ['Công bố kết quả kiểm kê', detail.inventoryResultPublishedAt],
@@ -80,13 +66,6 @@ function InventoryTimeframe({
       <span className="text-sm">{returning ? 'Hạn cuối dọn hàng và trả kho' : awaitingResponse ? 'Hạn phản hồi kết quả kiểm kê' : 'Hạn hoàn tất kiểm kê'}</span>
       <span className="font-bold">{deadline ? formatCustomerDateTime(deadline) : 'Chưa xác định'}</span>
     </div>
-    {returning && detail.inventoryReturnWindowDays != null && <p className="text-xs text-stone-500">Thời hạn trả hàng: {detail.inventoryReturnWindowDays} ngày{(detail.inventoryReturnExtensionCount ?? 0) > 0 ? ` · Đã gia hạn ${detail.inventoryReturnExtensionCount} lần` : ''}.</p>}
-    {returning && <div className="flex flex-wrap items-center justify-between gap-2">
-      <p className="text-xs text-stone-500">Có thể gia hạn tối đa 2 lần trước khi hết hạn trả hàng.</p>
-      <Button size="sm" variant="outline" disabled={busy || overdue || !detail.inventoryReturnCanExtend || arrivalLocked} onClick={onExtend}>
-        {busy ? 'Đang gia hạn…' : detail.inventoryReturnExtensionDays != null ? `Gia hạn thêm ${detail.inventoryReturnExtensionDays} ngày` : 'Gia hạn trả kho'}
-      </Button>
-    </div>}
     {overdue && <p role="status" className="text-xs font-semibold text-red-700">{returning ? 'Đã hết hạn dọn hàng và trả kho.' : awaitingResponse ? 'Đã hết 48 giờ phản hồi. Hồ sơ chuyển sang thu hồi.' : 'Đã hết hạn hoàn tất kiểm kê.'}</p>}
   </section>
 }
@@ -330,7 +309,7 @@ export default function RentalDetail({
         <Button variant={section === 'inventory' ? 'primary' : 'outline'} onClick={() => setSection('inventory')}>Kết quả kiểm kê</Button>
       </div>
       <div className={section === 'documents' ? 'space-y-5' : 'hidden'}>
-      {isReturningRental && (
+      {isReturningRental && role !== 'customer' && (
         <Card className="space-y-3 rounded-xl border border-amber-300 bg-amber-50/40 p-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-base font-bold text-amber-950">Hồ sơ đang trong quy trình trả kho</h3>
@@ -339,8 +318,6 @@ export default function RentalDetail({
           {activeReturnCase ? (
             <>
               <ReturnSummary record={activeReturnCase} hideHeader />
-              {role === 'customer' && activeReturnCase.sourceType !== 'RECOVERY' && <CustomerClearance
-                record={activeReturnCase} ownerId={getAuthenticatedActor()?.id} busy={clearanceBusy} run={updateClearance} />}
               {clearanceError && <p role="alert" className="text-sm text-red-800">{clearanceError}</p>}
             </>
           ) : (
@@ -445,9 +422,6 @@ export default function RentalDetail({
                   <InventoryTimeframe
                     detail={inventoryDetail}
                     now={now}
-                    busy={resolvingInventory}
-                    onExtend={() => void extendInventoryReturn()}
-                    returnCase={activeReturnCase}
                   />
                   <InventoryResolutionNotice detail={inventoryDetail} now={now} submitting={resolvingInventory} onExtendReturnWindow={() => void extendInventoryReturn()} onResolve={(decision, scheduledDate) => void resolveInventoryDecision(decision, scheduledDate)} />
                   {clearanceError && <p role="alert" className="text-xs font-medium text-red-700">{clearanceError}</p>}
@@ -464,9 +438,6 @@ export default function RentalDetail({
                   <InventoryTimeframe
                     detail={inventoryDetail}
                     now={now}
-                    busy={resolvingInventory}
-                    onExtend={() => void extendInventoryReturn()}
-                    returnCase={activeReturnCase}
                   />
                   <InventoryResolutionNotice
                     detail={inventoryDetail}
@@ -515,14 +486,64 @@ export default function RentalDetail({
           </div>
           <div>
             <dt>Quyền ra vào kho</dt>
-            <dd><Badge variant={rental.access.status === 'ACTIVE' ? 'success' : 'muted'}>{accessStatus || 'Chưa xác minh'}</Badge>
-            <p className="mt-2 text-xs leading-5 text-stone-500">{rental.access.completeness === 'UNKNOWN'
-              ? 'Chưa tải được trạng thái cấp quyền ra vào. Vui lòng liên hệ nhân viên cơ sở.'
-              : rental.access.status === 'ACTIVE' ? 'Đã có thẻ hoặc mã ra vào đang hoạt động.'
-              : rental.access.status === 'REVOKED' ? 'Thẻ hoặc mã ra vào đã được thu hồi.'
-              : rental.access.status === 'INACTIVE' ? 'Chưa ghi nhận thẻ hoặc mã ra vào được cấp cho hồ sơ này.'
-              : 'Trạng thái được cập nhật theo thông tin quyền ra vào của cơ sở.'}</p></dd>
-            {rental.access.status?.toUpperCase() === 'ACTIVE' && rental.access.reference && <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2"><dt className="text-xs font-medium text-amber-900">Mã ổ khóa đã bàn giao</dt><dd className="mt-1 font-mono text-base font-bold tracking-wider text-amber-950">{rental.access.reference}</dd></div>}
+            {(() => {
+              const code = rental.access.completeness === 'UNKNOWN'
+                ? 'UNKNOWN'
+                : (rental.access.status?.toUpperCase() || '')
+              const variant = code === 'ACTIVE'
+                ? 'success'
+                : code === 'REVOKED'
+                  ? 'error'
+                  : code === 'SUSPENDED'
+                    ? 'warning'
+                    : 'muted'
+              const label = code === 'UNKNOWN'
+                ? 'Chưa xác minh'
+                : code === 'ACTIVE'
+                  ? 'Đang hoạt động (Đang giữ)'
+                  : code === 'REVOKED'
+                    ? 'Đã cấp · Đã bị thu hồi'
+                    : code === 'SUSPENDED'
+                      ? 'Đã cấp · Đang tạm ngừng'
+                      : code === 'EXPIRED'
+                        ? 'Đã cấp · Đã hết hạn'
+                        : code === 'INACTIVE'
+                          ? 'Chưa hoạt động (Chưa cấp)'
+                          : accessStatus || 'Chưa xác minh'
+              const description = code === 'UNKNOWN'
+                ? 'Chưa tải được trạng thái cấp quyền ra vào. Vui lòng liên hệ nhân viên cơ sở.'
+                : code === 'ACTIVE'
+                  ? (rental.access.reference
+                    ? 'Khách đang giữ quyền ra vào kho theo mã ổ khóa bên dưới.'
+                    : 'Quyền ra vào kho đang hoạt động (chưa ghi nhận mã hiển thị).')
+                  : code === 'REVOKED'
+                    ? 'Hồ sơ đã từng được cấp quyền ra vào nhưng hiện đã bị thu hồi, không còn hiệu lực sử dụng.'
+                    : code === 'SUSPENDED'
+                      ? 'Quyền ra vào đã được cấp nhưng hiện đang bị tạm ngừng.'
+                      : code === 'EXPIRED'
+                        ? 'Quyền ra vào đã được cấp nhưng đã hết hạn hiệu lực.'
+                        : code === 'INACTIVE'
+                          ? 'Chưa từng cấp thẻ hoặc mã ra vào cho hồ sơ này.'
+                          : 'Trạng thái được cập nhật theo thông tin quyền ra vào của cơ sở.'
+              return (
+                <>
+                  <dd>
+                    <Badge variant={variant}>{label}</Badge>
+                    <p className="mt-2 text-xs leading-5 text-stone-500">{description}</p>
+                  </dd>
+                  {rental.access.reference && (code === 'ACTIVE' || code === 'REVOKED' || code === 'SUSPENDED') && (
+                    <div className={`mt-3 rounded-lg border px-3 py-2 ${code === 'ACTIVE' ? 'border-amber-200 bg-amber-50' : code === 'REVOKED' ? 'border-red-200 bg-red-50' : 'border-stone-200 bg-stone-50'}`}>
+                      <dt className={`text-xs font-medium ${code === 'ACTIVE' ? 'text-amber-900' : code === 'REVOKED' ? 'text-red-900' : 'text-stone-700'}`}>
+                        {code === 'ACTIVE' ? 'Đang giữ mã ổ khóa' : code === 'REVOKED' ? 'Mã ổ khóa đã thu hồi' : 'Mã ổ khóa đang tạm ngừng'}
+                      </dt>
+                      <dd className={`mt-1 font-mono text-base font-bold tracking-wider ${code === 'ACTIVE' ? 'text-amber-950' : code === 'REVOKED' ? 'text-red-950 line-through' : 'text-stone-800'}`}>
+                        {rental.access.reference}
+                      </dd>
+                    </div>
+                  )}
+                </>
+              )
+            })()}
           </div>
         </dl>
       </Card>
