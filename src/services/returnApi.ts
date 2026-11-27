@@ -460,9 +460,6 @@ export function reviewReturnArrival(
 ) {
   return mutate('manager', id, 'arrival-review', { accepted, reason, staffId, appointmentAt, decision })
 }
-export function savePropertyCheck(record: ApiReturn, unitVacated: boolean, staffNotes: string, evidencePhotos: string[]) {
-  return mutate('staff', record.id, 'property-check', { unitVacated, staffNotes, evidencePhotos, clearanceRevision: record.clearanceRevision ?? 0 })
-}
 export function inspectReturn(id: string, body: InspectionInput, clearanceRevision?: number) {
   const safeBody: InspectionInput = { ...body, ...sanitizeFees(body) }
   fees(safeBody)

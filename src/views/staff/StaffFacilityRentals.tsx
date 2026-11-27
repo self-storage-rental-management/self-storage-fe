@@ -20,13 +20,17 @@ const statuses = [
   ['completed', 'Đã hoàn tất'],
 ] as const
 
-export default function StaffFacilityRentals() {
+export default function StaffFacilityRentals({ initialRentalId }: { initialRentalId?: string } = {}) {
   const actor = getAuthenticatedActor()
   const facilityId = actor ? staffWorkingFacilityId(actor) : undefined
   const scope = JSON.stringify([actor?.id, actor?.facilityScopes, actor?.permissions, facilityId])
   const [input, setInput] = useState('')
   const [query, setQuery] = useState<RentalApiQuery>({ page: 0, size: 15, sort: 'createdAt,desc' })
   const [selected, setSelected] = useState<RentalApiRecord | null>(null)
+  const [directRentalId, setDirectRentalId] = useState(initialRentalId)
+  const direct = useRentalApiResource(`${scope}:notice:${directRentalId}`,
+    async () => directRentalId ? (await getStaffRental(directRentalId)).rental : null)
+  const opened = selected ?? (directRentalId ? direct.data : null)
   const [selectedReportId, setSelectedReportId] = useState<string>()
   const list = useRentalApiResource(scope + JSON.stringify(query), () => listRentals('staff', { ...query, facilityId }))
   const pagination = list.data?.pagination
@@ -79,10 +83,13 @@ export default function StaffFacilityRentals() {
           <Button variant="outline" size="md" className="min-h-11 w-40 max-w-full font-semibold" onClick={() => setSelected(rental)} aria-label={`Xem hồ sơ gian ${rental.storageUnit.code}`}>Xem hồ sơ</Button>
         </div>} />)}
     </RentalRecordGroup>}
-    {selected && (selectedReportId
-      ? <ManagerSuspicionReport key={scope + selectedReportId} id={selectedReportId} staffRentalId={selected.id}
+    {directRentalId && !opened && <Modal open title="Chi tiết hồ sơ thuê" onClose={() => setDirectRentalId(undefined)}>
+      {direct.error ? <p role="alert">{rentalError(direct.error)}</p> : <p role="status">Đang tải hồ sơ thuê…</p>}
+    </Modal>}
+    {opened && (selectedReportId
+      ? <ManagerSuspicionReport key={scope + selectedReportId} id={selectedReportId} staffRentalId={opened.id}
           onClose={() => setSelectedReportId(undefined)} onOpenRental={() => setSelectedReportId(undefined)} />
-      : <StaffRentalDetails key={scope + selected.id} identity={scope} rental={selected} onClose={() => setSelected(null)}
+      : <StaffRentalDetails key={scope + opened.id} identity={scope} rental={opened} onClose={() => { setSelected(null); setDirectRentalId(undefined) }}
           onOpenReport={setSelectedReportId}
           canReadFiles={actor?.permissions.includes('checkins:read') === true}
           canReport={facilityId != null && actor?.facilityScopes[facilityId] !== 'READ'} />)}
@@ -147,7 +154,7 @@ function StaffRentalDetails({ identity, rental, onClose, onOpenReport, canReadFi
       {reports.data?.data.length === 0 && <p className="text-sm text-stone-600">Chưa có báo cáo.</p>}
       {reports.data?.data.map(report => <div key={report.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 p-3">
         <div><p className="text-sm font-semibold">{report.code}</p>
-          <p className="text-xs text-stone-600">{report.status === 'INVESTIGATING' ? 'Đang xác minh' : report.status === 'TRANSFERRED_TO_RECOVERY' ? 'Đã chuyển thu hồi' : 'Chờ quản lý tiếp nhận'}</p></div>
+          <p className="text-xs text-stone-600">{report.status === 'INVESTIGATING' ? 'Đang xác minh' : report.status === 'TRANSFERRED_TO_RECOVERY' ? 'Đã chuyển thu hồi' : report.status === 'CLOSED_NO_VIOLATION' ? 'Đã đóng' : 'Chờ quản lý tiếp nhận'}</p></div>
         <Button variant="outline" size="sm" onClick={() => onOpenReport(report.id)}>Xem báo cáo</Button>
       </div>)}
     </section>

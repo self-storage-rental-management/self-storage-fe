@@ -10,7 +10,7 @@ import { PACKAGING_METHOD_OPTIONS } from '../../domain/packagingMethods'
 import InventoryFieldDifference from './InventoryFieldDifference'
 import InventoryResultNotice from './InventoryResultNotice'
 import { getGoodsCatalog, type GoodsCatalog } from '../../services/customerReservationApi'
-import { validateCccd, normalizeCccd, maskCccd } from '../../domain/cccd'
+import { validateCccd, normalizeCccd, maskCccd, cccdCorrectionError } from '../../domain/cccd'
 import { normalizeRentalIdentity, validateRentalIdentity } from '../../domain/rentalIdentity'
 import StaffInventoryVisitPanel from './StaffInventoryVisitPanel'
 import { useEffect, useId, useMemo, useRef, useState } from "react"
@@ -1126,13 +1126,11 @@ export default function StaffCheckInOperationsPanel({
   )
   const enteredIdentity = normalizeIdentityDocument(identityDocumentNumber)
   const savedIdentity = normalizeIdentityDocument(declaredIdentityDocument)
-  const reviewedCorrectionTooLarge = savedIdentityMismatch && (
-    !/^[0-9]{12}$/.test(savedIdentity) || !/^[0-9]{12}$/.test(enteredIdentity)
-    || Array.from(savedIdentity).filter((digit, index) => digit !== enteredIdentity[index]).length > 1
-  )
+  const correctionError = cccdCorrectionError(savedIdentity, enteredIdentity)
+  const reviewedCorrectionTooLarge = savedIdentityMismatch && !!correctionError
   const identityMismatch = !isReviewingCompletedStep && (identityComparison === "CORRECTABLE" || identityComparison === "REJECT")
   const identityCorrection = identityComparison === "CORRECTABLE" && identityMismatchAcknowledged
-  const identityCanConfirm = identityComparison === "MATCH" || identityCorrection
+  const identityCanConfirm = !correctionError && (identityComparison === "MATCH" || identityCorrection)
   const identityValidation = validateRentalIdentity(identityDocumentNumber)
   const identityNeedsNotes = identityCorrection || !declaredIdentityDocument
 
@@ -1612,6 +1610,7 @@ export default function StaffCheckInOperationsPanel({
 
   const submitVerifiedIdentityCorrection = async () => {
     if (!handoverTarget?.checkInId) return
+    if (correctionError) { setFieldErrors({ identityDocumentNumber: correctionError }); return }
     setSubmitting(true)
     setError(null)
     setFieldErrors({})
@@ -2161,8 +2160,8 @@ export default function StaffCheckInOperationsPanel({
               </Button>
             </>
           )}
-          {group === "PROCESSED" && !recoveryTransferred && item.checkInStatus !== "completed" && (
-            <span className="max-w-60 whitespace-normal text-xs text-stone-600">{item.rejectionReason || staffCheckInStatusLabel(item.checkInStatus, item.reservationStatus)}</span>
+          {group === "PROCESSED" && !recoveryTransferred && item.checkInStatus !== "completed" && item.rejectionReason && (
+            <span className="max-w-60 whitespace-normal text-xs text-stone-600">{item.rejectionReason}</span>
           )}
         </div>
       </Td>
@@ -2320,19 +2319,19 @@ export default function StaffCheckInOperationsPanel({
                       <Button variant="outline" disabled={submitting} onClick={() => setIdentityMismatchAcknowledged(true)}>Sai thông tin</Button>
                     ) : identityComparison === "REJECT" ? (
                       <>
-                        <p>CCCD vượt giới hạn sửa 3 chữ số. Kiểm tra lại số đã nhập trước khi từ chối.
+                        <p>{correctionError || 'CCCD không đáp ứng điều kiện sửa tối đa 3 số cuối và giữ nguyên 6 số đầu.'} Kiểm tra lại số đã nhập trước khi từ chối.
                           {handoverTarget.attendance?.termsVersion === HANDOVER_TERMS_VERSION && " Khoản giữ chỗ sẽ không được hoàn lại."}
                         </p>
                         <Button variant="danger" disabled={submitting} onClick={() => openRejection(handoverTarget, enteredIdentity)}>Từ chối bàn giao</Button>
                       </>
                     ) : (
-                      <p>Có thể sửa tối đa 3 chữ số. Đối chiếu giấy tờ gốc, xác nhận đúng người đặt kho và ghi căn cứ sửa CCCD.</p>
+                      <p>Chỉ được sửa tối đa 3 số trong 6 số cuối. Giữ nguyên 6 số đầu gồm mã tỉnh, giới tính/thế kỷ và năm sinh. Đối chiếu giấy tờ gốc và ghi căn cứ sửa CCCD.</p>
                     )}
                   </div>
                 )}
                 {(!isReviewingCompletedStep && identityCanConfirm || editingVerifiedIdentity) && identityValidation.warning && <label className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm"><input type="checkbox" checked={adulthoodConfirmed} disabled={submitting} onChange={event => setAdulthoodConfirmed(event.target.checked)} />Đã đối chiếu ngày sinh trên giấy tờ gốc và xác nhận khách đã đủ 18 tuổi *</label>}
                 {editingVerifiedIdentity && reviewedCorrectionTooLarge && identityValidation.ok && (
-                  <p role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">CCCD đã xác minh chỉ được sửa tối đa một chữ số.</p>
+                  <p role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">{correctionError}</p>
                 )}
                 {(!isReviewingCompletedStep && identityCanConfirm && identityNeedsNotes || editingVerifiedIdentity) && (
                   <Input label={identityCorrection || editingVerifiedIdentity ? "Căn cứ sửa CCCD" : "Căn cứ xác minh"}

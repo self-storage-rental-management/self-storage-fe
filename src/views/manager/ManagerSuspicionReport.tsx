@@ -19,6 +19,7 @@ interface SuspicionReport {
 }
 
 interface ReportDetail {
+  closure: { reason: string; decidedBy: string | null; decidedAt: string } | null
   transfer: { recoveryId: string; conclusion: string; grounds: string; decidedBy: string | null; decidedAt: string } | null
   report: SuspicionReport
   rental: {
@@ -52,15 +53,16 @@ export default function ManagerSuspicionReport({ id, staffRentalId, onClose, onO
   const [accepted, setAccepted] = useState<ReportDetail>()
   const [accepting, setAccepting] = useState(false)
   const [actionError, setActionError] = useState('')
-  const [transferOpen, setTransferOpen] = useState(false)
-  const [transferring, setTransferring] = useState(false)
-  const [transferError, setTransferError] = useState('')
-  const transferLock = useRef(false)
+  const [resolution, setResolution] = useState<'transfer' | 'close' | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [resolutionError, setResolutionError] = useState('')
+  const resolutionLock = useRef(false)
   const acceptLock = useRef(false)
   const detail = accepted ?? data?.data
   const report = detail?.report
   const rental = detail?.rental
   const transfer = detail?.transfer
+  const closure = detail?.closure
 
   async function acceptReport() {
     if (acceptLock.current) return
@@ -80,36 +82,44 @@ export default function ManagerSuspicionReport({ id, staffRentalId, onClose, onO
     }
   }
 
-  async function transferReport(event: FormEvent<HTMLFormElement>) {
+  function toggleResolution(next: 'transfer' | 'close') {
+    setResolution(current => current === next ? null : next)
+    setResolutionError('')
+  }
+
+  async function resolveReport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const values = new FormData(event.currentTarget)
-    const conclusion = String(values.get('conclusion') ?? '').trim()
-    const grounds = String(values.get('grounds') ?? '').trim()
-    if (!conclusion || !grounds || transferLock.current) return
-    transferLock.current = true
-    setTransferring(true)
-    setTransferError('')
+    if (!resolution || resolutionLock.current) return
+    const details = String(new FormData(event.currentTarget).get('details') ?? '').trim()
+    if (!details) {
+      setResolutionError(resolution === 'close' ? 'Vui lòng nhập lý do đóng báo cáo.' : 'Vui lòng nhập kết luận và căn cứ thu hồi.')
+      return
+    }
+    const body = resolution === 'close' ? { reason: details } : { conclusion: details }
+    resolutionLock.current = true
+    setSaving(true)
+    setResolutionError('')
     try {
-      const result = await apiRequest<{ data: ReportDetail }>(`${url}/transfer`, {
+      const result = await apiRequest<{ data: ReportDetail }>(`${url}/${resolution}`, {
         method: 'POST',
-        body: JSON.stringify({ conclusion, grounds }),
+        body: JSON.stringify(body),
       })
       setAccepted(result.data)
-      setTransferOpen(false)
+      setResolution(null)
       window.dispatchEvent(new Event('storagehub:suspicion-reports-refresh'))
     } catch (failure) {
-      setTransferError(rentalError(failure))
+      setResolutionError(rentalError(failure))
     } finally {
-      transferLock.current = false
-      setTransferring(false)
+      resolutionLock.current = false
+      setSaving(false)
     }
   }
 
-  return <Modal open onClose={onClose} title="Báo cáo nghi vấn hàng cấm" closeLabel="Đóng báo cáo" size="lg">
+  return <Modal open onClose={onClose} title="Báo cáo nghi vấn hàng cấm" closeLabel="Đóng cửa sổ chi tiết" size="lg">
     {loading && <p role="status">Đang tải báo cáo…</p>}
     {error != null && <div role="alert" className="space-y-3 text-red-700">
       <p>{rentalError(error)}</p>
-      <Button size="sm" variant="outline" onClick={refresh}>Thử lại</Button>
+      <Button size="sm" onClick={refresh}>Thử lại</Button>
     </div>}
     {report && <div className="space-y-4">
       <dl className="grid gap-3 rounded-xl bg-stone-50 p-4 sm:grid-cols-2">
@@ -118,7 +128,8 @@ export default function ManagerSuspicionReport({ id, staffRentalId, onClose, onO
           <dd className="mt-1">{report.status === 'PENDING_MANAGER'
             ? <Badge variant="warning">Chờ quản lý tiếp nhận</Badge>
             : report.status === 'INVESTIGATING' ? <Badge variant="info">Đang xác minh</Badge>
-            : report.status === 'TRANSFERRED_TO_RECOVERY' ? <Badge variant="info">Đã chuyển thu hồi</Badge> : 'Chưa có thông tin'}</dd>
+            : report.status === 'TRANSFERRED_TO_RECOVERY' ? <Badge variant="info">Đã chuyển thu hồi</Badge>
+            : report.status === 'CLOSED_NO_VIOLATION' ? <Badge variant="success">Đã đóng</Badge> : 'Chưa có thông tin' }</dd>
         </div>
         {[
           ['Mã báo cáo', report.code],
@@ -144,26 +155,39 @@ export default function ManagerSuspicionReport({ id, staffRentalId, onClose, onO
         <h3 className="font-bold">Kết luận chuyển thu hồi</h3>
         <p className="text-sm text-stone-600">{transfer.decidedBy ?? 'Chưa rõ người quyết định'} · {reportDateTime(transfer.decidedAt)}</p>
         <p className="whitespace-pre-wrap break-words text-sm">{transfer.conclusion}</p>
-        <h4 className="text-sm font-semibold">Căn cứ</h4>
-        <p className="whitespace-pre-wrap break-words text-sm">{transfer.grounds}</p>
-        {onOpenRecovery && <Button variant="outline" onClick={() => onOpenRecovery(transfer.recoveryId)}>Xem hồ sơ thu hồi</Button>}
+        {transfer.grounds && <>
+          <h4 className="text-sm font-semibold">Căn cứ</h4>
+          <p className="whitespace-pre-wrap break-words text-sm">{transfer.grounds}</p>
+        </>}
+        {onOpenRecovery && <Button onClick={() => onOpenRecovery(transfer.recoveryId)}>Xem hồ sơ thu hồi</Button>}
       </section>}
-      {role === 'manager' && onOpenRecovery && report.status === 'INVESTIGATING' && <section className="space-y-3 border-t border-stone-200 pt-4">
-        <Button variant="outline" aria-expanded={transferOpen} disabled={transferring}
-          onClick={() => setTransferOpen(open => !open)}>Chuyển sang thu hồi</Button>
-        {transferOpen && <form onSubmit={transferReport} className="space-y-3 rounded-lg bg-stone-50 p-3">
-          <p className="text-sm text-stone-600">Hệ thống sẽ mở hồ sơ thu hồi ở bước Chờ phân công và gửi thông báo theo lịch thu hồi.</p>
-          <label className="block text-sm font-medium">Kết luận xác minh
-            <textarea name="conclusion" required maxLength={2000} rows={3} disabled={transferring}
+      {closure && <section className="space-y-2 border-t border-stone-200 pt-4">
+        <h3 className="font-bold">Kết luận không phát hiện hàng cấm</h3>
+        <p className="text-sm text-stone-600">{closure.decidedBy ?? 'Chưa rõ người quyết định'} · {reportDateTime(closure.decidedAt)}</p>
+        <h4 className="text-sm font-semibold">Lý do đóng báo cáo</h4>
+        <p className="whitespace-pre-wrap break-words text-sm">{closure.reason}</p>
+      </section>}
+      {role === 'manager' && report.status === 'INVESTIGATING' && <section className="space-y-3 border-t border-stone-200 pt-4">
+        <div className="flex flex-wrap gap-2">
+          {onOpenRecovery && <Button variant="danger" aria-expanded={resolution === 'transfer'} disabled={saving}
+            onClick={() => toggleResolution('transfer')}>Chuyển sang thu hồi</Button>}
+          <Button aria-expanded={resolution === 'close'} disabled={saving}
+            onClick={() => toggleResolution('close')}>Đóng báo cáo</Button>
+        </div>
+        {resolution && <form key={resolution} onSubmit={resolveReport} className="space-y-3 rounded-lg bg-stone-50 p-3">
+          <p className="text-sm text-stone-600">{resolution === 'close'
+            ? 'Kết luận không phát hiện hàng cấm. Hồ sơ thuê tiếp tục như bình thường.'
+            : 'Hệ thống sẽ mở hồ sơ thu hồi ở bước Chờ phân công và gửi thông báo theo lịch thu hồi.'}</p>
+          <label className="block text-sm font-medium">
+            {resolution === 'close' ? 'Lý do đóng báo cáo' : 'Kết luận và căn cứ chuyển thu hồi'}
+            <textarea name="details" required maxLength={2000} rows={3} disabled={saving}
               className="mt-1 block w-full rounded-lg border border-stone-300 bg-white p-2" />
           </label>
-          <label className="block text-sm font-medium">Căn cứ chuyển thu hồi
-            <textarea name="grounds" required maxLength={2000} rows={3} disabled={transferring}
-              className="mt-1 block w-full rounded-lg border border-stone-300 bg-white p-2" />
-          </label>
-          {transferError && <p role="alert" className="text-sm text-red-700">{transferError}</p>}
-          <Button type="submit" disabled={transferring}>
-            {transferring ? 'Đang chuyển…' : 'Xác nhận chuyển thu hồi'}
+          {resolutionError && <p role="alert" className="text-sm text-red-700">{resolutionError}</p>}
+          <Button type="submit" variant={resolution === 'transfer' ? 'danger' : 'primary'} disabled={saving}>
+            {resolution === 'close'
+              ? (saving ? 'Đang đóng…' : 'Xác nhận đóng báo cáo')
+              : (saving ? 'Đang chuyển…' : 'Xác nhận chuyển thu hồi')}
           </Button>
         </form>}
       </section>}
@@ -172,7 +196,7 @@ export default function ManagerSuspicionReport({ id, staffRentalId, onClose, onO
         {role === 'manager' && report.status === 'PENDING_MANAGER' && <Button disabled={accepting} onClick={() => void acceptReport()}>
           {accepting ? 'Đang tiếp nhận…' : 'Tiếp nhận xử lý'}
         </Button>}
-        {rental && <Button variant="outline" onClick={() => onOpenRental(report.rentalId)}>Xem hồ sơ thuê</Button>}
+        {rental && <Button onClick={() => onOpenRental(report.rentalId)}>Xem hồ sơ thuê</Button>}
       </div>
     </div>}
   </Modal>

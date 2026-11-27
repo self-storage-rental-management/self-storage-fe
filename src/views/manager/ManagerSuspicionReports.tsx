@@ -44,6 +44,7 @@ export default function ManagerSuspicionReports({ onOpenReport }: { onOpenReport
         <h3 className="font-bold">{report.code}</h3>
         {report.status === 'PENDING_MANAGER' && <Badge variant="warning">Chờ quản lý tiếp nhận</Badge>}
         {report.status === 'INVESTIGATING' && <Badge variant="info">Đang xác minh</Badge>}
+        {report.status === 'CLOSED_NO_VIOLATION' && <Badge variant="success">Đã đóng</Badge>}
         {report.status === 'TRANSFERRED_TO_RECOVERY' && <Badge variant="info">Đã chuyển thu hồi</Badge>}
       </div>
       <p className="text-sm text-stone-600">

@@ -2426,7 +2426,6 @@ export default function BusinessApp({
   const [formFacUnitSpecs, setFormFacUnitSpecs] = useState<FacilityCustomUnitSpec[]>(() =>
     DEFAULT_FACILITY_UNIT_SPECS.map((s) => ({ ...s })),
   )
-  const [showAddUnitSpecModal, setShowAddUnitSpecModal] = useState<boolean>(false)
   const [newSpecSizeCode, setNewSpecSizeCode] = useState<string>("XXL")
   const [newSpecName, setNewSpecName] = useState<string>("Kho Ngoại Khổ (XXL)")
   const [newSpecLength, setNewSpecLength] = useState<number>(25.0)
@@ -3748,11 +3747,11 @@ export default function BusinessApp({
       )}
       {page === 'recoveries' && <div className="space-y-5">
         <SectionHeader title="Thu hồi kho" subtitle="Xử lý các hồ sơ quản lý cơ sở chưa hoàn thành đúng hạn." />
-        <Card className="recovery-workspace">
-          <h2>Hồ sơ quá hạn xử lý</h2>
+        <section className="recovery-workspace" aria-labelledby="business-recovery-heading">
+          <h2 id="business-recovery-heading">Hồ sơ quá hạn xử lý</h2>
           <p>Các hồ sơ quá hạn phân công hoặc rà soát của quản lý cơ sở được chuyển đến chủ doanh nghiệp.</p>
           <ViolationRecoveryPanel activeOnly managerOverdueOnly target={recoveryNoticeTarget} />
-        </Card>
+        </section>
       </div>}
       {/* ── QUẢN LÝ CƠ SỞ (CRUD FACILITIES) ──────────────────── */}
       {page === "facilities" && (

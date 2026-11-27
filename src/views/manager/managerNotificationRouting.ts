@@ -1,6 +1,14 @@
 import type { ApiNotification } from '../../services/notificationApi'
+import { notificationRecordTarget } from '../../services/notificationRecordTarget'
+
+export function managerOverdueNotificationRef(notification: ApiNotification): string | undefined {
+  const target = notificationRecordTarget(notification, 'manager')
+  if (target?.kind === 'rental') return `RENTAL_TERM:${target.id}`
+}
 
 export function managerNotificationPage(notification: ApiNotification): string {
+  if (managerOverdueNotificationRef(notification)) return 'overdue-cases'
+  if (notificationRecordTarget(notification, 'manager')?.kind === 'payment') return 'payments'
   if (notification.type === 'SYSTEM' && notification.relatedEntityId &&
     /^(?:(?:Khẩn cấp · )?Báo|Đã gửi báo) cáo nghi vấn hàng cấm$/.test(notification.title)) return 'suspicion-report'
   if (notification.relatedEntityType === 'VIOLATION_RECOVERY') return 'staff-tasks'

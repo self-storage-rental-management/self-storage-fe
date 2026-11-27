@@ -53,6 +53,7 @@ import {
   type CheckInCase,
 } from "../../services/checkInApi"
 import { listReturns, type ApiReturn } from "../../services/returnApi"
+import { notificationRecordTarget, type NotificationRecordTarget } from "../../services/notificationRecordTarget"
 import { listStaffActiveReservations, listStaffReservationReviews, type ReservationReview, type StaffReservationProgress } from "../../services/staffReservationApi"
 import StaffReservationReviews from "./StaffReservationReviews"
 import {
@@ -996,6 +997,7 @@ export default function StaffApp({
   const [selectedRecoveryTask, setSelectedRecoveryTask] = useState<{ id: string; facilityId: string } | null>(null)
   const recoveryCloseGuard = useRef<() => boolean>(() => false)
   const [selectedMaintenanceTaskId, setSelectedMaintenanceTaskId] = useState<string | null>(null)
+  const [noticeTarget, setNoticeTarget] = useState<{ record: NotificationRecordTarget; request: number }>()
 
   const [operationalTaskPriorityFilter, setOperationalTaskPriorityFilter] =
     useState("all")
@@ -2181,6 +2183,9 @@ export default function StaffApp({
   }))
 
   const notificationPage = (notification: ApiNotification) => {
+    const target = notificationRecordTarget(notification, 'staff')
+    if (target?.kind === 'rental') return 'facility-rentals'
+    if (target) return 'return'
     if (notification.title === "Khách hàng đã cập nhật lịch nhận kho") return "reservations"
     const type = notification.type
     if (type === "CHECKIN") return "checkin"
@@ -2210,7 +2215,7 @@ export default function StaffApp({
       user={user}
       navItems={nav}
       currentPage={page}
-      onNavigate={setPage}
+      onNavigate={next => { setNoticeTarget(undefined); setPage(next) }}
       onLogout={onLogout}
       notifications={[
         ...staffApiNotifications,
@@ -2233,6 +2238,9 @@ export default function StaffApp({
       onNotificationClick={(notification) => {
         if (notification.id.startsWith("api-notification-")) {
           const notificationId = notification.id.replace("api-notification-", "")
+          const source = backendNotifications.find(item => item.id === notificationId)
+          const record = source ? notificationRecordTarget(source, 'staff') : undefined
+          setNoticeTarget(previous => record ? { record, request: (previous?.request ?? 0) + 1 } : undefined)
           setPage(notification.page)
           if (notification.page === "support" && notification.targetId) {
             setSupportOpenTicket(previous => ({ id: notification.targetId!, request: (previous?.request ?? 0) + 1 }))
@@ -2967,7 +2975,8 @@ export default function StaffApp({
       {page === "credentials" && isApiAuthenticated() && <StaffCredentialReissuePanel showToast={showToast} />}
 
       {page === "facility-rentals" && isApiAuthenticated() && (
-        <StaffFacilityRentals key={user.id} />
+        <StaffFacilityRentals key={`${user.id}:${noticeTarget?.request ?? ''}`}
+          initialRentalId={noticeTarget?.record.kind === 'rental' ? noticeTarget.record.id : undefined} />
       )}
 
       {/* ── RETURN INSPECTION ────────────────────────────────── */}
@@ -2981,7 +2990,8 @@ export default function StaffApp({
                 title="Trả kho & thu hồi"
                 subtitle="Đối chiếu hiện trạng, ghi nhận quyết toán và hoàn cọc trên dữ liệu máy chủ"
               />
-              <ReturnApiPanel role="staff" onChanged={refreshCredentialAlerts} />
+              <ReturnApiPanel key={noticeTarget?.request ?? 0} role="staff" notificationTarget={noticeTarget?.record}
+                onChanged={refreshCredentialAlerts} />
             </div>
           )}
 
