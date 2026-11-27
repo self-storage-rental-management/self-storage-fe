@@ -542,8 +542,19 @@ function WorkspaceData({
                         </Button>
                       )
                     })()}
-                  <Button type="button" size="sm" variant="outline" className="!border-amber-400 !bg-amber-100 !text-amber-950 hover:!bg-amber-200"
-                    disabled={row.status === 'completed'} onClick={() => setReturnRental({ id: row.id, active: row.status === 'active' || row.status === 'setup' })}>Trả kho</Button>
+                  {(() => {
+                    const eligibility = getRentalRenewalEligibility(row, customerRenewals.data || [])
+                    return eligibility.hasOpenRenewal ? (
+                      <Button type="button" size="sm" variant="outline" disabled
+                        title="Phải xử lý xong hoặc hủy yêu cầu gia hạn trước khi trả kho."
+                        className="!border-amber-300 !bg-amber-50 !text-amber-800">
+                        Đang xử lý gia hạn
+                      </Button>
+                    ) : (
+                      <Button type="button" size="sm" variant="outline" className="!border-amber-400 !bg-amber-100 !text-amber-950 hover:!bg-amber-200"
+                        disabled={row.status === 'completed'} onClick={() => setReturnRental({ id: row.id, active: row.status === 'active' || row.status === 'setup' })}>Trả kho</Button>
+                    )
+                  })()}
                   {onRequestSupport && <Button type="button" size="sm" variant="outline" onClick={() => onRequestSupport(row.id, row.storageUnit.code)}>Hỗ trợ hồ sơ</Button>}
                 </>}
               />)}
@@ -641,8 +652,17 @@ function WorkspaceData({
                             </Button>
                           )
                         })()}
-                        <Button size="sm" variant="primary" disabled={!['setup', 'active', 'return_requested', 'return_inspection', 'closing'].includes(row.status)}
-                          onClick={() => setReturnRental({ id: row.id, active: row.status === 'active' || row.status === 'setup' })}>Trả kho</Button>
+                        {(() => {
+                          const eligibility = getRentalRenewalEligibility(row, customerRenewals.data || [])
+                          return eligibility.hasOpenRenewal ? (
+                            <Button size="sm" variant="outline" disabled
+                              title="Phải xử lý xong hoặc hủy yêu cầu gia hạn trước khi trả kho."
+                              className="!border-amber-300 !bg-amber-50 !text-amber-800">Đang xử lý gia hạn</Button>
+                          ) : (
+                            <Button size="sm" variant="primary" disabled={!['setup', 'active', 'return_requested', 'return_inspection', 'closing'].includes(row.status)}
+                              onClick={() => setReturnRental({ id: row.id, active: row.status === 'active' || row.status === 'setup' })}>Trả kho</Button>
+                          )
+                        })()}
                       </>}
                       </div>
                     </td>

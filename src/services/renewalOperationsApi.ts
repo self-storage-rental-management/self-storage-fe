@@ -468,7 +468,7 @@ const commandFields: Record<RenewalOperationCommand["action"], readonly string[]
   appointment: ["appointmentAt", "reason", "expectedVersion"],
   reschedule: ["appointmentAt", "reason", "expectedVersion"],
   confirmation: ["decisionRef", "expectedVersion"],
-  arrival: ["appointmentRef", "evidenceFileIds", "expectedVersion"],
+  arrival: ["appointmentRef", "evidenceFileIds", "expectedVersion", "identityVerified"],
   noShow: ["appointmentRef", "reason", "expectedVersion"],
   incident: ["appointmentRef", "reason", "evidenceFileIds", "expectedVersion"],
   cash: ["payableStatementRef", "receiptFileId", "paymentMethod", "received", "expectedVersion"],
