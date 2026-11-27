@@ -1329,7 +1329,7 @@ function OperationForm({
                   .filter((e) => e.kind === "INCIDENT")
                   .map((e) => (
                     <option key={e.id} value={e.id}>
-                      {rentalDate(e.occurredAt)} · {recordDisplayCode(e.id)}
+                      {rentalDate(e.occurredAt)}, {recordDisplayCode(e.id)}
                     </option>
                   ))}
               </select>
