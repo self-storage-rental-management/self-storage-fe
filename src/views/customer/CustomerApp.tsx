@@ -1248,8 +1248,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     return reservationSizeFilter === 'all' || storageSizeCode(unitType?.name || unitType?.code || '') === reservationSizeFilter
   })
 
-  const activeBackendReservations = filteredBackendReservations.filter(reservation => !reservation.violationRecovery && !['EXPIRED', 'COMPLETED'].includes(reservation.status))
-  const expiredBackendReservations = filteredBackendReservations.filter(reservation => reservation.status === 'EXPIRED')
+  const activeBackendReservations = filteredBackendReservations.filter(reservation => !reservation.violationRecovery && !['EXPIRED', 'REJECTED', 'CANCELLED', 'COMPLETED'].includes(reservation.status))
+  const expiredBackendReservations = filteredBackendReservations.filter(reservation => ['EXPIRED', 'REJECTED'].includes(reservation.status))
   const completedBackendReservations = filteredBackendReservations.filter(reservation => reservation.violationRecovery || reservation.status === 'COMPLETED')
   const activeReservationHolds = filteredReservationHolds.filter(hold => !['EXPIRED', 'COMPLETED', 'completed'].includes(hold.status))
   const expiredReservationHolds = filteredReservationHolds.filter(hold => hold.status === 'EXPIRED')
@@ -3709,7 +3709,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   <summary className="cursor-pointer text-sm font-medium">Quy định thuê kho và danh mục hàng cấm</summary>
                   <ul className="my-3 list-disc space-y-1 pl-5 text-sm text-stone-700">
                     <li><strong>Giữ chỗ.</strong> Trả trước 20% trong thời hạn ghi trên đơn. Khoản này được trừ vào tổng tiền phải trả. Cọc đảm bảo được tính riêng.</li>
-                    <li><strong>Nhận kho.</strong> Mang CCCD gốc hợp lệ đến trong 7 × 24 giờ kể từ giờ hẹn. Bàn giao trong 72 giờ kể từ khi nhân viên xác nhận khách đã đến nhận kho.</li>
+                    <li><strong>Nhận kho.</strong> Mang CCCD gốc hợp lệ đến nhận kho đúng giờ hẹn. Bàn giao trong 72 giờ kể từ khi nhân viên xác nhận khách đã đến nhận kho.</li>
                     <li><strong>Hủy đơn.</strong> Nếu tự hủy, bạn có thể mất khoản giữ chỗ. Nếu quá hạn nhận kho hoặc bị từ chối do CCCD sai từ 4 chữ số, khoản giữ chỗ sẽ không được hoàn.</li>
                     <li><strong>Hàng cấm.</strong> Kho không nhận hàng cháy nổ, hóa chất nguy hiểm, hàng tươi sống hoặc hàng vi phạm pháp luật.</li>
                   </ul>
