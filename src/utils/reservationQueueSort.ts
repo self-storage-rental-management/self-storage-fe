@@ -1,5 +1,20 @@
 import { compareWorkQueue } from './workQueueSort'
 
+export function compareReservationCreatedAt(
+  a: { id: string; createdAt?: string | null },
+  b: { id: string; createdAt?: string | null },
+  order: 'newest' | 'oldest',
+) {
+  const left = a.createdAt ? Date.parse(a.createdAt) : NaN
+  const right = b.createdAt ? Date.parse(b.createdAt) : NaN
+  if (!Number.isFinite(left) || !Number.isFinite(right)) {
+    if (Number.isFinite(left)) return -1
+    if (Number.isFinite(right)) return 1
+    return a.id.localeCompare(b.id)
+  }
+  return (order === 'newest' ? right - left : left - right) || a.id.localeCompare(b.id)
+}
+
 type ReservationQueueRow = {
   id: string; status: string; createdAt?: string | null; holdExpiresAt?: string | null
   paymentExpiresAt?: string | null; appointmentAt?: string | null; violationRecovery?: boolean
