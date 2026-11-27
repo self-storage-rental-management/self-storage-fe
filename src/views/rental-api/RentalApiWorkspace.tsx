@@ -426,7 +426,7 @@ function WorkspaceData({
           <option value="amount,desc">Giá giảm dần</option>
         </select>
       </RenewalSearch>}
-      {tab === "rental" && <div className={`grid items-end gap-3 ${role === "manager" ? "lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]" : "sm:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]"}`}>
+      {tab === "rental" && <div className="grid items-end gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
           <form
             className="grid h-full grid-cols-[minmax(0,1fr)_auto] items-end gap-2"
             onSubmit={(event) => {
@@ -463,7 +463,7 @@ function WorkspaceData({
               ))}
           </select>
         </label>
-        {role === "manager" && (
+        {/* sort available for all roles */}
           <label className="block min-w-0">
             Sắp xếp
             <select
@@ -472,13 +472,13 @@ function WorkspaceData({
               onChange={(e) => change({ sort: e.target.value })}
             >
               <option value="priority,asc">Cần xử lý / hạn gần nhất</option>
-              <option value="createdAt,desc">Mới nhất</option>
-              <option value="createdAt,asc">Cũ nhất</option>
+              <option value="createdAt,desc">Đơn mới nhất</option>
+              <option value="createdAt,asc">Đơn cũ nhất</option>
               <option value="contractEndDate,asc">Ngày hết hạn gần nhất</option>
               <option value="monthlyPrice,desc">Giá giảm dần</option>
             </select>
           </label>
-        )}
+        {/* end sort */}
       </div>}
       </section>
       {tab === "recovery" ? <ViolationRecoveryPanel target={recoveryTarget} customerView={role === 'customer'} /> : <ApiReadState {...read} retry={refresh} />}

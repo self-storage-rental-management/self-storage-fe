@@ -11,7 +11,7 @@ import ProcessingLeaseBoundary from '../../components/ProcessingLeaseBoundary'
 import ReturnPolicyNotice from '../../components/ReturnPolicyNotice'
 import EmergencyContactsPanel from '../../components/EmergencyContactsPanel'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Modal } from '../../components/ui'
+import { Badge, Button, Modal } from '../../components/ui'
 import { FilePreviewList } from '../staff/StaffFileUpload'
 import VietnameseDateInput from '../../components/VietnameseDateInput'
 import LockInspectionSelect, { lockInspectionLabels } from '../../components/LockInspectionSelect'
@@ -787,6 +787,23 @@ function ReturnWorkspace({
           </div>
 
           {feedback && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{feedback}</p>}
+          {pendingMismatch && (
+            <section
+              aria-label="Lý do trả kho và quyết toán"
+              className="rounded-xl border border-red-300 border-l-4 border-l-red-600 bg-red-50/80 p-4 text-sm text-red-950"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-base font-bold text-red-950">Lý do trả kho và quyết toán</h3>
+                <Badge variant="error">Quan trọng</Badge>
+              </div>
+              <div className="mt-2 space-y-1.5 leading-relaxed text-red-900">
+                {selectedRecord.customerNotes && (
+                  <p className="whitespace-pre-wrap break-words font-semibold">{selectedRecord.customerNotes}</p>
+                )}
+                <p>Tiền sử dụng tính theo số ngày thực tế. Khoản hoàn hoặc thu thêm được xác định sau nghiệm thu.</p>
+              </div>
+            </section>
+          )}
           {role === 'customer' && selectedRecord.sourceType !== 'RECOVERY' && <>
             <CustomerClearance record={selectedRecord} ownerId={actor?.id} busy={busy || read.loading}
               run={async work => {
@@ -815,13 +832,7 @@ function ReturnWorkspace({
           {/* Form Actions / 2-Column Inspection */}
           {role === 'staff' && <ReturnAttendance key={selectedRecord.id} record={selectedRecord} role="staff"
             editable={!!actor?.permissions.includes('returns:process')} onChanged={read.refresh} />}
-          {pendingMismatch ? <details className="rounded-xl border border-stone-200 px-4 py-3 text-sm">
-            <summary className="cursor-pointer font-semibold text-stone-800">Lý do trả kho và quyết toán</summary>
-            <div className="mt-2 space-y-2 text-stone-700">
-              {selectedRecord.customerNotes && <p className="whitespace-pre-wrap break-words">{selectedRecord.customerNotes}</p>}
-              <p>Tiền sử dụng tính theo số ngày thực tế. Khoản hoàn hoặc thu thêm được xác định sau nghiệm thu.</p>
-            </div>
-          </details> : (role !== 'staff' || !requiresReturnAttendance(selectedRecord) || (!!selectedRecord.attendance?.arrivedAt && !!selectedRecord.attendance.verifiedAt)) && <LeasedReturnActions
+          {!pendingMismatch && (role !== 'staff' || !requiresReturnAttendance(selectedRecord) || (!!selectedRecord.attendance?.arrivedAt && !!selectedRecord.attendance.verifiedAt)) && <LeasedReturnActions
             key={selectedRecord.id + ":" + (selectedRecord.clearanceRevision ?? 0) + ":" + (selectedRecord.settlementVersion ?? 0)}
             role={role}
             record={selectedRecord}
