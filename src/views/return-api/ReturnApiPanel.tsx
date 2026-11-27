@@ -1,5 +1,4 @@
 import ProcessingLeaseBoundary from '../../components/ProcessingLeaseBoundary'
-import ReturnAppointment from './ReturnAppointment'
 import { recordDisplayCode, receiptDisplayCode } from '../../utils/recordDisplayCode'
 import { compareReturnQueue } from '../../utils/returnQueueSort'
 import { awaitsCustomerClearance, ClearanceStatus, CustomerClearance, ReturnContract, ReturnPreparation } from './ReturnClearance'
@@ -11,7 +10,7 @@ import { getCustomerReservation, extendCustomerInventoryReturnWindow, resolveCus
 import ReturnPolicyNotice from '../../components/ReturnPolicyNotice'
 import EmergencyContactsPanel from '../../components/EmergencyContactsPanel'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Badge, Button, Modal } from '../../components/ui'
+import { Button, Modal } from '../../components/ui'
 import { FilePreviewList } from '../staff/StaffFileUpload'
 import VietnameseDateInput from '../../components/VietnameseDateInput'
 import LockInspectionSelect, { lockInspectionLabels } from '../../components/LockInspectionSelect'
@@ -24,8 +23,6 @@ import RecoveryTaskLink from '../rental-api/RecoveryTaskLink'
 import AssignedRecoveryTasks from '../staff/AssignedRecoveryTasks'
 import RecoveryTaskDetail from '../rental-api/RecoveryTaskDetail'
 import type { NotificationRecordTarget } from '../../services/notificationRecordTarget'
-import { getReturnRenewalEligibility } from '../../services/returnRenewalEligibility'
-import ReturnRenewalBlock from './ReturnRenewalBlock'
 import {
   getReturn,
   confirmReturn,
@@ -148,9 +145,6 @@ export function ReturnSummary({ record, hideTerminationFee = false, hideHeader =
       {['requested', 'scheduled'].includes(record.status) && record.recoveryEligibleAt && !record.attendance?.arrivedAt && <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">Nếu khách chưa đến và chưa hoàn tất trả kho, hồ sơ sẽ chuyển sang nhiệm vụ xử lý sau <strong>{returnRecoveryCountdown(record.recoveryEligibleAt, now) || returnRecoveryCutoff(record.recoveryEligibleAt)}</strong>. Hàng chưa được tự động di chuyển.</p>}
       {inventoryMismatch && <div className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-950">
         <p className="font-bold">Đơn trả kho do kiểm kê sai lệch</p>
-        <p className="mt-1">Thời hạn trả kho đã chốt: {record.returnWindowDays != null ? `${record.returnWindowDays} ngày` : 'Chưa có thông tin'}.</p>
-        <p className="mt-1">Gia hạn mỗi lần tối đa: {record.returnExtensionDays != null ? `${record.returnExtensionDays} ngày` : 'Chưa có thông tin'} · Đã gia hạn {record.returnExtensionCount ?? 0}/{record.maxReturnExtensions ?? 2} lần.</p>
-        {(record.inventoryRemovalDeadlineAt ?? record.recoveryEligibleAt) && <p className="mt-1 font-semibold">Hạn cuối dọn hàng: {returnRecoveryCutoff(record.inventoryRemovalDeadlineAt ?? record.recoveryEligibleAt)}</p>}
         <p className="mt-1">Tính tiền theo số ngày sử dụng thực tế (Đơn giá tháng × Số ngày / 30).</p>
         <p className="mt-1 text-xs font-medium">Khách dọn hàng trong hạn và xác nhận khi sẵn sàng bàn giao.</p>
       </div>}
@@ -462,14 +456,12 @@ export default function ReturnApiPanel({
   notificationTarget,
   rentalActive = false,
   onChanged,
-  onOpenRenewal,
 }: {
   role: ReturnRole
   rentalId?: string
   notificationTarget?: NotificationRecordTarget
   rentalActive?: boolean
   onChanged?: () => void
-  onOpenRenewal?: (id: string) => void
 }) {
   const actor = getAuthenticatedActor()
   const identity = `${actor?.id}:${JSON.stringify(actor?.permissions)}:${JSON.stringify(actor?.facilityScopes)}:${role}:${rentalId ?? ''}`
@@ -481,7 +473,6 @@ export default function ReturnApiPanel({
       notificationTarget={notificationTarget}
       rentalActive={rentalActive}
       onChanged={onChanged}
-      onOpenRenewal={onOpenRenewal}
       identity={identity}
     />
   )
@@ -493,7 +484,6 @@ function ReturnWorkspace({
   notificationTarget,
   rentalActive,
   onChanged,
-  onOpenRenewal,
   identity,
 }: {
   role: ReturnRole
@@ -501,7 +491,6 @@ function ReturnWorkspace({
   notificationTarget?: NotificationRecordTarget
   rentalActive: boolean
   onChanged?: () => void
-  onOpenRenewal?: (id: string) => void
   identity: string
 }) {
   const actor = getAuthenticatedActor()
@@ -517,12 +506,13 @@ function ReturnWorkspace({
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(timer)
   }, [mismatch])
+  const [sort, setSort] = useState<'priority' | 'createdAt,desc' | 'createdAt,asc'>('priority')
   const [page, setPage] = useState(0)
   const [directReturnId, setDirectReturnId] = useState(notificationTarget?.kind === 'return' ? notificationTarget.id : undefined)
   const directReturn = useRentalApiResource(`${identity}:return-detail:${directReturnId}`,
     async () => directReturnId ? getReturn(role, directReturnId) : null, { retainDataOnRefresh: true })
-  const read = useRentalApiResource(`${identity}:${page}`, async () => {
-    if (!rentalId) return listReturns(role, page)
+  const read = useRentalApiResource(`${identity}:${page}:${sort}`, async () => {
+    if (!rentalId) return listReturns(role, page, 20, sort)
     const first = await listReturns(role, 0, 100)
     const data = [...first.data]
     for (let next = 1; next < first.pagination.totalPages; next++) data.push(...(await listReturns(role, next, 100)).data)
@@ -637,9 +627,6 @@ function ReturnWorkspace({
     if (directReturnId) return directReturn.data ?? null
     return selectedRecordId ? rows.find((r) => r.id === selectedRecordId) ?? null : null
   }, [rows, selectedRecordId, directReturnId, directReturn.data])
-  const eligibilityRentalId = rentalId || selectedRecord?.rentalId
-  const renewalGate = useRentalApiResource(`${identity}:return-renewal-eligibility:${eligibilityRentalId}`, async () =>
-    role === 'customer' && eligibilityRentalId ? getReturnRenewalEligibility(eligibilityRentalId) : null)
 
   const counts = useMemo(() => {
     const pending = rows.filter((r) => ['requested', 'scheduled'].includes(r.status)).length
@@ -679,10 +666,6 @@ function ReturnWorkspace({
 
   if (!readable) return null
 
-  if (role === 'customer' && eligibilityRentalId && (renewalGate.loading || renewalGate.error || !renewalGate.data?.allowed))
-    return <ReturnRenewalBlock gate={renewalGate.data} loading={renewalGate.loading}
-      error={renewalGate.error ? returnError(renewalGate.error) : undefined}
-      onRetry={renewalGate.refresh} onOpenRenewal={onOpenRenewal} />
 
   if (directReturnId && !selectedRecord) return directReturn.error
     ? <div className="space-y-3"><p role="alert">{returnError(directReturn.error)}</p>
@@ -817,23 +800,6 @@ function ReturnWorkspace({
           </div>
 
           {feedback && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{feedback}</p>}
-          {pendingMismatch && (
-            <section
-              aria-label="Lý do trả kho và quyết toán"
-              className="rounded-xl border border-red-300 border-l-4 border-l-red-600 bg-red-50/80 p-4 text-sm text-red-950"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-base font-bold text-red-950">Lý do trả kho và quyết toán</h3>
-                <Badge variant="error">Quan trọng</Badge>
-              </div>
-              <div className="mt-2 space-y-1.5 leading-relaxed text-red-900">
-                {selectedRecord.customerNotes && (
-                  <p className="whitespace-pre-wrap break-words font-semibold">{selectedRecord.customerNotes}</p>
-                )}
-                <p>Tiền sử dụng tính theo số ngày thực tế. Khoản hoàn hoặc thu thêm được xác định sau nghiệm thu.</p>
-              </div>
-            </section>
-          )}
           {role === 'customer' && selectedRecord.sourceType !== 'RECOVERY' && <>
             <CustomerClearance record={selectedRecord} ownerId={actor?.id} busy={busy || read.loading}
               run={async work => {
@@ -849,7 +815,6 @@ function ReturnWorkspace({
               countdown={pendingMismatch ? returnRecoveryCountdown(selectedRecord.inventoryRemovalDeadlineAt ?? selectedRecord.recoveryEligibleAt, now) : undefined}
               extension={pendingMismatch ? {
                 count: selectedRecord.returnExtensionCount ?? removal.data?.inventoryReturnExtensionCount ?? 0,
-                days: selectedRecord.returnExtensionDays ?? removal.data?.inventoryReturnExtensionDays,
                 onExtend: selectedRecord.canExtendReturnWindow !== false
                   && (selectedRecord.returnExtensionCount ?? removal.data?.inventoryReturnExtensionCount ?? 0) < (selectedRecord.maxReturnExtensions ?? 2)
                   && Date.parse(selectedRecord.inventoryRemovalDeadlineAt ?? removal.data?.inventoryRemovalDeadlineAt ?? '') > now
@@ -858,6 +823,10 @@ function ReturnWorkspace({
                   && selectedRecord.attendance?.reviewStatus !== 'PENDING'
                   ? () => extendRemovalWindow(selectedRecord) : undefined,
               } : undefined} />
+            {contract.data && <details className="rounded-xl border border-stone-200 px-4 py-3 text-sm">
+              <summary className="cursor-pointer font-semibold text-stone-800">Thông tin hợp đồng</summary>
+              <div className="mt-2"><ReturnContract rental={contract.data} record={selectedRecord} /></div>
+            </details>}
           </>}
           {role === 'staff' && actor?.permissions.includes('returns:process') && awaitsCustomerClearance(selectedRecord) && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
@@ -871,7 +840,13 @@ function ReturnWorkspace({
           {/* Form Actions / 2-Column Inspection */}
           {role === 'staff' && <ReturnAttendance key={selectedRecord.id} record={selectedRecord} role="staff"
             editable={!!actor?.permissions.includes('returns:process')} onChanged={read.refresh} />}
-          {!pendingMismatch && (role !== 'staff' || !requiresReturnAttendance(selectedRecord) || (!!selectedRecord.attendance?.arrivedAt && !!selectedRecord.attendance.verifiedAt)) && <LeasedReturnActions
+          {pendingMismatch ? <details className="rounded-xl border border-stone-200 px-4 py-3 text-sm">
+            <summary className="cursor-pointer font-semibold text-stone-800">Lý do trả kho và quyết toán</summary>
+            <div className="mt-2 space-y-2 text-stone-700">
+              {selectedRecord.customerNotes && <p className="whitespace-pre-wrap break-words">{selectedRecord.customerNotes}</p>}
+              <p>Tiền sử dụng tính theo số ngày thực tế. Khoản hoàn hoặc thu thêm được xác định sau nghiệm thu.</p>
+            </div>
+          </details> : (role !== 'staff' || !requiresReturnAttendance(selectedRecord) || (!!selectedRecord.attendance?.arrivedAt && !!selectedRecord.attendance.verifiedAt)) && <LeasedReturnActions
             key={selectedRecord.id + ":" + (selectedRecord.clearanceRevision ?? 0) + ":" + (selectedRecord.settlementVersion ?? 0)}
             role={role}
             record={selectedRecord}
@@ -892,8 +867,6 @@ function ReturnWorkspace({
             }}
           />}
 
-
-          {role === 'customer' && selectedRecord.sourceType === 'RECOVERY' && <ReturnAppointment key={selectedRecord.id + ':' + selectedRecord.returnVersion} record={selectedRecord} busy={busy || read.loading} run={run} />}
 
           {role === 'customer' && !selectedRecord.attendance?.arrivedAt && selectedRecord.returnType !== 'INVENTORY_MISMATCH' && selectedRecord.status === 'requested' && editing !== selectedRecord.id && (
             <div className="mt-3 flex justify-end border-t border-stone-100 pt-3">
@@ -976,7 +949,7 @@ function ReturnWorkspace({
           {role !== 'customer' && listMode === 'recovery' ? (
             <>
               <ViolationRecoveryPanel key={violationTarget?.id ?? 'list'} target={violationTarget}
-                compact={role === 'staff'} leadingCards={role === 'staff' ? <AssignedRecoveryTasks identity={identity} /> : undefined}
+                compact={role === 'staff'} allowDateSort={role === 'staff'} leadingCards={role === 'staff' ? <AssignedRecoveryTasks identity={identity} /> : undefined}
                 detailOnly={!!violationTarget} onDetailClosed={() => setViolationTarget(undefined)} />
               {role === 'staff' && recoveryTaskId && <Modal open size="xl" title="Chi tiết nhiệm vụ thu hồi"
                 onClose={() => { if (!recoveryTaskGuard.current()) setRecoveryTaskId(undefined) }}>
@@ -997,13 +970,14 @@ function ReturnWorkspace({
 
           {/* Search bar & Status Tabs */}
           <div className="space-y-3">
-            <div className="relative">
+            <div className="flex flex-wrap items-center gap-3">
+            <div className="relative min-w-48 flex-1">
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Tìm kiếm theo mã kho, tên khách hàng, cơ sở hoặc lý do trả kho..."
-                className="w-full rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-xs text-stone-900 focus:border-amber-500 focus:outline-none placeholder:text-stone-400"
+                className="!h-9 w-full rounded-lg border border-stone-200 bg-white !px-3 !py-1.5 !text-xs text-stone-900 focus:border-amber-500 focus:outline-none placeholder:text-stone-400"
               />
               {searchQuery && (
                 <button
@@ -1014,6 +988,16 @@ function ReturnWorkspace({
                   Xóa
                 </button>
               )}
+            </div>
+          {role === 'staff' && <label className="flex shrink-0 items-center gap-2 whitespace-nowrap text-xs text-stone-500">
+            Sắp xếp
+            <select aria-label="Sắp xếp hồ sơ trả kho" className="!h-9 !w-40 !min-w-0 shrink-0 rounded-lg border border-stone-200 bg-white !px-3 !py-1.5 !text-xs text-stone-700"
+              value={sort} onChange={event => { setSort(event.target.value as typeof sort); setPage(0) }}>
+              <option value="priority">Ưu tiên xử lý</option>
+              <option value="createdAt,desc">Mới nhất</option>
+              <option value="createdAt,asc">Cũ nhất</option>
+            </select>
+          </label>}
             </div>
 
             {/* Segmented control tabs */}
@@ -1841,9 +1825,10 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                       <div className="space-y-2.5">
                         <p className="text-xs font-semibold text-stone-700">Ảnh hiện trường theo khu vực</p>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                          {(['Trần', 'Vách', 'Sàn', 'Cửa'] as const).map((area) => (
-                            <label key={area} className="relative cursor-pointer rounded-xl border border-dashed border-stone-300 bg-stone-50/50 p-3 text-center text-xs font-semibold text-stone-700 hover:border-stone-400 hover:bg-stone-100/50 transition">
-                              Thêm ảnh {area.toLowerCase()}
+                          {(['Trần', 'Vách', 'Sàn', 'Cửa'] as const).map((area) => {
+                            const areaCount = evidenceFiles.filter(file => file.name.startsWith(`${area} - `)).length
+                            return <label key={area} className={`relative cursor-pointer rounded-xl border border-dashed p-3 text-center text-xs font-semibold transition ${areaCount ? 'border-emerald-400 bg-emerald-50 text-emerald-800' : 'border-stone-300 bg-stone-50/50 text-stone-700 hover:border-stone-400 hover:bg-stone-100/50'}`}>
+                              {areaCount ? `Đã thêm ${areaCount} ảnh ${area.toLowerCase()}` : `Thêm ảnh ${area.toLowerCase()}`}
                               <input
                                 type="file"
                                 multiple
@@ -1858,7 +1843,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                                 }}
                               />
                             </label>
-                          ))}
+                          })}
                         </div>
                         <p className="text-[11px] text-stone-500">Đối chiếu với ảnh và hiện trạng kho trống trong hồ sơ nhận kho.</p>
                         <label className="text-xs font-semibold text-stone-700 block">

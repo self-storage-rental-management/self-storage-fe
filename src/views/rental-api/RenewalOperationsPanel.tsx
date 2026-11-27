@@ -48,7 +48,7 @@ import RenewalExceptionProposalCard from "./RenewalExceptionProposalCard"
 import RenewalCoordinationPanel, { canCoordinateRenewal } from "../rental-support-integration/RenewalCoordinationPanel"
 import { EvidenceUpload, EvidenceDownload } from "../rental-support-integration/EvidenceControls"
 
-type RenewalFormAction = Exclude<RenewalOperationAction, "noShow">
+type RenewalFormAction = RenewalOperationAction
 
 export const operationsInputClass =
   "mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
@@ -524,7 +524,9 @@ export default function RenewalOperationsPanel({
         }}
         onSuccess={(e) => {
           setLastEvent(e)
-          if (selected.action === "incident") setSuccessMessage("Đã gửi báo cáo sự cố tại cơ sở.")
+          if (selected.action === "noShow") setSuccessMessage("Đã ghi nhận khách không đến.")
+          if (e.kind === "NO_SHOW") onDocumentEvent?.(e)
+          if (selected.action === "incident") setSuccessMessage("Đã ghi nhận xử lý sự cố lịch ký.")
           if (selected.action === "cash") {
             setSuccessMessage("Đã ghi nhận thanh toán.")
           }
@@ -763,15 +765,13 @@ export default function RenewalOperationsPanel({
                         <div className="mt-4 flex flex-wrap items-center gap-3">
                           <Button
                             type="button"
-                            variant="outline"
+                            variant="primary"
                             disabled={locked}
                             onClick={() => {
-                              if (lockRef.current) return
-                              setSuccessMessage(undefined)
-                              setSelected({ action: "reschedule", state: s, proposal: proposalRead.data })
+                              setSuccessMessage("Đã gửi thông báo nhắc khách hàng thanh toán qua email và SMS.")
                             }}
                           >
-                            Dời lịch hẹn
+                            Gửi nhắc thanh toán
                           </Button>
                         </div>
                       </div>
@@ -938,31 +938,23 @@ export default function RenewalOperationsPanel({
                   )}
                 </div>
 
-                {/* Báo sự cố tại cơ sở */}
-                <div className="flex flex-wrap items-center justify-between gap-4 pt-3 border-t border-stone-200">
-                  <div className="space-y-0.5">
-                    <p className="text-xs font-semibold text-stone-800">Có vấn đề phát sinh?</p>
-                    <p className="text-xs text-stone-500">
-                      Danh mục sự cố: khách không đến, đến trễ, từ chối ký, thiếu giấy tờ, lỗi thanh toán.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="border-stone-300 text-stone-700 hover:bg-stone-50"
-                      disabled={locked}
-                      onClick={() => {
-                        if (lockRef.current) return
-                        setSuccessMessage(undefined)
-                        setSelected({ action: "incident", state: s, proposal: proposalRead.data })
-                      }}
-                    >
-                      ⚠️ Báo sự cố tại cơ sở ⌄
-                    </Button>
-                  </div>
-                </div>
+                {/* Một lối vào duy nhất cho mọi sự cố lịch ký. */}
+                {s.appointmentRef && !isCompleted && <div className="flex justify-end border-t border-stone-200 pt-3">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="border-stone-300 text-stone-700 hover:bg-stone-50"
+                    disabled={locked}
+                    onClick={() => {
+                      if (lockRef.current) return
+                      setSuccessMessage(undefined)
+                      setSelected({ action: "incident", state: s, proposal: proposalRead.data })
+                    }}
+                  >
+                    Xử lý sự cố lịch ký
+                  </Button>
+                </div>}
 
                 {selected?.action === "incident" && selectedForm}
               </Card>
@@ -1153,6 +1145,8 @@ function OperationForm({
   const needFiles = ["arrival", "incident", "exception", "refund"].includes(
     action,
   )
+  const incidentRequiresOutcome = action === "incident" && ["Khách không đến", "Từ chối ký"].includes(incidentType)
+  const incidentNeedsNote = action === "incident" && incidentType === "Khác"
   const rescheduleProposal =
     action === "exception" && exception === "APPROVE_RESCHEDULE_BEFORE_CUTOFF"
   const missingDecisionSources = rescheduleProposal
@@ -1168,6 +1162,8 @@ function OperationForm({
     const base = { expectedVersion: s.expectedVersion }
     if (action === "incident" && !incidentType) throw new Error("Vui lòng chọn loại sự cố.")
     if (needReason && action !== "incident") validateText(reason)
+    if (incidentNeedsNote) validateText(reason)
+    if (incidentRequiresOutcome && !attested) throw new Error("Cần xác nhận đã đọc và đồng ý với hệ quả trước khi ghi nhận.")
     if (needFiles) validateEvidence(files)
     if (
       manager &&
@@ -1284,6 +1280,16 @@ function OperationForm({
       case "confirmation":
         if (!attested) throw new Error("Cần xác nhận đã đọc và đồng ý với lịch và hạn ký mới.")
         return exceptionConfirmationCommand(s, proposal)
+      case "noShow":
+        if (!s.appointmentRef) throw new Error("Thiếu lịch ký.")
+        return {
+          action,
+          body: {
+            ...base,
+            appointmentRef: s.appointmentRef,
+            reason: reason.trim() || "Khách không đến theo lịch hẹn",
+          },
+        }
     }
   }
   return (
@@ -1323,7 +1329,7 @@ function OperationForm({
                   .filter((e) => e.kind === "INCIDENT")
                   .map((e) => (
                     <option key={e.id} value={e.id}>
-                      {rentalDate(e.occurredAt)} · {recordDisplayCode(e.id)}
+                      {rentalDate(e.occurredAt)}, {recordDisplayCode(e.id)}
                     </option>
                   ))}
               </select>
@@ -1410,17 +1416,46 @@ function OperationForm({
           </label>
         )}
         {action === "incident" && (
-          <label className="block">
-            Loại sự cố (bắt buộc)
-            <select className={operationsInputClass} value={incidentType} onChange={e => setIncidentType(e.target.value)}>
-              <option value="">Chọn loại sự cố</option>
-              {["Khách không đến", "Đến trễ", "Từ chối ký", "Thiếu giấy tờ", "Lỗi thanh toán", "Khác"].map(type => <option key={type}>{type}</option>)}
-            </select>
-          </label>
+          <fieldset className="space-y-2">
+            <legend className="block text-sm font-medium text-stone-700">Chọn loại sự cố (bắt buộc)</legend>
+            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Loại sự cố lịch ký">
+              {["Khách không đến", "Đến trễ", "Từ chối ký", "Thiếu giấy tờ", "Lỗi thanh toán", "Khác"].map(type => (
+                <button
+                  key={type}
+                  type="button"
+                  role="radio"
+                  aria-checked={incidentType === type}
+                  className={`rounded-full border px-3 py-1.5 text-sm transition ${incidentType === type
+                    ? incidentRequiresOutcome && type === incidentType
+                      ? "border-rose-400 bg-rose-50 text-rose-800"
+                      : "border-amber-500 bg-amber-50 text-amber-900"
+                    : "border-stone-300 bg-white text-stone-700 hover:bg-stone-50"}`}
+                  onClick={() => {
+                    setIncidentType(type)
+                    setAttested(false)
+                  }}
+                >
+                  {type}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+        )}
+        {incidentRequiresOutcome && (
+          <section className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm leading-6 text-rose-900" aria-label="Hệ quả của sự cố">
+            <p className="font-semibold">Hệ quả cần xác nhận</p>
+            <p className="mt-1">{incidentType === "Khách không đến"
+              ? "Lịch ký gia hạn sẽ kết thúc và chuyển sang đối soát. Gian kho đang thuê không bị giải phóng; khoản trả trước 20% không tự hoàn hoặc tự mất."
+              : "Nhánh ký gia hạn sẽ dừng và chuyển sang đối soát. Khoản trả trước 20% được xử lý theo chính sách, không tự động hoàn tiền."}</p>
+            <label className="mt-3 flex items-start gap-3 rounded-lg border border-rose-200 bg-white p-3 text-sm leading-6 text-stone-700">
+              <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-rose-600" checked={attested} onChange={e => setAttested(e.target.checked)} />
+              Tôi đã đọc và đồng ý với hệ quả trên.
+            </label>
+          </section>
         )}
         {needReason && (
           <label className="block">
-            {action === "incident" ? "Ghi chú thêm (không bắt buộc)" : "Lý do (bắt buộc)"}
+            {action === "incident" ? incidentNeedsNote ? "Ghi chú (bắt buộc với loại Khác)" : "Ghi chú thêm (không bắt buộc)" : "Lý do (bắt buộc)"}
             <textarea
               className={operationsInputClass}
               value={reason}
@@ -1529,10 +1564,13 @@ function OperationForm({
         {appointmentOnly && <p className="mr-auto text-sm text-stone-500">{scheduleReady ? "Đã chọn đủ ngày và giờ" : "Chưa chọn đủ ngày và giờ"}</p>}
         <Button
           size={appointmentOnly ? "md" : undefined}
+          variant={action === "noShow" || incidentRequiresOutcome ? "danger" : undefined}
           className={appointmentOnly ? "rounded-full px-5 disabled:!bg-stone-100 disabled:!text-stone-400" : undefined}
           disabled={
             command.busy || uploading || command.conflict || decisionMissing.length > 0 ||
             (action === "incident" && !command.uncertain && !incidentType) ||
+            (action === "incident" && !command.uncertain && incidentRequiresOutcome && !attested) ||
+            (action === "incident" && !command.uncertain && incidentNeedsNote && !reason.trim()) ||
             (!command.uncertain && ["appointment", "reschedule"].includes(action) && !scheduleReady) ||
             (!command.uncertain && action === "completion" && (!isUuid(signedDocumentFile) || cash.loading || !!cash.error || !cash.data || cash.data.amount !== 0 || !cash.data.effectiveStartDate)) ||
             (action === "confirmation" && !command.uncertain && (!attested || !!exceptionConfirmationBlockedReason(s, proposal)))
@@ -1604,7 +1642,7 @@ function OperationForm({
             ? ["appointment", "reschedule"].includes(action) ? "Đang lưu lịch ký…" : "Đang gửi…"
             : command.uncertain
               ? "Thử lại cùng yêu cầu"
-              : ["appointment", "reschedule"].includes(action) ? "Lưu lịch ký" : action === "completion" ? "Hoàn tất gia hạn" : action === "cash" ? "Xác nhận đã thu tiền" : action === "incident" ? "Gửi báo cáo" : "Gửi yêu cầu"}
+              : ["appointment", "reschedule"].includes(action) ? "Lưu lịch ký" : action === "completion" ? "Hoàn tất gia hạn" : action === "cash" ? "Xác nhận đã thu tiền" : action === "noShow" ? "Xác nhận khách không đến" : action === "incident" && incidentRequiresOutcome ? "Xác nhận và cập nhật trạng thái" : action === "incident" ? "Ghi nhận sự cố" : "Gửi yêu cầu"}
         </Button>
         {!["appointment", "reschedule"].includes(action) && <Button
           variant="outline"

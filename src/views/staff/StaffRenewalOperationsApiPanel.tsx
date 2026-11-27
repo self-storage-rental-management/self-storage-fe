@@ -2,7 +2,7 @@ import { parseVietnamDate } from '../../utils/vietnamTime'
 import LocalizedDateInput from '../../components/LocalizedDateInput'
 import { useCallback, useRef, useState } from "react"
 import { Badge, Button, Card, Modal } from "../../components/ui"
-import { getAuthenticatedActor } from "../../services/authApi"
+import { getAuthenticatedActor, staffWorkingFacilityId } from "../../services/authApi"
 import { listRenewalAppointments } from "../../services/renewalOperationsApi"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import type { RenewalAppointmentQuery } from "../../types/renewalOperationsApi"
@@ -55,6 +55,8 @@ function StaffSession({ identity, onLocked }: { identity: string; onLocked: (val
   const [query, setQuery] = useState<RenewalAppointmentQuery>({
     page: 0,
     size: 20,
+    facilityId: staffWorkingFacilityId(actor),
+    sort: "appointmentStart,asc",
   })
   const [selected, setSelected] = useState<string>()
   const lockRef = useRef(false)
@@ -72,22 +74,12 @@ function StaffSession({ identity, onLocked }: { identity: string; onLocked: (val
     <div className="space-y-4">
       <Card className="grid gap-4 rounded-2xl border border-stone-200 bg-white p-5 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr]">
         <label className="block min-w-0 text-sm font-medium text-stone-700">
-          Cơ sở
-          <select
-            className={operationsInputClass}
-            value={query.facilityId || ""}
-            onChange={(e) =>
-              change({ facilityId: e.target.value || undefined })
-            }
-          >
-            <option value="">Các cơ sở được vận hành</option>
-            {Object.entries(actor.facilityScopes)
-              .filter(([, scope]) => scope === "OPERATE" || scope === "MANAGE")
-              .map(([id]) => (
-                <option key={id} value={id}>
-                  {actor.facilityNames?.[id] || id}
-                </option>
-              ))}
+          Sắp xếp
+          <select className={operationsInputClass} value={query.sort || 'appointmentStart,asc'}
+            onChange={event => change({ sort: event.target.value as RenewalAppointmentQuery['sort'] })}>
+            <option value="appointmentStart,asc">Lịch hẹn sớm nhất</option>
+            <option value="createdAt,desc">Mới nhất</option>
+            <option value="createdAt,asc">Cũ nhất</option>
           </select>
         </label>
         <label className="block min-w-0 text-sm font-medium text-stone-700">
@@ -161,7 +153,7 @@ function StaffSession({ identity, onLocked }: { identity: string; onLocked: (val
               </thead>
               <tbody className="divide-y divide-stone-100">
                 {group.rows.map(s => <tr key={s.renewalId} className="transition-colors hover:bg-stone-50">
-                  <td className="break-words px-4 py-4 align-middle"><span className="font-semibold text-stone-900" title={renewalDisplayLabel(s)}>{s.rentalDisplayCode || 'Chưa cấp mã'}</span></td>
+                  <td className="break-words px-4 py-4 align-middle"><span className="font-semibold text-stone-900" title={renewalDisplayLabel(s)}>{s.rentalDisplayCode || s.displayCode || 'Chưa cấp mã'}</span></td>
                   <td className="px-4 py-4 align-middle"><span className="inline-block rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs text-stone-800">{s.renewalSequence ? `Lần ${s.renewalSequence}` : 'Chưa xác định'}</span></td>
                   <td className="break-words px-4 py-4 align-middle [overflow-wrap:anywhere]">
                     <p className="font-medium text-stone-900">{s.appointmentDetails?.customerName || 'Chưa xác định'}</p>

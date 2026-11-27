@@ -11,13 +11,6 @@ export async function getManagerPaymentComplaint(complaintId: string) {
   return response.data
 }
 
-export async function queryManagerPaymentComplaintVnpay(complaintId: string) {
-  const response = await apiRequest<ApiEnvelope<PaymentComplaint>>(`/api/manager/payment-complaints/${complaintId}/query-vnpay`, {
-    method: 'POST',
-  })
-  return response.data
-}
-
 export async function decideManagerPaymentComplaint(complaintId: string, decision: 'APPROVE' | 'REJECT', reason: string) {
   const response = await apiRequest<ApiEnvelope<PaymentComplaint>>(`/api/manager/payment-complaints/${complaintId}/decision`, {
     method: 'POST',

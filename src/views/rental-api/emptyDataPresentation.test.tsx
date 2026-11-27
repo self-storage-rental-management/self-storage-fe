@@ -23,7 +23,7 @@ const state = vi.hoisted(() => ({
   loading: false,
   error: undefined as unknown,
 }))
-vi.mock("../../services/authApi", () => ({ getAuthenticatedActor: () => state.actor }))
+vi.mock("../../services/authApi", async original => ({ ...await original<typeof import("../../services/authApi")>(), getAuthenticatedActor: () => state.actor }))
 vi.mock('../../hooks/useSupportMessageReads', () => ({ useSupportUnread: () => new Map(), useSupportMessageReads: () => {} }))
 vi.mock("../../hooks/useRentalApiResource", () => ({
   useRentalApiResource: (key: string) => ({

@@ -47,8 +47,8 @@ describe('Manager payment history screen', () => {
     const html = render()
     expect(html).toContain('Chờ đối soát')
     expect(html).not.toContain('>Đã thu<')
-    expect(html).not.toContain('aria-label="Xem biên lai')
-    expect(html).not.toContain('aria-label="Tải biên lai')
+    expect(html).not.toContain('aria-label="Xem chi tiết giao dịch')
+    expect(html).not.toContain('aria-label="Tải phiếu ghi nhận')
   })
   it('shows payment transactions without rental record cards or financial detail links', () => {
     state.list = { data: paymentPage([item]) }
@@ -90,8 +90,8 @@ describe('Manager payment history screen', () => {
     expect(html).toContain(`>${transactionReference}</code>`)
     expect(html).toContain('23/10/2026')
     expect(html).toContain('00:27')
-    expect(html).toContain(`aria-label="Xem biên lai ${transactionReference}"`)
-    expect(html).toContain(`aria-label="Tải biên lai ${transactionReference}"`)
+    expect(html).toContain(`aria-label="Xem chi tiết giao dịch ${transactionReference}"`)
+    expect(html).toContain(`aria-label="Tải phiếu ghi nhận ${transactionReference}"`)
     expect(html).toContain('VNPay')
   })
 

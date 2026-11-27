@@ -90,12 +90,14 @@ export default function ManagerSuspicionReport({ id, staffRentalId, onClose, onO
   async function resolveReport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!resolution || resolutionLock.current) return
-    const details = String(new FormData(event.currentTarget).get('details') ?? '').trim()
-    if (!details) {
+    const values = new FormData(event.currentTarget)
+    const details = String(values.get('details') ?? '').trim()
+    const grounds = String(values.get('grounds') ?? '').trim()
+    if (!details || (resolution === 'transfer' && !grounds)) {
       setResolutionError(resolution === 'close' ? 'Vui lòng nhập lý do đóng báo cáo.' : 'Vui lòng nhập kết luận và căn cứ thu hồi.')
       return
     }
-    const body = resolution === 'close' ? { reason: details } : { conclusion: details }
+    const body = resolution === 'close' ? { reason: details } : { conclusion: details, grounds }
     resolutionLock.current = true
     setSaving(true)
     setResolutionError('')
@@ -179,10 +181,15 @@ export default function ManagerSuspicionReport({ id, staffRentalId, onClose, onO
             ? 'Kết luận không phát hiện hàng cấm. Hồ sơ thuê tiếp tục như bình thường.'
             : 'Hệ thống sẽ mở hồ sơ thu hồi ở bước Chờ phân công và gửi thông báo theo lịch thu hồi.'}</p>
           <label className="block text-sm font-medium">
-            {resolution === 'close' ? 'Lý do đóng báo cáo' : 'Kết luận và căn cứ chuyển thu hồi'}
+            {resolution === 'close' ? 'Lý do đóng báo cáo' : 'Kết luận chuyển thu hồi'}
             <textarea name="details" required maxLength={2000} rows={3} disabled={saving}
               className="mt-1 block w-full rounded-lg border border-stone-300 bg-white p-2" />
           </label>
+          {resolution === 'transfer' && <label className="block text-sm font-medium">
+            Căn cứ chuyển thu hồi
+            <textarea name="grounds" required maxLength={2000} rows={3} disabled={saving}
+              className="mt-1 block w-full rounded-lg border border-stone-300 bg-white p-2" />
+          </label>}
           {resolutionError && <p role="alert" className="text-sm text-red-700">{resolutionError}</p>}
           <Button type="submit" variant={resolution === 'transfer' ? 'danger' : 'primary'} disabled={saving}>
             {resolution === 'close'

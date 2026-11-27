@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react'
-import { getBusinessConfigApi, type BusinessConfigApi } from '../../services/businessConfigApi'
 import { listBusinessPackagePolicies } from '../../services/businessPolicyApi'
 import { isApiAuthenticated } from '../../services/authApi'
-import { formatVnd } from '../../i18n/currency'
-import { Card, Badge, Button } from '../../components/ui'
+import { Card, Badge } from '../../components/ui'
 import type { User } from '../../types'
 import { REGULATIONS } from '../../data/rentalRegulationsData'
 
@@ -13,14 +11,11 @@ interface Props {
 }
 
 export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
-  const [copied, setCopied] = useState(false)
-  const [config, setConfig] = useState<BusinessConfigApi | null>(null)
   const [minimumRentalMonths, setMinimumRentalMonths] = useState<number | null>(null)
 
   useEffect(() => {
     if (!isApiAuthenticated()) return
 
-    void getBusinessConfigApi().then(setConfig).catch(() => {})
     void listBusinessPackagePolicies()
       .then((policies) => {
         const publishedRentalMonths = policies
@@ -39,27 +34,12 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
       .catch(() => setMinimumRentalMonths(null))
   }, [])
 
-  const handleCopyAll = () => {
-    const fullText = `QUY ĐỊNH CHO THUÊ KHO STORAGEHUB\n\n` +
-      REGULATIONS.map(
-        (r) => `${r.articleNumber}. ${r.title}\n` + r.clauses.map((c, i) => `${i + 1}. ${c}`).join('\n')
-      ).join('\n\n')
-
-    void navigator.clipboard.writeText(fullText)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2500)
-  }
-
-  const handlePrint = () => {
-    window.print()
-  }
-
   return (
     <div className="space-y-6 fade-in pb-12">
       {/* ── HEADER BANNER ── */}
       <div className="bg-gradient-to-r from-amber-900 via-stone-800 to-amber-950 rounded-2xl p-6 sm:p-8 text-white shadow-md relative overflow-hidden">
         <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-radial from-amber-500/10 to-transparent pointer-events-none" />
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="relative z-10">
           <div className="space-y-2 max-w-3xl">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-amber-400/20 text-amber-200 border border-amber-300/30">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
@@ -72,31 +52,12 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
               Văn bản pháp quy chuẩn hóa quyền và nghĩa vụ của Khách hàng cùng StorageHub, quy định chi tiết về phạm vi sử dụng, thanh toán, điều kiện an toàn, quy trình xử lý sự cố và chấm dứt hợp đồng lưu trữ.
             </p>
           </div>
-
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            <Button
-              type="button"
-              variant="outline"
-              className="bg-white/10 hover:bg-white/20 text-white border-white/20 text-xs px-3.5 py-2 cursor-pointer"
-              onClick={handleCopyAll}
-            >
-              {copied ? 'Đã sao chép toàn văn' : 'Sao chép toàn văn'}
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              className="bg-amber-600 hover:bg-amber-500 text-white text-xs px-3.5 py-2 font-semibold shadow-sm cursor-pointer"
-              onClick={handlePrint}
-            >
-              In / Xuất bản PDF
-            </Button>
-          </div>
         </div>
       </div>
 
       {/* ── KHỐI 1: QUY CHUẨN VẬN HÀNH CỐT LÕI & ĐIỀU KHOẢN HỢP ĐỒNG ── */}
       <Card className="p-6 border border-stone-200/90 shadow-sm bg-gradient-to-br from-stone-50 via-white to-amber-50/30">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-stone-200/70 pb-4">
+        <div className="border-b border-stone-200/70 pb-4">
           <div>
             <div className="flex flex-wrap items-center gap-2 mb-1.5">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-900 border border-amber-200">
@@ -116,38 +77,14 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
                 : "These parameters are published directly to customers when viewing units, reserving, and settling agreements on the Customer Portal."}
             </p>
           </div>
-
-          <Button
-            type="button"
-            variant="primary"
-            size="sm"
-            className="bg-amber-700 hover:bg-amber-800 text-white font-semibold text-xs px-4 py-2 self-start md:self-auto shrink-0 shadow-sm flex items-center gap-1.5 cursor-pointer"
-            onClick={() => {
-              const el = document.getElementById('regulations-articles')
-              if (el) el.scrollIntoView({ behavior: 'smooth' })
-            }}
-          >
-            <span>{lang === "vi" ? "Xem Toàn Văn 12 Điều Khoản" : "View Full 12 Articles"}</span>
-            <span>↓</span>
-          </Button>
         </div>
 
-        {/* 5 Chỉ Số Vận Hành Cốt Lõi */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 pt-4">
+        {/* 4 Chỉ Số Vận Hành Cốt Lõi */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 pt-4">
           <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
             <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Phí Quá Hạn</span>
             <div className="text-base font-extrabold text-amber-700 font-mono mt-1">Tiền thuê tháng ÷ 30 × 1,5 / ngày</div>
             <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30). Tự động tính theo số ngày trễ.</p>
-          </div>
-
-          <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
-              Phí Giữ Chỗ ({config ? `${Math.round(config.defaultDepositRatio * 100)}%` : '20%'})
-            </span>
-            <div className="text-base font-extrabold text-amber-600 font-mono mt-1">{config ? `${Math.round(config.defaultDepositRatio * 100)}%` : '10% - 30%'}</div>
-            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
-              Cấu hình theo từng gói thuê (mặc định {config ? `${Math.round(config.defaultDepositRatio * 100)}%` : '20%'}). Trừ trực tiếp vào tiền thuê khi nhận kho.
-            </p>
           </div>
 
           <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">

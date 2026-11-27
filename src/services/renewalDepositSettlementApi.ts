@@ -6,11 +6,11 @@ import type { RenewalOperationsRole, RenewalOperationResult } from "../types/ren
 export interface DepositSettlement {
   renewalId: string
   expectedVersion: number | null
-  status: "UNKNOWN" | "NOT_APPLICABLE" | "HELD" | "AWAITING_RECOVERY_DEADLINE" | "AWAITING_FAULT_REVIEW" | "FACILITY_FAULT" | "APPLIED_TO_RENT" | "REVIEW_REQUIRED" | "FORFEITED" | "PAYMENT_FORFEITED" | "REFUND_ELIGIBLE" | "REFUND_APPROVED" | "REFUNDED" | "PREPARATION_BLOCKED"
+  status: "UNKNOWN" | "NOT_APPLICABLE" | "HELD" | "AWAITING_RECOVERY_DEADLINE" | "AWAITING_FAULT_REVIEW" | "FACILITY_FAULT" | "APPLIED_TO_RENT" | "REVIEW_REQUIRED" | "FORFEITED" | "REFUND_ELIGIBLE" | "REFUND_APPROVED" | "REFUNDED" | "PREPARATION_BLOCKED"
   amount: number | null
   refundedAmount: number | null
   currency: "VND"
-  environment: "SANDBOX" | "PRODUCTION" | "MIXED" | null
+  environment: "SANDBOX" | "PRODUCTION" | null
   refundId: string | null
   signingDeadline: string | null
   checkedAt: string
@@ -20,7 +20,7 @@ export interface DepositSettlement {
 export function isDepositSettlement(value: unknown): value is DepositSettlement {
   const v = value as DepositSettlement | null
   return !!v && isUuid(v.renewalId) && (v.expectedVersion === null || isVersion(v.expectedVersion))
-    && ["UNKNOWN","NOT_APPLICABLE","HELD","AWAITING_RECOVERY_DEADLINE","AWAITING_FAULT_REVIEW","FACILITY_FAULT","APPLIED_TO_RENT","REVIEW_REQUIRED","FORFEITED","PAYMENT_FORFEITED","REFUND_ELIGIBLE","REFUND_APPROVED","REFUNDED","PREPARATION_BLOCKED"].includes(v.status)
+    && ["UNKNOWN","NOT_APPLICABLE","HELD","AWAITING_RECOVERY_DEADLINE","AWAITING_FAULT_REVIEW","FACILITY_FAULT","APPLIED_TO_RENT","REVIEW_REQUIRED","FORFEITED","REFUND_ELIGIBLE","REFUND_APPROVED","REFUNDED","PREPARATION_BLOCKED"].includes(v.status)
     && (v.preparationPaymentId == null || isUuid(v.preparationPaymentId))
     && (v.preparationRetryAllowed === undefined || typeof v.preparationRetryAllowed === 'boolean')
     && (v.status !== 'PREPARATION_BLOCKED' || isUuid(v.preparationPaymentId))
@@ -30,8 +30,7 @@ export function isDepositSettlement(value: unknown): value is DepositSettlement 
       ? v.amount === null && v.refundedAmount === null && v.environment === null && v.refundId === null
       : typeof v.amount === "number" && Number.isFinite(v.amount) && v.amount > 0
         && typeof v.refundedAmount === "number" && Number.isFinite(v.refundedAmount) && v.refundedAmount >= 0 && v.refundedAmount <= v.amount
-        && (["SANDBOX","PRODUCTION"].includes(v.environment ?? "") || v.status === 'PAYMENT_FORFEITED' && v.environment === 'MIXED')
-        && (v.status !== 'PAYMENT_FORFEITED' || v.refundedAmount === 0 && v.refundId === null)
+        && ["SANDBOX","PRODUCTION"].includes(v.environment ?? "")
         && (!["REFUND_APPROVED","REFUNDED"].includes(v.status) || isUuid(v.refundId)))
 }
 export async function getDepositSettlement(role: RenewalOperationsRole, id: string) {

@@ -21,22 +21,34 @@ import IntakeWorkflowPanel from "../../components/IntakeWorkflowPanel"
 import { formatCustomerDateTime } from "../../i18n/customerDate"
 import { listReturns, type ApiReturn } from "../../services/returnApi"
 import { CustomerClearance } from '../return-api/ReturnClearance'
+import VietnameseDateTimeField from '../../components/VietnameseDateTimeField'
 import { getAuthenticatedActor } from '../../services/authApi'
-import { getReturn, returnError } from '../../services/returnApi'
+import { getReturn, returnError, scheduleMismatchReturnAppointment } from '../../services/returnApi'
 import { ReturnSummary } from "../return-api/ReturnApiPanel"
 import { userFacingError } from "../../presentation/userFacingError"
 import FilePreviewDialog from "../../components/FilePreviewDialog"
-import { vietnamDateInput } from "../../utils/vietnamTime"
-import { getRentalRenewalEligibility } from './RentalDeadlineNotice'
+import { vietnamDateInput, vietnamDateTimeInput } from "../../utils/vietnamTime"
 const labelClass = "text-xs font-normal text-slate-500"
 const valueClass = "mt-1 text-sm font-medium text-slate-900"
 
 function InventoryTimeframe({
   detail,
   now,
+  busy,
+  onExtend,
+  returnCase,
+  returnCaseError,
+  scheduleBusy,
+  onScheduleReturn,
 }: {
   detail: CustomerReservationDetail
   now: number
+  busy: boolean
+  onExtend: () => void
+  returnCase?: ApiReturn
+  returnCaseError?: string
+  scheduleBusy?: boolean
+  onScheduleReturn?: (iso: string) => void
 }) {
   const returning = detail.inventoryResolutionStatus === 'RETURN_REQUESTED'
   const awaitingResponse = detail.inventoryResolutionStatus === 'PENDING_CUSTOMER'
@@ -46,6 +58,32 @@ function InventoryTimeframe({
     : awaitingResponse ? responseDeadline : detail.inventoryFinalDeadlineAt || detail.inventoryDueAt
   const deadlineMs = deadline ? Date.parse(deadline) : NaN
   const overdue = Boolean(Number.isFinite(deadlineMs) && deadlineMs <= now)
+  const [returnAppointmentAt, setReturnAppointmentAt] = useState(() =>
+    returnCase?.scheduledAppointmentAt ? vietnamDateTimeInput(returnCase.scheduledAppointmentAt) : '')
+  useEffect(() => {
+    setReturnAppointmentAt(returnCase?.scheduledAppointmentAt ? vietnamDateTimeInput(returnCase.scheduledAppointmentAt) : '')
+  }, [returnCase?.id, returnCase?.scheduledAppointmentAt])
+  const arrivalLocked = Boolean(
+    returnCase?.attendance?.arrivedAt
+    || returnCase?.attendance?.lateArrivalClaimedAt
+    || returnCase?.attendance?.reviewStatus === 'PENDING'
+    || returnCase?.warehouseEmptyVerified === true
+    || returnCase?.inspectedAt
+    || returnCase?.noShowAt,
+  )
+  const canScheduleReturn = Boolean(
+    returning
+    && !overdue
+    && Number.isFinite(deadlineMs)
+    && !arrivalLocked
+    && (!returnCase || ['requested', 'scheduled'].includes(returnCase.status))
+    && onScheduleReturn,
+  )
+  const minDateTime = vietnamDateTimeInput(Math.ceil(now / 60_000) * 60_000)
+  const maxDateTime = Number.isFinite(deadlineMs) ? vietnamDateTimeInput(deadlineMs - 60_000) : undefined
+  const selectedOutOfRange = Boolean(
+    returnAppointmentAt && (returnAppointmentAt < minDateTime || (maxDateTime && returnAppointmentAt > maxDateTime)),
+  )
   const milestones = returning
     ? [
       ['Công bố kết quả kiểm kê', detail.inventoryResultPublishedAt],
@@ -69,6 +107,63 @@ function InventoryTimeframe({
       <span className="text-sm">{returning ? 'Hạn cuối dọn hàng và trả kho' : awaitingResponse ? 'Hạn phản hồi kết quả kiểm kê' : 'Hạn hoàn tất kiểm kê'}</span>
       <span className="font-bold">{deadline ? formatCustomerDateTime(deadline) : 'Chưa xác định'}</span>
     </div>
+    {returning && detail.inventoryReturnWindowDays != null && <p className="text-xs text-stone-500">Thời hạn trả hàng: {detail.inventoryReturnWindowDays} ngày{(detail.inventoryReturnExtensionCount ?? 0) > 0 ? ` · Đã gia hạn ${detail.inventoryReturnExtensionCount} lần` : ''}.</p>}
+    {returning && <div className="flex flex-wrap items-center justify-between gap-2">
+      <p className="text-xs text-stone-500">Có thể gia hạn tối đa 2 lần trước khi hết hạn trả hàng.</p>
+      <Button size="sm" variant="outline" disabled={busy || overdue || !detail.inventoryReturnCanExtend || arrivalLocked} onClick={onExtend}>
+        {busy ? 'Đang gia hạn…' : 'Gia hạn thêm 2 ngày'}
+      </Button>
+    </div>}
+    {returning && returnCase?.scheduledAppointmentAt && (
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-xs">
+        <span className="text-stone-600">Lịch hẹn trả kho đã chọn:</span>
+        <span className="font-semibold text-stone-900">{formatCustomerDateTime(returnCase.scheduledAppointmentAt)}</span>
+      </div>
+    )}
+    {canScheduleReturn && (
+      <div className="space-y-2 rounded-lg border border-stone-200 bg-stone-50/70 p-3">
+        <p className="text-xs font-semibold text-stone-800">
+          {returnCase?.scheduledAppointmentAt ? 'Đổi lịch hẹn trả kho' : 'Đặt lịch hẹn trả kho'}
+        </p>
+        <p className="text-[11px] text-stone-500">
+          Chọn ngày và giờ theo giờ Việt Nam trước hạn cuối dọn hàng và trả kho. Đổi lịch không làm thay đổi hạn trả hàng.
+        </p>
+        <VietnameseDateTimeField
+          label="Ngày hẹn trả kho (dd/mm/yyyy)"
+          value={returnAppointmentAt}
+          minDate={minDateTime.slice(0, 10)}
+          maxDate={maxDateTime?.slice(0, 10)}
+          minDateTime={minDateTime}
+          maxDateTime={maxDateTime}
+          disabled={scheduleBusy}
+          onChange={setReturnAppointmentAt}
+        />
+        {selectedOutOfRange && (
+          <p role="alert" className="text-xs font-medium text-red-700">
+            Thời điểm hẹn phải nằm trong tương lai và trước hạn cuối dọn hàng và trả kho.
+          </p>
+        )}
+        {returnCaseError && (
+          <p role="alert" className="text-xs font-medium text-red-700">
+            {returnCaseError}
+          </p>
+        )}
+        {!returnCase && !returnCaseError && (
+          <p className="text-[11px] text-stone-500">Đang đồng bộ hồ sơ trả kho để mở xác nhận lịch hẹn…</p>
+        )}
+        <div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={scheduleBusy || !returnCase || !returnAppointmentAt || selectedOutOfRange}
+            onClick={() => onScheduleReturn?.(new Date(`${returnAppointmentAt}:00+07:00`).toISOString())}
+          >
+            {returnCase?.scheduledAppointmentAt ? 'Đổi lịch trả kho' : 'Đặt lịch trả kho'}
+          </Button>
+        </div>
+      </div>
+    )}
     {overdue && <p role="status" className="text-xs font-semibold text-red-700">{returning ? 'Đã hết hạn dọn hàng và trả kho.' : awaitingResponse ? 'Đã hết 48 giờ phản hồi. Hồ sơ chuyển sang thu hồi.' : 'Đã hết hạn hoàn tất kiểm kê.'}</p>}
   </section>
 }
@@ -113,7 +208,7 @@ export default function RentalDetail({
   onSuspicionReportSubmitted,
 }: {
   rental: RentalApiDetail
-  onRequest?: (blockedReason?: string) => void
+  onRequest?: () => void
   role?: RentalApiRole
   showTechnicalWarnings?: boolean
   onRentalStartConfirmed?: () => void
@@ -159,7 +254,6 @@ export default function RentalDetail({
     }
   }
   const isReturningRental = ['return_requested', 'return_inspection', 'closing'].includes(rental.status)
-  const renewalEligibility = getRentalRenewalEligibility(rental)
   const inventoryReservationId = role === 'customer'
     ? rental.reservationId : null
   const [now, setNow] = useState(Date.now())
@@ -211,6 +305,15 @@ export default function RentalDetail({
       })
     return () => { active = false }
   }, [returnRequestedForRental, rental.id, role, inventoryReload])
+  const scheduleReturnFromDetail = (appointmentIso: string) => {
+    if (!activeReturnCase) return
+    void updateClearance(() => scheduleMismatchReturnAppointment(
+      activeReturnCase.id,
+      appointmentIso,
+      activeReturnCase.returnVersion,
+      crypto.randomUUID(),
+    ))
+  }
   const labelClass = "text-xs font-medium text-stone-500"
   const valueClass = "mt-1 text-sm font-semibold text-stone-900"
 
@@ -314,7 +417,7 @@ export default function RentalDetail({
         <Button variant={section === 'inventory' ? 'primary' : 'outline'} onClick={() => setSection('inventory')}>Kết quả kiểm kê</Button>
       </div>
       <div className={section === 'documents' ? 'space-y-5' : 'hidden'}>
-      {isReturningRental && role !== 'customer' && (
+      {isReturningRental && (
         <Card className="space-y-3 rounded-xl border border-amber-300 bg-amber-50/40 p-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-base font-bold text-amber-950">Hồ sơ đang trong quy trình trả kho</h3>
@@ -323,6 +426,8 @@ export default function RentalDetail({
           {activeReturnCase ? (
             <>
               <ReturnSummary record={activeReturnCase} hideHeader />
+              {role === 'customer' && activeReturnCase.sourceType !== 'RECOVERY' && <CustomerClearance
+                record={activeReturnCase} ownerId={getAuthenticatedActor()?.id} busy={clearanceBusy} run={updateClearance} />}
               {clearanceError && <p role="alert" className="text-sm text-red-800">{clearanceError}</p>}
             </>
           ) : (
@@ -334,7 +439,7 @@ export default function RentalDetail({
       <Card className="overflow-hidden rounded-xl border-t-4 border-t-amber-500 bg-white px-5 py-6 sm:px-8 sm:py-8">
         <div className="mb-6 flex flex-wrap items-start justify-between gap-4 border-b border-stone-200 pb-6">
           <div><p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-amber-700">StorageHub · Hồ sơ lưu trữ</p><h3 className="text-2xl font-bold text-stone-900">Thông tin hồ sơ thuê</h3><p className="mt-2 text-sm text-stone-500">{rental.facility.name}</p></div>
-          <span className={`rounded-full px-3 py-1 text-xs font-medium ${rental.status === 'active' && renewalEligibility.canRenew ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-900'}`}>{copy(rentalStatusLabel(rental))}</span>
+          <span className={`rounded-full px-3 py-1 text-xs font-medium ${rental.status === 'active' ? 'bg-emerald-50 text-emerald-800' : 'bg-stone-100 text-stone-700'}`}>{copy(rentalStatusLabel(rental))}</span>
         </div>
         <dl className="divide-y divide-stone-100 [&>div]:grid [&>div]:min-w-0 [&>div]:gap-1 [&>div]:py-4 sm:[&>div]:grid-cols-[180px_minmax(0,1fr)] sm:[&>div]:gap-6 [&_dd]:!mt-0">
           <div>
@@ -379,11 +484,11 @@ export default function RentalDetail({
             <dt>Hạn chuẩn bị (Miễn phí)</dt>
             <dd className="space-y-3">
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-lg border border-stone-200 bg-stone-50 p-3"><p className="text-xs text-stone-500">Ngày nhận kho theo lịch khách chọn</p><p className="mt-1 font-semibold">{rentalDate(rental.setupStartedAt)}</p></div>
+                <div className="rounded-lg border border-stone-200 bg-stone-50 p-3"><p className="text-xs text-stone-500">Lịch hẹn nhận kho / bắt đầu chuẩn bị</p><p className="mt-1 font-semibold">{rentalDate(rental.setupStartedAt)}</p></div>
                 <div className="rounded-lg border border-stone-200 bg-stone-50 p-3"><p className="text-xs text-stone-500">Kết thúc chuẩn bị miễn phí</p><p className="mt-1 font-semibold">{rentalDate(rental.setupEndsAt)}</p></div>
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3"><span className="text-sm text-emerald-800">Bắt đầu kỳ thuê có tính tiền</span><span className="font-bold text-emerald-900">{rentalDate(rental.startDate)}</span></div>
-              <p className="border-t border-stone-100 pt-3 text-xs text-stone-500">Ngày tính tiền = ngày khách chọn nhận kho + số ngày chuẩn bị miễn phí theo gói thuê.</p>
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3"><span className="text-sm text-emerald-800">Bắt đầu tính tiền thuê (đã chốt)</span><span className="font-bold text-emerald-900">{rentalDate(rental.startDate)}</span></div>
+              <p className="border-t border-stone-100 pt-3 text-xs text-stone-500">Đối với bàn giao mới, thời gian chuẩn bị bắt đầu khi staff hoàn tất bàn giao. Kỳ thuê đã chốt được hiển thị trên hồ sơ; hoàn tất chuẩn bị hoặc kiểm kê sớm không tự động làm đổi mốc này.</p>
               {rental.moveInCompletedAt && <p className="border-t border-stone-100 pt-3 text-xs text-stone-500">Đã báo hoàn tất chuẩn bị lúc {new Date(rental.moveInCompletedAt).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })} ngày {rentalDate(vietnamDateInput(rental.moveInCompletedAt))}</p>}
             </dd>
           </div>}
@@ -417,8 +522,8 @@ export default function RentalDetail({
               {role === 'customer' && rental.setupEndsAt && rental.status === 'setup' && <p className="mt-3 text-sm text-stone-700">Hàng đã được kiểm kê. Kỳ thuê sẽ bắt đầu theo ngày đã chốt sau khi hết thời gian chuẩn bị miễn phí.</p>}
               {role === 'customer' && rental.canConfirmRentalStart && rental.reservationId && (
                 <div className="mt-3 space-y-2">
-                  <p className="text-sm text-stone-700">Hàng đã được kiểm kê. Bạn có thể xác nhận bắt đầu kỳ thuê hôm nay.</p>
-                  <Button size="sm" onClick={openStartPreview}>Xem mốc kỳ thuê mới</Button>
+                  <p className="text-sm text-stone-700">Hàng đã được kiểm kê. Bạn có thể chủ động bắt đầu kỳ thuê có tính phí sớm từ hôm nay và kết thúc thời gian miễn phí còn lại.</p>
+                  <Button size="sm" onClick={openStartPreview}>Xem và xác nhận kỳ thuê sớm</Button>
                   {startError && !startPreview && <p role="alert" className="text-sm text-red-700">{startError}</p>}
                 </div>
               )}
@@ -427,6 +532,12 @@ export default function RentalDetail({
                   <InventoryTimeframe
                     detail={inventoryDetail}
                     now={now}
+                    busy={resolvingInventory}
+                    onExtend={() => void extendInventoryReturn()}
+                    returnCase={activeReturnCase}
+                    returnCaseError={returnCaseLoadError}
+                    scheduleBusy={clearanceBusy}
+                    onScheduleReturn={scheduleReturnFromDetail}
                   />
                   <InventoryResolutionNotice detail={inventoryDetail} now={now} submitting={resolvingInventory} onExtendReturnWindow={() => void extendInventoryReturn()} onResolve={(decision, scheduledDate) => void resolveInventoryDecision(decision, scheduledDate)} />
                   {clearanceError && <p role="alert" className="text-xs font-medium text-red-700">{clearanceError}</p>}
@@ -443,6 +554,12 @@ export default function RentalDetail({
                   <InventoryTimeframe
                     detail={inventoryDetail}
                     now={now}
+                    busy={resolvingInventory}
+                    onExtend={() => void extendInventoryReturn()}
+                    returnCase={activeReturnCase}
+                    returnCaseError={returnCaseLoadError}
+                    scheduleBusy={clearanceBusy}
+                    onScheduleReturn={scheduleReturnFromDetail}
                   />
                   <InventoryResolutionNotice
                     detail={inventoryDetail}
@@ -469,7 +586,6 @@ export default function RentalDetail({
                 />
               ) : (
                 <>
-                  {(role === 'manager' || role === 'staff') && rental.reservationId && <IntakeWorkflowPanel reservationId={rental.reservationId} role={role === 'manager' ? 'MANAGER' : 'STAFF'} mode="summary" />}
                   {rental.inventoryDueAt && <p className="mt-1 text-xs text-stone-500">Mốc nhắc kiểm kê: {new Date(rental.inventoryDueAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</p>}
                   {rental.inventoryFinalDeadlineAt && <p className={`mt-1 text-xs font-bold ${new Date(rental.inventoryFinalDeadlineAt).getTime() <= now ? 'text-red-700' : 'text-stone-700'}`}>{new Date(rental.inventoryFinalDeadlineAt).getTime() <= now ? 'Đã quá hạn đến kiểm kê' : 'Hạn đến kiểm kê'}: {new Date(rental.inventoryFinalDeadlineAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</p>}
                 </>
@@ -491,64 +607,14 @@ export default function RentalDetail({
           </div>
           <div>
             <dt>Quyền ra vào kho</dt>
-            {(() => {
-              const code = rental.access.completeness === 'UNKNOWN'
-                ? 'UNKNOWN'
-                : (rental.access.status?.toUpperCase() || '')
-              const variant = code === 'ACTIVE'
-                ? 'success'
-                : code === 'REVOKED'
-                  ? 'error'
-                  : code === 'SUSPENDED'
-                    ? 'warning'
-                    : 'muted'
-              const label = code === 'UNKNOWN'
-                ? 'Chưa xác minh'
-                : code === 'ACTIVE'
-                  ? 'Đang hoạt động (Đang giữ)'
-                  : code === 'REVOKED'
-                    ? 'Đã cấp · Đã bị thu hồi'
-                    : code === 'SUSPENDED'
-                      ? 'Đã cấp · Đang tạm ngừng'
-                      : code === 'EXPIRED'
-                        ? 'Đã cấp · Đã hết hạn'
-                        : code === 'INACTIVE'
-                          ? 'Chưa hoạt động (Chưa cấp)'
-                          : accessStatus || 'Chưa xác minh'
-              const description = code === 'UNKNOWN'
-                ? 'Chưa tải được trạng thái cấp quyền ra vào. Vui lòng liên hệ nhân viên cơ sở.'
-                : code === 'ACTIVE'
-                  ? (rental.access.reference
-                    ? 'Khách đang giữ quyền ra vào kho theo mã ổ khóa bên dưới.'
-                    : 'Quyền ra vào kho đang hoạt động (chưa ghi nhận mã hiển thị).')
-                  : code === 'REVOKED'
-                    ? 'Hồ sơ đã từng được cấp quyền ra vào nhưng hiện đã bị thu hồi, không còn hiệu lực sử dụng.'
-                    : code === 'SUSPENDED'
-                      ? 'Quyền ra vào đã được cấp nhưng hiện đang bị tạm ngừng.'
-                      : code === 'EXPIRED'
-                        ? 'Quyền ra vào đã được cấp nhưng đã hết hạn hiệu lực.'
-                        : code === 'INACTIVE'
-                          ? 'Chưa từng cấp thẻ hoặc mã ra vào cho hồ sơ này.'
-                          : 'Trạng thái được cập nhật theo thông tin quyền ra vào của cơ sở.'
-              return (
-                <>
-                  <dd>
-                    <Badge variant={variant}>{label}</Badge>
-                    <p className="mt-2 text-xs leading-5 text-stone-500">{description}</p>
-                  </dd>
-                  {rental.access.reference && (code === 'ACTIVE' || code === 'REVOKED' || code === 'SUSPENDED') && (
-                    <div className={`mt-3 rounded-lg border px-3 py-2 ${code === 'ACTIVE' ? 'border-amber-200 bg-amber-50' : code === 'REVOKED' ? 'border-red-200 bg-red-50' : 'border-stone-200 bg-stone-50'}`}>
-                      <dt className={`text-xs font-medium ${code === 'ACTIVE' ? 'text-amber-900' : code === 'REVOKED' ? 'text-red-900' : 'text-stone-700'}`}>
-                        {code === 'ACTIVE' ? 'Đang giữ mã ổ khóa' : code === 'REVOKED' ? 'Mã ổ khóa đã thu hồi' : 'Mã ổ khóa đang tạm ngừng'}
-                      </dt>
-                      <dd className={`mt-1 font-mono text-base font-bold tracking-wider ${code === 'ACTIVE' ? 'text-amber-950' : code === 'REVOKED' ? 'text-red-950 line-through' : 'text-stone-800'}`}>
-                        {rental.access.reference}
-                      </dd>
-                    </div>
-                  )}
-                </>
-              )
-            })()}
+            <dd><Badge variant={rental.access.status === 'ACTIVE' ? 'success' : 'muted'}>{accessStatus || 'Chưa xác minh'}</Badge>
+            <p className="mt-2 text-xs leading-5 text-stone-500">{rental.access.completeness === 'UNKNOWN'
+              ? 'Chưa tải được trạng thái cấp quyền ra vào. Vui lòng liên hệ nhân viên cơ sở.'
+              : rental.access.status === 'ACTIVE' ? 'Đã có thẻ hoặc mã ra vào đang hoạt động.'
+              : rental.access.status === 'REVOKED' ? 'Thẻ hoặc mã ra vào đã được thu hồi.'
+              : rental.access.status === 'INACTIVE' ? 'Chưa ghi nhận thẻ hoặc mã ra vào được cấp cho hồ sơ này.'
+              : 'Trạng thái được cập nhật theo thông tin quyền ra vào của cơ sở.'}</p></dd>
+            {rental.access.status?.toUpperCase() === 'ACTIVE' && rental.access.reference && <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2"><dt className="text-xs font-medium text-amber-900">Mã ổ khóa đã bàn giao</dt><dd className="mt-1 font-mono text-base font-bold tracking-wider text-amber-950">{rental.access.reference}</dd></div>}
           </div>
         </dl>
       </Card>
@@ -557,11 +623,15 @@ export default function RentalDetail({
         <ManagerRentalSuspicionAction rentalId={rental.id} onOpenReport={onSuspicionReportSubmitted} />}
       <RentalHandoverFiles key={`${role}:${rental.id}`} role={role === "manager" ? "manager" : "customer"} id={rental.id} />
       {onRequest && (
-        <div className="sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center justify-end gap-3 border-t border-stone-200 bg-white/95 px-1 py-3 backdrop-blur">
-          <Button disabled={!renewalEligibility.canOpenRequest}
-            onClick={() => onRequest(renewalEligibility.canRenew ? undefined : renewalEligibility.reason)}>
+        <div className="sticky bottom-0 z-10 -mx-1 flex items-center justify-end border-t border-stone-200 bg-white/95 px-1 py-3 backdrop-blur">
+          <Button disabled={rental.status !== "active"} onClick={onRequest}>
             Yêu cầu gia hạn
           </Button>
+          {rental.status !== "active" && (
+            <p>
+              Chỉ có thể yêu cầu gia hạn khi hồ sơ đang hiệu lực và chưa yêu cầu trả kho.
+            </p>
+          )}
         </div>
       )}
       {evidence && evidence.customer && <Card className="rounded-xl p-5">
@@ -686,10 +756,10 @@ export default function RentalDetail({
       </Modal>}
       {startPreview && <Modal open onClose={() => { if (!startSubmitting) setStartPreview(undefined) }} title="Xác nhận bắt đầu kỳ thuê" size="lg">
         <div className="space-y-4 text-sm">
-          <p>Thời gian miễn phí kết thúc khi bạn xác nhận. Kỳ thuê {startPreview.rentalMonths} tháng sẽ tính từ hôm nay theo báo giá đã chốt.</p>
+          <p>Chỉ khi bạn xác nhận bắt đầu kỳ thuê sớm tại đây, thời gian miễn phí còn lại mới kết thúc. Kỳ thuê {startPreview.rentalMonths} tháng sẽ tính từ hôm nay theo báo giá đã chốt.</p>
           <dl className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-4 sm:grid-cols-3">
-            <div><dt>Ngày tính tiền theo lịch cũ</dt><dd>{rentalDate(startPreview.scheduledStartDate)}</dd></div>
-            <div><dt>Bắt đầu tính tiền</dt><dd>{rentalDate(startPreview.startDate)}</dd></div>
+            <div><dt>Ngày bắt đầu tính tiền theo lịch hẹn</dt><dd>{rentalDate(startPreview.scheduledStartDate)}</dd></div>
+            <div><dt>Ngày bắt đầu tính tiền nếu xác nhận sớm</dt><dd>{rentalDate(startPreview.startDate)}</dd></div>
             <div><dt>Ngày cuối kỳ thuê</dt><dd>{rentalDate(startPreview.lastPermittedDate)}</dd></div>
           </dl>
           <label className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">

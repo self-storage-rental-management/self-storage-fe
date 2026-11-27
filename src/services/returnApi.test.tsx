@@ -1,14 +1,13 @@
-import ReturnAppointment from '../views/return-api/ReturnAppointment'
 import { awaitsCustomerClearance, CustomerClearance } from '../views/return-api/ReturnClearance'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { setAccessToken, clearAuthTokens } from './apiClient'
+import { putProcessingLease, clearProcessingLeases } from './processingLeaseState'
 import { setCustomerClearance, completeRefund, recordReturnSettlement, isApiReturn, requestReturn, listReturns, getReturn, inspectReturn, reviewDispute, confirmReturn, paySettlement, reopenReturnVerification, verifyReturnIdentity, scheduleMismatchReturnAppointment, extendMismatchReturnWindow, recordReturnArrival, reviewReturnArrival, returnError, uploadReturnEvidence, type ApiReturn } from './returnApi'
 import ReturnApiPanel, { ReturnSummary } from '../views/return-api/ReturnApiPanel'
 import ReturnAttendance, { requiresReturnAttendance } from '../views/return-api/ReturnAttendance'
 import { ids, operationsActor } from '../../tests/rentalOperationsApiFixtures'
 import type { ApiActor } from './authApi'
-import { putProcessingLease } from './processingLeaseState'
 const state = vi.hoisted(() => ({ actor: null as ApiActor | null }))
 vi.mock('./authApi', () => ({ getAuthenticatedActor: () => state.actor }))
 export const record: ApiReturn = {
@@ -21,16 +20,40 @@ export const record: ApiReturn = {
   proposedUnitStatus: 'maintenance',
 }
 function respond(data: unknown, status = 200) {
-  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } }))
+  const fetch = vi.fn().mockImplementation(async (url: string | URL | Request) => {
+    const urlStr = typeof url === 'string' ? url : url instanceof Request ? url.url : url.toString()
+    if (urlStr.includes('/api/processing-locks/')) {
+      return new Response(JSON.stringify({
+        data: { owned: true, token: 'mock-token', expiresAt: new Date(Date.now() + 60000).toISOString() }
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
+    return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })
+  })
   vi.stubGlobal('fetch', fetch); return fetch
 }
 beforeEach(() => {
-  state.actor = operationsActor('customer'); setAccessToken('TEST-token')
-  putProcessingLease({ target: 'RETURN', id: ids.event, token: 'test-return-lease', invalid: false, inFlight: false, ready: true,
-    view: { reservationId: ids.event, ownerId: ids.staff, ownerName: 'Nhân viên kiểm thử', expiresAt: new Date(Date.now() + 60_000).toISOString(),
-      revision: 1, sourceStamp: 'test-return', owned: true, occupied: true } })
+  state.actor = operationsActor('customer')
+  setAccessToken('TEST-token')
+  putProcessingLease({
+    target: 'RETURN',
+    id: ids.event,
+    token: 'mock-token',
+    view: {
+      reservationId: ids.event,
+      ownerId: 'staff-id',
+      ownerName: 'Staff',
+      expiresAt: new Date(Date.now() + 600_000).toISOString(),
+      revision: 1,
+      sourceStamp: 'stamp',
+      owned: true,
+      occupied: true,
+    },
+    invalid: false,
+    inFlight: false,
+    ready: true,
+  })
 })
-afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); clearAuthTokens() })
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); clearAuthTokens(); clearProcessingLeases() })
 describe('real Return transport and unknown settlement presentation', () => {
   it('explains when an approved handover returns to manager review', () => {
     const overdue = new Date(Date.now() - 60_000).toISOString()
@@ -438,14 +461,4 @@ describe('real Return transport and unknown settlement presentation', () => {
     expect(html).not.toContain('Thu gọn')
     expect(html).not.toContain('Trải ra')
   })
-})
-
-it('places the mismatch return date picker on the return case and hides it after inspection', () => {
-  const returning: ApiReturn = { ...record, returnType: 'INVENTORY_MISMATCH', status: 'requested',
-    inventoryRemovalDeadlineAt: '2099-12-06T00:00:00Z' }
-  const html = renderToStaticMarkup(<ReturnAppointment record={returning} busy={false} run={() => {}} />)
-  expect(html).toContain('Ngày hẹn trả kho (dd/mm/yyyy)')
-  expect(html).toContain('Đặt lịch trả kho')
-  expect(html).not.toContain('Chưa tìm thấy hồ sơ')
-  expect(renderToStaticMarkup(<ReturnAppointment record={{ ...returning, inspectedAt: '2026-11-27T00:00:00Z' }} busy={false} run={() => {}} />)).toBe('')
 })

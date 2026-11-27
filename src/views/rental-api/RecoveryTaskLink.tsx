@@ -13,7 +13,7 @@ export default function RecoveryTaskLink({ role, taskId, facilityId, rentalDispl
   const assigning = useRef(false)
   const [revision, setRevision] = useState(0)
   const actor = getAuthenticatedActor()
-  const canAssign = role === 'manager' && actor?.permissions.includes('staff_tasks:update') && actor.facilityScopes[facilityId] === 'MANAGE'
+  const canAssign = role === 'manager' && actor?.permissions.includes('staff_tasks:update') && actor?.facilityScopes[facilityId] === 'MANAGE'
   return <>
     <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={() => { if (!disabled) setOpen(true) }}>Xem nhiệm vụ thu hồi</Button>
     {open && <Modal open size="xl" title="Chi tiết nhiệm vụ thu hồi" onClose={() => { if (!assigning.current && !guard.current()) setOpen(false) }}>

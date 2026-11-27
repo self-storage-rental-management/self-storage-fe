@@ -5,12 +5,12 @@ import { rentalEndDateForDisplay } from '../../domain/rentalTimeline'
 import type { CheckInInventoryLine } from '../../services/checkInApi'
 import { formatCustomerDate, formatCustomerDateTime } from '../../i18n/customerDate'
 import { userFacingError } from '../../presentation/userFacingError'
-import { savedReservationQuote } from '../../services/reservationSnapshot'
+import { savedReservationQuote, MISSING_RESERVATION_SNAPSHOT } from '../../services/reservationSnapshot'
 import { useEffect, useRef, useState } from 'react'
 import { Button, Card, Modal } from '../../components/ui'
 import VietnameseDateInput from '../../components/VietnameseDateInput'
 import { formatVndAmount as formatVnd } from '../../i18n/currency'
-import { confirmCustomerReceipt, downloadBookingDocument, downloadCustomerCheckInDocument, downloadCustomerReservationGoodsImage, generateBookingDocument, getCustomerCheckInDocuments, getCustomerReservation, setCustomerCheckInAppointment, type BookingDocument, type CheckInDocument, type CustomerFacility, type CustomerReservation, type CustomerReservationDetail, type CustomerUnitType } from '../../services/customerReservationApi'
+import { downloadBookingDocument, downloadCustomerCheckInDocument, downloadCustomerReservationGoodsImage, generateBookingDocument, getCustomerCheckInDocuments, getCustomerReservation, setCustomerCheckInAppointment, type BookingDocument, type CheckInDocument, type CustomerFacility, type CustomerReservation, type CustomerReservationDetail, type CustomerUnitType } from '../../services/customerReservationApi'
 import { goodsReviewLabels, paymentCountdown, reservationProgress, reservationStatusLabels } from './reservationPresentation'
 import CustomerPaymentComplaint from './CustomerPaymentComplaint'
 import CustomerReservationPayment from './CustomerReservationPayment'
@@ -78,7 +78,7 @@ export function ReservationPreparationNotice({ checkInStatus, submitting, onRead
   onReady: () => void
 }) {
   const waitingForInventory = checkInStatus === 'setup_completed' || checkInStatus === 'completed'
-  const canReportPreparation = checkInStatus === 'setup_in_progress' || checkInStatus === 'handover_pending_receipt'
+  const canReportPreparation = checkInStatus === 'setup_in_progress'
 
   return (
     <div className="rounded-lg border border-violet-300 bg-violet-50 p-3 text-right text-xs text-violet-950">
@@ -173,7 +173,7 @@ export function InventoryResolutionNotice({ detail, now, submitting, onResolve, 
       {!partialAccepted && !returnRequested && !confirmReturnOpen && <div className="mt-3 flex flex-wrap justify-end gap-2">
         {detail.inventoryFullFit && <Button size="sm" disabled={submitting} onClick={() => onResolve('ACCEPT_FULL')}>Nhận toàn bộ hàng</Button>}
         {!detail.inventoryFullFit && detail.inventoryReturnCanExtend && onExtendReturnWindow && (
-          <Button size="sm" variant="outline" disabled={submitting} onClick={onExtendReturnWindow}>{detail.inventoryReturnExtensionDays != null ? `Gia hạn thêm ${detail.inventoryReturnExtensionDays} ngày` : 'Gia hạn trả kho'}</Button>
+          <Button size="sm" variant="outline" disabled={submitting} onClick={onExtendReturnWindow}>Yêu cầu kéo dài thời gian</Button>
         )}
         {!detail.inventoryFullFit && <Button size="sm" variant="danger" disabled={submitting || !canPlanReturn} onClick={() => { setConfirmReturnOpen(true) }}>Tạo yêu cầu trả kho ngay</Button>}
       </div>}
@@ -182,7 +182,7 @@ export function InventoryResolutionNotice({ detail, now, submitting, onResolve, 
         <p className="text-red-950">Vui lòng dọn hết hàng trong thời hạn trả kho và báo cơ sở khi sẵn sàng bàn giao.</p>
         <div className="flex flex-wrap justify-end gap-2">
           {detail.inventoryReturnCanExtend && onExtendReturnWindow && (
-            <Button size="sm" variant="outline" disabled={submitting} onClick={onExtendReturnWindow}>{detail.inventoryReturnExtensionDays != null ? `Gia hạn thêm ${detail.inventoryReturnExtensionDays} ngày` : 'Gia hạn trả kho'}</Button>
+            <Button size="sm" variant="outline" disabled={submitting} onClick={onExtendReturnWindow}>Yêu cầu kéo dài thời gian</Button>
           )}
           <Button size="sm" variant="outline" disabled={submitting} onClick={() => setConfirmReturnOpen(false)}>Hủy</Button>
           <Button size="sm" variant="danger" disabled={submitting || !canPlanReturn} onClick={() => { setConfirmReturnOpen(false); onResolve('CANCEL_AND_RETURN') }}>{submitting ? 'Đang gửi…' : 'Xác nhận yêu cầu trả kho'}</Button>
@@ -414,21 +414,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
       window.setTimeout(() => URL.revokeObjectURL(url), 1_000)
     } catch (error) { setMessage(userFacingError(error, 'Không thể tải phiếu xác nhận giữ kho.')) }
   }
-  const confirmReceipt = async () => {
-    if (receiptLock.current) return
-    receiptLock.current = true
-    setConfirmingReceipt(true); setMessage(null)
-    try {
-      const confirmed = await confirmCustomerReceipt(r.id)
-      setMessage('Đã xác nhận nhận kho. Hồ sơ thuê đã được tạo thành công.')
-      try { await onRefresh() } catch { /* Receipt command has already succeeded. */ }
-      onReceiptConfirmed?.(confirmed.reservation.assignedUnitId || r.assignedUnitId || '')
-    } catch (error) {
-      setMessage(userFacingError(error, 'Không thể xác nhận nhận kho.'))
-      try { await onRefresh() } catch { /* Preserve the command error if readback is also unavailable. */ }
-    }
-    finally { receiptLock.current = false; setConfirmingReceipt(false) }
-  }
+
   const documentAvailable = ['CONFIRMED', 'UNIT_RESERVED', 'READY_FOR_CHECKIN', 'AWAITING_CUSTOMER_RECEIPT', 'COMPLETED'].includes(r.status)
   const handoverDocumentsAvailable = Boolean(detail?.handoverCompletedAt)
     || ['AWAITING_CUSTOMER_RECEIPT', 'PREPARING', 'COMPLETED'].includes(r.status)
@@ -581,18 +567,9 @@ export default function CustomerReservationCard({ user, reservation: r, facility
         <div className="min-w-0 flex-1">
           <h2 className="mt-1 text-lg font-bold text-stone-900">{displayedUnitTypeName} · {displayedFacilityName}</h2>
           <div className="mt-3 space-y-2">
-            <p className="text-xs leading-5 text-stone-600">{savedQuote?.rentalPeriodConfirmed ? 'Kỳ thuê đã chốt:' : 'Kỳ thuê dự kiến sau thời gian chuẩn bị:'} <b className="text-stone-900">{formatDisplayDate(savedQuote?.startDate || r.startDate)} đến {formatDisplayDate(rentalEndDateForDisplay(savedQuote?.endDate || r.endDate))}</b></p>
-            <p className="text-xs leading-5 text-blue-800">Lịch nhận kho khách đặt: <b>{savedAppointmentAt ? formatCustomerDateTime(new Date(savedAppointmentAt)) : 'Chưa đặt lịch'}</b></p>
+            <p className="text-xs leading-5 text-stone-600">{savedQuote?.rentalPeriodConfirmed ? 'Kỳ thuê có tính phí (đã chốt):' : 'Kỳ thuê có tính phí (dự kiến):'} <b className="text-stone-900">{formatDisplayDate(savedQuote?.startDate || r.startDate)} đến {formatDisplayDate(rentalEndDateForDisplay(savedQuote?.endDate || r.endDate))}</b></p>
+            <p className="text-xs leading-5 text-blue-800">Lịch hẹn đến nhận kho: <b>{savedAppointmentAt ? formatCustomerDateTime(new Date(savedAppointmentAt)) : 'Chưa đặt lịch'}</b></p>
           </div>
-          {r.status === 'AWAITING_CUSTOMER_RECEIPT' && <div className={`mt-3 w-fit max-w-full rounded-lg border p-3 text-left text-xs ${receiptCountdown.expired ? 'border-red-400 bg-red-50 text-red-950' : receiptCountdown.urgent ? 'border-red-300 bg-red-50/70 text-red-950' : 'border-amber-300 bg-amber-50 text-amber-950'}`}>
-            <p className="font-bold">Nhân viên đã hoàn tất bàn giao kho trống</p>
-            <p className="mt-1">Vui lòng kiểm tra kho và mã ra vào, sau đó xác nhận đã nhận kho để bắt đầu thời gian chuẩn bị.</p>
-            {detail?.handoverCompletedAt && <p className="mt-1">Bàn giao lúc: <b>{formatCustomerDateTime(new Date(detail.handoverCompletedAt))}</b></p>}
-            {detail?.lockReference && <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-white px-3 py-2 text-left"><span className="font-semibold text-amber-950">Mã ổ khóa đã bàn giao</span><b className="font-mono text-base tracking-wider text-amber-800">{detail.lockReference}</b></div>}
-            {detail?.receiptConfirmationDueAt && <p className="mt-1 font-bold">{receiptCountdown.text} · Hạn xác nhận: {formatCustomerDateTime(new Date(detail.receiptConfirmationDueAt))}</p>}
-            {receiptCountdown.expired && <p className="mt-1 font-semibold">Hồ sơ đang chờ cơ sở xử lý tiếp. Bạn vẫn có thể xác nhận nhận kho hoặc liên hệ cơ sở để được hỗ trợ.</p>}
-            <Button type="button" className="mt-2" size="sm" disabled={confirmingReceipt} onClick={() => void confirmReceipt()}>{confirmingReceipt ? 'Đang xác nhận…' : 'Xác nhận đã nhận kho'}</Button>
-          </div>}
           <CustomerReservationPayment receiptSlot={receiptSlot} remainingPayment={remainingPayment} attendanceDeadline={detail?.attendance?.deadline} handoverTermsVersion={detail?.attendance?.termsVersion} reservation={r} facilityName={displayedFacilityName} unitTypeName={displayedUnitTypeName} paymentStartedAt={detail?.paymentStartedAt} paymentExpiresAt={detail?.paymentExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />
           {r.violationRecovery && <p className="mt-3 text-sm font-medium text-amber-900">Mở mục Thu hồi kho để xem tiến độ và phản hồi.</p>}
           {inventoryReturnRequested && onOpenReturns && <Button className="mt-3" type="button" size="sm" variant="outline" onClick={onOpenReturns}>Theo dõi trả kho</Button>}
@@ -628,7 +605,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
           {handoverDocumentsAvailable && <Button variant="outline" size="sm" className="min-h-10 w-full justify-center" disabled={busy} onClick={() => void loadHandoverDocuments('contract')}>Xem hợp đồng đã ký</Button>}
           {recordsAvailable && <Button variant="outline" size="sm" className="min-h-10 w-full justify-center" disabled={busy} onClick={() => void loadHandoverDocuments('records')}>Xem biên bản</Button>}
           {onRequestSupport && <Button type="button" variant="outline" size="sm" className="min-h-10 w-full justify-center" onClick={onRequestSupport}>Hỗ trợ đơn này</Button>}
-          {['PAYMENT_GRACE', 'PAYMENT_REVIEW', 'REJECTED'].includes(r.status) && <CustomerPaymentComplaint reservation={r} complaintExpiresAt={detail?.complaintExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />}
+          {['PAYMENT_GRACE', 'PAYMENT_REVIEW'].includes(r.status) && <CustomerPaymentComplaint reservation={r} complaintExpiresAt={detail?.complaintExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />}
           {APPOINTMENT_EDITABLE_STATUSES.some(status => status === r.status) && <Button variant="ghost" size="sm" className="reservation-action reservation-action-cancel" onClick={() => setCancelConfirmOpen(true)}>Hủy giữ kho</Button>}
           {['EXPIRED', 'COMPLETED'].includes(r.status) && onDelete && <Button variant="danger" size="sm" className="min-h-10 w-full justify-center" onClick={() => setDeleteConfirmOpen(true)}>Xóa đơn đặt giữ kho</Button>}
         </div>
@@ -727,7 +704,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
               onChange={event => { setAppointmentInput(`${appointmentInput.split('T')[0] || ''}T${event.target.value}`); setAppointmentErrors(current => ({ ...current, time: undefined })); setMessage(null) }} />{appointmentErrors.time && <p className="mt-1 text-xs text-red-700">{appointmentErrors.time}</p>}</label>
           </div>
           <Button size="sm" disabled={!appointmentInput || busy} onClick={() => void saveAppointment()}>{busy ? 'Đang lưu…' : r.appointmentAt ? 'Đổi lịch nhận kho' : 'Lưu lịch nhận kho'}</Button>
-          <span className="basis-full text-[11px]">Bạn có thể nhận kho từ {formatPolicyDateTime(appointmentWindow.availableAt)} đến {formatPolicyDateTime(appointmentWindow.deadlineAt)}. Kỳ thuê có tính tiền bắt đầu sau thời gian chuẩn bị miễn phí, tính từ ngày khách chọn nhận kho. Trước khi bàn giao, ngày bắt đầu và kết thúc sẽ được tính lại theo lịch đã chọn. Mọi thay đổi lịch sẽ được thông báo cho nhân viên tại cơ sở.</span>
+          <span className="basis-full text-[11px]">Bạn có thể nhận kho từ {formatPolicyDateTime(appointmentWindow.availableAt)} đến {formatPolicyDateTime(appointmentWindow.deadlineAt)}. Ngày bắt đầu tính tiền thuê = ngày hẹn nhận kho + số ngày chuẩn bị miễn phí theo gói thuê. Trước khi bàn giao, ngày bắt đầu và kết thúc sẽ được tính lại theo lịch đã chọn. Mọi thay đổi lịch sẽ được thông báo cho nhân viên tại cơ sở.</span>
           {message && <p role="status" className="basis-full rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{message}</p>}
         </div>}
         {progress !== null && <div className="mt-4 border-t border-stone-200 pt-4">
@@ -742,7 +719,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
         </div>}
       </section>
       <section role="tabpanel" id={`reservation-quote-${r.id}`} aria-labelledby={`reservation-quote-tab-${r.id}`} hidden={activeSection !== 'quote'} className="w-full min-w-0 space-y-4">
-          {savedQuote && <ReservationQuoteSummary quote={{ ...savedQuote, facilityName: savedQuote.facilityName || facilityName, unitTypeName: savedQuote.unitTypeName || unitTypeName }} needsReview={false} context="reservation" handoverTermsVersion={detail?.attendance?.termsVersion} />}
+          {savedQuote ? <ReservationQuoteSummary quote={{ ...savedQuote, facilityName: savedQuote.facilityName || facilityName, unitTypeName: savedQuote.unitTypeName || unitTypeName }} needsReview={false} context="reservation" handoverTermsVersion={detail?.attendance?.termsVersion} /> : <p role="status">{MISSING_RESERVATION_SNAPSHOT}</p>}
             {r.setupExitReviewRequired && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><b>Đang chờ Ban điều hành quyết định hoàn tiền</b><p className="mt-1 text-xs">Yêu cầu hủy/trả trong thời gian chuẩn bị không tự động hoàn tiền. Khoản hoàn và bước kiểm tra trả kho sẽ được quyết định theo tình trạng hàng thực tế.</p></div>}
             {remainingPayment && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-950">
               <p className="font-bold">Biên lai thanh toán phần còn lại</p>

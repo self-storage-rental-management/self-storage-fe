@@ -220,10 +220,13 @@ export default function ManagerFinancialApiPanel({ paymentTarget, onPaymentClose
   catch (error) { return <Card className="p-5" role="alert">{managerDisplayError(error)}</Card> }
   const facilityId = singleManagerFacility(actor)
   if (!facilityId) return <Card className="p-5" role="alert">{managerFacilityNotice(actor)}</Card>
+  const identity = managerApiIdentity(actor)
+  const history = <ManagerPaymentHistorySession key={identity} actor={actor} facilityId={facilityId} />
+  if (!paymentTarget) return history
   return <>
-    <ManagerPaymentHistorySession key={managerApiIdentity(actor)} actor={actor} facilityId={facilityId} />
-    {paymentTarget && <ManagerPaymentNotice key={paymentTarget.id} identity={managerApiIdentity(actor)}
-      paymentId={paymentTarget.id} onClose={() => onPaymentClosed?.()} />}
+    {history}
+    <ManagerPaymentNotice key={paymentTarget.id} identity={identity}
+      paymentId={paymentTarget.id} onClose={() => onPaymentClosed?.()} />
   </>
 }
 
