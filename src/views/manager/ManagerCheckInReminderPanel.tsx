@@ -85,6 +85,7 @@ export default function ManagerCheckInReminderPanel({ showToast, onCountChange }
       || Number(rightState.urgent) - Number(leftState.urgent)
       || new Date(left.receiptConfirmationDueAt || left.checkedInAt || 0).getTime()
         - new Date(right.receiptConfirmationDueAt || right.checkedInAt || 0).getTime()
+      || left.reservationId.localeCompare(right.reservationId)
   }), [items, now])
 
   const release = async () => {

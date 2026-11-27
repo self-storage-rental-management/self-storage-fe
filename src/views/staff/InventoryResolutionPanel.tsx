@@ -89,7 +89,7 @@ export default function InventoryResolutionPanel({ item, busy, onOpenReturns, on
   const deadlineMs = item.inventoryRemovalDeadlineAt ? Date.parse(item.inventoryRemovalDeadlineAt) : null
   const result = inventoryResult(item.inventoryFullFit, Boolean(item.inventoryMismatchJson))
   const report = item.handover
-  const formatNumber = (value: number, digits = 0) => value.toLocaleString('vi-VN', { maximumFractionDigits: digits })
+  const formatNumber = (value: number | null | undefined, digits = 0) => value == null ? "—" : value.toLocaleString('vi-VN', { maximumFractionDigits: digits })
   return <div className="flex flex-col gap-4">
     <h3 className="text-lg font-bold">Kết quả tiếp nhận hàng hóa</h3>
     <div className="space-y-5 text-stone-900">
@@ -108,11 +108,11 @@ export default function InventoryResolutionPanel({ item, busy, onOpenReturns, on
       {report && <section className="space-y-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h4 className="font-semibold">Bảng đối chiếu kiểm kê</h4>
-          <p className="text-sm font-medium tabular-nums">{formatNumber(report.packageCount)} kiện · {formatNumber(report.actualMeasurements.weightKg, 2)} kg · {formatNumber(report.actualMeasurements.actualVolumeM3, 6)} m³</p>
+          <p className="text-sm font-medium tabular-nums">{formatNumber(report.packageCount)} kiện · {formatNumber(report.actualMeasurements?.weightKg, 2)} kg · {formatNumber(report.actualMeasurements?.actualVolumeM3, 6)} m³</p>
         </div>
         <InventoryMismatchEvidence item={item} showEvidence={false} />
       </section>}
-      <InventoryAlternatives result={result} published checkInId={item.checkInId} packages={report?.packageCount ?? 0} weight={report?.actualMeasurements.weightKg ?? 0} volume={report?.actualMeasurements.actualVolumeM3 ?? 0} showAlternatives={!returning && !done && !transferring} />
+      <InventoryAlternatives result={result} published checkInId={item.checkInId} packages={report?.packageCount ?? 0} weight={report?.actualMeasurements?.weightKg ?? 0} volume={report?.actualMeasurements?.actualVolumeM3 ?? 0} showAlternatives={!returning && !done && !transferring} />
       {refusalPending && <p role="status" className="rounded-lg bg-amber-50 p-3">Biên bản từ chối ký đang chờ Quản lý xem xét. Hạn dọn kho chưa bắt đầu.</p>}
       {item.inventoryRefusalStatus === 'REJECTED' && !returning && <p role="status" className="rounded-lg bg-amber-50 p-3">Quản lý yêu cầu bổ sung biên bản. Xem thông báo để biết nội dung cần bổ sung.</p>}
       {!done && !returning && !transferring && !refusalPending && <fieldset className="space-y-4 rounded-xl border border-amber-200 bg-white p-4 text-sm text-stone-900" disabled={disabled}>

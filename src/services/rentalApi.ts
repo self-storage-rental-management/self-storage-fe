@@ -143,7 +143,7 @@ export async function listRentals(
       "sort",
       ...(role === "manager" ? ["facilityId"] : []),
     ],
-    ["createdAt", "contractEndDate", "startDate", "monthlyPrice", "id"],
+    ["priority", "createdAt", "contractEndDate", "startDate", "monthlyPrice", "id"],
   )
   return readRentalPage<RentalApiRecord>(
     await apiRequest(`${rentalReadPath(role)}${suffix}`),

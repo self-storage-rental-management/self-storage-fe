@@ -1,6 +1,6 @@
 import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import { useState } from 'react'
-import { Button, Modal } from '../../components/ui'
+import { Button } from '../../components/ui'
 import { formatCustomerDateTime } from '../../i18n/customerDate'
 import { setCustomerClearance, type ApiReturn } from '../../services/returnApi'
 import type { RentalApiDetail } from '../../types/rentalApi'
@@ -25,14 +25,15 @@ export function ReturnPreparation() {
   return <p className="text-sm text-stone-700">Quý khách cần di chuyển toàn bộ tài sản cá nhân ra khỏi gian kho trước khi nhân viên hoàn tất nghiệm thu. Sau khi dọn kho, vui lòng xác nhận tại màn hình chi tiết yêu cầu trả kho.</p>
 }
 
-export function ReturnContract({ rental, date, record }: { rental: RentalApiDetail; date?: string; record?: ApiReturn }) {
+export function ReturnContract({ rental, date, record, depositAmount, reservationCode, inventoryMismatch }: { rental: RentalApiDetail; date?: string; record?: ApiReturn; depositAmount?: number | null; reservationCode?: string; inventoryMismatch?: boolean }) {
   const lastDay = rental.dateSemantics?.lastPermittedDate || rental.contractEndDate
-  const deposit = rental.financialSummary.securityDepositAmount ?? rental.bookingEvidence?.agreedAmounts?.securityDepositAmount
-  const type = record ? record.returnType : rental.inventory?.decision === 'RETURN_REQUESTED' ? 'INVENTORY_MISMATCH'
+  const deposit = record?.depositAmount ?? rental.financialSummary.securityDepositAmount ?? rental.bookingEvidence?.agreedAmounts?.securityDepositAmount ?? depositAmount
+  const type = record ? record.returnType : (inventoryMismatch || rental.inventory?.decision === 'RETURN_REQUESTED') ? 'INVENTORY_MISMATCH'
     : rental.setupReturnWindow || rental.status === 'setup' ? 'RETURN_IN_SETUP'
     : lastDay && date ? date < lastDay ? 'EARLY_RETURN' : 'NORMAL' : undefined
   const fields = [
-    ['Mã hợp đồng', rental.contractNumber ?? 'Chưa có mã hợp đồng'],
+    ['Mã hợp đồng', rental.contractNumber || 'Chưa có mã hợp đồng'],
+    ...(!rental.contractNumber && reservationCode ? [['Mã đơn đặt kho', reservationCode]] : []),
     ['Gian kho', rental.storageUnit.code], ['Cơ sở', rental.facility.name],
     ['Ngày bắt đầu thuê', rentalDate(rental.startDate)], ['Ngày hết hạn hợp đồng', rentalDate(lastDay)],
     ['Tiền cọc đảm bảo', deposit == null ? 'Chưa xác định' : rentalMoney(deposit, rental.currency)],
@@ -49,7 +50,8 @@ export function ClearanceStatus({ record }: { record: ApiReturn }) {
     : 'Khách chưa xác nhận dọn kho'}</p>
 }
 
-export function CustomerClearance({ record, busy, run, ownerId }: { record: ApiReturn; busy: boolean; ownerId?: string;
+export function CustomerClearance({ record, busy, run, ownerId, countdown, extension }: { record: ApiReturn; busy: boolean; ownerId?: string; countdown?: string | null;
+  extension?: { count: number; onExtend?: () => void };
   run: (work: () => Promise<ApiReturn>) => Promise<void> }) {
   const [confirming, setConfirming] = useState(false)
   const editable = ownerId === record.customerId && ['requested', 'scheduled'].includes(record.status)
@@ -60,24 +62,36 @@ export function CustomerClearance({ record, busy, run, ownerId }: { record: ApiR
       ? record.attendance.handoverDueAt ?? record.recoveryEligibleAt
       : record.recoveryEligibleAt
   return <section className="space-y-3 rounded-xl border border-stone-200 p-4">
-    <p className="break-all text-sm">Mã yêu cầu · {record.displayCode || recordDisplayCode(record.id)}</p>
-    <ClearanceStatus record={record} />
+    <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+      <div>
+        <h3 className="font-semibold text-stone-900">{steps[currentStep[record.status]]}</h3>
+        <p className="break-all text-xs text-stone-600">Mã yêu cầu · {record.displayCode || recordDisplayCode(record.id)}</p>
+      </div>
+      <ClearanceStatus record={record} />
+    </header>
     {editable && <>
-      {clearanceDeadline && <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-        <strong>Hạn cuối dọn kho</strong> · Trước <time dateTime={clearanceDeadline}>{formatCustomerDateTime(clearanceDeadline)}</time> (giờ Việt Nam)
-      </p>}
-      <ReturnPreparation />
+      {clearanceDeadline && <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+        <p><strong>Hạn cuối dọn kho</strong> · Trước <time dateTime={clearanceDeadline}>{formatCustomerDateTime(clearanceDeadline)}</time> (giờ Việt Nam)</p>
+        {countdown && <p role="timer" className="font-medium tabular-nums">{countdown}</p>}
+        {extension && <div className="flex w-full flex-wrap items-center justify-between gap-2 border-t border-amber-200 pt-2">
+          <p className="text-xs">Đã gia hạn {extension.count}/2 lần</p>
+          {extension.onExtend && <Button type="button" size="sm" variant="outline" disabled={busy} onClick={extension.onExtend}>Gia hạn dọn kho thêm 2 ngày</Button>}
+        </div>}
+      </div>}
+      {record.returnType === 'INVENTORY_MISMATCH'
+        ? <p className="text-sm text-stone-700">Dọn hết hàng rồi xác nhận để cơ sở nghiệm thu. Quá hạn, cơ sở sẽ xem xét thu hồi.</p>
+        : <ReturnPreparation />}
       {record.warehouseEmptyVerified === false && <p className="rounded-lg bg-amber-50 p-3 text-sm">Nhân viên ghi nhận còn tài sản. {record.inspectionNotes}</p>}
-      {record.customerClearedAt
+      <div className="flex justify-end">{record.customerClearedAt
         ? <Button variant="outline" disabled={busy} onClick={() => void run(() => setCustomerClearance(record, false))}>Thu hồi xác nhận dọn kho</Button>
-        : <Button disabled={busy} onClick={() => setConfirming(true)}>Xác nhận đã dọn kho</Button>}
-      {confirming && !record.customerClearedAt && <Modal open title="Xác nhận đã dọn kho" onClose={() => setConfirming(false)}>
-        <p>Tôi xác nhận đã di chuyển toàn bộ tài sản cá nhân ra khỏi gian kho và sẵn sàng bàn giao để nhân viên kiểm tra thực tế.</p>
-        <div className="mt-4 flex justify-end gap-2">
+        : !confirming && <Button disabled={busy} onClick={() => setConfirming(true)}>Xác nhận đã dọn kho</Button>}</div>
+      {confirming && !record.customerClearedAt && <div role="group" aria-label="Xác nhận đã dọn kho" className="space-y-3 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm">
+        <p>Tôi đã dọn hết tài sản và sẵn sàng bàn giao để cơ sở nghiệm thu.</p>
+        <div className="flex flex-wrap justify-end gap-2">
           <Button variant="outline" disabled={busy} onClick={() => setConfirming(false)}>Quay lại</Button>
           <Button disabled={busy} onClick={() => { setConfirming(false); void run(() => setCustomerClearance(record, true)) }}>Xác nhận</Button>
         </div>
-      </Modal>}
+      </div>}
     </>}
     <ol aria-label="Tiến độ trả kho" className="grid gap-2 border-t border-stone-200 pt-3 text-xs sm:grid-cols-3">
       {steps.map((label, index) => <li key={label} aria-current={index === currentStep[record.status] ? 'step' : undefined}

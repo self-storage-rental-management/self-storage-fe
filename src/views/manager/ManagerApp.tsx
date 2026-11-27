@@ -79,10 +79,14 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
 
 
   const [staffTaskDraft, setStaffTaskDraft] = useState<{ referenceId: string; title: string; notes: string } | null>(null)
+  const [returnReviewTarget, setReturnReviewTarget] = useState<{ id: string; request: number }>()
   const [inventoryRentalId, setInventoryRentalId] = useState<string | undefined>()
   const [inventoryMaintenanceDraft, setInventoryMaintenanceDraft] = useState<{ unitId: string; unitCode: string } | null>(null)
   useEffect(() => {
     if (page !== 'rentals') setInventoryRentalId(undefined)
+  }, [page])
+  useEffect(() => {
+    if (page !== 'returns') setReturnReviewTarget(undefined)
   }, [page])
   const showToast = (message: string) => {
     const pageTitles: Record<string, string> = {
@@ -171,6 +175,9 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
         && backendNotifications.some(item => item.id === notificationId && item.relatedEntityType === 'VIOLATION_RECOVERY')) {
         setRecoveryTarget({ id: notification.targetId, request: Date.now() })
       }
+      if (notification.page === 'returns' && notification.targetId && notification.title === 'Cần đối soát danh tính trả kho') {
+        setReturnReviewTarget({ id: notification.targetId, request: Date.now() })
+      }
       if (notification.page === 'support' && notification.targetId) setSupportTarget({ id: notification.targetId, request: Date.now() })
       setBackendNotifications(current => current.map(item =>
         item.id === notificationId ? { ...item, isRead: true } : item
@@ -189,7 +196,7 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
       : <ManagerInventoryPanel user={user} units={hub.units} rentals={hub.rentals} reservations={hub.holds} checkins={hub.checkins} returns={hub.returns} activities={hub.activities} maintenanceTasks={hub.maintenanceTasks} unitTypes={hub.unitTypes} facilityId={managerFacilityId || ''} facilityName={facility?.name || user.facility || ''} createUnit={hub.createUnit} updateUnit={hub.updateUnit} deleteUnit={hub.deleteUnit} updateUnitStatus={hub.updateUnitStatus} onCreateMaintenanceWork={draft => { setStaffTaskDraft(draft); setPage('staff-tasks') }} onOpenRental={rentalId => { setInventoryRentalId(rentalId); setPage('rentals') }} onOpenMaintenance={(unitId, unitCode) => { setInventoryMaintenanceDraft({ unitId, unitCode }); setPage('staff-tasks') }} showToast={showToast} />)}
     {page === 'unit-assignment' && isApiAuthenticated() && <ManagerAssignmentWorkspace showToast={showToast} onOpenRental={rentalId => { setInventoryRentalId(rentalId); setPage('rentals') }} onOpenMaintenance={(unitId, unitCode) => { setInventoryMaintenanceDraft({ unitId, unitCode }); setPage('staff-tasks') }} />}
     {page === 'rentals' && (isApiAuthenticated() ? <ManagerRentalsApiPanel key={`${user.id}:${JSON.stringify(getAuthenticatedActor()?.facilityScopes)}`} initialRentalId={inventoryRentalId} /> : <ManagerRentalsPanel user={user} rentals={hub.rentals} renewals={hub.renewals} reservations={hub.holds} units={hub.units} unitTypes={hub.unitTypes} assignUnitToHold={hub.assignUnitToHold} showToast={showToast} />)}
-    {page === 'returns' && <ManagerReturnsPanel user={user} showToast={showToast} sb={statusBadge} onOpenRecovery={() => { setRecoveryTarget(undefined); setPage('staff-tasks') }} onCreateMaintenanceWork={draft => { setStaffTaskDraft(draft); setPage('staff-tasks') }} />}
+    {page === 'returns' && <ManagerReturnsPanel reviewTarget={returnReviewTarget} user={user} showToast={showToast} sb={statusBadge} onOpenRecovery={() => { setRecoveryTarget(undefined); setPage('staff-tasks') }} onCreateMaintenanceWork={draft => { setStaffTaskDraft(draft); setPage('staff-tasks') }} />}
 
     {page === 'payments' && (isApiAuthenticated() ? <ManagerFinancialApiPanel /> : <ManagerPaymentsPanel user={user} rentals={hub.rentals} payments={hub.payments} config={hub.config} applyRentalLateFee={hub.applyRentalLateFee} setRentalOverlock={hub.setRentalOverlock} sendDelinquencyReminder={hub.sendDelinquencyReminder} showToast={showToast} />)}
     {page === 'overdue-cases' && isApiAuthenticated() && <ManagerOverdueApiPanel key={user.id} />}

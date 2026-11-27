@@ -1,5 +1,7 @@
 import ProcessingLeaseBoundary from '../../components/ProcessingLeaseBoundary'
 import { recordDisplayCode } from '../../utils/recordDisplayCode'
+import { compareWorkQueue, compareQueueTime } from '../../utils/workQueueSort'
+import { compareReturnQueue } from '../../utils/returnQueueSort'
 import { displayStatusLabel } from '../../presentation/statusLabels'
 import { isApiAuthenticated } from '../../services/authApi'
 import { useReturnRecords } from '../../hooks/useReturnRecords'
@@ -43,9 +45,10 @@ interface ManagerReturnsPanelProps {
   sb: (v: string) => React.ReactNode
   onCreateMaintenanceWork?: (draft: { referenceId: string; title: string; notes: string }) => void
   onOpenRecovery?: () => void
+  reviewTarget?: { id: string; request: number }
 }
 
-export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaintenanceWork, onOpenRecovery }: ManagerReturnsPanelProps) {
+export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaintenanceWork, onOpenRecovery, reviewTarget }: ManagerReturnsPanelProps) {
   const {
     returns: legacyReturns,
     users,
@@ -126,6 +129,17 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
     setRefundFile(null); setRefundConfirmed(false); refundUpload.current = null; refundKey.current = null
   }, [apiRead.identity])
 
+  const openedReviewTarget = useRef<typeof reviewTarget>(undefined)
+  useEffect(() => {
+    if (!reviewTarget || openedReviewTarget.current === reviewTarget) return
+    const record = apiRead.rows.find(row => row.id === reviewTarget.id)
+    if (!record) return
+    openedReviewTarget.current = reviewTarget
+    setReturnTab(isReturnIdentityReviewPending(record, Date.now()) ? 'awaiting_identity_review' : 'All')
+    setSelectedReturn(returnScreenRecord(record))
+    setDetailModalOpen(true)
+  }, [apiRead.rows, reviewTarget])
+
   const availableStaff = users.filter(member => canManagerAssignStaff(user, member))
 
   // Filter returns by facility
@@ -140,6 +154,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
     return () => window.clearInterval(timer)
   }, [hasReviewTimes])
   const pendingIdentityReviews = new Set(useApi ? apiRead.rows.filter(row => isReturnIdentityReviewPending(row, reviewNow)).map(row => row.id) : [])
+  const apiRowsById = new Map(apiRead.rows.map(row => [row.id, row]))
   const hiddenFacilityCount = scopedReturns.length - facilityReturns.length
   const moneyValue = (value?: number) => useApi ? value ?? Number.NaN : normalizeManagerMoney(value) ?? 0
 
@@ -172,19 +187,23 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
     const matchDate = (!dateFrom || r.scheduledDate >= dateFrom) && (!dateTo || r.scheduledDate <= dateTo)
     return matchTab && matchSearch && matchDamage && matchSettlement && matchDate
   }).sort((left, right) => {
-    if (sortBy === 'date-asc') return managerDateValue(left.scheduledDate) - managerDateValue(right.scheduledDate)
-    if (sortBy === 'date-desc') return managerDateValue(right.scheduledDate) - managerDateValue(left.scheduledDate)
+    if (sortBy === 'date-asc') return compareQueueTime(left.scheduledDate, right.scheduledDate) || left.id.localeCompare(right.id)
+    if (sortBy === 'date-desc') return compareQueueTime(left.scheduledDate, right.scheduledDate, true) || left.id.localeCompare(right.id)
     if (sortBy === 'amount-desc') {
       const amount = (record: ReturnCase) => Number.isFinite(record.netRefundAmount) && Number.isFinite(record.amountDueFromCustomer ?? 0)
         ? record.netRefundAmount + (record.amountDueFromCustomer ?? 0) : -Infinity
       const leftAmount = amount(left), rightAmount = amount(right)
-      return leftAmount === rightAmount ? 0 : rightAmount - leftAmount
+      return (leftAmount === rightAmount ? 0 : rightAmount - leftAmount) || left.id.localeCompare(right.id)
     }
-    const leftDue = managerReviewDeadline(left) ?? Infinity
-    const rightDue = managerReviewDeadline(right) ?? Infinity
-    if (leftDue !== rightDue) return leftDue - rightDue
-    const statusPriority: Record<string, number> = { recovery_required: -1, requested: 0, scheduled: 1, inspected: 2, awaiting_business_review: 3, disputed: 4, refund_pending: 5, payment_due: 6, awaiting_customer_confirmation: 7, completed: 8 }
-    return (statusPriority[left.status] ?? 99) - (statusPriority[right.status] ?? 99) || managerDateValue(left.requestedAt) - managerDateValue(right.requestedAt)
+    const rawLeft = apiRowsById.get(left.id), rawRight = apiRowsById.get(right.id)
+    if (useApi && rawLeft && rawRight) return compareReturnQueue(rawLeft, rawRight, 'manager', reviewNow)
+    const order = (record: ReturnCase) => ({
+      id: record.id, closed: record.status === 'completed',
+      actionable: pendingIdentityReviews.has(record.id) || isAwaitingManagerReview(record) || record.status === 'disputed' || record.status === 'refund_pending',
+      dueAt: record.managerReviewDueAt,
+      waitingSince: record.requestedAt, completedAt: record.completedAt,
+    })
+    return compareWorkQueue(order(left), order(right), reviewNow)
   })
   const returnGroups = [
     { id: 'ongoing', title: 'Đang diễn ra', rows: filteredReturns.filter(r => r.status !== 'completed'), page: ongoingPage, setPage: setOngoingPage },

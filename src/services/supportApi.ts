@@ -266,7 +266,7 @@ function queryString(query: SupportQuery, manager = false, timeline = false, cus
     if (id !== undefined) check(isUuid(id), "Mã bộ lọc không hợp lệ.")
   if (query.sort !== undefined)
     check(
-      /^(createdAt|updatedAt|id|subject),(asc|desc)$/.test(query.sort),
+      /^(createdAt|updatedAt|id|subject),(asc|desc)$|^priority,asc$/.test(query.sort),
       "Sắp xếp không hợp lệ.",
     )
   const params = new URLSearchParams()

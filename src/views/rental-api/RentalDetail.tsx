@@ -13,7 +13,6 @@ import { bookingPaymentPurposes, bookingPaymentStatuses } from "../../services/r
 import { rentalRecordLabel, rentalStatusLabel, rentalMoney, unknown, rentalDataWarning, rentalPeriodText, rentalDate, accessStatusLabels } from "./presentation"
 import { downloadCheckInEvidence } from "../../services/checkInApi"
 import { confirmCustomerRentalStart, extendCustomerInventoryReturnWindow, getCustomerReservation, markCustomerPreparationComplete, previewCustomerRentalStart, resolveCustomerInventory, type CustomerReservationDetail, type RentalStartConfirmation } from "../../services/customerReservationApi"
-import { updateReturnRequest } from "../../services/returnApi"
 import { InventoryLineInspectionResult, InventoryResolutionNotice, PackagingInspectionResult } from "../customer/CustomerReservationCard"
 import IntakeWorkflowPanel from "../../components/IntakeWorkflowPanel"
 import { formatCustomerDateTime } from "../../i18n/customerDate"
@@ -27,6 +26,48 @@ import FilePreviewDialog from "../../components/FilePreviewDialog"
 import { vietnamDateInput } from "../../utils/vietnamTime"
 const labelClass = "text-xs font-normal text-slate-500"
 const valueClass = "mt-1 text-sm font-medium text-slate-900"
+
+function InventoryTimeframe({ detail, now, busy, onExtend }: { detail: CustomerReservationDetail; now: number; busy: boolean; onExtend: () => void }) {
+  const returning = detail.inventoryResolutionStatus === 'RETURN_REQUESTED'
+  const awaitingResponse = detail.inventoryResolutionStatus === 'PENDING_CUSTOMER'
+  const responseDeadline = detail.inventoryResultPublishedAt
+    ? new Date(Date.parse(detail.inventoryResultPublishedAt) + 48 * 60 * 60 * 1000).toISOString() : null
+  const deadline = returning ? detail.inventoryRemovalDeadlineAt
+    : awaitingResponse ? responseDeadline : detail.inventoryFinalDeadlineAt || detail.inventoryDueAt
+  const overdue = Boolean(deadline && Date.parse(deadline) <= now)
+  const milestones = returning
+    ? [
+      ['Công bố kết quả kiểm kê', detail.inventoryResultPublishedAt],
+      ['Bắt đầu thời hạn trả hàng', detail.inventoryRemovalPublishedAt],
+    ]
+    : awaitingResponse ? [
+      ['Công bố kết quả kiểm kê', detail.inventoryResultPublishedAt],
+      ['Thời gian phản hồi', null],
+    ] : [
+      ['Hoàn tất chuẩn bị hàng', detail.setupCompletedAt],
+      ['Lịch hẹn kiểm kê', detail.inventoryAppointmentAt],
+    ]
+  return <section className="space-y-3" aria-label="Khung thời gian kiểm kê và trả hàng">
+    <div className="grid gap-3 sm:grid-cols-2">
+      {milestones.map(([label, value]) => <div key={label} className="rounded-lg border border-stone-200 bg-stone-50 p-3">
+        <p className="text-xs text-stone-500">{label}</p>
+        <p className="mt-1 font-semibold">{label === 'Thời gian phản hồi' ? '48 giờ từ lúc công bố kết quả' : value ? formatCustomerDateTime(value) : 'Chưa ghi nhận'}</p>
+      </div>)}
+    </div>
+    <div className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border px-4 py-3 ${overdue ? 'border-red-200 bg-red-50 text-red-900' : 'border-amber-200 bg-amber-50 text-amber-950'}`}>
+      <span className="text-sm">{returning ? 'Hạn cuối dọn hàng và trả kho' : awaitingResponse ? 'Hạn phản hồi kết quả kiểm kê' : 'Hạn hoàn tất kiểm kê'}</span>
+      <span className="font-bold">{deadline ? formatCustomerDateTime(deadline) : 'Chưa xác định'}</span>
+    </div>
+    {returning && detail.inventoryReturnWindowDays != null && <p className="text-xs text-stone-500">Thời hạn trả hàng: {detail.inventoryReturnWindowDays} ngày{(detail.inventoryReturnExtensionCount ?? 0) > 0 ? ` · Đã gia hạn ${detail.inventoryReturnExtensionCount} lần` : ''}.</p>}
+    {returning && <div className="flex flex-wrap items-center justify-between gap-2">
+      <p className="text-xs text-stone-500">Có thể gia hạn tối đa 2 lần trước khi hết hạn trả hàng.</p>
+      <Button size="sm" variant="outline" disabled={busy || overdue || !detail.inventoryReturnCanExtend} onClick={onExtend}>
+        {busy ? 'Đang gia hạn…' : 'Gia hạn thêm 2 ngày'}
+      </Button>
+    </div>}
+    {overdue && <p role="status" className="text-xs font-semibold text-red-700">{returning ? 'Đã hết hạn dọn hàng và trả kho.' : awaitingResponse ? 'Đã hết 48 giờ phản hồi. Hồ sơ chuyển sang thu hồi.' : 'Đã hết hạn hoàn tất kiểm kê.'}</p>}
+  </section>
+}
 
 function GoodsImage({ image }: { image: { id: string; originalName: string; contentType: string; sizeBytes: number } }) {
   const [url, setUrl] = useState<string>()
@@ -365,7 +406,8 @@ export default function RentalDetail({
                 </div>
               )}
               {role === 'customer' && inventoryDetail?.reservation.id === rental.reservationId && (
-                <div className="mt-3 space-y-2">
+                <div className="mt-3 space-y-3">
+                  <InventoryTimeframe detail={inventoryDetail} now={now} busy={resolvingInventory} onExtend={() => void extendInventoryReturn()} />
                   <InventoryResolutionNotice detail={inventoryDetail} now={now} submitting={resolvingInventory} onExtendReturnWindow={() => void extendInventoryReturn()} onResolve={(decision, scheduledDate) => void resolveInventoryDecision(decision, scheduledDate)} />
                   {inventoryActionMessage && <p role="status" className="text-xs font-medium text-emerald-700">{inventoryActionMessage}</p>}
                   {inventoryActionError && <p role="alert" className="text-xs font-medium text-red-700">{inventoryActionError}</p>}
@@ -377,27 +419,12 @@ export default function RentalDetail({
             <dd className="space-y-3">{role === 'customer' && inventoryDetail?.reservation.id === rental.reservationId
               && (inventoryDetail.inventoryDecision || (inventoryDetail.inventoryResolutionStatus && inventoryDetail.inventoryResolutionStatus !== 'NOT_STARTED')) ? (
                 <>
+                  <InventoryTimeframe detail={inventoryDetail} now={now} busy={resolvingInventory} onExtend={() => void extendInventoryReturn()} />
                   <InventoryResolutionNotice
                     detail={inventoryDetail}
                     now={now}
                     submitting={resolvingInventory}
                     onExtendReturnWindow={() => void extendInventoryReturn()}
-                    onScheduleReturnDate={async (returnCaseId, scheduledDate, note) => {
-                      setResolvingInventory(true)
-                      setInventoryActionMessage('')
-                      setInventoryActionError('')
-                      try {
-                        await updateReturnRequest(returnCaseId, scheduledDate, note)
-                        const refreshed = await getCustomerReservation(rental.reservationId!)
-                        setInventoryDetail(refreshed)
-                        setInventoryActionMessage('Đã lưu ngày hẹn trả kho dự kiến.')
-                        onRentalStartConfirmed?.()
-                      } catch (error) {
-                        setInventoryActionError(userFacingError(error, 'Không thể lưu ngày hẹn trả kho.'))
-                      } finally {
-                        setResolvingInventory(false)
-                      }
-                    }}
                     onResolve={(decision, scheduledDate) => void resolveInventoryDecision(decision, scheduledDate)}
                   />
                   {inventoryActionMessage && <p role="status" className="text-xs font-medium text-emerald-700">{inventoryActionMessage}</p>}

@@ -93,7 +93,7 @@ export interface ApiReturn {
   lockInspectionResult?: LockInspectionResult | null
   inventoryMatch?: 'match' | 'missing' | 'excess' | null
   damageClassification?: 'no_damage' | 'minor_damage' | 'major_damage' | 'abandoned_goods' | null
-  status: typeof returnStatuses[number]; scheduledDate: string
+  status: typeof returnStatuses[number]; scheduledDate: string | null
   inventoryRemovalDeadlineAt?: string | null
   returnWindowDays?: number | null
   attendance?: {
@@ -199,7 +199,7 @@ export function isApiReturn(v: unknown): v is ApiReturn {
     (v.legacyPricingSnapshotAvailable === undefined || typeof v.legacyPricingSnapshotAvailable === 'boolean') &&
     (v.legacyPricingEvidenceFileId === undefined || v.legacyPricingEvidenceFileId === null || isUuid(v.legacyPricingEvidenceFileId)) &&
     (v.moveInCompletedAt === undefined || v.moveInCompletedAt === null || (typeof v.moveInCompletedAt === 'string' && Number.isFinite(Date.parse(v.moveInCompletedAt)))) &&
-    ['facilityName', 'unitNumber', 'customerName'].every(k => typeof v[k] === 'string') && date(v.scheduledDate) &&
+    ['facilityName', 'unitNumber', 'customerName'].every(k => typeof v[k] === 'string') && (date(v.scheduledDate) || v.returnType === 'INVENTORY_MISMATCH' && v.scheduledDate === null) &&
     returnStatuses.includes(v.status as ApiReturn['status']) && typeof v.customerConfirmed === 'boolean' && money(v.totalDeductions) &&
     ['damageFee', 'cleaningFee', 'lostItemFee', 'overdueFee', 'outstandingFee'].every(k => money(v[k])) &&
     (v.proposedUnitStatus === null || v.proposedUnitStatus === 'available' || v.proposedUnitStatus === 'maintenance') &&
