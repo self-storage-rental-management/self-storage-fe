@@ -48,7 +48,7 @@ import RenewalExceptionProposalCard from "./RenewalExceptionProposalCard"
 import RenewalCoordinationPanel, { canCoordinateRenewal } from "../rental-support-integration/RenewalCoordinationPanel"
 import { EvidenceUpload, EvidenceDownload } from "../rental-support-integration/EvidenceControls"
 
-type RenewalFormAction = Exclude<RenewalOperationAction, "noShow">
+type RenewalFormAction = RenewalOperationAction
 
 export const operationsInputClass =
   "mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
@@ -1040,7 +1040,7 @@ export default function RenewalOperationsPanel({
             ...(paymentEventsRead.data?.data ?? []),
             ...(lastEvent ? [lastEvent] : []),
           ]}
-        />}
+        />
       </>}
       {!appointmentOnly && role !== "staff" && (
         <EventTimeline
@@ -1280,6 +1280,16 @@ function OperationForm({
       case "confirmation":
         if (!attested) throw new Error("Cần xác nhận đã đọc và đồng ý với lịch và hạn ký mới.")
         return exceptionConfirmationCommand(s, proposal)
+      case "noShow":
+        if (!s.appointmentRef) throw new Error("Thiếu lịch ký.")
+        return {
+          action,
+          body: {
+            ...base,
+            appointmentRef: s.appointmentRef,
+            reason: reason.trim() || "Khách không đến theo lịch hẹn",
+          },
+        }
     }
   }
   return (
