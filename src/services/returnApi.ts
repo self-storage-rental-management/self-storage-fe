@@ -510,6 +510,9 @@ export function validateReturnSettlementReceipt(body: ReturnSettlementReceipt) {
     throw new Error('Kiểm tra phương thức, tải biên lai và xác nhận đã thực thu hoặc thực hoàn tiền. Với chuyển khoản, nhập mã giao dịch.')
 }
 export async function recordReturnSettlement(id: string, body: ReturnSettlementReceipt, key: string, role: ReturnRole = 'staff') {
+  if (role !== 'staff' && role !== 'business') {
+    throw new ApiClientError('Vai trò này không được ghi nhận thu hoặc hoàn tiền trả kho.', { status: 403 })
+  }
   const a = actor(role, true)
   if (!a.permissions.includes('payments:collect') && !a.permissions.includes('refunds:execute')) throw new ApiClientError('Bạn chưa có quyền ghi nhận thu hoặc hoàn tiền.', { status: 403 })
   if (!isUuid(id)) throw new Error('Mã hồ sơ trả kho không hợp lệ.')
