@@ -250,7 +250,7 @@ export async function loadCustomerPaymentHistory(): Promise<{
       return (
         await Promise.all(
           renewals.map(async (renewal) => {
-            const dossierReference = renewalDisplayLabel(renewal)
+            const dossierReference = renewal.rentalDisplayCode ? renewalDisplayLabel(renewal) : (renewal.displayCode || renewal.id)
             const events = await allPages((page) =>
               listRenewalOperationEvents(
                 "customer",

@@ -346,10 +346,6 @@ export default function RenewalDetail({
         </div>
       </Modal>
       <div className="flex flex-wrap gap-2">
-        {isCustomer && customerHasPaid && !r.allowedActions.includes('CANCEL') && !['completed', 'cancelled', 'rejected', 'payment_expired'].includes(r.status) &&
-          <p className="w-full rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
-            Khoản thanh toán gia hạn cần được cơ sở đối soát trước khi hủy gia hạn và trả kho. Vui lòng liên hệ cơ sở.
-          </p>}
         {actions
           .filter((a) => r.allowedActions.includes(a.action))
           .map((a) => (

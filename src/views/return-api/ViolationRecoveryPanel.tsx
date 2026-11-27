@@ -19,7 +19,7 @@ const actionLabels = {
   CANNOT_ATTEND: 'Tôi không thể có mặt', DISPUTE: 'Gửi phản đối hoặc khiếu nại',
   RECORD_PRESENT: 'Ghi nhận có mặt', RECORD_ABSENT: 'Ghi nhận vắng mặt', VERIFY: 'Xác minh khách khi thu hồi',
   START: 'Bắt đầu thu hồi', SAVE_ITEM: 'Ghi nhận kiện hàng',
-  BLOCK: 'Tạm dừng và báo quản lý', RESUME: 'Duyệt phản hồi và tiếp tục', CANCEL: 'Hủy thu hồi',
+  BLOCK: 'Tạm dừng và báo quản lý', RESUME: 'Tiếp tục xử lý', CANCEL: 'Hủy thu hồi',
   CLOSE_REMEDIATION: 'Đóng xử lý khắc phục', COMPLETE: 'Hoàn tất thu hồi',
   ASSIGN_PICKUP: 'Phân công bàn giao hàng', SCHEDULE_PICKUP: 'Đặt lịch nhận hàng', OPEN_PICKUP: 'Mở phiên nhận hàng',
   VERIFY_PICKUP: 'Xác minh người nhận hàng', RELEASE_ITEM: 'Ghi nhận bàn giao hàng',
@@ -920,10 +920,11 @@ export function RecoveryPagination({ pagination, disabled, onChange }: {
   </nav>
 }
 
-export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, managerOverdueOnly = false, customerView = false, target, detailOnly = false, onDetailClosed, onRecordChanged }: {
+export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, managerOverdueOnly = false, customerView = false, target, detailOnly = false, onDetailClosed, onRecordChanged, allowDateSort = false }: {
   sourceReturnId?: string; activeOnly?: boolean; managerOverdueOnly?: boolean; customerView?: boolean; target?: { id: string; request: number }
-  detailOnly?: boolean; onDetailClosed?: () => void; onRecordChanged?: () => void
+  detailOnly?: boolean; onDetailClosed?: () => void; onRecordChanged?: () => void; allowDateSort?: boolean
 }) {
+  const [sort, setSort] = useState<'priority' | 'createdAt,desc' | 'createdAt,asc'>('priority')
   const [page, setPage] = useState(0)
   const [entries, setEntries] = useState<Entry[]>([])
   const [pagination, setPagination] = useState<RecoveryPageInfo>()
@@ -965,7 +966,7 @@ export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, man
     const query = managerOverdueOnly ? `page=${page}&escalatedOnly=true`
       : sourceReturnId ? `sourceReturnId=${encodeURIComponent(sourceReturnId)}` : `page=${page}&activeOnly=${activeOnly && !showClosed}`
     const url = targetId ? `${endpoint}/${encodeURIComponent(targetId)}`
-      : customerPaging ? `${endpoint}/customer?page=${page}&pageSize=${CUSTOMER_PAGE_SIZE}` : `${endpoint}?${query}`
+      : customerPaging ? `${endpoint}/customer?page=${page}&pageSize=${CUSTOMER_PAGE_SIZE}` : `${endpoint}?${query}${allowDateSort ? `&sort=${encodeURIComponent(sort)}` : ''}`
     if (requestUrl.current !== url) {
       requestUrl.current = url
       setLoading(true)
@@ -990,7 +991,7 @@ export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, man
       .catch(err => { if (active) setError(userFacingError(err, 'Không thể tải hồ sơ thu hồi.')) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [page, refresh, sourceReturnId, activeOnly, managerOverdueOnly, targetId, showClosed, action, customerPaging])
+  }, [page, refresh, sourceReturnId, activeOnly, managerOverdueOnly, targetId, showClosed, action, customerPaging, sort, allowDateSort])
 
   useEffect(() => {
     if (detailOnly || !target || target.id !== targetId || loading || error || !targetCard.current
@@ -1011,6 +1012,15 @@ export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, man
       <Button variant="outline" onClick={onDetailClosed}>Đóng</Button>
     </div>}
     <div hidden={detailOnly}>
+    {allowDateSort && !targetId && <label className="mb-3 ml-auto flex w-fit max-w-full items-center gap-2 whitespace-nowrap text-xs text-stone-500">
+      Sắp xếp
+      <select aria-label="Sắp xếp hồ sơ thu hồi" disabled={!!action} className="!h-9 !w-40 !min-w-0 shrink-0 rounded-lg border border-stone-200 bg-white !px-3 !py-1.5 !text-xs text-stone-700"
+        value={sort} onChange={event => { setSort(event.target.value as typeof sort); setPage(0) }}>
+        <option value="priority">Ưu tiên xử lý</option>
+        <option value="createdAt,desc">Mới nhất</option>
+        <option value="createdAt,asc">Cũ nhất</option>
+      </select>
+    </label>}
     {((activeOnly && !managerOverdueOnly) || targetId) && <div className="recovery-toolbar">
       <div className="recovery-view-switch">
         {activeOnly && !managerOverdueOnly && !targetId && <>
@@ -1051,7 +1061,6 @@ export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, man
           <div><dt>{entry.stage === 'COMPLETED' ? 'Hoàn tất thu hồi' : 'Lịch thu hồi'}</dt><dd>{dateLabel(entry.stage === 'COMPLETED' ? entry.completedAt : entry.scheduledAt)}</dd></div>
           {!closed && <div><dt>Hạn hoàn tất</dt><dd>{dateLabel(entry.deadlineAt)}</dd></div>}
         </dl>
-        {customerView && !closed && entry.reply && entry.reply !== 'NO_RESPONSE' && !replyActions.length && entry.responseDueAt && Date.now() < Date.parse(entry.responseDueAt) && <p role="status" className="recovery-item-notice">Đã gửi phản hồi. Vui lòng chờ quản lý duyệt trước khi gửi phản hồi tiếp theo.</p>}
         {!!replyActions.length && !closed && <p className="recovery-item-notice">Vui lòng phản hồi trong 6 giờ từ khi nhận thông báo. {entry.reply ? `Phản hồi: ${replies[entry.reply] || entry.reply}. ` : ''}<RecoveryCountdown deadline={entry.responseDueAt} label="Phản hồi" /></p>}
         {!!entry.items.length && <ul className="recovery-goods-summary" aria-label="Hàng hóa đã thu hồi">
           {groupRecoveryItems(entry.items).map(group => <li key={group.key}><span>{group.name}</span><strong>{group.items.length} kiện</strong></li>)}

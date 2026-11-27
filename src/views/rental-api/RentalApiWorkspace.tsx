@@ -1,3 +1,5 @@
+import type { RentalApiRecord } from '../../types/rentalApi'
+import { filterCustomerRentals } from './customerRentalFilters'
 import { parseVietnamDate, vietnamDateInput } from '../../utils/vietnamTime'
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { singleManagerFacility, managerFacilityNotice } from "../manager/managerFacilityUi"
@@ -12,7 +14,6 @@ import { getRenewal, listRenewals } from "../../services/renewalApi"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import type {
   RentalApiDetail,
-  RentalApiRecord,
   RentalApiQuery,
   RentalApiRole,
 } from "../../types/rentalApi"
@@ -36,6 +37,7 @@ import {
   rentalLabels,
   rentalRecordLabel,
   rentalStatusLabel,
+  rentalFilterLabels,
   rentalPeriodText,
   renewalLabels,
 } from "./presentation"
@@ -56,7 +58,6 @@ type Action = {
   kind: "request"
   rentalId: string
   revision?: RenewalApiRecord
-  blockedReason?: string
 } | {
   kind: "cancel"
   renewal: RenewalApiRecord
@@ -275,14 +276,16 @@ function WorkspaceData({
     async () =>
       dataTab === "rental"
         ? { kind: "rental" as const, page: await (async () => {
-          if (role !== 'customer') return listRentals(role, rq)
-          const first = await listRentals(role, { ...rq, page: 0, size: 100 })
+          if (role !== 'customer' && role !== 'manager') return listRentals(role, rq)
+          const status = role === 'customer' ? undefined : rq.status
+          const first = await listRentals(role, { ...rq, status, page: 0, size: 100 })
           const rows = [...first.data]
           for (let page = 1; page < first.pagination.totalPages; page++) {
-            const next = await listRentals(role, { ...rq, page, size: 100 })
+            const next = await listRentals(role, { ...rq, status, page, size: 100 })
             rows.push(...next.data)
           }
-          const data = [...new Map(rows.map(row => [row.id, row])).values()]
+          const uniqueRows = [...new Map(rows.map(row => [row.id, row])).values()]
+          const data = role === 'customer' ? filterCustomerRentals(uniqueRows, rq.status) : uniqueRows
           return { ...first, data, pagination: { ...first.pagination, page: 0, totalPages: 1, totalItems: data.length } }
         })() }
         : { kind: "renewal" as const, page: await (async () => {
@@ -430,7 +433,7 @@ function WorkspaceData({
           <option value="amount,desc">Giá giảm dần</option>
         </select>
       </RenewalSearch>}
-      {tab === "rental" && <div className="grid items-end gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
+      {tab === "rental" && <div className={`grid items-end gap-3 ${role === "manager" ? "lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]" : "sm:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]"}`}>
           <form
             className="grid h-full grid-cols-[minmax(0,1fr)_auto] items-end gap-2"
             onSubmit={(event) => {
@@ -460,14 +463,14 @@ function WorkspaceData({
             }
           >
             <option value="">Tất cả</option>
-            {Object.entries(rentalLabels).map(([value, label]) => (
+            {Object.entries(rentalFilterLabels).map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
               </option>
               ))}
           </select>
         </label>
-        {/* sort available for all roles */}
+        {role === "manager" && (
           <label className="block min-w-0">
             Sắp xếp
             <select
@@ -476,28 +479,29 @@ function WorkspaceData({
               onChange={(e) => change({ sort: e.target.value })}
             >
               <option value="priority,asc">Cần xử lý / hạn gần nhất</option>
-              <option value="createdAt,desc">Đơn mới nhất</option>
-              <option value="createdAt,asc">Đơn cũ nhất</option>
+              <option value="createdAt,desc">Mới nhất</option>
+              <option value="createdAt,asc">Cũ nhất</option>
               <option value="contractEndDate,asc">Ngày hết hạn gần nhất</option>
               <option value="monthlyPrice,desc">Giá giảm dần</option>
             </select>
           </label>
-        {/* end sort */}
+        )}
       </div>}
       </section>
       {tab === "recovery" ? <ViolationRecoveryPanel target={recoveryTarget} customerView={role === 'customer'} /> : <ApiReadState {...read} retry={refresh} />}
       {tab !== "recovery" && read.data && (
         <Card className={role === 'customer' || (role === 'manager' && read.data.kind === 'rental') ? '!border-0 !bg-transparent !shadow-none' : 'overflow-hidden rounded-2xl'}>
           {role === 'manager' ? (read.data.kind === 'rental'
-            ? <ManagerRentalGroups kind="rental" rows={read.data.page.data} onDetail={id => setDetail({ kind: 'rental', id })} />
+            ? <ManagerRentalGroups key={`rental:${rq.search}:${rq.status}:${rq.sort}`} kind="rental" rows={read.data.page.data} onDetail={id => setDetail({ kind: 'rental', id })} />
             : <ManagerRentalGroups kind="renewal" rows={read.data.page.data} onDetail={id => setDetail({ kind: 'renewal', id })} />
           ) : role === 'customer' && read.data.kind === 'renewal' ? <CustomerRenewalGroups rows={read.data.page.data} onDetail={id => setDetail({ kind: 'renewal', id })} /> : role === 'customer' && read.data.kind === 'rental' ? <div className="space-y-5">{(() => {
             const returningStatuses = ['return_requested', 'return_inspection', 'closing']
             const isReturning = (row: RentalApiRecord) => row.status !== 'completed' && (returningStatuses.includes(row.status) || row.inventoryMismatchReturn === true)
             const returningRows = read.data.page.data.filter(isReturning)
+            if (rq.sort && rq.sort !== 'priority,asc') return [{ id: 'all', title: 'Danh sách hồ sơ thuê', subtitle: 'Hiển thị theo thứ tự sắp xếp đã chọn.', rows: read.data.page.data, active: true }]
             return [
-              { id: 'ongoing', title: 'Đang diễn ra', subtitle: 'Hồ sơ đang thuê, trong thời gian chuẩn bị hoặc quá hạn.', rows: read.data.page.data.filter(row => row.status !== 'completed' && !isReturning(row)), active: true },
-              ...(returningRows.length > 0 ? [{ id: 'returning', title: 'Hồ sơ trả kho', subtitle: 'Hồ sơ đã chuyển sang quy trình trả kho, nghiệm thu và quyết toán.', rows: returningRows, active: true }] : []),
+              { id: 'ongoing', title: 'Đang diễn ra', subtitle: 'Hồ sơ đang thuê, trong thời gian chuẩn bị hoặc quá hạn.', rows: read.data.page.data.filter(row => row.status !== 'completed' && !returningStatuses.includes(row.status)), active: true },
+              ...(returningRows.length > 0 ? [{ id: 'returning', title: 'Đang trả kho', subtitle: 'Hồ sơ đã chuyển sang quy trình trả kho, nghiệm thu và quyết toán.', rows: returningRows, active: true }] : []),
               { id: 'finished', title: 'Hồ sơ đã kết thúc', subtitle: 'Hồ sơ thuê đã hoàn tất xử lý.', rows: read.data.page.data.filter(row => row.status === 'completed'), active: false },
             ]
           })().sort((a, b) => Number(b.active) - Number(a.active)
@@ -541,16 +545,27 @@ function WorkspaceData({
                           size="sm"
                           variant="outline"
                           className="!border-emerald-600 !bg-emerald-600 !text-white hover:!bg-emerald-700 disabled:opacity-50"
-                          disabled={!eligibility.canOpenRequest}
-                          onClick={() => setAction({ kind: 'request', rentalId: row.id,
-                            blockedReason: eligibility.canRenew ? undefined : eligibility.reason })}
+                          disabled={!eligibility.canRenew}
+                          title={eligibility.reason}
+                          onClick={() => setAction({ kind: 'request', rentalId: row.id })}
                         >
                           Gia hạn
                         </Button>
                       )
                     })()}
-                  <Button type="button" size="sm" variant="outline" className="!border-amber-400 !bg-amber-100 !text-amber-950 hover:!bg-amber-200"
-                    disabled={row.status === 'completed'} onClick={() => setReturnRental({ id: row.id, active: row.status === 'active' || row.status === 'setup' })}>Trả kho</Button>
+                  {(() => {
+                    const eligibility = getRentalRenewalEligibility(row, customerRenewals.data || [])
+                    return eligibility.hasOpenRenewal ? (
+                      <Button type="button" size="sm" variant="outline" disabled
+                        title="Phải xử lý xong hoặc hủy yêu cầu gia hạn trước khi trả kho."
+                        className="!border-amber-300 !bg-amber-50 !text-amber-800">
+                        Đang xử lý gia hạn
+                      </Button>
+                    ) : (
+                      <Button type="button" size="sm" variant="outline" className="!border-amber-400 !bg-amber-100 !text-amber-950 hover:!bg-amber-200"
+                        disabled={row.status === 'completed'} onClick={() => setReturnRental({ id: row.id, active: row.status === 'active' || row.status === 'setup' })}>Trả kho</Button>
+                    )
+                  })()}
                   {onRequestSupport && <Button type="button" size="sm" variant="outline" onClick={() => onRequestSupport(row.id, row.storageUnit.code)}>Hỗ trợ hồ sơ</Button>}
                 </>}
               />)}
@@ -640,16 +655,25 @@ function WorkspaceData({
                               size="sm"
                               variant="outline"
                               className="!border-emerald-600 !bg-emerald-600 !text-white hover:!bg-emerald-700 disabled:opacity-50"
-                              disabled={!eligibility.canOpenRequest}
-                              onClick={() => setAction({ kind: 'request', rentalId: row.id,
-                                blockedReason: eligibility.canRenew ? undefined : eligibility.reason })}
+                              disabled={!eligibility.canRenew}
+                              title={eligibility.reason}
+                              onClick={() => setAction({ kind: 'request', rentalId: row.id })}
                             >
                               Gia hạn
                             </Button>
                           )
                         })()}
-                        <Button size="sm" variant="primary" disabled={!['setup', 'active', 'return_requested', 'return_inspection', 'closing'].includes(row.status)}
-                          onClick={() => setReturnRental({ id: row.id, active: row.status === 'active' || row.status === 'setup' })}>Trả kho</Button>
+                        {(() => {
+                          const eligibility = getRentalRenewalEligibility(row, customerRenewals.data || [])
+                          return eligibility.hasOpenRenewal ? (
+                            <Button size="sm" variant="outline" disabled
+                              title="Phải xử lý xong hoặc hủy yêu cầu gia hạn trước khi trả kho."
+                              className="!border-amber-300 !bg-amber-50 !text-amber-800">Đang xử lý gia hạn</Button>
+                          ) : (
+                            <Button size="sm" variant="primary" disabled={!['setup', 'active', 'return_requested', 'return_inspection', 'closing'].includes(row.status)}
+                              onClick={() => setReturnRental({ id: row.id, active: row.status === 'active' || row.status === 'setup' })}>Trả kho</Button>
+                          )
+                        })()}
                       </>}
                       </div>
                     </td>
@@ -671,7 +695,7 @@ function WorkspaceData({
               </tbody>
             </table>
           </div>}
-          {role !== 'customer' && <Pager
+          {role !== 'customer' && !(role === 'manager' && read.data.kind === 'rental') && <Pager
             fixedSize
             {...{
               page: read.data.page.pagination.page,
@@ -699,8 +723,7 @@ function WorkspaceData({
         />
       )}
       {returnRental && <Modal open onClose={() => setReturnRental(undefined)} title="Trả kho" size="2xl">
-        <ReturnApiPanel role="customer" rentalId={returnRental.id} rentalActive={returnRental.active} onChanged={refresh}
-          onOpenRenewal={renewalId => { setReturnRental(undefined); setTab('renewal'); setDetail({ kind: 'renewal', id: renewalId }) }} />
+        <ReturnApiPanel role="customer" rentalId={returnRental.id} rentalActive={returnRental.active} onChanged={refresh} />
       </Modal>}
       {action?.kind === "request" && (
         <CustomerRenewalRequestModal
@@ -708,7 +731,6 @@ function WorkspaceData({
           actorId={actor.id}
           rentalId={action.rentalId}
           revision={action.revision}
-          blockedReason={action.blockedReason}
           onBrowseUnits={onBrowseUnits}
           onClose={() => setAction(undefined)}
           onSuccess={(created) => {

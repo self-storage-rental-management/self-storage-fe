@@ -130,7 +130,7 @@ export default function IntakeWorkflowPanel({
   role: 'CUSTOMER' | 'STAFF' | 'MANAGER' | 'BUSINESS'
   checkInId?: string | null
   statusSignal?: string | null
-  mode?: 'full' | 'setup' | 'inspection' | 'staff-visit' | 'summary'
+  mode?: 'full' | 'setup' | 'inspection' | 'staff-visit'
   hideCompleteSetupButton?: boolean
   onUpdated?: () => void
 }) {
@@ -204,7 +204,7 @@ export default function IntakeWorkflowPanel({
   const maxExtensions = state.maxExtensions ?? 2
   const usedExtensions = state.setupExtensionCount ?? 0
   const remainingExtensions = Math.max(0, maxExtensions - usedExtensions)
-  const maxDaysPerExtension = Math.max(0, Math.floor((state.extensionMaxHours ?? (state.setupExtensionDays ?? 0) * 24) / 24))
+  const maxDaysPerExtension = Math.max(1, Math.floor((state.extensionMaxHours ?? (state.setupExtensionDays ?? 1) * 24) / 24))
   const inspectionClockStartedAt = state.inspectionClockStartedAt || state.firstIdentityVerificationAt
   // The 72h window is anchored on the customer arrival confirmation, not on identity verification.
   const clockStarted = Boolean(inspectionClockStartedAt)
@@ -233,16 +233,9 @@ export default function IntakeWorkflowPanel({
     at && (at < minAppointmentDateTime || (maxAppointmentDateTime && at > maxAppointmentDateTime)),
   )
   const apptBadge = appointmentBadge(state.appointmentStatus)
-  const previewExtendedDeadline = arrivalDeadline && maxDaysPerExtension > 0
+  const previewExtendedDeadline = arrivalDeadline
     ? show(new Date(Date.parse(arrivalDeadline) + maxDaysPerExtension * 86_400_000).toISOString())
     : null
-
-  if (mode === 'summary') {
-    return <div className="mt-2 space-y-1 rounded-lg bg-stone-50 p-3 text-xs text-stone-700">
-      <p>Hạn đến kiểm kê: <b>{show(arrivalDeadline)}</b></p>
-      <p>Gia hạn đến kiểm kê mỗi lần tối đa: {maxDaysPerExtension > 0 ? `${maxDaysPerExtension} ngày` : 'Chưa có thông tin'} · Đã gia hạn {usedExtensions}/{maxExtensions} lần.</p>
-    </div>
-  }
 
   if (mode === 'setup') {
     if (!setupCutoff || clockStarted || state.readyAt) return null
@@ -341,8 +334,6 @@ export default function IntakeWorkflowPanel({
             )}
           </div>
         )}
-
-        {!clockStarted && <p className="text-xs text-stone-600">Gia hạn đến kiểm kê mỗi lần tối đa: {maxDaysPerExtension > 0 ? `${maxDaysPerExtension} ngày` : 'Chưa có thông tin'} · Đã gia hạn {usedExtensions}/{maxExtensions} lần.</p>}
 
         {state.attendanceReviewStatus === 'PENDING' && (
           <div className="space-y-2.5 rounded-lg border border-amber-300 bg-amber-50/90 p-3 text-xs">
@@ -469,7 +460,7 @@ export default function IntakeWorkflowPanel({
           <div className="rounded-lg border border-stone-200 bg-stone-50/80 px-3 py-2.5">
             <dt className="text-xs text-stone-500">Số lần gia hạn còn lại</dt>
             <dd className="mt-0.5 font-semibold text-stone-900">
-              {remainingExtensions}/{maxExtensions} lần <span className="text-xs font-normal text-stone-500">{maxDaysPerExtension > 0 ? `(tối đa ${maxDaysPerExtension} ngày/lần)` : '(Chưa có số ngày gia hạn)'}</span>
+              {remainingExtensions}/{maxExtensions} lần <span className="text-xs font-normal text-stone-500">(tối đa {maxDaysPerExtension} ngày/lần)</span>
             </dd>
           </div>
         )}
@@ -596,7 +587,7 @@ export default function IntakeWorkflowPanel({
             </div>
           </div>
 
-          {remainingExtensions > 0 && maxDaysPerExtension > 0 && arrivalDeadline && Date.parse(arrivalDeadline) > now && (
+          {remainingExtensions > 0 && arrivalDeadline && Date.parse(arrivalDeadline) > now && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-stone-200 bg-stone-50/70 p-3">
               <div className="space-y-0.5 text-xs">
                 <p className="font-semibold text-stone-800">

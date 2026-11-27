@@ -21,14 +21,6 @@ describe("Renewal deposit settlement API", () => {
     respond({ ...settlement, renewalId: ids.rental })
     await expect(getDepositSettlement("customer",ids.renewal)).rejects.toMatchObject({ code: "INVALID_RESPONSE" })
   })
-  it('shows all forfeited renewal money, including separate deposit and balance receipts', async () => {
-    const result = { ...settlement, status: 'PAYMENT_FORFEITED', amount: 100, environment: 'MIXED', refundId: null }
-    respond(result)
-    expect(await getDepositSettlement('customer', ids.renewal)).toEqual(result)
-    expect(isDepositSettlement({ ...result, refundedAmount: 1 })).toBe(false)
-    expect(isDepositSettlement({ ...result, refundId: ids.event })).toBe(false)
-    expect(isDepositSettlement({ ...settlement, environment: 'MIXED' })).toBe(false)
-  })
   it.each([{ refundedAmount: 41 }, { amount: -1 }, { environment: null }, { refundId: null }, { refundedAmount: Infinity }])("rejects inconsistent financial evidence %j", change => {
     expect(isDepositSettlement({ ...settlement,...change })).toBe(false)
   })

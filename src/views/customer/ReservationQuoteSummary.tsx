@@ -57,7 +57,7 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
           )}
         </div>
         <p className="mt-1 text-xs text-stone-600">
-          {q.rentalPeriodConfirmed ? 'Kỳ thuê đã chốt:' : 'Kỳ thuê dự kiến sau thời gian chuẩn bị:'} <b className="text-stone-900">{formatDisplayDate(q.startDate)} đến {formatDisplayDate(q.endDate, true)}</b> · {q.rentalMonths} tháng
+          {q.rentalPeriodConfirmed ? 'Kỳ thuê có tính phí (đã chốt):' : 'Kỳ thuê có tính phí (dự kiến):'} <b className="text-stone-900">{formatDisplayDate(q.startDate)} đến {formatDisplayDate(q.endDate, true)}</b> · {q.rentalMonths} tháng
         </p>
         <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-950">
           <b>{q.freeSetupDays ?? 0} ngày chuẩn bị miễn phí</b> tính từ khi bạn xác nhận nhận kho trống. Kỳ thuê bắt đầu theo mốc đã chốt sau khi hết thời gian miễn phí; hoàn tất chuẩn bị hoặc kiểm kê sớm không làm đổi ngày tính tiền.
@@ -94,7 +94,7 @@ export default function ReservationQuoteSummary({ quote: q, needsReview, context
         </div>
 
         <div className="flex justify-between gap-4 text-xs sm:text-sm">
-          <div><span className="text-stone-600">Tiền cọc đảm bảo (hoàn lại khi trả kho)</span><p className={formulaClass}>1 × đơn giá tháng {formatVndAmount(q.monthlyPrice)} = {formatVndAmount(q.securityDepositAmount)}.</p></div>
+          <div><span className="text-stone-600">Tiền cọc đảm bảo thuê (hoàn lại khi trả kho)</span><p className={formulaClass}>1 × đơn giá tháng {formatVndAmount(q.monthlyPrice)} = {formatVndAmount(q.securityDepositAmount)}.</p></div>
           <span className={amountClass}>+ {formatVndAmount(q.securityDepositAmount)}</span>
         </div>
         <div className="flex justify-between gap-4 border-t border-stone-200 pt-2 font-bold">

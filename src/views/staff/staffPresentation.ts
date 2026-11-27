@@ -109,7 +109,7 @@ const RESERVATION_STATUS_LABELS: Record<string, string> = {
   CONFIRMED: "Đã xác nhận giữ kho",
   UNIT_RESERVED: "Đã phân kho",
   READY_FOR_CHECKIN: "Sẵn sàng nhận kho",
-  AWAITING_CUSTOMER_RECEIPT: "Chờ khách hàng xác nhận nhận kho",
+  AWAITING_CUSTOMER_RECEIPT: "Đang cập nhật bàn giao",
   PREPARING: "Khách đang chuẩn bị hàng",
   COMPLETED: "Đã bàn giao",
   CANCELLED: "Đã hủy",
