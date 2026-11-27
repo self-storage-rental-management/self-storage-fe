@@ -17,7 +17,7 @@ interface Props {
   onOpenProfile: () => void
 }
 
-export default function BookingPersonalDetails({ user, identity, phone, address, onIdentityChange, onPhoneChange, onAddressChange, onOpenProfile }: Props) {
+export default function BookingPersonalDetails({ user, identity, phone, address, identityFromProfile, onIdentityChange, onPhoneChange, onAddressChange, onOpenProfile }: Props) {
   const [expanded, setExpanded] = useState(true)
   const [editing, setEditing] = useState(false)
   const [visible, setVisible] = useState(false)
@@ -32,6 +32,7 @@ export default function BookingPersonalDetails({ user, identity, phone, address,
   ]
   const completed = checks.filter(item => item.ok).length
   const input = 'w-full min-w-0 rounded-lg border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20'
+  const badge = 'ml-2 inline-block rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-normal text-stone-600'
   const label = 'mb-1.5 block text-sm font-medium text-stone-700'
   const jump = (id?: string) => {
     if (!id) { onOpenProfile(); return }
