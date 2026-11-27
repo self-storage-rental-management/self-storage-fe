@@ -1,12 +1,11 @@
 import InventoryDecisionSummary from '../../components/InventoryDecisionSummary'
-import InventoryGoodsNotice from '../../components/InventoryGoodsNotice'
 import InventoryMismatchEvidence, { parseInventoryInspectionReport } from '../staff/InventoryMismatchEvidence'
 import { intakeDecisionLabels } from '../../services/inventoryDecision'
 import { rentalEndDateForDisplay } from '../../domain/rentalTimeline'
 import type { CheckInInventoryLine } from '../../services/checkInApi'
 import { formatCustomerDate, formatCustomerDateTime } from '../../i18n/customerDate'
 import { userFacingError } from '../../presentation/userFacingError'
-import { savedReservationQuote } from '../../services/reservationSnapshot'
+import { savedReservationQuote, MISSING_RESERVATION_SNAPSHOT } from '../../services/reservationSnapshot'
 import { useEffect, useRef, useState } from 'react'
 import { Button, Card, Modal } from '../../components/ui'
 import VietnameseDateInput from '../../components/VietnameseDateInput'
@@ -174,7 +173,7 @@ export function InventoryResolutionNotice({ detail, now, submitting, onResolve, 
       {!partialAccepted && !returnRequested && !confirmReturnOpen && <div className="mt-3 flex flex-wrap justify-end gap-2">
         {detail.inventoryFullFit && <Button size="sm" disabled={submitting} onClick={() => onResolve('ACCEPT_FULL')}>Nhận toàn bộ hàng</Button>}
         {!detail.inventoryFullFit && detail.inventoryReturnCanExtend && onExtendReturnWindow && (
-          <Button size="sm" variant="outline" disabled={submitting} onClick={onExtendReturnWindow}>{detail.inventoryReturnExtensionDays != null ? `Gia hạn thêm ${detail.inventoryReturnExtensionDays} ngày` : 'Gia hạn trả kho'}</Button>
+          <Button size="sm" variant="outline" disabled={submitting} onClick={onExtendReturnWindow}>Yêu cầu kéo dài thời gian</Button>
         )}
         {!detail.inventoryFullFit && <Button size="sm" variant="danger" disabled={submitting || !canPlanReturn} onClick={() => { setConfirmReturnOpen(true) }}>Tạo yêu cầu trả kho ngay</Button>}
       </div>}
@@ -183,7 +182,7 @@ export function InventoryResolutionNotice({ detail, now, submitting, onResolve, 
         <p className="text-red-950">Vui lòng dọn hết hàng trong thời hạn trả kho và báo cơ sở khi sẵn sàng bàn giao.</p>
         <div className="flex flex-wrap justify-end gap-2">
           {detail.inventoryReturnCanExtend && onExtendReturnWindow && (
-            <Button size="sm" variant="outline" disabled={submitting} onClick={onExtendReturnWindow}>{detail.inventoryReturnExtensionDays != null ? `Gia hạn thêm ${detail.inventoryReturnExtensionDays} ngày` : 'Gia hạn trả kho'}</Button>
+            <Button size="sm" variant="outline" disabled={submitting} onClick={onExtendReturnWindow}>Yêu cầu kéo dài thời gian</Button>
           )}
           <Button size="sm" variant="outline" disabled={submitting} onClick={() => setConfirmReturnOpen(false)}>Hủy</Button>
           <Button size="sm" variant="danger" disabled={submitting || !canPlanReturn} onClick={() => { setConfirmReturnOpen(false); onResolve('CANCEL_AND_RETURN') }}>{submitting ? 'Đang gửi…' : 'Xác nhận yêu cầu trả kho'}</Button>
@@ -607,7 +606,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
           {handoverDocumentsAvailable && <Button variant="outline" size="sm" className="min-h-10 w-full justify-center" disabled={busy} onClick={() => void loadHandoverDocuments('contract')}>Xem hợp đồng đã ký</Button>}
           {recordsAvailable && <Button variant="outline" size="sm" className="min-h-10 w-full justify-center" disabled={busy} onClick={() => void loadHandoverDocuments('records')}>Xem biên bản</Button>}
           {onRequestSupport && <Button type="button" variant="outline" size="sm" className="min-h-10 w-full justify-center" onClick={onRequestSupport}>Hỗ trợ đơn này</Button>}
-          {['PAYMENT_GRACE', 'PAYMENT_REVIEW', 'REJECTED'].includes(r.status) && <CustomerPaymentComplaint reservation={r} complaintExpiresAt={detail?.complaintExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />}
+          {['PAYMENT_GRACE', 'PAYMENT_REVIEW'].includes(r.status) && <CustomerPaymentComplaint reservation={r} complaintExpiresAt={detail?.complaintExpiresAt} now={now} onMessage={setMessage} onRefresh={onRefresh} />}
           {APPOINTMENT_EDITABLE_STATUSES.some(status => status === r.status) && <Button variant="ghost" size="sm" className="reservation-action reservation-action-cancel" onClick={() => setCancelConfirmOpen(true)}>Hủy giữ kho</Button>}
           {['EXPIRED', 'COMPLETED'].includes(r.status) && onDelete && <Button variant="danger" size="sm" className="min-h-10 w-full justify-center" onClick={() => setDeleteConfirmOpen(true)}>Xóa đơn đặt giữ kho</Button>}
         </div>
@@ -721,7 +720,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
         </div>}
       </section>
       <section role="tabpanel" id={`reservation-quote-${r.id}`} aria-labelledby={`reservation-quote-tab-${r.id}`} hidden={activeSection !== 'quote'} className="w-full min-w-0 space-y-4">
-          {savedQuote && <ReservationQuoteSummary quote={{ ...savedQuote, facilityName: savedQuote.facilityName || facilityName, unitTypeName: savedQuote.unitTypeName || unitTypeName }} needsReview={false} context="reservation" handoverTermsVersion={detail?.attendance?.termsVersion} />}
+          {savedQuote ? <ReservationQuoteSummary quote={{ ...savedQuote, facilityName: savedQuote.facilityName || facilityName, unitTypeName: savedQuote.unitTypeName || unitTypeName }} needsReview={false} context="reservation" handoverTermsVersion={detail?.attendance?.termsVersion} /> : <p role="status">{MISSING_RESERVATION_SNAPSHOT}</p>}
             {r.setupExitReviewRequired && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><b>Đang chờ Ban điều hành quyết định hoàn tiền</b><p className="mt-1 text-xs">Yêu cầu hủy/trả trong thời gian chuẩn bị không tự động hoàn tiền. Khoản hoàn và bước kiểm tra trả kho sẽ được quyết định theo tình trạng hàng thực tế.</p></div>}
             {remainingPayment && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-950">
               <p className="font-bold">Biên lai thanh toán phần còn lại</p>
@@ -783,7 +782,6 @@ export default function CustomerReservationCard({ user, reservation: r, facility
         {documentGroups.map(group => <section key={group.key} className="space-y-3">
           {group.title && <h3 className="border-b border-stone-200 pb-2 text-sm font-semibold">{group.title}</h3>}
           {group.key === 'inventory' && detail && <>
-            {(inspectionReport || detail.inventoryDecision) && <InventoryGoodsNotice />}
             {detail.inventoryDecision && <InventoryDecisionSummary decision={detail.inventoryDecision} />}
             {inspectionReport && <InventoryMismatchEvidence item={{
               handover: inspectionReport,

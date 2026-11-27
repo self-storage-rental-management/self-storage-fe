@@ -1,5 +1,5 @@
-import ProcessingLeaseBoundary from '../../components/ProcessingLeaseBoundary'
 import { receiptDisplayCode } from '../../utils/recordDisplayCode'
+import ProcessingLeaseBoundary from '../../components/ProcessingLeaseBoundary'
 import ReturnPolicyNotice from '../../components/ReturnPolicyNotice'
 import { ViolationRecoveryEntry } from '../return-api/ViolationRecoveryPanel'
 import { useReturnRecords } from '../../hooks/useReturnRecords'
@@ -295,9 +295,9 @@ const SAMPLE_RETURNS: Array<{
     returnedLock: true,
     inspectionNotes: 'Thay thế 01 bản lề cửa kho bị xệ. Bàn giao đủ khóa.',
     customerDecisionNote: 'Đã xác nhận quyết toán.',
-    managerResolutionNote: 'Đã ghi nhận hoàn tiền cọc bằng chuyển khoản.',
+    managerResolutionNote: 'Đã hoàn tiền cọc thành công vào tài khoản khách hàng qua cổng VNPay.',
     proposedUnitStatus: 'available',
-    settlementPaymentId: 'BANK-REFUND-88992211',
+    settlementPaymentId: 'VNPAY-REFUND-88992211',
     completedAt: '2026-10-06 14:30:00',
   },
 ]
@@ -554,7 +554,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
     setProposedUnit(item.proposedUnitStatus || 'available')
     setInspectProposedUnit(item.proposedUnitStatus || 'available')
     setResolutionNote(item.managerResolutionNote ?? (useApi ? '' : 'Ban Điều Hành xem xét: Chấp thuận miễn giảm phí vệ sinh cho khách hàng sau khi kiểm tra biên nhận.'))
-    setRefundReference(useApi ? '' : `BANK-REFUND-${Date.now().toString().slice(-6)}`)
+    setRefundReference(useApi ? '' : `VNPAY-REFUND-${Date.now().toString().slice(-6)}`)
     setRefundNotes(useApi ? '' : `Đã chuyển hoàn tiền cọc cho khách hàng ${item.customerName} theo quyết toán thanh lý hợp đồng.`)
     setSetupRefundAmount(item.netRefundAmount || item.depositAmount || 0)
     setSetupRentalRefundAmount(item.earlyTerminationPolicy?.rentalRefundAmount || 0)
@@ -846,7 +846,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
           ? {
               ...r,
               status: 'completed',
-              settlementPaymentId: refundReference.trim() || `BANK-REFUND-${Date.now().toString().slice(-6)}`,
+              settlementPaymentId: refundReference.trim() || `VNPAY-REFUND-${Date.now().toString().slice(-6)}`,
               completedAt: new Date().toLocaleString('vi-VN'),
             }
           : r
@@ -858,7 +858,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
           ? {
               ...prev,
               status: 'completed',
-              settlementPaymentId: refundReference.trim() || `BANK-REFUND-${Date.now().toString().slice(-6)}`,
+              settlementPaymentId: refundReference.trim() || `VNPAY-REFUND-${Date.now().toString().slice(-6)}`,
               completedAt: new Date().toLocaleString('vi-VN'),
             }
           : null
@@ -1274,17 +1274,10 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
             setSelectedItem(previous => previous ? {
               ...previous,
               ...latest,
+              netRefundAmount: latest.netRefundAmount ?? Number.NaN,
+              amountDueFromCustomer: latest.amountDueFromCustomer ?? Number.NaN,
               scheduledDate: latest.scheduledDate || previous.scheduledDate,
-              customerPhone: latest.customerPhone || undefined,
-              depositAmount: latest.depositAmount ?? previous.depositAmount,
-              totalDeductions: latest.totalDeductions ?? previous.totalDeductions,
-              netRefundAmount: latest.netRefundAmount ?? previous.netRefundAmount,
-              amountDueFromCustomer: latest.amountDueFromCustomer ?? previous.amountDueFromCustomer,
-              damageFee: latest.damageFee ?? previous.damageFee,
-              cleaningFee: latest.cleaningFee ?? previous.cleaningFee,
-              lostItemFee: latest.lostItemFee ?? previous.lostItemFee,
-              overdueFee: latest.overdueFee ?? previous.overdueFee,
-              outstandingFee: latest.outstandingFee ?? previous.outstandingFee,
+              customerPhone: latest.customerPhone || '',
               customerDecisionNote: latest.customerDecisionNote ?? null,
               returnedKey: latest.returnedKey ?? null,
               returnedCard: latest.returnedCard ?? null,

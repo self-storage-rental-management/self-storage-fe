@@ -4,7 +4,7 @@ export default function CustomerTransactionTerms({ handoverTermsVersion, deposit
   const hasCurrentHandoverTerms = (handoverTermsVersion === undefined ? HANDOVER_TERMS_VERSION : handoverTermsVersion) === HANDOVER_TERMS_VERSION
   const handoverNotice = hasCurrentHandoverTerms ? HANDOVER_TERMS_NOTICE
     : handoverTermsVersion === LEGACY_HANDOVER_TERMS_VERSION ? LEGACY_HANDOVER_TERMS_NOTICE
-    : 'Hạn đến nhận kho và xử lý khoản giữ chỗ theo điều khoản đã lưu của đơn.'
+    : 'Hạn nhận kho và xử lý khoản giữ chỗ theo điều khoản đã lưu của đơn.'
   const terms = [
     ['Đặt kho và thanh toán', 'Đơn được xác nhận sau khi khoản giữ chỗ được ghi nhận. Hàng cần duyệt phải được duyệt trước khi thanh toán. Thanh toán theo số tiền và thời hạn hiển thị trên đơn.'],
     ['Khoản giữ chỗ và cọc đảm bảo', 'Khoản trả trước giữ chỗ 20% được trừ vào tổng tiền phải thanh toán. Cọc đảm bảo được ghi riêng và quyết toán khi trả kho.'],

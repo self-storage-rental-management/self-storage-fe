@@ -1,11 +1,12 @@
-import BusinessDeadlinePolicies from './BusinessDeadlinePolicies'
 import { recordDisplayCode } from '../../utils/recordDisplayCode'
+import ReturnPolicyNotice from '../../components/ReturnPolicyNotice'
 import { useState, useMemo, useCallback, useEffect } from "react"
 import DuongPolicyWorkspace from "../rental-support-integration/DuongPolicyWorkspace"
 import UnitTypeReviewModal from "./UnitTypeReviewModal"
 import { listFacilityContentPolicies, saveFacilityContentPolicies, type FacilityContentPolicy } from "../../services/facilityContentPolicyApi"
 import BusinessReturnsPanel from "./BusinessReturnsPanel"
 import { ViolationRecoveryPanel } from '../return-api/ViolationRecoveryPanel'
+import BusinessRefundRequestsPanel from "./BusinessRefundRequestsPanel"
 import BusinessDamageIncidentsPanel from "./BusinessDamageIncidentsPanel"
 import CentralizedPolicyWorkspace from "./CentralizedPolicyWorkspace"
 import BusinessRentalRegulationsPanel from "./BusinessRentalRegulationsPanel"
@@ -67,7 +68,6 @@ import {
 } from "../../data/demoDatabase"
 
 import { formatVnd, formatVndAmount } from "../../i18n/currency"
-import { scheduleRows, returnFeeRows, getReturnFeeDetails, getReturnFeeSchedule, publishReturnFeeSchedule, type ReturnFeeDetails, type ReturnFeeSchedule } from "../../services/returnApi"
 
 import { exportRevenueExcel } from "../../utils/excelExport"
 
@@ -96,7 +96,7 @@ import { getBusinessRackLayout } from "../../services/rackLayoutApi"
 import type { RackResult } from "../../services/rackLayoutApi"
 import { isApiAuthenticated, canApiActor } from "../../services/authApi"
 import { isUuid } from "../../services/renewalOperationsApi"
-import { businessNotificationText, listNotifications, markNotificationRead, notifyBell, type ApiNotification } from "../../services/notificationApi"
+import { listNotifications, markNotificationRead, notifyBell, type ApiNotification } from "../../services/notificationApi"
 import {
   type RentalPackagePolicyApi,
   createBusinessPackagePolicy,
@@ -636,6 +636,7 @@ export default function BusinessApp({
   }
 
   const NAV: NavItem[] = [
+    // ── CƠ SỞ ──
     {
       id: "facilities",
       label: "Quản lý cơ sở",
@@ -643,68 +644,67 @@ export default function BusinessApp({
       group: "Cơ sở",
       permission: "facilities:read",
     },
+
+    // ── BẢNG GIÁ & GÓI THUÊ ──
     {
       id: "pricing",
       label: "Thiết lập giá kho",
       icon: Icon.dollar,
-      group: "Thiết lập",
+      group: "Bảng giá & gói thuê",
       permission: "policies:read",
     },
     {
       id: "policies",
       label: "Gói thuê",
       icon: Icon.calendar,
-      group: "Thiết lập",
+      group: "Bảng giá & gói thuê",
       permission: "policies:read",
     },
-    {
-      id: "deadlines",
-      label: "Thiết lập thời hạn kho",
-      icon: Icon.calendar,
-      group: "Thiết lập",
-      permission: "policies:read",
-    },
-    {
-      id: "centralized-policies",
-      label: "Chính sách",
-      icon: Icon.shield,
-      group: "Thiết lập",
-      permission: "policies:read",
-    },
-    {
-      id: "rental-regulations",
-      label: "Quy định khi thuê",
-      icon: Icon.clipboard,
-      group: "Thiết lập",
-      permission: "policies:read",
-    },
-    {
-      id: "rental-source-policies",
-      label: "Chính sách gia hạn",
-      icon: Icon.policy,
-      group: "Thiết lập",
-      permission: "policies:read",
-    },
+
+    // ── VẬN HÀNH VÀ KHUYẾN MÃI ──
     {
       id: "returns",
       label: "Trả kho",
       icon: Icon.clipboard,
-      group: "Vận hành",
+      group: "Vận hành và khuyến mãi",
       permission: "returns:read",
     },
     {
       id: "recoveries",
       label: "Thu hồi kho",
       icon: Icon.clipboard,
-      group: "Vận hành",
+      group: "Vận hành và khuyến mãi",
       permission: "returns:read",
     },
     {
       id: "damage-incidents",
       label: "Xử lý sự cố",
       icon: Icon.alert,
-      group: "Vận hành",
+      group: "Vận hành và khuyến mãi",
       permission: "facilities:read",
+    },
+
+    // ── QUY ĐỊNH PHÁP LÝ ──
+    {
+      id: "centralized-policies",
+      label: "Chính sách",
+      icon: Icon.shield,
+      group: "Quy Định & Pháp Lý",
+      permission: "policies:read",
+    },
+    {
+      id: "rental-regulations",
+      label: "Quy định khi thuê",
+      icon: Icon.clipboard,
+      group: "Quy định pháp lý",
+      permission: "policies:read",
+    },
+    {
+      id: "rental-source-policies",
+      label: "Chính sách gia hạn",
+      icon: Icon.policy,
+      group: "Quy định pháp lý",
+      permission: "policies:read",
     },
   ]
 
@@ -714,63 +714,6 @@ export default function BusinessApp({
 
   const [pricingCollapsedMap, setPricingCollapsedMap] = useState<Record<string, boolean>>({})
   const [feeScheduleCollapsed, setFeeScheduleCollapsed] = useState(false)
-  const [feeSchedule, setFeeSchedule] = useState<ReturnFeeSchedule | null>(null)
-  const [feeDraft, setFeeDraft] = useState<Record<string, string> | null>(null)
-  const [feeDetailsDraft, setFeeDetailsDraft] = useState<Record<string, ReturnFeeDetails> | null>(null)
-  const [feeError, setFeeError] = useState("")
-  const [feeSaving, setFeeSaving] = useState(false)
-  useEffect(() => {
-    if (page !== "pricing" || !isApiAuthenticated() || feeDraft) return
-    let active = true
-    getReturnFeeSchedule().then(value => { if (active) { setFeeSchedule(value); setFeeError("") } })
-      .catch(() => { if (active) setFeeError("Không tải được biểu phí. Vui lòng tải lại trang.") })
-    return () => { active = false }
-  }, [page, !!feeDraft])
-  const [newFeeKind, setNewFeeKind] = useState('custom_minor')
-  const feeCodes = feeDraft ? Object.keys(feeDraft) : feeSchedule ? scheduleRows(feeSchedule).map(row => row.code) : []
-  const addFee = () => {
-    if (!feeDraft || !feeDetailsDraft) return
-    const standard = returnFeeRows.find(row => row.code === newFeeKind)
-    const code = standard?.code ?? newFeeKind + '_' + crypto.randomUUID().replace(/-/g, '')
-    setFeeDraft({ ...feeDraft, [code]: String(standard?.price ?? 0) })
-    setFeeDetailsDraft({ ...feeDetailsDraft, [code]: standard
-      ? { label: standard.label, trigger: standard.trigger, applies: standard.applies }
-      : { label: '', trigger: '', applies: 'Nghiệm thu trả kho' } })
-    setNewFeeKind('custom_minor')
-    setFeeScheduleCollapsed(false)
-    requestAnimationFrame(() => document.getElementById('fee-label-' + code)?.focus())
-  }
-  const removeFee = (code: string) => {
-    if (!feeDraft || !feeDetailsDraft) return
-    const prices = { ...feeDraft }, details = { ...feeDetailsDraft }
-    delete prices[code]
-    delete details[code]
-    setFeeDraft(prices)
-    setFeeDetailsDraft(details)
-  }
-  const editFeeSchedule = () => {
-    if (!feeSchedule) return
-    setNewFeeKind('custom_minor')
-    setFeeDraft(Object.fromEntries(scheduleRows(feeSchedule).map(row => [row.code, String(feeSchedule.prices[row.code] ?? row.price)])))
-    setFeeDetailsDraft(Object.fromEntries(scheduleRows(feeSchedule).map(row => [row.code, { ...getReturnFeeDetails(feeSchedule, row.code) }])))
-    setFeeError("")
-  }
-  const editFeeDetail = (code: string, field: keyof ReturnFeeDetails, value: string) => {
-    setFeeDetailsDraft(current => current ? { ...current, [code]: { ...current[code], [field]: value } } : current)
-  }
-  const submitFeeSchedule = async () => {
-    if (!feeSchedule || !feeDraft || !feeDetailsDraft || feeSaving) return
-    if (Object.values(feeDraft).some(value => !/^\d+$/.test(value) || !Number.isSafeInteger(Number(value)))) { setFeeError("Mức phí phải là số nguyên không âm hợp lệ."); return }
-    if (Object.values(feeDetailsDraft).some(detail => Object.values(detail).some(value => !value.trim()))) { setFeeError("Vui lòng điền tên phí, điều kiện và đối tượng cho mỗi hạng mục."); return }
-    setFeeSaving(true); setFeeError("")
-    try {
-      const prices = Object.fromEntries(Object.entries(feeDraft).map(([key, value]) => [key, Number(value)]))
-      const details = feeDetailsDraft
-      const saved = await publishReturnFeeSchedule({ revision: feeSchedule.revision, prices, details })
-      setFeeSchedule(saved); setFeeDraft(null); setFeeDetailsDraft(null)
-    } catch (error) { setFeeError(error instanceof Error ? error.message : "Không công bố được biểu phí.") }
-    finally { setFeeSaving(false) }
-  }
 
   const [policiesList, setPoliciesList] = useState<PolicyItem[]>(() =>
     isApiAuthenticated() ? [] : loadInitialPolicies(),
@@ -2010,12 +1953,8 @@ export default function BusinessApp({
       try {
         const backendFacilityId = await resolveBackendFacilityId(fac)
         const page = await listAccessibleUnitTypes(backendFacilityId, 0, 100)
-        const allTypes = [...page.data]
-        for (let pageIndex = 1; pageIndex < page.pagination.totalPages; pageIndex++) {
-          allTypes.push(...(await listAccessibleUnitTypes(backendFacilityId, pageIndex, 100)).data)
-        }
-        const editableUnitTypes = allTypes.filter(unitType => isUnitTypePriceEditable(unitType.status))
-        setBackendPricingArchivedCount(allTypes.length - editableUnitTypes.length)
+        const editableUnitTypes = page.data.filter(unitType => isUnitTypePriceEditable(unitType.status))
+        setBackendPricingArchivedCount(page.data.length - editableUnitTypes.length)
         setBackendPricingUnitTypes(editableUnitTypes)
         setBackendPricingValues(Object.fromEntries(editableUnitTypes.map(unitType => [unitType.id, {
           monthlyPrice: isUnitTypePricingPending(unitType.status, unitType.monthlyPrice) ? 0 : Number(unitType.monthlyPrice) || 0,
@@ -2048,11 +1987,11 @@ export default function BusinessApp({
         return !value || value.monthlyPrice <= 0
       })
       if (invalid) {
-        showToast('Giá thuê phải lớn hơn 0. Tiền cọc bằng giá thuê một tháng.')
+        showToast('Giá thuê phải lớn hơn 0. Tiền cọc được tự động lấy bằng giá thuê 1 tháng.')
         return
       }
       try {
-        await Promise.all(editableUnitTypes.map(async unitType => {
+        await Promise.all(editableUnitTypes.map(unitType => {
           const value = backendPricingValues[unitType.id]
           return priceBusinessUnitTypeApi(unitType.id, {
             monthlyPrice: value.monthlyPrice,
@@ -2469,7 +2408,6 @@ export default function BusinessApp({
       facilities: 'Quản lý cơ sở',
       performance: 'Hiệu Suất Mặt Bằng',
       pricing: 'Thiết lập giá kho',
-      deadlines: 'Thiết lập thời hạn kho',
       policies: 'Gói thuê',
       'rental-regulations': 'Quy định khi thuê',
       'rental-source-policies': 'Chính Sách Gia Hạn',
@@ -2479,7 +2417,7 @@ export default function BusinessApp({
     }
     notifyBell({
       title: pageTitles[page] || (lang === 'vi' ? 'Thông báo kinh doanh' : 'Business Notice'),
-      message: businessNotificationText(msg),
+      message: msg,
       page,
       date: new Date().toISOString()
     })
@@ -3743,6 +3681,7 @@ export default function BusinessApp({
               </Button>
             }
           />
+          <BusinessRefundRequestsPanel refreshVersion={returnsRefreshVersion} />
           <BusinessReturnsPanel user={user} refreshVersion={returnsRefreshVersion} />
         </div>
       )}
@@ -4049,6 +3988,8 @@ export default function BusinessApp({
       {/* ── RENTAL POLICIES & PACKAGES ───────────────────────── */}
       {page === "policies" && (
         <div className="fade-in space-y-6">
+          <ReturnPolicyNotice business />
+
           <SectionHeader
             title={
               lang === "vi"
@@ -4104,7 +4045,7 @@ export default function BusinessApp({
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold text-stone-600 whitespace-nowrap">Trạng thái:</span>
                   <select
-                    className="h-11 min-w-40 rounded-lg border border-stone-300 bg-white px-3 py-0 text-xs font-medium leading-normal text-stone-800 shadow-2xs focus:border-amber-500 focus:outline-none"
+                    className="h-9 rounded-lg border border-stone-300 bg-white px-3 text-xs font-medium text-stone-800 shadow-2xs focus:border-amber-500 focus:outline-none"
                     value={packageStatusFilter}
                     onChange={e => setPackageStatusFilter(e.target.value)}
                   >
@@ -4116,7 +4057,7 @@ export default function BusinessApp({
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold text-stone-600 whitespace-nowrap">Sắp xếp:</span>
                   <select
-                    className="h-11 min-w-44 rounded-lg border border-stone-300 bg-white px-3 py-0 text-xs font-medium leading-normal text-stone-800 shadow-2xs focus:border-amber-500 focus:outline-none"
+                    className="h-9 rounded-lg border border-stone-300 bg-white px-3 text-xs font-medium text-stone-800 shadow-2xs focus:border-amber-500 focus:outline-none"
                     value={packageSort}
                     onChange={e => setPackageSort(e.target.value)}
                   >
@@ -4291,7 +4232,7 @@ export default function BusinessApp({
                                       ? "bg-stone-100 text-stone-700 border-stone-200/80"
                                       : "bg-amber-50 text-amber-800 border-amber-200/70"
                                 }`}>
-                                  {isSpecific && <span className="text-xs">📍</span>}
+                                  <span className="text-xs">{!isSpecific ? "🌐" : "📍"}</span>
                                   <span>
                                     {!isSpecific
                                       ? "Toàn hệ thống"
@@ -4453,7 +4394,7 @@ export default function BusinessApp({
                                   : "bg-amber-50 text-amber-800 border-amber-200/70"
                             }`}
                           >
-                            {isSpecific && <span className="text-xs">📍</span>}
+                            <span className="text-xs">{!isSpecific ? "🌐" : "📍"}</span>
                             <span>
                               {!isSpecific
                                 ? "Toàn hệ thống"
@@ -4680,8 +4621,6 @@ export default function BusinessApp({
       )}
 
       {/* ── PRICING & FEES ────────────────────────────────────── */}
-      {page === "deadlines" && <BusinessDeadlinePolicies facilities={facilitiesList} resolveFacilityId={resolveBackendFacilityId} connected={isApiAuthenticated()} />}
-
       {page === "pricing" && (() => {
         const currentPricingFacilities = selectedPricingFacility ? [selectedPricingFacility] : facilitiesList
         const areAllPricingCollapsed =
@@ -4930,7 +4869,7 @@ export default function BusinessApp({
 
             <Card className="p-5">
               <div
-                className="flex flex-wrap items-center justify-between gap-3 cursor-pointer select-none mb-3"
+                className="flex items-center justify-between cursor-pointer select-none mb-3"
                 onClick={() => setFeeScheduleCollapsed((prev) => !prev)}
               >
                 <div className="flex items-center gap-2">
@@ -4940,20 +4879,8 @@ export default function BusinessApp({
                   <h3 className="font-semibold text-slate-800">
                     {lang === "vi" ? "Biểu Phí Dịch Vụ Quy Định" : "Fee Schedule"}
                   </h3>
-                  <Badge variant="muted">{visibleRuntimeFees.length + feeCodes.length} hạng mục</Badge>
+                  <Badge variant="muted">{visibleRuntimeFees.length} loại phí</Badge>
                 </div>
-                <div className="flex flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                  {feeSchedule && (feeDraft ? <>
-                    <select aria-label="Nhóm phí cần thêm" value={newFeeKind} disabled={feeSaving} onChange={e => setNewFeeKind(e.target.value)} className="rounded-lg border p-2 text-sm">
-                      <option value="custom_cleaning">Hạng mục vệ sinh</option>
-                      <option value="custom_minor">Hạng mục hư hỏng nhẹ</option>
-                      <option value="custom_major">Hạng mục hư hỏng nặng</option>
-                      {returnFeeRows.filter(row => !(row.code in feeDraft)).map(row => <option key={row.code} value={row.code}>{row.label}</option>)}
-                    </select>
-                    <Button size="sm" variant="outline" disabled={feeSaving} onClick={addFee}>Thêm hạng mục</Button>
-                    <Button size="sm" disabled={feeSaving} onClick={submitFeeSchedule}>{feeSaving ? 'Đang công bố…' : 'Công bố biểu phí'}</Button>
-                    <Button size="sm" variant="outline" disabled={feeSaving} onClick={() => { setFeeDraft(null); setFeeDetailsDraft(null); setFeeError("") }}>Hủy</Button>
-                  </> : <Button size="sm" variant="outline" onClick={() => { editFeeSchedule(); setFeeScheduleCollapsed(false) }}>Chỉnh sửa biểu phí</Button>)}
                 <Button
                   variant="outline"
                   size="sm"
@@ -4965,12 +4892,7 @@ export default function BusinessApp({
                 >
                   {feeScheduleCollapsed ? "Mở rộng" : "Thu gọn"}
                 </Button>
-                </div>
               </div>
-
-              <p className="mb-2 text-sm text-slate-600">Các thay đổi áp dụng cho đơn đặt sau khi công bố. Đơn đã tạo giữ biểu phí cũ.</p>
-              <p className="mb-3 text-xs text-slate-500">Chọn nhóm phí để thêm hạng mục vào phần nghiệm thu tương ứng. Mức phí kho sạch là 0 ₫.</p>
-              {feeError && <p role="alert" className="mb-3 text-sm text-red-700">{feeError}</p>}
 
               {!feeScheduleCollapsed && (
                 <Table>
@@ -4980,11 +4902,19 @@ export default function BusinessApp({
                       <Th>{lang === "vi" ? "Mức Phí" : "Amount"}</Th>
                       <Th>{lang === "vi" ? "Điều Kiện Áp Dụng" : "Trigger"}</Th>
                       <Th>{lang === "vi" ? "Đối Tượng" : "Applies To"}</Th>
-                      {feeDraft && <Th>Thao tác</Th>}
                     </tr>
                   </Thead>
                   <Tbody>
-                    {visibleRuntimeFees.map((f) => (
+                    {visibleRuntimeFees.length === 0 ? (
+                      <Tr>
+                        <Td colSpan={4} className="text-center py-6 text-slate-400">
+                          {lang === "vi"
+                            ? "Chưa có biểu phí dịch vụ phát sinh ngoài giá thuê & cọc."
+                            : "No fee schedule configured."}
+                        </Td>
+                      </Tr>
+                    ) : (
+                      visibleRuntimeFees.map((f) => (
                         <Tr key={f.type}>
                           <Td className="font-medium text-slate-900">
                             {getFeeType(f.type, lang)}
@@ -5001,24 +4931,8 @@ export default function BusinessApp({
                             </Badge>
                           </Td>
                         </Tr>
-                      ))}
-                    {feeSchedule && feeCodes.map(code => {
-                      const row = returnFeeRows.find(item => item.code === code) ?? { code, unit: code.startsWith('custom_cleaning_') ? '' : 'lần', label: feeDetailsDraft?.[code]?.label || feeSchedule.details[code]?.label || 'Hạng mục mới', price: 0 }
-                      const detail = feeDetailsDraft?.[row.code] ?? getReturnFeeDetails(feeSchedule, row.code)
-                      const textEditor = (field: keyof ReturnFeeDetails, title: string) => feeDetailsDraft
-                        ? <textarea id={field === 'label' ? 'fee-label-' + row.code : undefined} aria-label={`${title}: ${row.label}`} disabled={feeSaving} className="w-full min-w-40 rounded border p-2" rows={2} value={detail[field]} onChange={e => editFeeDetail(row.code, field, e.target.value)} />
-                        : detail[field]
-                      return <Tr key={row.code}>
-                        <Td className="font-medium text-slate-900">{textEditor('label', 'Tên phí')}</Td>
-                        <Td className="font-semibold text-emerald-700 font-mono">
-                          {feeDraft ? <input aria-label={`Mức phí: ${row.label}`} disabled={feeSaving || row.code === 'clean'} title={row.code === 'clean' ? 'Kho sạch có mức phí cố định 0 ₫' : undefined} type="number" min="0" step="1" className="w-36 rounded border p-2" value={row.code === 'clean' ? '0' : feeDraft[row.code] ?? ''} onChange={e => setFeeDraft(current => current ? { ...current, [row.code]: e.target.value } : current)} /> : formatVndAmount(feeSchedule.prices[row.code] ?? row.price)}
-                          {row.unit && ` / ${row.unit}`}
-                        </Td>
-                        <Td className="text-slate-600">{textEditor('trigger', 'Điều kiện áp dụng')}</Td>
-                        <Td>{textEditor('applies', 'Đối tượng')}</Td>
-                        {feeDraft && <Td><Button size="sm" variant="outline" disabled={feeSaving} aria-label={`Xóa ${detail.label || 'hạng mục mới'}`} onClick={() => removeFee(row.code)}>Xóa</Button></Td>}
-                      </Tr>
-                    })}
+                      ))
+                    )}
                   </Tbody>
                 </Table>
               )}
@@ -5055,8 +4969,8 @@ export default function BusinessApp({
         size="2xl"
         title={
           editingPriceFacility
-            ? `Chỉnh sửa biểu giá: ${editingPriceFacility.name} (${editingPriceFacility.code || recordDisplayCode(editingPriceFacility.id)})`
-            : "Chỉnh sửa biểu giá cơ sở"
+            ? `Chỉnh Sửa Biểu Giá: ${editingPriceFacility.name} (${editingPriceFacility.code || recordDisplayCode(editingPriceFacility.id)})`
+            : "Chỉnh Sửa Biểu Giá Cơ Sở"
         }
       >
         {editingPriceFacility && (
@@ -5092,13 +5006,13 @@ export default function BusinessApp({
                 </p>}
                 {!backendPricingLoading && backendPricingUnitTypes.map(unitType => {
                   const value = backendPricingValues[unitType.id] || { monthlyPrice: 0, securityDepositAmount: 0 }
-                  return <div key={unitType.id} className="grid gap-3 rounded-xl border border-stone-200 bg-white p-4 shadow-2xs sm:grid-cols-[1fr_190px_190px] sm:items-start">
+                  return <div key={unitType.id} className="grid gap-3 rounded-xl border border-stone-200 bg-white p-4 shadow-2xs sm:grid-cols-[1fr_190px_190px] sm:items-end">
                     <div>
                       <div className="flex items-center gap-2"><span className="rounded bg-amber-100 px-2 py-0.5 font-mono text-xs font-bold text-amber-900">{unitType.code}</span><b className="text-sm text-slate-900">{unitType.name}</b></div>
                       <p className="mt-2 text-xs text-slate-500">{unitType.lengthM} × {unitType.widthM} × {unitType.heightM} m · tải tối đa {unitType.maxLoadKg.toLocaleString('vi-VN')} kg · {unitType.availableCount ?? 0} gian khả dụng</p>
                     </div>
-                    <label className="block w-full text-[11px] font-semibold text-slate-700">Giá thuê (VNĐ/tháng)
-                      <div className="relative mt-1 w-full">
+                    <label className="text-[11px] font-semibold text-slate-700">Giá thuê (VNĐ/tháng)
+                      <div className="relative mt-1">
                         <input
                           type="text"
                           inputMode="numeric"
@@ -5116,8 +5030,8 @@ export default function BusinessApp({
                         </span>
                       </div>
                     </label>
-                    <div className="w-full text-[11px] font-semibold text-slate-700">Tiền cọc đảm bảo kho (VNĐ)
-                      <div className="mt-1 w-full rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-2 font-mono text-xs font-bold text-slate-900">
+                    <div className="text-[11px] font-semibold text-slate-700">Tiền cọc đảm bảo kho (VNĐ)
+                      <div className="mt-1 rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-2 font-mono text-xs font-bold text-slate-900">
                         {value.monthlyPrice > 0 ? `${value.monthlyPrice.toLocaleString('vi-VN')} ₫` : 'Tự động theo giá thuê 1 tháng'}
                       </div>
                       <p className="mt-1 text-[10px] font-normal text-stone-500">Luôn bằng giá thuê 1 tháng.</p>

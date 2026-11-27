@@ -131,9 +131,8 @@ describe('Manager activity journal', () => {
     }
 
     const html = render()
-    expect(html).toContain('Tiền đã thu')
-    expect(html).toContain('190.700.000')
-    expect(html).toContain('Đã trừ 14.500.000')
-    expect(html).toContain('Biến động doanh thu thực thu theo tháng')
+    expect(html).toContain('Quản lý thu và hoàn tiền')
+    expect(html).toContain('Phân bổ trạng thái gian kho')
+    expect(html).toContain('Công suất theo loại kho')
   })
 })

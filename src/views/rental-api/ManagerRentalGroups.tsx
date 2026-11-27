@@ -57,7 +57,7 @@ export default function ManagerRentalGroups(props: ({ kind: 'rental'; rows: Rent
           actions={<>
             <Button type="button" size="sm" variant="outline" aria-label={`Xem chi tiết ${rentalRecordLabel(row)}`} onClick={() => onDetail(row.id)}>Chi tiết hồ sơ</Button>
             <Button type="button" size="sm" variant="outline" className="!border-amber-400 !bg-amber-100 !text-amber-950 hover:!bg-amber-200"
-              aria-label={`Xem hợp đồng đã ký ${rentalRecordLabel(row)}`} onClick={() => setContractId(row.id)}>Xem hợp đồng đã ký</Button>
+              aria-label={`Xem trước hợp đồng ${rentalRecordLabel(row)}`} onClick={() => setContractId(row.id)}>Xem trước</Button>
           </>}
         />)}
       </RentalRecordGroup>})}
@@ -94,7 +94,7 @@ export default function ManagerRentalGroups(props: ({ kind: 'rental'; rows: Rent
           <thead className={`text-xs ${renewalTableHeadClass}`}><tr>
             {['Hồ sơ thuê', 'Lần gia hạn', 'Gian kho / Cơ sở', 'Trạng thái', 'Kết thúc kỳ']
               .map(label => <th key={label} scope="col" className={`px-4 py-3 font-medium ${label === 'Lần gia hạn' ? 'text-center' : ''}`}>{label}</th>)}
-            <th scope="col" className="px-4 py-3 text-center font-medium">Hợp đồng đã ký</th>
+            <th scope="col" className="px-4 py-3 text-center font-medium">Xem trước hợp đồng</th>
             <th scope="col" className="px-2 py-3 text-center font-medium">Chi tiết</th>
           </tr></thead>
           <tbody className="divide-y divide-stone-200">
@@ -109,7 +109,7 @@ export default function ManagerRentalGroups(props: ({ kind: 'rental'; rows: Rent
                 <td className="px-4 py-3"><span className="block truncate font-medium text-stone-900" title={renewal.storageUnit.code}>{renewal.storageUnit.code}</span><span className="block truncate text-xs text-stone-500" title={renewal.facility.name}>{renewal.facility.name}</span></td>
                 <td className="px-4 py-3"><span className={`${renewalBadgeClass} ${renewalStatusTone(renewal)}`}>{statusLabel || renewal.status}</span></td>
                 <td className="whitespace-nowrap px-4 py-3 tabular-nums text-stone-700">{endDate ? rentalDate(endDate) : 'Chưa xác định'}</td>
-                <td className="px-4 py-3 text-center"><button type="button" className={renewalPreviewClass} aria-label={`Xem hợp đồng đã ký ${recordLabel}`} onClick={() => setContractId(renewal.id)}><RenewalPreviewIcon />Xem hợp đồng đã ký</button></td>
+                <td className="px-4 py-3 text-center"><button type="button" className={renewalPreviewClass} aria-label={`Xem trước hợp đồng ${recordLabel}`} onClick={() => setContractId(renewal.id)}><RenewalPreviewIcon />Xem trước</button></td>
                 <td className="px-1 py-3 text-center"><button type="button" title="Xem chi tiết hồ sơ" className={renewalDetailClass} aria-label={`Xem chi tiết ${recordLabel}`} onClick={() => onDetail(renewal.id)}>Chi tiết<RenewalDetailIcon /></button></td>
               </tr>
             })}

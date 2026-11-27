@@ -298,7 +298,7 @@ export default function CentralizedPolicyWorkspace({ user, lang = 'vi', initialP
       {/* ── HEADER BANNER ── */}
       <div className="bg-gradient-to-r from-amber-950 via-stone-900 to-amber-900 rounded-2xl p-6 sm:p-8 text-white shadow-md relative overflow-hidden">
         <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-radial from-amber-500/10 to-transparent pointer-events-none" />
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="relative z-10">
           <div className="space-y-2 max-w-3xl">
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-400/20 text-amber-200 border border-amber-300/30">
@@ -315,26 +315,6 @@ export default function CentralizedPolicyWorkspace({ user, lang = 'vi', initialP
             <p className="text-stone-300 text-sm leading-relaxed">
               Mô-đun quản trị tập trung toàn bộ 9 chính sách cốt lõi của StorageHub. BO ban hành quy chuẩn chung - Toàn bộ cơ sở và khách hàng tự động áp dụng đồng bộ, bảo vệ quyền lợi hợp đồng đang chạy.
             </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            <Button
-              type="button"
-              variant="outline"
-              className="bg-white/10 hover:bg-white/20 text-white border-white/20 text-xs px-3.5 py-2 cursor-pointer"
-              onClick={() => setHistoryModalOpen(true)}
-            >
-              Xem Lịch Sử Ban Hành
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              className="bg-amber-600 hover:bg-amber-500 text-white text-xs px-4 py-2 font-semibold shadow-sm cursor-pointer flex items-center gap-1.5"
-              onClick={handleOpenPreviewDiff}
-            >
-              <span>Thẩm Định & Ban Hành</span>
-              <span>→</span>
-            </Button>
           </div>
         </div>
       </div>
@@ -370,7 +350,7 @@ export default function CentralizedPolicyWorkspace({ user, lang = 'vi', initialP
       <div className="space-y-6 fade-in">
         {/* Active Version Snapshot Card */}
         <Card className="p-6 border border-stone-200 bg-gradient-to-br from-white via-stone-50/50 to-amber-50/30 shadow-sm">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-stone-200/70 pb-4">
+          <div className="border-b border-stone-200/70 pb-4">
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <Badge variant="success">ĐANG ÁP DỤNG TOÀN HỆ THỐNG</Badge>
@@ -385,27 +365,6 @@ export default function CentralizedPolicyWorkspace({ user, lang = 'vi', initialP
               <p className="text-xs text-stone-600 mt-1 leading-relaxed">
                 {activePolicy?.changeSummary || 'Chính sách vận hành chuẩn hóa điều khoản đặt cọc, thanh toán, gia hạn và bồi hoàn của StorageHub.'}
               </p>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="text-xs font-semibold cursor-pointer"
-                onClick={() => setEditModalOpen(true)}
-              >
-                Điều chỉnh thông số
-              </Button>
-              <Button
-                type="button"
-                variant="primary"
-                size="sm"
-                className="bg-amber-700 hover:bg-amber-800 text-white text-xs font-semibold shadow-xs cursor-pointer"
-                onClick={handleOpenPreviewDiff}
-              >
-                Ban hành phiên bản mới
-              </Button>
             </div>
           </div>
 

@@ -5,7 +5,7 @@ import { actorToUser, getAuthenticatedActor } from '../../services/authApi'
 import { formatCustomerDateTime } from '../../i18n/customerDate'
 import { userFacingError } from '../../presentation/userFacingError'
 import { useEffect, useRef, useState } from 'react'
-import { savedReservationQuote } from '../../services/reservationSnapshot'
+import { savedReservationQuote, MISSING_RESERVATION_SNAPSHOT } from '../../services/reservationSnapshot'
 import { Button, Modal } from '../../components/ui'
 import { formatVndAmount as formatVnd } from '../../i18n/currency'
 import { ApiClientError } from '../../services/apiClient'
@@ -174,7 +174,7 @@ export default function CustomerReservationPayment({ receiptSlot, user, reservat
     setReceiptOpen(true)
   }
   const selectedReceipt = receiptSection === 'deposit' ? payment : remainingPayment
-  if (!snapshot) return null
+  if (!snapshot) return <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{MISSING_RESERVATION_SNAPSHOT}</p>
   const receiptButton = <Button variant="outline" size="sm" className="reservation-action reservation-action-receipt min-h-10 w-full justify-center" onClick={openReceipts}>Xem biên lai thanh toán</Button>
   return <>
     {reservation.status === 'AWAITING_PAYMENT' && <div className={`mt-3 w-fit max-w-full rounded-lg p-3 text-left text-xs ${timerTone}`}>
@@ -237,11 +237,11 @@ export default function CustomerReservationPayment({ receiptSlot, user, reservat
       <div className="space-y-4">
         {hasCurrentHandoverTerms ? (
           <ul className="list-disc space-y-2 pl-5 text-sm leading-6">
-            <li>{HANDOVER_WINDOW_NOTICE}{attendanceDeadline && <> Hạn đến nhận kho <b>{formatDisplayDateTime(attendanceDeadline)}</b>.</>}</li>
+            <li>{HANDOVER_WINDOW_NOTICE}{attendanceDeadline && <> Hạn nhận kho <b>{formatDisplayDateTime(attendanceDeadline)}</b>.</>}</li>
             <li>{HANDOVER_IDENTITY_NOTICE}</li>
             <li>{HANDOVER_FORFEITURE_NOTICE}</li>
           </ul>
-        ) : attendanceDeadline && <p className="text-sm">{LEGACY_HANDOVER_TERMS_NOTICE} Hạn đến nhận kho <b>{formatDisplayDateTime(attendanceDeadline)}</b>.</p>}
+        ) : attendanceDeadline && <p className="text-sm">{LEGACY_HANDOVER_TERMS_NOTICE} Hạn nhận kho <b>{formatDisplayDateTime(attendanceDeadline)}</b>.</p>}
         <div className="rounded-xl border-2 border-rose-300 bg-rose-50 p-4 text-rose-950">
           <div className="space-y-2 text-xs">
             <p className="font-bold uppercase tracking-wider text-rose-900 text-sm">
@@ -300,7 +300,7 @@ export default function CustomerReservationPayment({ receiptSlot, user, reservat
         {receiptSection === 'deposit' && payment && <div role="tabpanel" className="w-full min-w-0"><ReservationReceipt payment={payment} reservationCode={reservation.reservationCode} /></div>}
         {receiptSection === 'remaining' && remainingPayment && <div role="tabpanel" className="w-full min-w-0"><ReservationReceipt payment={remainingPayment} reservationCode={reservation.reservationCode} /></div>}
         {selectedReceipt?.paymentStatus === 'PAID' && <div className="flex justify-end border-t border-stone-200 pt-4">
-          <Button type="button" variant="outline" onClick={() => downloadPaymentReceipt(reservationPaymentReceiptExport(selectedReceipt, reservation.reservationCode))}>Tải phiếu ghi nhận giao dịch</Button>
+          <Button type="button" variant="outline" onClick={() => downloadPaymentReceipt(reservationPaymentReceiptExport(selectedReceipt, reservation.reservationCode))}>Tải biên lai xuống</Button>
         </div>}
       </div>
     </Modal>

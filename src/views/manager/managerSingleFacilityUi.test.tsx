@@ -137,11 +137,11 @@ describe("Manager rental and renewal filters", () => {
     const data = () => invoke(session())
     return { session, data }
   }
-  it("uses 10 records and the assigned facility for both tabs and preserves scope in totals", async () => {
+  it("loads the grouped queue and assigned facility for both tabs and preserves scope in totals", async () => {
     const w = workspace()
     let tree = w.data()
     await load()
-    expect(h.rental).toHaveBeenCalledWith("manager", expect.objectContaining({ size: 10, facilityId: "f1" }))
+    expect(h.rental).toHaveBeenCalledWith("manager", expect.objectContaining({ size: 100, facilityId: "f1" }))
     expect(h.rental.mock.calls.every(([, q]) => q.facilityId === "f1")).toBe(true)
     expect(h.renewal.mock.calls.every(([, q]) => q.facilityId === "f1")).toBe(true)
     byText(tree, "Yêu cầu gia hạn").props.onClick()
@@ -149,14 +149,13 @@ describe("Manager rental and renewal filters", () => {
     expect(h.renewal).toHaveBeenCalledWith("manager", expect.objectContaining({ size: 10, facilityId: "f1" }))
     expect(text(tree)).not.toContain("Tất cả cơ sở")
   })
-  it("keeps the previous/next buttons without a Manager size selector", async () => {
+  it("delegates pagination to rental groups without a Manager size selector", async () => {
     const w = workspace(), tree = w.data()
-    const pager = invoke(named(tree, "Pager"))
-    expect(nodes(pager).some(n => n.type === "select")).toBe(false)
-    expect(byText(pager, "Trước").props.disabled).toBe(true)
-    byText(pager, "Sau").props.onClick()
-    w.data(); await load()
-    expect(h.rental).toHaveBeenCalledWith("manager", expect.objectContaining({ page: 1, size: 10, facilityId: "f1" }))
+    const groups = named(tree, "ManagerRentalGroups")
+    expect(groups.props.kind).toBe("rental")
+    expect(nodes(tree).some(n => n.type === "select" && n.props["aria-label"] === "Kích thước trang")).toBe(false)
+    await load()
+    expect(h.rental).toHaveBeenCalledWith("manager", expect.objectContaining({ page: 0, size: 100, facilityId: "f1" }))
   })
   it("keeps expiry dates in the 30-day count query and preserves the selected sort", async () => {
     const w = workspace()
@@ -167,7 +166,7 @@ describe("Manager rental and renewal filters", () => {
     expect(label(tree, "Ngày hết hạn đến")).toBeUndefined()
     control(label(tree, "Sắp xếp"), "select").props.onChange({ target: { value: "contractEndDate,asc" } })
     w.data(); await load()
-    expect(h.rental).toHaveBeenCalledWith("manager", expect.objectContaining({ facilityId: "f1", size: 10, sort: "contractEndDate,asc" }))
+    expect(h.rental).toHaveBeenCalledWith("manager", expect.objectContaining({ facilityId: "f1", size: 100, sort: "contractEndDate,asc" }))
     expect(h.rental).toHaveBeenCalledWith("manager", expect.objectContaining({ facilityId: "f1", size: 1,
       status: "active", endFrom: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), endTo: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) }))
   })
@@ -195,7 +194,7 @@ describe("Support and overdue pagination", () => {
     tree = renderSupport()
     byText(tree, "Đặt lại").props.onClick()
     tree = renderSupport(); await load()
-    expect(h.support).toHaveBeenLastCalledWith("manager", { page: 0, size: 10, facilityId: "f1", sort: "createdAt,desc" })
+    expect(h.support).toHaveBeenLastCalledWith("manager", { page: 0, size: 10, facilityId: "f1", sort: "priority,asc" })
     nodes(tree).find(n => n.type === ApiPager)!.props.onPage(1)
     renderSupport(); await load()
     expect(h.support).toHaveBeenLastCalledWith("manager", expect.objectContaining({ page: 1, size: 10, facilityId: "f1" }))

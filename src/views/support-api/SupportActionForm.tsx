@@ -309,7 +309,7 @@ function EscalationPicker({
             .filter((e) => e.status === "REQUESTED")
             .map((e) => (
               <option key={e.id} value={e.id}>
-                {copy(supportModuleLabels[e.targetModule])} · {new Date(e.requestedAt).toLocaleString('vi-VN')} · {recordDisplayCode(e.id)}
+                {copy(supportModuleLabels[e.targetModule])}, {new Date(e.requestedAt).toLocaleString('vi-VN')}, {recordDisplayCode(e.id)}
               </option>
             ))}
         </select>

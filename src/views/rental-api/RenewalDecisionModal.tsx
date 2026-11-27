@@ -1,8 +1,6 @@
 import { renewalDisplayLabel } from '../../presentation/renewalIdentity'
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { useState } from "react"
-import { useRentalApiResource } from '../../hooks/useRentalApiResource'
-import { getRenewalCancellationPolicy } from '../../services/returnRenewalEligibility'
 import { Button, Modal } from "../../components/ui"
 import { cancelRenewal } from "../../services/renewalApi"
 import { getAuthenticatedActor } from "../../services/authApi"
@@ -30,12 +28,6 @@ export default function RenewalDecisionModal({
   const { manager, copy, errorText } = useManagerPresentation()
 
   const [reason, setReason] = useState("")
-  const [forfeitureAccepted, setForfeitureAccepted] = useState(false)
-  const cancellation = useRentalApiResource(`cancel:${r.id}:${r.version}`, () => getRenewalCancellationPolicy(r.id))
-  const depositPaid = cancellation.data?.state === 'DEPOSIT_PAID'
-  const fullyPaid = cancellation.data?.state === 'FULLY_PAID'
-  const requiresAcknowledgement = depositPaid || fullyPaid
-  const policyAllows = cancellation.data?.state === 'UNPAID' || requiresAcknowledgement
   const command = useRenewalCommand()
   const allowed = hasRenewalAction(r, action, getAuthenticatedActor(), "customer")
   const locked = command.busy || command.uncertain
@@ -51,25 +43,10 @@ export default function RenewalDecisionModal({
     >
       <div className="space-y-4">
         <p className="break-all">
-          {renewalDisplayLabel(r)} · {r.storageUnit.code}
+          {renewalDisplayLabel(r)}, {r.storageUnit.code}
         </p>
         <p>Ngày kết thúc đề nghị: {rentalDate(r.newEndDate)}</p>
         <p>Tiền gia hạn: {rentalMoney(r.amount, r.currency)}</p>
-        {cancellation.loading ? <p role="status">Đang kiểm tra khoản thanh toán gia hạn…</p>
-          : cancellation.error ? <p role="alert">{rentalError(cancellation.error)}</p>
-          : cancellation.data && <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
-            <p>{fullyPaid ? 'Bạn đã thanh toán đủ tiền gia hạn. Khi tự hủy yêu cầu, toàn bộ tiền gia hạn đã thanh toán không được hoàn lại. Hợp đồng thuê hiện tại giữ nguyên thời hạn.'
-              : depositPaid ? 'Bạn đã thanh toán cọc gia hạn. Khi tự hủy yêu cầu, tiền cọc gia hạn không được hoàn lại. Hợp đồng thuê hiện tại giữ nguyên thời hạn.'
-              : policyAllows ? 'Hủy yêu cầu gia hạn chưa thanh toán để tiếp tục trả kho theo hợp đồng hiện tại.'
-              : 'Khoản thanh toán gia hạn cần được cơ sở đối soát trước khi hủy. Vui lòng liên hệ cơ sở.'}</p>
-            {requiresAcknowledgement && <>
-              <p>{fullyPaid ? 'Tổng tiền gia hạn không hoàn lại' : 'Cọc gia hạn không hoàn lại'}: <strong>{rentalMoney(fullyPaid ? cancellation.data.paidAmount : cancellation.data.depositAmount, r.currency)}</strong></p>
-              <label className="flex items-start gap-2"><input type="checkbox" className="mt-1 size-4" checked={forfeitureAccepted}
-                disabled={locked} onChange={event => setForfeitureAccepted(event.target.checked)} />
-                {fullyPaid ? 'Tôi xác nhận tự hủy gia hạn và đồng ý toàn bộ tiền gia hạn đã thanh toán không được hoàn lại.'
-                  : 'Tôi xác nhận tự hủy gia hạn và đồng ý tiền cọc gia hạn không được hoàn lại.'}</label>
-            </>}
-          </div>}
         <label className="block">
           Lý do (bắt buộc)
           <textarea
@@ -92,15 +69,13 @@ export default function RenewalDecisionModal({
             command.busy ||
             command.conflict ||
             !allowed ||
-            cancellation.loading || !!cancellation.error || !policyAllows || (requiresAcknowledgement && !forfeitureAccepted) ||
             !reason.trim()
           }
           onClick={() => {
-            if (cancellation.loading || cancellation.error || !policyAllows || !allowed || (requiresAcknowledgement && !forfeitureAccepted) || !reason.trim()) return
             void command.run(
-              JSON.stringify({ id: r.id, action, reason, version: r.version, acknowledgeDepositForfeiture: depositPaid && forfeitureAccepted, acknowledgePaymentForfeiture: fullyPaid && forfeitureAccepted }),
+              JSON.stringify({ id: r.id, action, reason, version: r.version }),
               (key) =>
-                cancelRenewal(r.id, reason, r.version!, key, depositPaid && forfeitureAccepted, fullyPaid && forfeitureAccepted),
+                cancelRenewal(r.id, reason, r.version!, key),
               onSuccess,
             )
           }}

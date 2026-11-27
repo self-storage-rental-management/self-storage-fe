@@ -1,5 +1,3 @@
-import ProcessingLeaseBoundary from '../../components/ProcessingLeaseBoundary'
-import ReturnAppointment from './ReturnAppointment'
 import { recordDisplayCode, receiptDisplayCode } from '../../utils/recordDisplayCode'
 import { compareReturnQueue } from '../../utils/returnQueueSort'
 import { ClearanceStatus, CustomerClearance, ReturnContract, ReturnPreparation } from './ReturnClearance'
@@ -8,10 +6,11 @@ import { ViolationRecoveryEntry, ViolationRecoveryPanel } from './ViolationRecov
 import { listMaintenanceStaff } from '../../services/maintenanceApi'
 import { getRental } from '../../services/rentalApi'
 import { getCustomerReservation, extendCustomerInventoryReturnWindow, resolveCustomerInventory } from '../../services/customerReservationApi'
+import ProcessingLeaseBoundary from '../../components/ProcessingLeaseBoundary'
 import ReturnPolicyNotice from '../../components/ReturnPolicyNotice'
 import EmergencyContactsPanel from '../../components/EmergencyContactsPanel'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Badge, Button, Modal } from '../../components/ui'
+import { Button, Modal } from '../../components/ui'
 import { FilePreviewList } from '../staff/StaffFileUpload'
 import VietnameseDateInput from '../../components/VietnameseDateInput'
 import LockInspectionSelect, { lockInspectionLabels } from '../../components/LockInspectionSelect'
@@ -21,8 +20,6 @@ import { rentalDate, rentalMoney } from '../rental-api/presentation'
 import { VIETNAM_TIME_ZONE, vietnamDateInput } from '../../utils/vietnamTime'
 import RecoveryReturnSettlement from './RecoveryReturnSettlement'
 import RecoveryTaskLink from '../rental-api/RecoveryTaskLink'
-import { getReturnRenewalEligibility } from '../../services/returnRenewalEligibility'
-import ReturnRenewalBlock from './ReturnRenewalBlock'
 import {
   getReturn,
   confirmReturn,
@@ -39,12 +36,6 @@ import {
   uploadReturnEvidence,
   calculateDamageFee,
   returnDamageCatalog,
-  isCustomFee,
-  returnCleaningOptions,
-  getReturnFeeScheduleForReturn,
-  getReturnFeeDetails,
-  type ReturnFeeSchedule,
-  type DamagePricingItem,
   type ApiReturn,
   type DamageItemInput,
   type InspectionInput,
@@ -146,9 +137,6 @@ export function ReturnSummary({ record, hideTerminationFee = false, hideHeader =
       {['requested', 'scheduled'].includes(record.status) && record.recoveryEligibleAt && !record.attendance?.arrivedAt && <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">Nếu khách chưa đến và chưa hoàn tất trả kho, hồ sơ sẽ chuyển sang nhiệm vụ xử lý sau <strong>{returnRecoveryCountdown(record.recoveryEligibleAt, now) || returnRecoveryCutoff(record.recoveryEligibleAt)}</strong>. Hàng chưa được tự động di chuyển.</p>}
       {inventoryMismatch && <div className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-950">
         <p className="font-bold">Đơn trả kho do kiểm kê sai lệch</p>
-        <p className="mt-1">Thời hạn trả kho đã chốt: {record.returnWindowDays != null ? `${record.returnWindowDays} ngày` : 'Chưa có thông tin'}.</p>
-        <p className="mt-1">Gia hạn mỗi lần tối đa: {record.returnExtensionDays != null ? `${record.returnExtensionDays} ngày` : 'Chưa có thông tin'} · Đã gia hạn {record.returnExtensionCount ?? 0}/{record.maxReturnExtensions ?? 2} lần.</p>
-        {(record.inventoryRemovalDeadlineAt ?? record.recoveryEligibleAt) && <p className="mt-1 font-semibold">Hạn cuối dọn hàng: {returnRecoveryCutoff(record.inventoryRemovalDeadlineAt ?? record.recoveryEligibleAt)}</p>}
         <p className="mt-1">Tính tiền theo số ngày sử dụng thực tế (Đơn giá tháng × Số ngày / 30).</p>
         <p className="mt-1 text-xs font-medium">Khách dọn hàng trong hạn và xác nhận khi sẵn sàng bàn giao.</p>
       </div>}
@@ -459,13 +447,11 @@ export default function ReturnApiPanel({
   rentalId,
   rentalActive = false,
   onChanged,
-  onOpenRenewal,
 }: {
   role: ReturnRole
   rentalId?: string
   rentalActive?: boolean
   onChanged?: () => void
-  onOpenRenewal?: (id: string) => void
 }) {
   const actor = getAuthenticatedActor()
   const identity = `${actor?.id}:${JSON.stringify(actor?.permissions)}:${JSON.stringify(actor?.facilityScopes)}:${role}:${rentalId ?? ''}`
@@ -476,7 +462,6 @@ export default function ReturnApiPanel({
       rentalId={rentalId}
       rentalActive={rentalActive}
       onChanged={onChanged}
-      onOpenRenewal={onOpenRenewal}
       identity={identity}
     />
   )
@@ -487,14 +472,12 @@ function ReturnWorkspace({
   rentalId,
   rentalActive,
   onChanged,
-  onOpenRenewal,
   identity,
 }: {
   role: ReturnRole
   rentalId?: string
   rentalActive: boolean
   onChanged?: () => void
-  onOpenRenewal?: (id: string) => void
   identity: string
 }) {
   const actor = getAuthenticatedActor()
@@ -620,9 +603,6 @@ function ReturnWorkspace({
   const selectedRecord = useMemo(() => {
     return selectedRecordId ? rows.find((r) => r.id === selectedRecordId) ?? null : null
   }, [rows, selectedRecordId])
-  const eligibilityRentalId = rentalId || selectedRecord?.rentalId
-  const renewalGate = useRentalApiResource(`${identity}:return-renewal-eligibility:${eligibilityRentalId}`, async () =>
-    role === 'customer' && eligibilityRentalId ? getReturnRenewalEligibility(eligibilityRentalId) : null)
 
   const counts = useMemo(() => {
     const pending = rows.filter((r) => ['requested', 'scheduled'].includes(r.status)).length
@@ -661,11 +641,6 @@ function ReturnWorkspace({
   )
 
   if (!readable) return null
-
-  if (role === 'customer' && eligibilityRentalId && (renewalGate.loading || renewalGate.error || !renewalGate.data?.allowed))
-    return <ReturnRenewalBlock gate={renewalGate.data} loading={renewalGate.loading}
-      error={renewalGate.error ? returnError(renewalGate.error) : undefined}
-      onRetry={renewalGate.refresh} onOpenRenewal={onOpenRenewal} />
 
   if (role === 'customer' && rentalId && !selectedRecord) {
     if (read.loading && !read.data) return <p role="status">Đang tải thông tin trả kho…</p>
@@ -794,23 +769,6 @@ function ReturnWorkspace({
           </div>
 
           {feedback && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{feedback}</p>}
-          {pendingMismatch && (
-            <section
-              aria-label="Lý do trả kho và quyết toán"
-              className="rounded-xl border border-red-300 border-l-4 border-l-red-600 bg-red-50/80 p-4 text-sm text-red-950"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-base font-bold text-red-950">Lý do trả kho và quyết toán</h3>
-                <Badge variant="error">Quan trọng</Badge>
-              </div>
-              <div className="mt-2 space-y-1.5 leading-relaxed text-red-900">
-                {selectedRecord.customerNotes && (
-                  <p className="whitespace-pre-wrap break-words font-semibold">{selectedRecord.customerNotes}</p>
-                )}
-                <p>Tiền sử dụng tính theo số ngày thực tế. Khoản hoàn hoặc thu thêm được xác định sau nghiệm thu.</p>
-              </div>
-            </section>
-          )}
           {role === 'customer' && selectedRecord.sourceType !== 'RECOVERY' && <>
             <CustomerClearance record={selectedRecord} ownerId={actor?.id} busy={busy || read.loading}
               run={async work => {
@@ -826,7 +784,6 @@ function ReturnWorkspace({
               countdown={pendingMismatch ? returnRecoveryCountdown(selectedRecord.inventoryRemovalDeadlineAt ?? selectedRecord.recoveryEligibleAt, now) : undefined}
               extension={pendingMismatch ? {
                 count: selectedRecord.returnExtensionCount ?? removal.data?.inventoryReturnExtensionCount ?? 0,
-                days: selectedRecord.returnExtensionDays ?? removal.data?.inventoryReturnExtensionDays,
                 onExtend: selectedRecord.canExtendReturnWindow !== false
                   && (selectedRecord.returnExtensionCount ?? removal.data?.inventoryReturnExtensionCount ?? 0) < (selectedRecord.maxReturnExtensions ?? 2)
                   && Date.parse(selectedRecord.inventoryRemovalDeadlineAt ?? removal.data?.inventoryRemovalDeadlineAt ?? '') > now
@@ -835,11 +792,21 @@ function ReturnWorkspace({
                   && selectedRecord.attendance?.reviewStatus !== 'PENDING'
                   ? () => extendRemovalWindow(selectedRecord) : undefined,
               } : undefined} />
+            {contract.data && <details className="rounded-xl border border-stone-200 px-4 py-3 text-sm">
+              <summary className="cursor-pointer font-semibold text-stone-800">Thông tin hợp đồng</summary>
+              <div className="mt-2"><ReturnContract rental={contract.data} record={selectedRecord} /></div>
+            </details>}
           </>}
           {/* Form Actions / 2-Column Inspection */}
           {role === 'staff' && <ReturnAttendance key={selectedRecord.id} record={selectedRecord} role="staff"
             editable={!!actor?.permissions.includes('returns:process')} onChanged={read.refresh} />}
-          {!pendingMismatch && (role !== 'staff' || !requiresReturnAttendance(selectedRecord) || (!!selectedRecord.attendance?.arrivedAt && !!selectedRecord.attendance.verifiedAt)) && <LeasedReturnActions
+          {pendingMismatch ? <details className="rounded-xl border border-stone-200 px-4 py-3 text-sm">
+            <summary className="cursor-pointer font-semibold text-stone-800">Lý do trả kho và quyết toán</summary>
+            <div className="mt-2 space-y-2 text-stone-700">
+              {selectedRecord.customerNotes && <p className="whitespace-pre-wrap break-words">{selectedRecord.customerNotes}</p>}
+              <p>Tiền sử dụng tính theo số ngày thực tế. Khoản hoàn hoặc thu thêm được xác định sau nghiệm thu.</p>
+            </div>
+          </details> : (role !== 'staff' || !requiresReturnAttendance(selectedRecord) || (!!selectedRecord.attendance?.arrivedAt && !!selectedRecord.attendance.verifiedAt)) && <LeasedReturnActions
             key={selectedRecord.id + ":" + (selectedRecord.clearanceRevision ?? 0) + ":" + (selectedRecord.settlementVersion ?? 0)}
             role={role}
             record={selectedRecord}
@@ -859,8 +826,6 @@ function ReturnWorkspace({
             }}
           />}
 
-
-          {role === 'customer' && selectedRecord.sourceType === 'RECOVERY' && <ReturnAppointment key={selectedRecord.id + ':' + selectedRecord.returnVersion} record={selectedRecord} busy={busy || read.loading} run={run} />}
 
           {role === 'customer' && !selectedRecord.attendance?.arrivedAt && selectedRecord.returnType !== 'INVENTORY_MISMATCH' && selectedRecord.status === 'requested' && editing !== selectedRecord.id && (
             <div className="mt-3 flex justify-end border-t border-stone-100 pt-3">
@@ -1165,15 +1130,13 @@ function DamagePricingSelector({
   items,
   onChange,
   disabled,
-  prices,
 }: {
   category: 'minor' | 'major'
   items: DamageItemInput[]
   onChange: (items: DamageItemInput[]) => void
   disabled?: boolean
-  prices: DamagePricingItem[]
 }) {
-  const catalog = prices.filter((item) => item.category === category)
+  const catalog = returnDamageCatalog.filter((item) => item.category === category)
   const addItem = () => {
     const first = catalog[0]
     if (first) onChange([...items, { code: first.code, quantity: 1 }])
@@ -1225,21 +1188,19 @@ function DamagePricingSelector({
               Xóa
             </button>
             <p className="col-span-full -mt-1 text-[10px] text-stone-500">
-              Giá chuẩn: {price ? `${rentalMoney(price.unitPrice, 'VND')} / ${price.unit}` : ''}
+              Giá chuẩn: {price ? `${rentalMoney(price.unitPrice, 'VND')} / ${price.unit} (khung ${rentalMoney(price.suggestedMin, 'VND')}–${rentalMoney(price.suggestedMax, 'VND')})` : ''}
             </p>
-            {price?.trigger && <p className="col-span-full text-[11px] text-stone-500">Điều kiện: {price.trigger}</p>}
-            {price?.applies && <p className="col-span-full text-[11px] text-stone-500">Đối tượng: {price.applies}</p>}
             <p className="col-span-full text-[10px] font-semibold text-stone-800">
-              Tính: {item.quantity || 0} × {price ? rentalMoney(price.unitPrice, 'VND') : '0 ₫'} = {rentalMoney(calculateDamageFee([item], prices), 'VND')}
+              Tính: {item.quantity || 0} × {price ? rentalMoney(price.unitPrice, 'VND') : '0 ₫'} = {rentalMoney(calculateDamageFee([item]), 'VND')}
             </p>
           </div>
         )
       })}
       <div className="flex items-center justify-between gap-2 border-t border-stone-200 pt-2">
-        <button type="button" disabled={disabled || !catalog.length} onClick={addItem} className="rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-stone-800 hover:bg-stone-50">
+        <button type="button" disabled={disabled} onClick={addItem} className="rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-stone-800 hover:bg-stone-50">
           + Thêm hạng mục
         </button>
-        <span className="text-sm font-extrabold text-stone-900">{rentalMoney(calculateDamageFee(items, prices), 'VND')}</span>
+        <span className="text-sm font-extrabold text-stone-900">{rentalMoney(calculateDamageFee(items), 'VND')}</span>
       </div>
     </div>
   )
@@ -1289,29 +1250,10 @@ function LeasedReturnActions(props: Parameters<typeof ReturnActions>[0]) {
     : props.role === 'manager' && fresh.status === 'disputed'
   return <ProcessingLeaseBoundary target="RETURN" id={props.record.id} enabled={actionable && fresh.sourceType !== 'RECOVERY'} onAcquired={async () => {
     setFresh(await getReturn(props.role, props.record.id))
-  }}><ReturnActions key={fresh.id} {...props} record={fresh} /></ProcessingLeaseBoundary>
+  }}><ReturnActions {...props} record={fresh} /></ProcessingLeaseBoundary>
 }
 
 function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLocked, onRecoveryChanged }: { role: ReturnRole; record: ApiReturn; run: (work: () => Promise<ApiReturn>) => Promise<void>; busy: boolean; recoveryLocked: boolean; onRecoveryLocked: (locked: boolean) => void; onRecoveryChanged: () => void }) {
-  const [applicableSchedule, setApplicableSchedule] = useState<{ returnId: string; value: ReturnFeeSchedule } | null>(null)
-  const feeSchedule = applicableSchedule?.returnId === record.id ? applicableSchedule.value : null
-  useEffect(() => {
-    setApplicableSchedule(null)
-    if (role !== 'staff') return
-    let active = true
-    getReturnFeeScheduleForReturn(record.id).then(value => { if (active) setApplicableSchedule({ returnId: record.id, value }) }).catch(() => { if (active) setApplicableSchedule(null) })
-    return () => { active = false }
-  }, [role, record.id])
-  const customDamage: DamagePricingItem[] = Object.entries(feeSchedule?.prices ?? {}).filter(([code]) => isCustomFee(code) && !code.startsWith('custom_cleaning_')).map(([code, amount]) => ({
-    code, category: code.startsWith('custom_minor_') ? 'minor' : 'major', unit: 'lần',
-    label: feeSchedule!.details[code].label, suggestedMin: amount, suggestedMax: amount, unitPrice: amount,
-  }))
-  const damagePrices = [...returnDamageCatalog, ...customDamage].filter(item => !feeSchedule?.editableCatalog || item.code in feeSchedule.prices).map(item => ({ ...item, ...getReturnFeeDetails(feeSchedule, item.code), unitPrice: feeSchedule?.prices[item.code] ?? item.unitPrice }))
-  const cleaningOptions = returnCleaningOptions.filter(item => !feeSchedule?.editableCatalog || item.id in feeSchedule.prices).map(item => ({ ...item, ...getReturnFeeDetails(feeSchedule, item.id), fee: feeSchedule?.prices[item.id] ?? item.fee }))
-  for (const [id, fee] of Object.entries(feeSchedule?.prices ?? {})) {
-    if (id.startsWith('custom_cleaning_')) cleaningOptions.push({ id, fee, desc: '', ...getReturnFeeDetails(feeSchedule, id) })
-  }
-  const majorCleaningFee = feeSchedule?.prices.major ?? 0
   const attendance = record.attendance
   const handoverApproved = attendance?.reviewAccepted === true
   const appointmentAt = attendance?.handoverAppointmentAt
@@ -1334,20 +1276,15 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
   const [confirmationError, setConfirmationError] = useState('')
   const actor = getAuthenticatedActor()
   const [note, setNote] = useState(record.inspectionNotes || record.staffNotes || '')
-  const [fees, setFees] = useState<ReturnFees>(() => ({ damageFee: record.damageFee, cleaningFee: record.cleaningFee, lostItemFee: record.lostItemFee, overdueFee: record.overdueFee, outstandingFee: record.outstandingFee }))
+  const [fees, setFees] = useState<ReturnFees>({ damageFee: 0, cleaningFee: 0, lostItemFee: 0, overdueFee: 0, outstandingFee: 0 })
   const [damageItems, setDamageItems] = useState<DamageItemInput[]>([])
   const [empty, setEmpty] = useState<boolean | null>(record.warehouseEmptyVerified === false ? false : null)
   const goodsLeft = empty === false
   const [missingPalletCount, setMissingPalletCount] = useState(0)
-  const [damagedFrames, setDamagedFrames] = useState(0)
-  const framePrice = feeSchedule?.prices.equipment_frame_damage ?? 0
-  const inspectionItems = damagedFrames > 0
-    ? [...damageItems, { code: 'equipment_frame_damage', quantity: damagedFrames }]
-    : damageItems
   const palletFee = missingPalletCount * (record.equipment?.palletUnitPrice || 0)
   const [damage, setDamage] = useState<InspectionInput['damageClassification']>('no_damage')
   const [unit, setUnit] = useState<'available' | 'maintenance'>('available')
-  const requiresMaintenance = goodsLeft || fees.cleaningFee > 0 || damage !== 'no_damage' || missingPalletCount > 0 || damagedFrames > 0
+  const requiresMaintenance = goodsLeft || fees.cleaningFee > 0 || damage !== 'no_damage' || missingPalletCount > 0
   const [returnedLock, setReturnedLock] = useState((record.lostItemFee ?? 0) <= 0)
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([])
   const initialized = useRef(false)
@@ -1375,7 +1312,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
   }
 
   const handleCleaningChange = (fee: number) => {
-    if (goodsLeft) fee = majorCleaningFee
+    if (goodsLeft) fee = 200000
     setFees((f) => ({ ...f, cleaningFee: fee }))
     if (fee > 0) {
       setUnit('maintenance')
@@ -1432,9 +1369,6 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
     return evidencePhotos
   }
   const submitInspection = async () => {
-    if (!feeSchedule) throw new Error('Không tải được biểu phí trả kho. Vui lòng tải lại trang.')
-    const applicable = await getReturnFeeScheduleForReturn(id)
-    if (applicable.revision !== feeSchedule.revision) throw new Error('Biểu phí áp dụng cho đơn đã thay đổi. Vui lòng tải lại trang trước khi nghiệm thu.')
     if (recoveryIncomplete) throw new Error('Cần ghi danh mục hàng, tình trạng niêm phong, nhân chứng và thông tin lưu tạm.')
     if (empty !== true) throw new Error('Vui lòng xác minh gian kho đã trống hoàn toàn.')
     if (!hasEvidence) throw new Error('Cần ít nhất một ảnh hiện trường để hoàn tất nghiệm thu.')
@@ -1443,10 +1377,10 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       ...sanitizeFees(fees),
       missingPalletCount,
       lostItemFee: (returnedLock ? 0 : 150000) + palletFee,
-      damageFee: calculateDamageFee(inspectionItems, damagePrices),
-      damageItems: inspectionItems,
+      damageFee: calculateDamageFee(damageItems),
+      damageItems,
       inventoryMatch: missingPalletCount > 0 ? 'missing' : 'match',
-      damageClassification: goodsLeft ? 'abandoned_goods' : damagedFrames > 0 && damage === 'no_damage' ? 'minor_damage' : damage,
+      damageClassification: goodsLeft ? 'abandoned_goods' : damage,
       staffNotes: note,
       evidencePhotos,
       returnedKey: returnedLock,
@@ -1538,7 +1472,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
       {/* ─── OPTION 1: MODERN 2-COLUMN INSPECTION & LIVE SETTLEMENT ─── */}
       {(canInspect || canReview) && (() => {
         const deposit = record.depositAmount ?? 0
-        const calculatedDamage = canInspect ? calculateDamageFee(inspectionItems, damagePrices) : fees.damageFee
+        const calculatedDamage = canInspect ? calculateDamageFee(damageItems) : fees.damageFee
         const effectiveFees = { ...fees, damageFee: calculatedDamage, lostItemFee: fees.lostItemFee + (canInspect ? palletFee : 0) }
         const displayedPalletFee = canInspect ? palletFee : (record.palletLossFee || 0)
         const displayedLockFee = Math.max(0, effectiveFees.lostItemFee - displayedPalletFee)
@@ -1553,7 +1487,6 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
           ? Math.max(0, totalFees - deposit)
           : Math.max(0, totalFees - deposit - rentalCredit)
         const missingDamageItems = canInspect && !goodsLeft && damage !== 'no_damage' && damage !== 'abandoned_goods'
-          && damagePrices.some(item => item.category === (damage === 'major_damage' ? 'major' : 'minor'))
           && (damageItems.length === 0 || damageItems.some((item) => item.quantity <= 0))
 
         return (
@@ -1683,13 +1616,17 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                             )}
                           </div>
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                            {cleaningOptions.map((opt) => {
+                            {[
+                              { id: 'clean', label: 'Kho sạch sẽ', fee: 0, desc: 'Đạt chuẩn vệ sinh (0 ₫)' },
+                              { id: 'minor', label: 'Cần quét dọn bụi', fee: 100000, desc: 'Bẩn nhẹ (+100.000 ₫)' },
+                              { id: 'major', label: 'Cần tổng vệ sinh', fee: 200000, desc: 'Bẩn nặng / Rác (+200.000 ₫)' },
+                            ].map((opt) => {
                               const active = fees.cleaningFee === opt.fee
                               return (
                                 <button
                                   key={opt.id}
                                   type="button"
-                                  disabled={busy || !feeSchedule || (goodsLeft && opt.id !== 'major')}
+                                  disabled={busy || (goodsLeft && opt.fee !== 200000)}
                                   onClick={() => handleCleaningChange(opt.fee)}
                                   className={`rounded-xl border p-2.5 text-center transition cursor-pointer select-none ${
                                     active
@@ -1698,9 +1635,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                                   }`}
                                 >
                                   <div className="text-xs font-bold mt-0.5">{opt.label}</div>
-                                  <div className={`text-[10px] mt-0.5 ${active ? 'text-stone-600' : 'text-stone-400'}`}>{rentalMoney(opt.fee, 'VND')}</div>
-                                  <div className="mt-1 text-[11px] font-normal">Điều kiện: {opt.trigger}</div>
-                                  <div className="mt-1 text-[11px] font-normal">Đối tượng: {opt.applies}</div>
+                                  <div className={`text-[10px] mt-0.5 ${active ? 'text-stone-600' : 'text-stone-400'}`}>{opt.desc}</div>
                                 </button>
                               )
                             })}
@@ -1709,25 +1644,15 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
 
                         <div className="rounded-xl border border-stone-200 p-3 space-y-2">
                           <p className="text-xs font-bold">Kiểm kê thiết bị đã bàn giao</p>
-                          {record.equipment && <>
-                            <label className="text-xs font-semibold block">Số khung kệ bị hư
-                              <input type="number" min={0} max={record.equipment.frameCount} step={1} value={damagedFrames}
-                                disabled={busy || !feeSchedule || !record.equipment.frameCount}
-                                onChange={event => setDamagedFrames(Math.min(record.equipment!.frameCount, Math.max(0, Math.trunc(Number(event.target.value) || 0))))}
-                                className="ml-3 w-24 rounded-lg border p-2" />
-                            </label>
-                            <p className="text-xs">Khung hư: {damagedFrames}/{record.equipment.frameCount}. Phí hư khung: {damagedFrames} × {rentalMoney(framePrice, 'VND')} = {rentalMoney(damagedFrames * framePrice, 'VND')}.</p>
-                          </>}
                           {record.equipment?.palletCount != null ? <>
+                            <p className="text-xs">Theo cấu hình bàn giao: {record.equipment.rackCount} bộ kệ / {record.equipment.frameCount} khung, {record.equipment.palletCount} tấm kê.</p>
                             <label className="text-xs font-semibold block">Số tấm kê bị thiếu
                               <input type="number" min={0} max={record.equipment.palletCount} step={1} value={missingPalletCount} disabled={busy}
                                 onChange={(event) => { setMissingPalletCount(Math.min(record.equipment!.palletCount!, Math.max(0, Math.trunc(Number(event.target.value) || 0)))); setUnit('maintenance') }}
                                 className="ml-3 w-24 rounded-lg border p-2" />
+                              <button type="button" disabled={busy || missingPalletCount === 0} onClick={() => setMissingPalletCount((n) => Math.max(0, n - 1))} className="ml-2 rounded border px-3 py-2">−</button>
+                              <button type="button" disabled={busy || missingPalletCount >= record.equipment.palletCount} onClick={() => { setMissingPalletCount((n) => Math.min(record.equipment!.palletCount!, n + 1)); setUnit('maintenance') }} className="ml-2 rounded border px-3 py-2">+</button>
                             </label>
-                            <div className="flex items-center gap-2 py-1">
-                              <button type="button" aria-label="Giảm số tấm kê bị thiếu" disabled={busy || missingPalletCount === 0} onClick={() => setMissingPalletCount((n) => Math.max(0, n - 1))} className="flex h-10 w-10 shrink-0 items-center justify-center rounded border">−</button>
-                              <button type="button" aria-label="Tăng số tấm kê bị thiếu" disabled={busy || missingPalletCount >= record.equipment.palletCount} onClick={() => { setMissingPalletCount((n) => Math.min(record.equipment!.palletCount!, n + 1)); setUnit('maintenance') }} className="flex h-10 w-10 shrink-0 items-center justify-center rounded border">+</button>
-                            </div>
                             <p className="text-xs">Thu hồi: {record.equipment.palletCount - missingPalletCount} / {record.equipment.palletCount} tấm. Phí thiếu: {rentalMoney(palletFee, 'VND')}.</p>
                             {missingPalletCount > 0 && !record.equipment.palletUnitPrice && <p className="text-xs text-amber-700">Chưa cấu hình đơn giá bồi thường tấm kê; cần bổ sung trước khi nghiệm thu.</p>}
                           </> : <p className="text-xs text-amber-700">{noShowRecovery
@@ -1809,9 +1734,10 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                       <div className="space-y-2.5">
                         <p className="text-xs font-semibold text-stone-700">Ảnh hiện trường theo khu vực</p>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                          {(['Trần', 'Vách', 'Sàn', 'Cửa'] as const).map((area) => (
-                            <label key={area} className="relative cursor-pointer rounded-xl border border-dashed border-stone-300 bg-stone-50/50 p-3 text-center text-xs font-semibold text-stone-700 hover:border-stone-400 hover:bg-stone-100/50 transition">
-                              Thêm ảnh {area.toLowerCase()}
+                          {(['Trần', 'Vách', 'Sàn', 'Cửa'] as const).map((area) => {
+                            const areaCount = evidenceFiles.filter(file => file.name.startsWith(`${area} - `)).length
+                            return <label key={area} className={`relative cursor-pointer rounded-xl border border-dashed p-3 text-center text-xs font-semibold transition ${areaCount ? 'border-emerald-400 bg-emerald-50 text-emerald-800' : 'border-stone-300 bg-stone-50/50 text-stone-700 hover:border-stone-400 hover:bg-stone-100/50'}`}>
+                              {areaCount ? `Đã thêm ${areaCount} ảnh ${area.toLowerCase()}` : `Thêm ảnh ${area.toLowerCase()}`}
                               <input
                                 type="file"
                                 multiple
@@ -1826,7 +1752,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                                 }}
                               />
                             </label>
-                          ))}
+                          })}
                         </div>
                         <p className="text-[11px] text-stone-500">Đối chiếu với ảnh và hiện trạng kho trống trong hồ sơ nhận kho.</p>
                         <label className="text-xs font-semibold text-stone-700 block">
@@ -1918,12 +1844,11 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                           category={damage === 'major_damage' ? 'major' : 'minor'}
                           items={damageItems}
                           onChange={setDamageItems}
-                          disabled={busy || !feeSchedule}
-                          prices={damagePrices}
+                          disabled={busy}
                         />
                       ) : (
                         <div className="rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs text-stone-600 flex items-center justify-between">
-                          <span className="font-semibold text-stone-800">Phí hư hỏng</span>
+                          <span className="font-semibold text-stone-800">Phí hư hỏng kết cấu</span>
                           <span className={`font-mono font-bold ${effectiveFees.damageFee > 0 ? 'text-rose-700' : 'text-stone-700'}`}>
                             {effectiveFees.damageFee > 0 ? `− ${rentalMoney(effectiveFees.damageFee, 'VND')}` : '0 ₫'}
                           </span>
@@ -1958,7 +1883,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                       <div className="rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-xs text-stone-600 flex items-center justify-between">
                         <div>
                           <span className="font-semibold text-stone-800 block">Phí vệ sinh gian kho</span>
-                          <span className="text-[10px] text-stone-400">{cleaningOptions.find(option => option.fee === fees.cleaningFee)?.label ?? 'Phí vệ sinh đã ghi nhận'}</span>
+                          <span className="text-[10px] text-stone-400">{fees.cleaningFee === 0 ? 'Kho sạch sẽ' : fees.cleaningFee <= 100000 ? 'Bẩn nhẹ' : 'Bẩn nặng / Rác'}</span>
                         </div>
                         <span className={`font-mono font-bold ${fees.cleaningFee > 0 ? 'text-rose-700' : 'text-stone-700'}`}>
                           {fees.cleaningFee > 0 ? `− ${rentalMoney(fees.cleaningFee, 'VND')}` : '0 ₫'}
@@ -2027,7 +1952,6 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
 
                     {/* Nút hành động chính */}
                     <div className="space-y-2 pt-1">
-                      {canInspect && !feeSchedule && <p role="status" className="text-xs text-amber-900">Chưa tải được biểu phí áp dụng cho đơn này. Nếu tình trạng kéo dài, vui lòng tải lại trang trước khi nghiệm thu.</p>}
                       {canInspect && !hasEvidence && (
                         <p className="rounded-xl border border-amber-200 bg-amber-50 p-2 text-center text-xs text-amber-900 font-semibold">
                           Cần tải lên ít nhất 1 ảnh hiện trường để làm bằng chứng nghiệm thu.
@@ -2036,7 +1960,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                       <Button
                         type="submit"
                         variant="primary"
-                        disabled={busy || recoveryIncomplete || (canInspect && !feeSchedule) || (canInspect && ((!noShowRecovery && record.equipment?.palletCount == null) || (missingPalletCount > 0 && !record.equipment?.palletUnitPrice))) || (canReview && !note.trim()) || missingDamageItems || (canInspect && !hasEvidence) || (canInspect && empty !== true)}
+                        disabled={busy || recoveryIncomplete || (canInspect && ((!noShowRecovery && record.equipment?.palletCount == null) || (missingPalletCount > 0 && !record.equipment?.palletUnitPrice))) || (canReview && !note.trim()) || missingDamageItems || (canInspect && !hasEvidence) || (canInspect && empty !== true)}
                         className="w-full font-bold py-3 text-sm shadow-xs flex items-center justify-center gap-2 cursor-pointer"
                       >
                         <span>{canInspect ? 'Ghi nhận kết quả nghiệm thu' : 'Ghi nhận xem xét khiếu nại'}</span>
@@ -2050,7 +1974,6 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                           setDamageItems([])
                           setDamage('no_damage')
                           setEmpty(null)
-                          setDamagedFrames(0)
                           setMissingPalletCount(0)
                           setReturnedLock(true)
                           setUnit('available')
