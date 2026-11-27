@@ -7,7 +7,7 @@ export default function CustomerTransactionTerms({ handoverTermsVersion, deposit
     : handoverTermsVersion === LEGACY_HANDOVER_TERMS_VERSION ? LEGACY_HANDOVER_TERMS_NOTICE
     : 'Hạn đến nhận kho và xử lý khoản giữ chỗ theo điều khoản đã lưu của đơn.'
   const terms = [
-    ['Đặt giữ kho và xác minh', 'Email được xác minh khi kích hoạt tài khoản; tài khoản đã xác minh không cần nhập OTP cho mỗi lần đặt kho. Giữ kho là tạm thời, chỉ xác nhận đặt thành công sau khi cọc được ghi nhận. Thời hạn thanh toán mặc định 15 phút; hàng cần duyệt có tối đa 6 giờ để duyệt rồi bắt đầu thời hạn thanh toán riêng. Luôn theo mốc giờ cụ thể trên đơn.'],
+    ['Đặt giữ kho', 'Giữ kho là tạm thời, chỉ xác nhận đặt thành công sau khi cọc được ghi nhận. Thời hạn thanh toán mặc định 15 phút; hàng cần duyệt có tối đa 6 giờ để duyệt rồi bắt đầu thời hạn thanh toán riêng. Luôn theo mốc giờ cụ thể trên đơn.'],
     ['Khoản trả trước và cọc đảm bảo', 'Thanh toán trước 20% (giữ chỗ) là khoản trả trước theo báo giá, được trừ vào tổng nghĩa vụ phải thanh toán. Tiền cọc đảm bảo thuê được ghi riêng và quyết toán khi trả kho. Báo giá phải hiển thị tiền thuê sau ưu đãi, khoản trả trước giữ chỗ, cọc đảm bảo thuê và phần còn phải thu. Không thu thêm một lần nữa khoản đã được ghi nhận.'],
     ['Hạn đến nhận kho và đối chiếu CCCD', handoverNotice],
     ['Hủy đơn và giao dịch có sai sót', 'Khách tự hủy hoặc không nhận kho đúng hạn có thể không được hoàn khoản trả trước giữ chỗ theo điều khoản đã chấp nhận. Lỗi thuộc StorageHub, thu trùng, trừ tiền nhưng chưa xác nhận đơn hoặc không cung cấp đúng dịch vụ phải được đối soát và xử lý theo chứng từ, hợp đồng và quy định áp dụng; không tự động coi là mất cọc.'],

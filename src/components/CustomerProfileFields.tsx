@@ -81,7 +81,7 @@ export function CustomerProfileFields({ value, onChange, user, onNameChange, onP
   const input = 'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm'
   const identity = value.identityDocumentNumber || ''
   const result = identity ? validateRentalIdentity(identity) : null
-  const locked = !!user.profileDetails?.identityDocumentNumber?.trim() || !!value.identityVerifiedAt
+  const locked = user.role !== 'customer' && (!!user.profileDetails?.identityDocumentNumber?.trim() || !!value.identityVerifiedAt)
   const errorLine = (error?: string) => error && <p className="text-xs text-red-700" role="alert">{error}</p>
   return <div className="space-y-5">
     <fieldset id="profile-identity" className="space-y-3 rounded-xl border border-stone-200 p-4">

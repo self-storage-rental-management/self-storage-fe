@@ -13,6 +13,7 @@ import {
 
 const labels = { PENDING: 'Đang chờ xử lý', REVIEW_OVERDUE: 'Quá hạn xử lý', APPROVED: 'Đã chấp thuận', REJECTED: 'Đã từ chối', WITHDRAWN: 'Đã rút' }
 const queryConclusionMeta: Record<string, { label: string; variant: 'success' | 'warning' | 'error' | 'muted' }> = {
+  DEMO_PAID_CONFIRMED: { label: 'Đủ căn cứ xác nhận — MÔ PHỎNG (00)', variant: 'success' },
   PAID_CONFIRMED: { label: 'VNPAY xác nhận đã thanh toán (00)', variant: 'success' },
   INCOMPLETE: { label: 'Giao dịch chưa hoàn tất (01)', variant: 'warning' },
   FAILED: { label: 'Giao dịch lỗi trên VNPAY (02)', variant: 'error' },
@@ -182,7 +183,7 @@ export default function ManagerPaymentComplaintsPanel({
         <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-3 space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="font-bold text-stone-900">Đối soát VNPAY</p>
-            <Button type="button" size="sm" variant="outline" disabled={queryingVnpay || busy} onClick={() => void queryVnpay()}>
+            <Button type="button" size="sm" variant="outline" disabled={queryingVnpay || busy || selected.gatewayQueryConclusion === 'DEMO_PAID_CONFIRMED'} onClick={() => void queryVnpay()}>
               {queryingVnpay ? 'Đang truy vấn VNPAY…' : 'Kiểm tra giao dịch VNPAY'}
             </Button>
           </div>

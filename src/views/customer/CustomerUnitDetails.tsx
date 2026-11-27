@@ -152,7 +152,6 @@ export default function CustomerUnitDetails({
     <section className="rounded-xl border border-stone-200 p-5"><h4 className="font-bold">Kỳ thuê và chi phí</h4><p className="mt-2 text-sm">Chọn thời gian thuê và khai báo hàng hóa ở bước đặt kho. Báo giá sẽ hiển thị tiền thuê, ưu đãi, khoản trả trước 20% (giữ chỗ), tiền cọc đảm bảo kho và số tiền còn lại.</p><h4 className="mt-4 font-bold">Hàng hóa cần xét duyệt</h4><p className="mt-2 text-sm">Hàng thuộc nhóm “Khác” cần nhập tên, chất liệu, mô tả, kích thước và cân nặng. Nhân viên cơ sở sẽ xem xét và duyệt.</p></section>
     <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
       <h4 className="font-bold text-emerald-900">2. Ưu đãi và báo giá theo kỳ thuê</h4>
-      <p className="mt-2 text-sm leading-6 text-stone-700">Chọn kỳ thuê ở bước đặt kho để nhận báo giá chính thức, khoản trả trước 20% (giữ chỗ), tiền thuê còn lại và tiền cọc đảm bảo kho.</p>
       {rentalPackages.length > 0 ? (
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           {rentalPackages.map(item => (

@@ -8,6 +8,7 @@ import { PACKAGING_METHOD_OPTIONS } from '../../domain/packagingMethods'
 import BookingArrivalDetails from './BookingArrivalDetails'
 import CustomerTransactionTerms from './CustomerTransactionTerms'
 import BookingPersonalDetails from './BookingPersonalDetails'
+import GoodsImagePreviewGrid from './GoodsImagePreviewGrid'
 import { validateCccd, normalizeCccd, maskCccd } from '../../domain/cccd'
 import { normalizeRentalIdentity, validateRentalIdentity } from '../../domain/rentalIdentity'
 import { CustomerProfileReminder } from '../../components/CustomerProfileFields'
@@ -1941,6 +1942,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       if (item.images.length > 10) errors[`goodsImages-${item.id}`] = 'Mỗi loại hàng hóa được tải tối đa 10 ảnh.'
       if (isFreeformGoods) {
         if (!item.customGoodsName.trim()) errors[`customGoodsName-${item.id}`] = 'Vui lòng nhập tên hàng hóa.'
+        if (!item.customMaterial.trim()) errors[`customMaterial-${item.id}`] = 'Vui lòng nhập chất liệu chính.'
+        if (item.images.length === 0) errors[`goodsImages-${item.id}`] = 'Vui lòng tải lên ít nhất 1 hình ảnh cho hàng hóa loại khác.'
       }
     })
     if (!goodsCondition.trim()) errors.condition = 'Vui lòng chọn phương thức đóng gói.'
@@ -3664,10 +3667,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     <div className="mt-3 space-y-3 border-t border-stone-200 pt-3">
                       {catalogCategoryFor(item.category)?.custom && <div className="grid gap-3 sm:grid-cols-2">
                         <div><Input label="Tên hàng hóa *" value={item.customGoodsName} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customGoodsName: e.target.value } : row))} />{bookingErrors[`customGoodsName-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`customGoodsName-${item.id}`]}</p>}</div>
-                        <div><Input label="Chất liệu chính (nếu xác định được)" value={item.customMaterial} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customMaterial: e.target.value } : row))} /></div>
+                        <div><Input label="Chất liệu chính *" value={item.customMaterial} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customMaterial: e.target.value } : row))} />{bookingErrors[`customMaterial-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`customMaterial-${item.id}`]}</p>}</div>
                       </div>}
                       <Input label="Ghi chú bổ sung" value={item.customerNote} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customerNote: e.target.value } : row))} />
-                      <div><label className="text-sm font-medium text-stone-700">Hình ảnh hàng hóa</label><p className="mt-1 text-xs text-stone-500">Tối đa 10 ảnh PNG, JPEG hoặc WebP. Ảnh được gắn với đúng hàng hóa sau khi tạo đơn.</p><input type="file" accept="image/png,image/jpeg,image/webp" multiple className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm" onChange={event => selectGoodsImages(item.id, event)} />{item.images.length > 0 && <p className="mt-1 text-xs text-stone-500">Đã chọn {item.images.length}/10 ảnh: {item.images.map(file => file.name).join(', ')}</p>}{bookingErrors[`goodsImages-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsImages-${item.id}`]}</p>}</div>
+                      <div><label className="text-sm font-medium text-stone-700">Hình ảnh hàng hóa{catalogCategoryFor(item.category)?.custom ? ' *' : ''}</label><p className="mt-1 text-xs text-stone-500">Tối đa 10 ảnh PNG, JPEG hoặc WebP. Ảnh được gắn với đúng hàng hóa sau khi tạo đơn.</p><input type="file" accept="image/png,image/jpeg,image/webp" multiple className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm" onChange={event => selectGoodsImages(item.id, event)} /><GoodsImagePreviewGrid files={item.images} onRemove={idx => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, images: row.images.filter((_, i) => i !== idx) } : row))} />{bookingErrors[`goodsImages-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsImages-${item.id}`]}</p>}</div>
                       {catalogCategoryFor(item.category)?.custom && <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><b>Yêu cầu cần nhân viên cơ sở duyệt</b><p className="mt-1 leading-5">Sau khi bạn chọn lịch nhận kho và gửi đơn, nhân viên cơ sở sẽ duyệt hàng hóa trong tối đa {STAFF_REVIEW_HOURS} giờ. Khi đơn được duyệt, bạn có {PAYMENT_WINDOW_MINUTES} phút để thanh toán cọc. Quản lý cơ sở có tối đa {MANAGER_ASSIGNMENT_HOURS} giờ tiếp theo để phân kho.</p></div>}
                     </div>
                   </details>)
