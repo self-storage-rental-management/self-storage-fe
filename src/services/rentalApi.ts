@@ -118,7 +118,6 @@ export function isRentalRecord(value: unknown): boolean {
     typeof r.currency === "string" &&
     isRentalStatus(r.status) &&
     (r.inventoryMismatchReturn === undefined || typeof r.inventoryMismatchReturn === "boolean") &&
-    (r.intakeCompleted === undefined || typeof r.intakeCompleted === "boolean") &&
     r.currency === "VND" &&
     validDateSemantics(r) &&
     (r.monthlyPrice === null || (Number.isFinite(r.monthlyPrice) && r.monthlyPrice >= 0)) &&
@@ -142,7 +141,7 @@ export async function listRentals(
       "endFrom",
       "endTo",
       "sort",
-      ...(role !== "customer" ? ["facilityId"] : []),
+      ...(role === "manager" ? ["facilityId"] : []),
     ],
     ["priority", "createdAt", "contractEndDate", "startDate", "monthlyPrice", "id"],
   )
@@ -213,5 +212,5 @@ export async function getStaffRental(id: string) {
 }
 
 function rentalReadPath(role: RentalApiRole) {
-  return role === "customer" ? "/api/customer/rental-records" : `/api/${role}/rentals`
+  return role === "customer" ? "/api/customer/rental-records" : "/api/manager/rentals"
 }

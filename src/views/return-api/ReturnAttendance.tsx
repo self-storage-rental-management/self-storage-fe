@@ -154,11 +154,6 @@ export default function ReturnAttendance({ record, role, editable, onChanged }: 
       <p className="text-sm text-stone-700">Hạn cuối dọn hàng · <strong>{formatVn(arrivalDeadline)}</strong></p>
     )}
 
-    {isMismatch && <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950">
-      <p>Thời hạn trả kho đã chốt: {record.returnWindowDays != null ? `${record.returnWindowDays} ngày` : 'Chưa có thông tin'}.</p>
-      <p>Gia hạn mỗi lần tối đa: {record.returnExtensionDays != null ? `${record.returnExtensionDays} ngày` : 'Chưa có thông tin'} · Đã gia hạn {record.returnExtensionCount ?? 0}/{record.maxReturnExtensions ?? 2} lần.</p>
-    </div>}
-
     {attendance.arrivedAt && (
       <div className="space-y-1 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm text-stone-800">
         <p>Đã xác nhận khách đến lúc <strong>{formatVn(attendance.arrivedAt)}</strong>.</p>

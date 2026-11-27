@@ -582,7 +582,6 @@ export interface ReservationEmailVerificationResult {
 }
 
 export interface ReservationPaymentResult {
-  receiptFileId?: string | null
   paymentId: string
   reservationId: string
   transactionReference: string
@@ -643,16 +642,6 @@ export interface PaymentComplaint {
   reviewedAt: string | null
   withdrawnAt: string | null
   decisionReason: string | null
-  paymentId?: string | null
-  gatewayIntentId?: string | null
-  paymentInitiatedAt?: string | null
-  gatewayQueryCheckedAt?: string | null
-  gatewayQueryResponseCode?: string | null
-  gatewayQueryTransactionStatus?: string | null
-  gatewayQueryTransactionNo?: string | null
-  gatewayQueryPayDate?: string | null
-  gatewayQueryConclusion?: string | null
-  gatewayQueryMessage?: string | null
 }
 
 export interface BookingDocument {

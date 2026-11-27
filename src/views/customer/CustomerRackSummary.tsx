@@ -72,6 +72,8 @@ export default function CustomerRackSummary({ result }: { result: RackResult }) 
             <tr className="border-t border-stone-200"><th className="px-3 py-2 font-medium">Số khoang mỗi tầng</th><td className="px-3 py-2">{n(firstRack.bayCount)} khoang</td></tr>
             <tr className="border-t border-stone-200"><th className="px-3 py-2 font-medium">Số tấm kê mỗi khoang</th><td className="px-3 py-2">{n(firstInput.palletsPerCompartment)} tấm</td></tr>
             <tr className="border-t border-stone-200"><th className="px-3 py-2 font-medium">Kích thước thông thủy mỗi khoang</th><td className="px-3 py-2">{size(result.compartmentClearLengthCm ?? firstRack.bayLengthCm, result.compartmentClearWidthCm ?? firstRack.bayWidthCm, result.compartmentClearHeightCm ?? firstRack.levels[0]?.clearHeightCm ?? 0)}</td></tr>
+            <tr className="border-t border-stone-200"><th className="px-3 py-2 font-medium">Kích thước tấm kê do hệ thống tính</th><td className="px-3 py-2">{size(palletLength, palletWidth, palletHeight)} · nhô {n(result.actualPalletOverhangCm ?? 0)} cm mỗi mặt</td></tr>
+            <tr className="border-t border-stone-200"><th className="px-3 py-2 font-medium">Số tấm kê tối đa theo hình học</th><td className="px-3 py-2">{n(result.maxPalletCountByGeometry ?? firstRack.maxPalletCountByGeometry ?? firstInput.palletsPerCompartment)} tấm kê mỗi khoang</td></tr>
           </tbody>
         </table>
       </div>

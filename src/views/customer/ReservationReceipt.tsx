@@ -6,7 +6,6 @@ import type { ReservationPaymentResult } from '../../services/customerReservatio
 import { bookingDepositAccepted } from './paymentPresentation'
 import { invoiceNumberLabel, paymentCurrencyLabel, paymentMethodLabel } from './paymentLabels'
 import PaymentReceiptCard from './PaymentReceiptCard'
-import { EvidenceDownload } from '../rental-support-integration/EvidenceControls'
 import type { PaymentReceiptExport } from '../../utils/downloadPaymentReceipt'
 
 function formatGatewayPayDate(value: string | null) {
@@ -25,7 +24,7 @@ export function reservationPaymentReceiptExport(payment: ReservationPaymentResul
   const isRemainingRental = payment.purpose === 'RENTAL_BALANCE'
   const gatewayPaidAt = formatGatewayPayDate(payment.gatewayPayDate)
   return {
-    title: isRemainingRental ? 'Phiếu ghi nhận thanh toán khi nhận kho' : accepted ? 'Phiếu xác nhận thanh toán giữ chỗ qua VNPay' : 'Chi tiết giao dịch cần đối soát',
+    title: isRemainingRental ? 'Biên lai thanh toán phần còn lại khi nhận kho' : accepted ? 'Biên lai đặt cọc giữ chỗ (thanh toán trước 20%)' : 'Chi tiết giao dịch cần đối soát',
     reference: receiptDisplayCode(payment.receiptCode, payment.transactionReference, payment.paymentId),
     confirmed: accepted || isRemainingRental,
     status: isRemainingRental ? 'Đã ghi nhận thanh toán nhận kho' : accepted ? 'Đơn đã xác nhận cọc (khoản trả trước)' : 'Đơn chưa xác nhận',
@@ -40,20 +39,12 @@ export function reservationPaymentReceiptExport(payment: ReservationPaymentResul
       ['Số hóa đơn', invoiceNumberLabel(payment.invoiceNumber)], ['Trạng thái hóa đơn', displayStatusLabel(payment.invoiceStatus || 'DRAFT')],
       ['Ngày phát hành hóa đơn', payment.invoiceIssuedAt ? formatCustomerDateTime(new Date(payment.invoiceIssuedAt)) : '-'],
     ],
-    footer: isRemainingRental || accepted ? 'Phiếu ghi nhận được lưu cùng đơn giữ kho để đối chiếu thanh toán.' : 'Hệ thống đã ghi nhận giao dịch, trạng thái đơn cần được kiểm tra trước khi tính là khoản trả trước được chấp nhận.',
+    footer: isRemainingRental || accepted ? 'Biên lai được lưu cùng đơn giữ kho để đối chiếu thanh toán.' : 'Hệ thống đã ghi nhận giao dịch, trạng thái đơn cần được kiểm tra trước khi tính là khoản trả trước được chấp nhận.',
   }
 }
 
 export default function ReservationReceipt({ payment, reservationCode }: { payment: ReservationPaymentResult; reservationCode: string }) {
   if (payment.paymentStatus !== 'PAID') return <p className="text-sm text-amber-900">Giao dịch chưa được ghi nhận thành công, chưa có biên lai thanh toán.</p>
   const receipt = reservationPaymentReceiptExport(payment, reservationCode)
-  return <div className="space-y-4">
-    {payment.receiptFileId
-      ? <section className="space-y-3 rounded-xl border border-stone-200 bg-white p-4">
-        <h3 className="font-semibold">Biên lai gốc do nhân viên đính kèm</h3>
-        <EvidenceDownload id={payment.receiptFileId} previewLabel="Xem biên lai gốc" label="Tải biên lai gốc" />
-      </section>
-      : payment.purpose === 'RENTAL_BALANCE' && <p role="status" className="text-sm text-amber-900">Giao dịch này chưa có biên lai gốc đính kèm. Vui lòng liên hệ cơ sở để đối chiếu.</p>}
-    <PaymentReceiptCard {...receipt} />
-  </div>
+  return <PaymentReceiptCard {...receipt} />
 }

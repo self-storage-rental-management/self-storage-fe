@@ -1,6 +1,6 @@
 import { recordDisplayCode, receiptDisplayCode } from '../../utils/recordDisplayCode'
 import { revealRecord } from '../../utils/revealRecord'
-import { compareReservationCreatedAt } from '../../utils/reservationQueueSort'
+import { compareCustomerReservations } from '../../utils/reservationQueueSort'
 import { HANDOVER_TERMS_VERSION, LEGACY_HANDOVER_TERMS_NOTICE } from '../../domain/reservationCheckInPolicy'
 import { displayStatusLabel } from '../../presentation/statusLabels'
 import { getRentalRenewalEligibility } from '../rental-api/RentalDeadlineNotice'
@@ -8,7 +8,6 @@ import { PACKAGING_METHOD_OPTIONS } from '../../domain/packagingMethods'
 import BookingArrivalDetails from './BookingArrivalDetails'
 import CustomerTransactionTerms from './CustomerTransactionTerms'
 import BookingPersonalDetails from './BookingPersonalDetails'
-import GoodsImagePreviewGrid from './GoodsImagePreviewGrid'
 import { validateCccd, normalizeCccd, maskCccd } from '../../domain/cccd'
 import { normalizeRentalIdentity, validateRentalIdentity } from '../../domain/rentalIdentity'
 import { CustomerProfileReminder } from '../../components/CustomerProfileFields'
@@ -109,21 +108,13 @@ type CustomerCatalogUnit = StorageUnit & {
 }
 
 async function loadCustomerReservationRecords() {
-  const loadAll = async (status?: Parameters<typeof listCustomerReservations>[0]) => {
-    const first = await listCustomerReservations(status, 0, 100)
-    const remaining = await Promise.all(Array.from(
-      { length: Math.max(0, first.pagination.totalPages - 1) },
-      (_, index) => listCustomerReservations(status, index + 1, 100),
-    ))
-    return [first, ...remaining].flatMap(page => page.data)
-  }
-  const currentRecords = await loadAll()
+  const currentPage = await listCustomerReservations(undefined, 0, 100)
   // Read expired records after the active list so a deadline transition between
   // requests is picked up by the history request.
-  const expiredRecords = await loadAll('EXPIRED')
+  const expiredPage = await listCustomerReservations('EXPIRED', 0, 100)
   const records = new Map<string, CustomerReservation>()
-  currentRecords.forEach(reservation => records.set(reservation.id, reservation))
-  expiredRecords.forEach(reservation => records.set(reservation.id, reservation))
+  currentPage.data.forEach(reservation => records.set(reservation.id, reservation))
+  expiredPage.data.forEach(reservation => records.set(reservation.id, reservation))
   return [...records.values()]
 }
 
@@ -795,7 +786,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const [reservationSizeFilter, setReservationSizeFilter] = useState('all')
   const [reservationTab, setReservationTab] = useState<'all' | 'active' | 'completed' | 'expired'>('all')
   const [reservationSearch, setReservationSearch] = useState('')
-  const [reservationSortOrder, setReservationSortOrder] = useState<'newest' | 'oldest'>('newest')
   const [reservationPageNumber, setReservationPageNumber] = useState(1)
   const [reservationPageSize, setReservationPageSize] = useState(5)
   const [expiredReservationPageNumber, setExpiredReservationPageNumber] = useState(1)
@@ -1248,18 +1238,18 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     const holdSize = storageSizeCode(assignedUnit?.type || hold.unitTypeName || hold.unitId)
     if (!matchesReservationSearch(reservationSearch, [hold.id, hold.unitTypeName, facilities.find(item => item.id === hold.facilityId)?.name])) return false
     return reservationSizeFilter === 'all' || holdSize === reservationSizeFilter
-  }).sort((a, b) => compareReservationCreatedAt(a, b, reservationSortOrder))
-  // Sort the filtered records by creation time before dividing them into pages.
+  }).sort(compareCustomerReservations)
+  // Server orders every page by the customer's next action and its authoritative deadline.
   const pendingHandoverReservations = [...backendReservations]
   const filteredBackendReservations = pendingHandoverReservations.filter(reservation => {
     if (reservationFacilityFilter !== 'all' && reservation.facilityId !== reservationFacilityFilter) return false
     const unitType = backendUnitTypes.find(item => item.id === reservation.unitTypeId)
     if (!matchesReservationSearch(reservationSearch, [reservation.reservationCode, reservation.customerName, reservation.customerPhone, reservation.customerEmail, reservation.unitTypeName || unitType?.name, reservation.assignedUnitCode, facilities.find(item => item.id === reservation.facilityId)?.name])) return false
     return reservationSizeFilter === 'all' || storageSizeCode(unitType?.name || unitType?.code || '') === reservationSizeFilter
-  }).sort((a, b) => compareReservationCreatedAt(a, b, reservationSortOrder))
+  })
 
-  const activeBackendReservations = filteredBackendReservations.filter(reservation => !reservation.violationRecovery && !['EXPIRED', 'REJECTED', 'CANCELLED', 'COMPLETED'].includes(reservation.status))
-  const expiredBackendReservations = filteredBackendReservations.filter(reservation => ['EXPIRED', 'REJECTED'].includes(reservation.status))
+  const activeBackendReservations = filteredBackendReservations.filter(reservation => !reservation.violationRecovery && !['EXPIRED', 'COMPLETED'].includes(reservation.status))
+  const expiredBackendReservations = filteredBackendReservations.filter(reservation => reservation.status === 'EXPIRED')
   const completedBackendReservations = filteredBackendReservations.filter(reservation => reservation.violationRecovery || reservation.status === 'COMPLETED')
   const activeReservationHolds = filteredReservationHolds.filter(hold => !['EXPIRED', 'COMPLETED', 'completed'].includes(hold.status))
   const expiredReservationHolds = filteredReservationHolds.filter(hold => hold.status === 'EXPIRED')
@@ -1291,9 +1281,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const pagedBackendReservations = displayedBackendReservations.slice(currentTabPagination.start, currentTabPagination.end)
   const pagedReservationHolds = displayedReservationHolds.slice(currentTabPagination.start, currentTabPagination.end)
 
-  useEffect(() => { setReservationPageNumber(1) }, [reservationTab, reservationSearch, reservationFacilityFilter, reservationSizeFilter, reservationSortOrder, reservationPageSize])
-  useEffect(() => { setExpiredReservationPageNumber(1) }, [reservationSearch, reservationFacilityFilter, reservationSizeFilter, reservationSortOrder, reservationPageSize])
-  useEffect(() => { setCompletedReservationPageNumber(1) }, [reservationSearch, reservationFacilityFilter, reservationSizeFilter, reservationSortOrder, reservationPageSize])
+  useEffect(() => { setReservationPageNumber(1) }, [reservationTab, reservationSearch, reservationFacilityFilter, reservationSizeFilter, reservationPageSize])
+  useEffect(() => { setExpiredReservationPageNumber(1) }, [reservationSearch, reservationFacilityFilter, reservationSizeFilter, reservationPageSize])
+  useEffect(() => { setCompletedReservationPageNumber(1) }, [reservationSearch, reservationFacilityFilter, reservationSizeFilter, reservationPageSize])
   useEffect(() => { setReservationPageNumber(current => Math.min(current, currentTabPagination.pages)) }, [currentTabPagination.pages])
   useEffect(() => { setExpiredReservationPageNumber(current => Math.min(current, expiredReservationPagination.pages)) }, [expiredReservationPagination.pages])
   useEffect(() => { setCompletedReservationPageNumber(current => Math.min(current, completedReservationPagination.pages)) }, [completedReservationPagination.pages])
@@ -1334,7 +1324,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       id: `api-notification-${notification.id}`,
       date: notification.createdAt,
       title: notification.title,
-      message: notification.content.replace(/(Kỳ thuê tính từ\s+)(\d{4})-(\d{2})-(\d{2})(?=\.|\s|$)/g, '$1$4/$3/$2'),
+      message: notification.content,
       page: notification.type === 'CHECKIN' ? 'reservations'
         : notification.type === 'RENEWAL' || notification.type === 'OVERDUE' ? 'rental-records'
         : notification.type === 'RETURN' ? 'rental-records'
@@ -1671,16 +1661,20 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   const selectedSizeCode = storageSizeCode(selectedTarget?.unitType.name || selectedUnit?.type) as CustomerCatalogUnit['sizeCode']
   const selectedBackendUnitType = backendUnitTypes.find(item => item.id === selectedTarget?.unitType.id)
+  const isScopedUnitType = Boolean(selectedBackendUnitType?.acceptedGoodsCategoryIds && selectedBackendUnitType.acceptedGoodsCategoryIds.length > 0)
   const bookingCategories = (goodsCatalog?.categories || []).filter(category =>
-    !selectedBackendUnitType?.acceptedGoodsCategoryIds?.length || selectedBackendUnitType.acceptedGoodsCategoryIds.includes(category.id))
+    !isScopedUnitType || selectedBackendUnitType!.acceptedGoodsCategoryIds!.includes(category.id))
   const bookingCategoryOptions = bookingCategories.map(category => [category.code, category.label] as const)
   const bookingMaterials = (categoryCode: string) => {
     const category = bookingCategories.find(item => item.code === categoryCode)
     if (!category) return []
+    if (!isScopedUnitType) return (category.materials || []).filter(m => m.status === 'ACTIVE')
+    const acceptedMatIds = selectedBackendUnitType?.acceptedGoodsMaterialIds || []
     return (category.materials || []).filter(material =>
-      !selectedBackendUnitType?.acceptedGoodsMaterialIds?.length || selectedBackendUnitType.acceptedGoodsMaterialIds.includes(material.id))
+      material.status === 'ACTIVE' && acceptedMatIds.includes(material.id))
   }
-  const isMaterialOptional = (categoryCode: string) => OPTIONAL_MATERIAL_CATEGORY_CODES.has(categoryCode)
+  const isMaterialOptional = (categoryCode: string) =>
+    OPTIONAL_MATERIAL_CATEGORY_CODES.has(categoryCode) || (isScopedUnitType && bookingMaterials(categoryCode).length === 0)
   const catalogIssues = goodsItems.map(item => goodsCatalogIssue(item, goodsCatalog,
     selectedBackendUnitType?.acceptedGoodsCategoryIds, selectedBackendUnitType?.acceptedGoodsMaterialIds))
   const hasValidQuotedGoods = bookingReview && !!serverQuote && Date.parse(serverQuote.expiresAt) > Date.now() && !!quotedGoodsItems.current
@@ -1951,8 +1945,6 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       if (item.images.length > 10) errors[`goodsImages-${item.id}`] = 'Mỗi loại hàng hóa được tải tối đa 10 ảnh.'
       if (isFreeformGoods) {
         if (!item.customGoodsName.trim()) errors[`customGoodsName-${item.id}`] = 'Vui lòng nhập tên hàng hóa.'
-        if (!item.customMaterial.trim()) errors[`customMaterial-${item.id}`] = 'Vui lòng nhập chất liệu chính.'
-        if (item.images.length === 0) errors[`goodsImages-${item.id}`] = 'Vui lòng tải lên ít nhất 1 hình ảnh cho hàng hóa loại khác.'
       }
     })
     if (!goodsCondition.trim()) errors.condition = 'Vui lòng chọn phương thức đóng gói.'
@@ -2636,12 +2628,11 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           />
 
           <Card className="p-4">
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[2fr_1fr_1fr_1fr_auto] md:items-end">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[2fr_1fr_1fr_auto] md:items-end">
               <Input label="Tìm kiếm đơn giữ kho" placeholder="Mã đơn, cơ sở, loại kho hoặc thông tin liên hệ" value={reservationSearch} onChange={event => setReservationSearch(event.target.value)} />
               <Select label="Lọc theo cơ sở" value={reservationFacilityFilter} onChange={event => setReservationFacilityFilter(event.target.value)}><option value="all">Tất cả cơ sở</option>{facilities.map(facility => <option key={facility.id} value={facility.id}>{CUSTOMER_FACILITY_DISPLAY[facility.id]?.name || facility.name}</option>)}</Select>
               <Select label="Lọc theo kích thước kho" value={reservationSizeFilter} onChange={event => setReservationSizeFilter(event.target.value)}><option value="all">Tất cả kích thước</option><option value="S">Kho nhỏ (S)</option><option value="M">Kho vừa (M)</option><option value="L">Kho lớn (L)</option><option value="XL">Kho rất lớn (XL)</option></Select>
-              <Select label="Sắp xếp theo ngày đặt" value={reservationSortOrder} onChange={event => setReservationSortOrder(event.target.value as 'newest' | 'oldest')}><option value="newest">Mới nhất</option><option value="oldest">Cũ nhất</option></Select>
-              <Button variant="outline" disabled={!reservationSearch && reservationFacilityFilter === 'all' && reservationSizeFilter === 'all' && reservationSortOrder === 'newest'} onClick={() => { setReservationSearch(''); setReservationFacilityFilter('all'); setReservationSizeFilter('all'); setReservationSortOrder('newest') }}>Xóa bộ lọc</Button>
+              <Button variant="outline" disabled={!reservationSearch && reservationFacilityFilter === 'all' && reservationSizeFilter === 'all'} onClick={() => { setReservationSearch(''); setReservationFacilityFilter('all'); setReservationSizeFilter('all') }}>Xóa bộ lọc</Button>
             </div>
             <p className="mt-3 text-xs text-stone-500">Hiển thị {isApiAuthenticated() ? filteredBackendReservations.length : filteredReservationHolds.length}/{isApiAuthenticated() ? pendingHandoverReservations.length : visibleMyHolds.length} đơn đặt giữ kho.</p>
 
@@ -3677,10 +3668,10 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     <div className="mt-3 space-y-3 border-t border-stone-200 pt-3">
                       {catalogCategoryFor(item.category)?.custom && <div className="grid gap-3 sm:grid-cols-2">
                         <div><Input label="Tên hàng hóa *" value={item.customGoodsName} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customGoodsName: e.target.value } : row))} />{bookingErrors[`customGoodsName-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`customGoodsName-${item.id}`]}</p>}</div>
-                        <div><Input label="Chất liệu chính *" value={item.customMaterial} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customMaterial: e.target.value } : row))} />{bookingErrors[`customMaterial-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`customMaterial-${item.id}`]}</p>}</div>
+                        <div><Input label="Chất liệu chính (nếu xác định được)" value={item.customMaterial} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customMaterial: e.target.value } : row))} /></div>
                       </div>}
                       <Input label="Ghi chú bổ sung" value={item.customerNote} onChange={e => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, customerNote: e.target.value } : row))} />
-                      <div><label className="text-sm font-medium text-stone-700">Hình ảnh hàng hóa{catalogCategoryFor(item.category)?.custom ? ' *' : ''}</label><p className="mt-1 text-xs text-stone-500">Tối đa 10 ảnh PNG, JPEG hoặc WebP. Ảnh được gắn với đúng hàng hóa sau khi tạo đơn.</p><input type="file" accept="image/png,image/jpeg,image/webp" multiple className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm" onChange={event => selectGoodsImages(item.id, event)} /><GoodsImagePreviewGrid files={item.images} onRemove={idx => setGoodsItems(items => items.map(row => row.id === item.id ? { ...row, images: row.images.filter((_, i) => i !== idx) } : row))} />{bookingErrors[`goodsImages-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsImages-${item.id}`]}</p>}</div>
+                      <div><label className="text-sm font-medium text-stone-700">Hình ảnh hàng hóa</label><p className="mt-1 text-xs text-stone-500">Tối đa 10 ảnh PNG, JPEG hoặc WebP. Ảnh được gắn với đúng hàng hóa sau khi tạo đơn.</p><input type="file" accept="image/png,image/jpeg,image/webp" multiple className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm" onChange={event => selectGoodsImages(item.id, event)} />{item.images.length > 0 && <p className="mt-1 text-xs text-stone-500">Đã chọn {item.images.length}/10 ảnh: {item.images.map(file => file.name).join(', ')}</p>}{bookingErrors[`goodsImages-${item.id}`] && <p className="mt-1 text-xs text-red-700">{bookingErrors[`goodsImages-${item.id}`]}</p>}</div>
                       {catalogCategoryFor(item.category)?.custom && <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950"><b>Yêu cầu cần nhân viên cơ sở duyệt</b><p className="mt-1 leading-5">Sau khi bạn chọn lịch nhận kho và gửi đơn, nhân viên cơ sở sẽ duyệt hàng hóa trong tối đa {STAFF_REVIEW_HOURS} giờ. Khi đơn được duyệt, bạn có {PAYMENT_WINDOW_MINUTES} phút để thanh toán cọc. Quản lý cơ sở có tối đa {MANAGER_ASSIGNMENT_HOURS} giờ tiếp theo để phân kho.</p></div>}
                     </div>
                   </details>)
@@ -3722,7 +3713,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   <summary className="cursor-pointer text-sm font-medium">Quy định thuê kho và danh mục hàng cấm</summary>
                   <ul className="my-3 list-disc space-y-1 pl-5 text-sm text-stone-700">
                     <li><strong>Giữ chỗ.</strong> Trả trước 20% trong thời hạn ghi trên đơn. Khoản này được trừ vào tổng tiền phải trả. Cọc đảm bảo được tính riêng.</li>
-                    <li><strong>Nhận kho.</strong> Mang CCCD gốc hợp lệ đến nhận kho đúng giờ hẹn. Bàn giao trong 72 giờ kể từ khi nhân viên xác nhận khách đã đến nhận kho.</li>
+                    <li><strong>Nhận kho.</strong> Mang CCCD gốc hợp lệ đến trong 7 ngày, tính cả ngày hẹn. Bàn giao trong 72 giờ từ lần đối chiếu CCCD đầu tiên có kết quả.</li>
                     <li><strong>Hủy đơn.</strong> Nếu tự hủy, bạn có thể mất khoản giữ chỗ. Nếu quá hạn nhận kho hoặc bị từ chối do CCCD sai từ 4 chữ số, khoản giữ chỗ sẽ không được hoàn.</li>
                     <li><strong>Hàng cấm.</strong> Kho không nhận hàng cháy nổ, hóa chất nguy hiểm, hàng tươi sống hoặc hàng vi phạm pháp luật.</li>
                   </ul>
@@ -3845,7 +3836,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             {bookingStep === 3 && bookingReview && isApiAuthenticated() && serverQuote && (
               <label className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
                 <input type="checkbox" className="mt-1 h-4 w-4" checked={termsAccepted} onChange={event => setTermsAccepted(event.target.checked)} />
-                <span>Tôi đồng ý với báo giá, thời gian chuẩn bị miễn phí và điều khoản về hạn nhận kho 7 ngày và đối chiếu CCCD. Tôi hiểu khoản giữ chỗ có thể không được hoàn là <b>{formatVndAmount(serverQuote.reservationDepositAmount)}</b>.</span>
+                <span>Tôi đồng ý với báo giá, thời gian chuẩn bị miễn phí và điều khoản về hạn nhận kho 7 ngày và đối chiếu CCCD. Tôi hiểu khoản giữ chỗ có thể không được hoàn là <b>{formatVndAmount(serverQuote.reservationDepositAmount)}</b>. Phiên bản điều khoản được lưu cùng đơn.</span>
               </label>
             )}
             {reservationSubmitError && <div role="alert" className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900">

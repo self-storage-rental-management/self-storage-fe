@@ -13,10 +13,6 @@ import ManagerPaymentComplaintsPanel from './ManagerPaymentComplaintsPanel'
 import { listManagerPaymentComplaints } from '../../services/managerPaymentComplaintApi'
 import { getRental } from '../../services/rentalApi'
 
-import ManagerSuspicionReports from './ManagerSuspicionReports'
-
-export type ManagerComplaintsTab = 'payment' | 'returns' | 'reports'
-
 const rentalCodeCache = new Map<string, string>()
 
 function RentalDisplayCode({
@@ -63,9 +59,8 @@ function RentalDisplayCode({
 export interface ManagerComplaintsWorkspaceProps {
   user: User
   showToast: (message: string) => void
-  activeTab: ManagerComplaintsTab
-  onTabChange: (tab: ManagerComplaintsTab) => void
-  onOpenReport: (id: string) => void
+  initialTab?: 'payment' | 'returns'
+  onTabChange?: (tab: 'payment' | 'returns') => void
 }
 
 interface DisputeSettlementFees {
@@ -79,10 +74,10 @@ interface DisputeSettlementFees {
 export default function ManagerComplaintsWorkspace({
   user,
   showToast,
-  activeTab,
-  onTabChange,
-  onOpenReport,
+  initialTab = 'payment',
+  onTabChange
 }: ManagerComplaintsWorkspaceProps) {
+  const [activeTab, setActiveTab] = useState<'payment' | 'returns'>(initialTab)
   const [paymentCount, setPaymentCount] = useState<number>(0)
   const hub = useStorageHub()
   const useApi = isApiAuthenticated()
@@ -326,7 +321,10 @@ export default function ManagerComplaintsWorkspace({
     }
   }
 
-  const switchTab = onTabChange
+  const switchTab = (tab: 'payment' | 'returns') => {
+    setActiveTab(tab)
+    onTabChange?.(tab)
+  }
 
   return (
     <div className="space-y-6">
@@ -336,9 +334,9 @@ export default function ManagerComplaintsWorkspace({
           <p className="text-xs font-bold uppercase tracking-wider text-amber-700">
             Hỗ trợ & Đối soát
           </p>
-          <h1 className="text-2xl font-bold text-stone-900">Khiếu nại và báo cáo</h1>
+          <h1 className="text-2xl font-bold text-stone-900">Quản lý Khiếu nại</h1>
           <p className="mt-1 text-sm text-stone-500">
-            Xem khiếu nại thanh toán, khiếu nại quyết toán trả kho và báo cáo nghi vấn hàng cấm.
+            Trung tâm xử lý khiếu nại tập trung: đối soát giao dịch thanh toán cọc giữ chỗ và giải quyết khiếu nại quyết toán trả kho.
           </p>
         </div>
       </div>
@@ -388,14 +386,7 @@ export default function ManagerComplaintsWorkspace({
             </span>
           )}
         </button>
-        {useApi && <button type="button" aria-pressed={activeTab === 'reports'} onClick={() => switchTab('reports')}
-          className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${activeTab === 'reports'
-            ? 'bg-amber-600 text-white shadow' : 'bg-stone-100 text-stone-700 hover:bg-stone-200'}`}>
-          Báo cáo nghi vấn
-        </button>}
       </div>
-
-      {activeTab === 'reports' && useApi && <ManagerSuspicionReports onOpenReport={onOpenReport} />}
 
       {/* TAB 1: Payment Complaints */}
       {activeTab === 'payment' && (

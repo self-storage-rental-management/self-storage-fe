@@ -7,16 +7,13 @@ import { listRentalPayments, type RentalPaymentReceipt } from '../../services/re
 import { formatVndAmount } from '../../i18n/currency'
 import { rentalDate, rentalError } from '../rental-api/presentation'
 import PaymentReceiptCard from '../customer/PaymentReceiptCard'
-import { EvidenceDownload } from '../rental-support-integration/EvidenceControls'
 import { paymentCurrencyLabel, paymentMethodLabel } from '../customer/paymentLabels'
 
 const statuses = { PENDING: 'Chờ thanh toán', PROCESSING: 'Đang xử lý', PAID: 'Đã thanh toán', NOT_RECEIVED: 'Chưa nhận tiền', FAILED: 'Không thành công', CANCELLED: 'Đã hủy', REFUNDED: 'Đã hoàn tiền' }
 const purpose = (p: RentalPaymentReceipt) => p.purpose==='RENEWAL' ? 'Thanh toán gia hạn' : p.purpose==='RENTAL_BALANCE' ? p.renewalId ? 'Thanh toán khi ký gia hạn' : 'Thanh toán khi nhận kho' : p.purpose==='MONTHLY_RENT' ? 'Tiền thuê tháng' : 'Đặt cọc giữ chỗ'
 function Receipt({ payment: p }: { payment: RentalPaymentReceipt }) {
   const verified = ['VERIFIED','SANDBOX'].includes(p.verification)
-  return <div className="space-y-4">
-    {p.receiptFileId && <EvidenceDownload id={p.receiptFileId} previewLabel="Xem biên lai gốc" label="Tải biên lai gốc" />}
-    <PaymentReceiptCard title="Phiếu ghi nhận thanh toán" reference={receiptDisplayCode(p.receiptCode, p.transactionReference, p.paymentId)}
+  return <PaymentReceiptCard title="Biên lai thanh toán" reference={receiptDisplayCode(p.receiptCode, p.transactionReference, p.paymentId)}
     confirmed={verified} status={p.verification==='SIMULATED' ? 'Giao dịch mô phỏng' : verified ? 'Đã xác nhận' : 'Cần đối soát'}
     fields={[
       ['Mã phiếu thu',p.receiptCode || 'Chưa cấp'],
@@ -26,7 +23,6 @@ function Receipt({ payment: p }: { payment: RentalPaymentReceipt }) {
       ['Nội dung',purpose(p)],['Số tiền',formatVndAmount(p.amount)],['Tiền tệ',paymentCurrencyLabel(p.currency)],
       ...(p.refundedAmount>0 ? [['Đã hoàn',formatVndAmount(p.refundedAmount)] as [string,string]] : []),
     ]} footer={p.verification==='SIMULATED' ? 'Giao dịch mô phỏng, không xác nhận thu tiền thật.' : p.verification==='SANDBOX' ? 'Giao dịch VNPay thử nghiệm, không xác nhận thu tiền thật.' : verified ? 'Biên lai được lưu để đối chiếu thanh toán của hồ sơ thuê.' : 'Khoản thanh toán chưa có đủ bằng chứng đối soát.'} />
-  </div>
 }
 export default function InventoryRentalPayments({ id }: { id: string }) {
   const actor=getAuthenticatedActor()

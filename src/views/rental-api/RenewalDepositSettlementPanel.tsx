@@ -8,7 +8,7 @@ import type { RenewalOperationsRole } from "../../types/renewalOperationsApi"
 import { EvidenceUpload } from "../rental-support-integration/EvidenceControls"
 import { rentalError, rentalMoney } from "./presentation"
 
-const labels = { AWAITING_FAULT_REVIEW: "Giữ tiền thuê trả trước, chờ xác minh trách nhiệm", FACILITY_FAULT: "Giữ tiền thuê trả trước để xử lý sự cố từ cơ sở", HELD: "Đã ghi nhận tiền thuê trả trước", AWAITING_RECOVERY_DEADLINE: "Chờ mốc xử lý tiền thuê trả trước ngày quá hạn thứ 8", APPLIED_TO_RENT: "Đã tính vào tiền thuê", REVIEW_REQUIRED: "Chờ xác minh nguyên nhân", FORFEITED: "Đã ghi nhận mất tiền thuê gia hạn trả trước", PAYMENT_FORFEITED: "Đã tự hủy gia hạn và xác nhận toàn bộ tiền gia hạn đã thanh toán không được hoàn lại.", REFUND_ELIGIBLE: "Đủ điều kiện xem xét hoàn tiền thuê trả trước", REFUND_APPROVED: "Đã duyệt, chờ hoàn tiền thuê trả trước", REFUNDED: "Đã ghi nhận hoàn tiền thuê trả trước", UNKNOWN: "Chưa xác minh", NOT_APPLICABLE: "Không áp dụng" }
+const labels = { AWAITING_FAULT_REVIEW: "Giữ tiền thuê trả trước, chờ xác minh trách nhiệm", FACILITY_FAULT: "Giữ tiền thuê trả trước để xử lý sự cố từ cơ sở", HELD: "Đã ghi nhận tiền thuê trả trước", AWAITING_RECOVERY_DEADLINE: "Chờ mốc xử lý tiền thuê trả trước ngày quá hạn thứ 8", APPLIED_TO_RENT: "Đã tính vào tiền thuê", REVIEW_REQUIRED: "Chờ xác minh nguyên nhân", FORFEITED: "Đã ghi nhận mất tiền thuê gia hạn trả trước", REFUND_ELIGIBLE: "Đủ điều kiện xem xét hoàn tiền thuê trả trước", REFUND_APPROVED: "Đã duyệt, chờ hoàn tiền thuê trả trước", REFUNDED: "Đã ghi nhận hoàn tiền thuê trả trước", UNKNOWN: "Chưa xác minh", NOT_APPLICABLE: "Không áp dụng" }
 export default function RenewalDepositSettlementPanel({ id, role, revision, onLocked, onChanged }: {
   id: string; role: RenewalOperationsRole; revision?: number | null; onLocked: (value: boolean) => void; onChanged: () => void
 }) {
@@ -42,11 +42,11 @@ export default function RenewalDepositSettlementPanel({ id, role, revision, onLo
     {settlement.status === 'PREPARATION_BLOCKED' && <p className="text-sm text-stone-600">Khoản thu đã được đối soát nhưng chưa chuẩn bị được ký gia hạn. Cơ sở cần kiểm tra khả năng tiếp tục hoặc duyệt hoàn tiền. Trường hợp này không được tự coi là khách không đến.</p>}
     {canResolve && <PreparationResolutionForm id={id} settlement={settlement} onLocked={onLocked} onChanged={() => { read.refresh();onChanged() }} />}
     {canRecord && <div className="space-y-3 border-t border-stone-100 pt-4">
-      <p className="text-sm text-stone-600">{settlement.environment === "SANDBOX" ? "Ghi nhận chứng từ hoàn thử nghiệm cho khoản thu thử nghiệm. Thao tác này không chuyển tiền hoặc xác nhận khoản hoàn thực tế." : "Sau khi hoàn bằng tiền mặt hoặc chuyển khoản, tải chứng từ và xác nhận để ghi nhận kết quả."}</p>
+      <p className="text-sm text-stone-600">{settlement.environment === "SANDBOX" ? "Ghi nhận chứng từ hoàn khoản trả trước qua VNPay thử nghiệm. Thao tác này không xác nhận chuyển tiền thật." : "Sau khi thực hiện khoản hoàn, tải chứng từ và xác nhận để ghi nhận kết quả."}</p>
       <fieldset disabled={locked} className="space-y-3">
         <label className="block text-sm">Mã giao dịch hoàn tiền thuê trả trước<input className="mt-1 block w-full rounded-lg border border-stone-300 px-3 py-2" value={reference} maxLength={100} onChange={event => setReference(event.target.value)} /></label>
         <EvidenceUpload entityType="DUONG_RENEWAL_REFUND" entityId={id} value={file ? [file] : []} limit={1} disabled={locked} fileNamePurpose="chung-tu-hoan-tien-thue-gia-han" onChange={ids => setFile(ids[0] ?? "")} onBusy={uploadBusy} />
-        <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={attested} onChange={event => setAttested(event.target.checked)} />{settlement.environment === "SANDBOX" ? "Tôi xác nhận chứng từ thử nghiệm đúng với hồ sơ này." : "Tôi xác nhận khoản hoàn đã được thực hiện và chứng từ đúng với hồ sơ này."}</label>
+        <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={attested} onChange={event => setAttested(event.target.checked)} />Tôi xác nhận khoản hoàn đã được thực hiện và chứng từ đúng với hồ sơ này.</label>
       </fieldset>
       {Boolean(command.error) && <p role="alert" className="text-sm text-red-700">{rentalError(command.error)}</p>}
       {command.uncertain && <p role="status" className="text-sm text-amber-800">Chưa xác định kết quả. Thử lại cùng yêu cầu để kiểm tra, không tạo khoản hoàn mới.</p>}

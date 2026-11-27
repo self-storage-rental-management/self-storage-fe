@@ -136,9 +136,7 @@ export function staffWorkingFacilityId(actor: ApiActor): string | undefined {
 }
 
 export function actorToUser(actor: ApiActor): User {
-  const role = primaryRole(actor.roles)
   const assignedFacilityIds = Object.keys(actor.facilityScopes)
-  const facilityId = role === 'staff' ? staffWorkingFacilityId(actor) : assignedFacilityIds[0]
   const assignedFacilityNames = assignedFacilityIds
     .map(id => actor.facilityNames?.[id])
     .filter((name): name is string => Boolean(name))
@@ -152,9 +150,9 @@ export function actorToUser(actor: ApiActor): User {
     emergencyContactPhone: actor.emergencyContactPhone || undefined,
     profileDetails: actor.profileDetails,
     avatar: actor.avatarUrl || undefined,
-    role,
-    facility: role === 'staff' ? (facilityId ? actor.facilityNames?.[facilityId] : undefined) : assignedFacilityNames.join(', ') || undefined,
-    facilityId,
+    role: primaryRole(actor.roles),
+    facility: assignedFacilityNames.join(', ') || undefined,
+    facilityId: assignedFacilityIds[0],
     facilityScopes: actor.facilityScopes,
     facilityNames: actor.facilityNames,
     mustChangePassword: actor.mustChangePassword,
@@ -169,7 +167,9 @@ function completeApiLogin(response: ApiEnvelope<ApiAuthResponse>, invalidMessage
   }
   setAccessToken(response.data.accessToken)
   setRefreshToken(response.data.refreshToken)
-  return persistActor(normalizeApiActor(response.data.actor))!
+  const actor = persistActor(normalizeApiActor(response.data.actor))!
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('storagehub:actor-updated'))
+  return actor
 }
 
 export async function loginWithApi(email: string, password: string): Promise<ApiActor> {
@@ -257,7 +257,7 @@ export async function updateCurrentProfileWithApi(input: {
   })
   if (!response?.data) throw new Error('Chưa tải được thông tin. Vui lòng thử lại.')
   persistActor(normalizeApiActor(response.data))
-  window.dispatchEvent(new Event('storagehub:actor-updated'))
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('storagehub:actor-updated'))
   return currentActor!
 }
 
@@ -265,7 +265,7 @@ export async function refreshCurrentProfileWithApi(): Promise<ApiActor> {
   const response = await apiRequest<ApiEnvelope<ApiActor>>('/api/auth/me')
   if (!response?.data) throw new Error('Chưa tải được thông tin. Vui lòng thử lại.')
   persistActor(normalizeApiActor(response.data))
-  window.dispatchEvent(new Event('storagehub:actor-updated'))
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('storagehub:actor-updated'))
   return currentActor!
 }
 
