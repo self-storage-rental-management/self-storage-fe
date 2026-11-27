@@ -58,7 +58,7 @@ describe('customer reservation layout regression', () => {
       responseCode: '00', transactionStatus: '00', gatewayPayDate: '20261101165500', message: '',
       processedAt: '2026-11-01T09:55:00Z', lastReconciledAt: null }
     const html = renderToStaticMarkup(<ReservationReceipt payment={payment} reservationCode={base.reservationCode} />)
-    for (const text of ['Biên lai đặt cọc giữ chỗ (thanh toán trước 20%)', 'transaction-1', 'RSV-TEST', 'Thời điểm VNPay ghi nhận', '01/11/2026 16:55:00', 'Đơn đã xác nhận cọc (khoản trả trước)']) expect(html).toContain(text)
+    for (const text of ['Phiếu xác nhận thanh toán giữ chỗ qua VNPay', 'SH-REFERENCE', 'RSV-TEST', 'Thời điểm VNPay ghi nhận', '01/11/2026 16:55:00', 'Đơn đã xác nhận cọc (khoản trả trước)']) expect(html).toContain(text)
     expect(html).toContain('6.402.000 ₫')
     expect(html).not.toContain('166.452.000.000')
     for (const paymentStatus of ['FAILED', 'NOT_RECEIVED'] as const) {
@@ -100,15 +100,15 @@ describe('customer reservation layout regression', () => {
     }
     expect(render('AWAITING_CUSTOMER_RECEIPT')).not.toContain('Lưu lịch nhận kho')
   })
-  it('shows the two customer gates before inventory', () => {
-    expect(render('AWAITING_CUSTOMER_RECEIPT')).toContain('Xác nhận đã nhận kho')
+  it('removes customer receipt confirmation and retains preparation reporting', () => {
+    expect(render('AWAITING_CUSTOMER_RECEIPT')).not.toContain('Xác nhận đã nhận kho')
     expect(render('PREPARING')).not.toContain('Đã chuẩn bị xong')
 
     const notice = (checkInStatus: string) => renderToStaticMarkup(
       <ReservationPreparationNotice checkInStatus={checkInStatus} submitting={false} onReady={() => {}} />,
     )
     expect(notice('setup_in_progress')).toContain('Đã chuẩn bị xong')
-    expect(notice('handover_pending_receipt')).toContain('Đã chuẩn bị xong')
+    expect(notice('handover_pending_receipt')).not.toContain('Đã chuẩn bị xong')
     expect(notice('setup_completed')).toContain('Đang chờ nhân viên kiểm kê')
     expect(notice('setup_completed')).not.toContain('Đã chuẩn bị xong')
     expect(notice('completed')).toContain('Đã hoàn tất kiểm kê')
@@ -176,7 +176,7 @@ describe('customer reservation layout regression', () => {
 it('pre-handover reservation shows setup-adjusted estimated dates without repricing', () => {
  const html = renderToStaticMarkup(<CustomerReservationCard reservation={{ ...base, rentalPeriodConfirmed: false, appointmentAt: '2026-10-30T03:00:00Z', freeSetupDays: 6 }} facilityName="Kho HCM" unitTypeName="Kho nhỏ" onVerify={() => {}} onCancel={() => {}} onRefresh={async () => {}} />)
  expect(html).toContain('05/11/2026')
- expect(html).toContain('Kỳ thuê dự kiến sau thời gian chuẩn bị')
+ expect(html).toContain('Kỳ thuê có tính phí (dự kiến)')
  expect(html).toContain('4.000.000 ₫')
  expect(html).not.toContain('Kỳ thuê bắt đầu từ ngày kho có thể sẵn sàng sớm nhất')
 })

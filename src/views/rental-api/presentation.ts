@@ -30,6 +30,14 @@ export const rentalLabels: Record<string, string> = {
   completed: "Hoàn tất",
 }
 
+// Keep return-processing stages in their own workflow, rather than offering
+// them as primary rental lifecycle filters.
+export const rentalFilterLabels: Record<string, string> = {
+  setup: 'Đang chuẩn bị',
+  active: 'Đang hoạt động',
+  completed: 'Hoàn tất',
+}
+
 export function rentalStatusLabel(rental: RentalIntakeProgress & Pick<RentalApiRecord, "status" | "canConfirmRentalStart" | "inventoryMismatchReturn">) {
   if (['setup', 'active'].includes(rental.status) && rental.inventoryMismatchReturn)
     return 'Chờ trả kho do kiểm kê sai lệch'

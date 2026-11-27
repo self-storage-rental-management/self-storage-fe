@@ -1,3 +1,4 @@
+import { filterCustomerRentals } from './customerRentalFilters'
 import { parseVietnamDate, vietnamDateInput } from '../../utils/vietnamTime'
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { singleManagerFacility, managerFacilityNotice } from "../manager/managerFacilityUi"
@@ -36,6 +37,7 @@ import {
   rentalLabels,
   rentalRecordLabel,
   rentalStatusLabel,
+  rentalFilterLabels,
   rentalPeriodText,
   renewalLabels,
 } from "./presentation"
@@ -275,14 +277,16 @@ function WorkspaceData({
     async () =>
       dataTab === "rental"
         ? { kind: "rental" as const, page: await (async () => {
-          if (role !== 'customer') return listRentals(role, rq)
-          const first = await listRentals(role, { ...rq, page: 0, size: 100 })
+          if (role !== 'customer' && role !== 'manager') return listRentals(role, rq)
+          const status = role === 'customer' ? undefined : rq.status
+          const first = await listRentals(role, { ...rq, status, page: 0, size: 100 })
           const rows = [...first.data]
           for (let page = 1; page < first.pagination.totalPages; page++) {
-            const next = await listRentals(role, { ...rq, page, size: 100 })
+            const next = await listRentals(role, { ...rq, status, page, size: 100 })
             rows.push(...next.data)
           }
-          const data = [...new Map(rows.map(row => [row.id, row])).values()]
+          const uniqueRows = [...new Map(rows.map(row => [row.id, row])).values()]
+          const data = role === 'customer' ? filterCustomerRentals(uniqueRows, rq.status) : uniqueRows
           return { ...first, data, pagination: { ...first.pagination, page: 0, totalPages: 1, totalItems: data.length } }
         })() }
         : { kind: "renewal" as const, page: await (async () => {
@@ -460,7 +464,7 @@ function WorkspaceData({
             }
           >
             <option value="">Tất cả</option>
-            {Object.entries(rentalLabels).map(([value, label]) => (
+            {Object.entries(rentalFilterLabels).map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
               </option>
@@ -489,12 +493,13 @@ function WorkspaceData({
       {tab !== "recovery" && read.data && (
         <Card className={role === 'customer' || (role === 'manager' && read.data.kind === 'rental') ? '!border-0 !bg-transparent !shadow-none' : 'overflow-hidden rounded-2xl'}>
           {role === 'manager' ? (read.data.kind === 'rental'
-            ? <ManagerRentalGroups kind="rental" rows={read.data.page.data} onDetail={id => setDetail({ kind: 'rental', id })} />
+            ? <ManagerRentalGroups key={`rental:${rq.search}:${rq.status}:${rq.sort}`} kind="rental" rows={read.data.page.data} onDetail={id => setDetail({ kind: 'rental', id })} />
             : <ManagerRentalGroups kind="renewal" rows={read.data.page.data} onDetail={id => setDetail({ kind: 'renewal', id })} />
           ) : role === 'customer' && read.data.kind === 'renewal' ? <CustomerRenewalGroups rows={read.data.page.data} onDetail={id => setDetail({ kind: 'renewal', id })} /> : role === 'customer' && read.data.kind === 'rental' ? <div className="space-y-5">{(() => {
             const returningStatuses = ['return_requested', 'return_inspection', 'closing']
             const isReturning = (row: RentalApiRecord) => row.status !== 'completed' && (returningStatuses.includes(row.status) || row.inventoryMismatchReturn === true)
             const returningRows = read.data.page.data.filter(isReturning)
+            if (rq.sort && rq.sort !== 'priority,asc') return [{ id: 'all', title: 'Danh sách hồ sơ thuê', subtitle: 'Hiển thị theo thứ tự sắp xếp đã chọn.', rows: read.data.page.data, active: true }]
             return [
               { id: 'ongoing', title: 'Đang diễn ra', subtitle: 'Hồ sơ đang thuê, trong thời gian chuẩn bị hoặc quá hạn.', rows: read.data.page.data.filter(row => row.status !== 'completed' && !isReturning(row)), active: true },
               ...(returningRows.length > 0 ? [{ id: 'returning', title: 'Hồ sơ trả kho', subtitle: 'Hồ sơ đã chuyển sang quy trình trả kho, nghiệm thu và quyết toán.', rows: returningRows, active: true }] : []),
@@ -671,7 +676,7 @@ function WorkspaceData({
               </tbody>
             </table>
           </div>}
-          {role !== 'customer' && <Pager
+          {role !== 'customer' && !(role === 'manager' && read.data.kind === 'rental') && <Pager
             fixedSize
             {...{
               page: read.data.page.pagination.page,
