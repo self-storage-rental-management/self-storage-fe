@@ -100,7 +100,7 @@ describe('unitAssignmentApi', () => {
       'http://localhost:8080/api/manager/unit-assignments/reservation-1/change',
       expect.objectContaining({
         method: 'PUT',
-        body: JSON.stringify({ storageUnitId: 'unit-2', reason: 'Kho cũ cần bảo trì' }),
+        body: JSON.stringify({ storageUnitId: 'unit-2', reason: 'Kho cũ cần bảo trì', previousUnitNeedsMaintenance: false }),
       }),
     )
   })

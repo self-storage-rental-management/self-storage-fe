@@ -14,6 +14,7 @@ import {
   verifyReturnIdentity,
   type ApiReturn,
 } from '../../services/returnApi'
+import { awaitsCustomerClearance } from './ReturnClearance'
 
 export function requiresReturnAttendance(record: ApiReturn) {
   return !!record.attendance && record.sourceType !== 'RECOVERY'
@@ -116,7 +117,8 @@ export default function ReturnAttendance({ record, role, editable, onChanged }: 
   const canEnterIdentity = role === 'staff' && editable && assignedToVerify && !attendance.verifiedAt
     && !pendingReview && attendance.reviewAccepted == null
     && (isMismatch ? !!attendance.arrivedAt : (!!attendance.arrivedAt || beforeDeadline))
-  const canVerify = canEnterIdentity
+  const clearancePending = awaitsCustomerClearance(record)
+  const canVerify = canEnterIdentity && !clearancePending
     && (isMismatch || !!attendance.arrivedAt || !!file)
     && !busy && !!document.trim()
 
@@ -153,6 +155,11 @@ export default function ReturnAttendance({ record, role, editable, onChanged }: 
     {isMismatch && arrivalDeadline && (
       <p className="text-sm text-stone-700">Hạn cuối dọn hàng · <strong>{formatVn(arrivalDeadline)}</strong></p>
     )}
+
+    {isMismatch && <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950">
+      <p>Thời hạn trả kho đã chốt: {record.returnWindowDays != null ? `${record.returnWindowDays} ngày` : 'Chưa có thông tin'}.</p>
+      <p>Gia hạn mỗi lần tối đa: {record.returnExtensionDays != null ? `${record.returnExtensionDays} ngày` : 'Chưa có thông tin'} · Đã gia hạn {record.returnExtensionCount ?? 0}/{record.maxReturnExtensions ?? 2} lần.</p>
+    </div>}
 
     {attendance.arrivedAt && (
       <div className="space-y-1 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm text-stone-800">
@@ -343,17 +350,17 @@ export default function ReturnAttendance({ record, role, editable, onChanged }: 
       {(!attendance.arrivedAt || (isMismatch && !attendance.evidenceId)) && (
         <label className="block text-sm">
           {isMismatch ? 'Ảnh hiện trường khi tiếp nhận (tùy chọn nếu đã có)' : 'Ảnh hiện trường chứng minh khách đã đến và sẵn sàng bàn giao'}
-          <input className="block" type="file" accept="image/jpeg,image/png,image/webp" required={!isMismatch && !attendance.arrivedAt} disabled={busy}
+          <input className="block" type="file" accept="image/jpeg,image/png,image/webp" required={!isMismatch && !attendance.arrivedAt} disabled={busy || clearancePending}
             onChange={e => { setFile(e.target.files?.[0]); evidence.current = null }} />
         </label>
       )}
       <label className="block text-sm">Số CCCD trên giấy tờ gốc
         <input className="block rounded border p-2" type="password" autoComplete="off" maxLength={32} value={document}
-          required disabled={busy} aria-describedby="return-identity-help"
+          required disabled={busy || clearancePending} aria-describedby="return-identity-help"
           onChange={e => { setDocument(e.target.value); attempt.current = null }} />
       </label>
       <p id="return-identity-help" className="text-xs text-stone-600">
-        Nhập CCCD 12 số hoặc số hộ chiếu đã dùng khi đặt kho.
+        {clearancePending ? 'Chờ khách xác nhận đã dọn kho để xác minh danh tính.' : 'Nhập CCCD 12 số hoặc số hộ chiếu đã dùng khi đặt kho.'}
       </p>
       <Button type="submit" disabled={!canVerify}>Xác minh danh tính</Button>
     </form>}

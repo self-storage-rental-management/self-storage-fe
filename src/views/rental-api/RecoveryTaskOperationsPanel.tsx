@@ -36,9 +36,10 @@ export default function RecoveryTaskOperationsPanel({ role, task, view, identity
   refresh: () => void; closeGuard?: RecoveryCloseGuard; onSuccess: (message: string) => void
 }) {
   const actor = getAuthenticatedActor()
+  const assignedToAnother = !!task.assignedStaffId && task.assignedStaffId !== actor?.id
   const canProcess = actor?.status === 'ACTIVE' && actor.roles.includes(role === 'staff' ? 'STAFF' : 'MANAGER')
     && actor.permissions.includes('rentals:read') && actor.permissions.includes('returns:process')
-    && ['OPERATE', 'MANAGE'].includes(actor.facilityScopes[task.facilityId])
+    && ['OPERATE', 'MANAGE'].includes(actor.facilityScopes[task.facilityId]) && !assignedToAnother
   const refundSettlement = view.settlementStatus === 'refund_pending'
   const staffCashOnly = role === 'staff' && !refundSettlement
   const canCollect = !!canProcess
@@ -101,7 +102,7 @@ export default function RecoveryTaskOperationsPanel({ role, task, view, identity
         }
         request = { action: operation, body: { expectedVersion, inspection, evidenceFileIds: [...files] } }
       }
-      if (operation === 'settlement-receipts') request = { action: operation, body: { expectedVersion, paymentMethod, transactionReference: paymentMethod === 'CASH' ? '' : text('transactionReference'), receiptFileId: files[0], confirmed: checked('confirmed') } }
+      if (operation === 'settlement-receipts') request = { action: operation, body: { expectedVersion, paymentMethod, transactionReference: paymentMethod === 'CASH' ? '' : text('transactionReference'), receiptFileId: files[0], confirmed: checked('confirmed'), documentNumber: text('documentNumber') } }
       if (operation === 'completion') request = { action: operation, body: { expectedVersion, assetsCleared: checked('assetsCleared'), unitInspected: checked('unitInspected'), reportFileId: files[0], note: 'Hoàn tất thu hồi và giải phóng kho.' } }
       if (!request) return
       try { validateRecoveryCommand(request) } catch (error) { setValidation(recoveryOperationError(error)); return }
@@ -111,6 +112,7 @@ export default function RecoveryTaskOperationsPanel({ role, task, view, identity
     setValidation('')
     const snapshot = request
     void command.run(JSON.stringify(snapshot), key => sendRecoveryCommand(role, task.id, snapshot, key), () => {
+      pending.current = null
       onSuccess(`${actionLabels[snapshot.action]} thành công.`)
     })
   }
@@ -148,7 +150,7 @@ export default function RecoveryTaskOperationsPanel({ role, task, view, identity
     </section>}
     {action && !(needsReconciliation && action === 'settlement-receipts') && <form onSubmit={e => { e.preventDefault(); submit(e.currentTarget) }} className="space-y-4 rounded-lg border border-stone-200 p-4">
       <h3 className="font-semibold">{actionLabels[action]}</h3>
-      {!canProcess && <p className="text-sm">Cần quyền xử lý trả kho và quyền thao tác tại cơ sở để xử lý nhiệm vụ.</p>}
+      {!canProcess && <p className="text-sm">{role === 'staff' && assignedToAnother ? 'Nhiệm vụ đã được giao cho nhân viên khác.' : 'Cần quyền xử lý trả kho và quyền thao tác tại cơ sở để xử lý nhiệm vụ.'}</p>}
       {action === 'settlement-receipts' && canProcess && !canCollect && <p className="text-sm">{refundSettlement ? 'Cần quyền duyệt hoàn tiền, nhân viên không được thực hiện hoàn tiền.' : 'Cần quyền quản lý thanh toán để ghi nhận quyết toán.'}</p>}
       <fieldset disabled={frozen || !allowed || command.conflict} className="space-y-4 disabled:opacity-70">
         {action === 'inspection' && <>
@@ -165,6 +167,9 @@ export default function RecoveryTaskOperationsPanel({ role, task, view, identity
           <Field label="Ghi chú kiểm kê"><textarea name="staffNotes" rows={3} maxLength={4000} className={inputClass} /></Field>
         </>}
         {action === 'settlement-receipts' && <>
+          <Field label="Số CCCD hoặc hộ chiếu của khách"><input name="documentNumber" type="password" autoComplete="off"
+            required maxLength={32} className={inputClass} /></Field>
+          <p className="text-sm text-stone-600">Đối chiếu giấy tờ gốc với số đã dùng khi đặt kho trước khi ghi nhận quyết toán.</p>
           {record && <p className="rounded-lg bg-stone-50 p-3 font-semibold">{record.status === 'payment_due' ? 'Thực thu' : 'Thực hoàn'}: {money((record.status === 'payment_due' ? record.amountDueFromCustomer : record.netRefundAmount) ?? 0)}</p>}
           <Field label="Phương thức"><select name="paymentMethod" className={inputClass} value={paymentMethod} onChange={event => setPaymentMethod(event.target.value as 'CASH' | 'BANK_TRANSFER')}><option value="CASH">Tiền mặt</option>{!staffCashOnly && <option value="BANK_TRANSFER">Chuyển khoản</option>}</select></Field>
           {paymentMethod === 'BANK_TRANSFER'

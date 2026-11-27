@@ -41,6 +41,7 @@ import StaffCredentialReissuePanel from "./StaffCredentialReissuePanel"
 import StaffMaintenanceOperationsPanel from "./StaffMaintenanceOperationsPanel"
 import StaffRenewalOperationsApiPanel from "./StaffRenewalOperationsApiPanel"
 import StaffDailyTaskQueue from "./StaffDailyTaskQueue"
+import StaffFacilityRentals from "./StaffFacilityRentals"
 import RecoveryTaskDetail from "../rental-api/RecoveryTaskDetail"
 import ReturnApiPanel from "../return-api/ReturnApiPanel"
 import {
@@ -52,6 +53,7 @@ import {
   type CheckInCase,
 } from "../../services/checkInApi"
 import { listReturns, type ApiReturn } from "../../services/returnApi"
+import { notificationRecordTarget, type NotificationRecordTarget } from "../../services/notificationRecordTarget"
 import { listStaffActiveReservations, listStaffReservationReviews, type ReservationReview, type StaffReservationProgress } from "../../services/staffReservationApi"
 import StaffReservationReviews from "./StaffReservationReviews"
 import {
@@ -867,6 +869,13 @@ export default function StaffApp({
       permission: "reservations:read",
     },
 
+    ...(isApiAuthenticated() ? [{
+      id: "facility-rentals",
+      label: "Hồ sơ thuê",
+      icon: Icon.clipboard,
+      group: "Vận hành",
+      permission: "rentals:read" as const,
+    }] : []),
     {
       id: "return",
 
@@ -988,6 +997,7 @@ export default function StaffApp({
   const [selectedRecoveryTask, setSelectedRecoveryTask] = useState<{ id: string; facilityId: string } | null>(null)
   const recoveryCloseGuard = useRef<() => boolean>(() => false)
   const [selectedMaintenanceTaskId, setSelectedMaintenanceTaskId] = useState<string | null>(null)
+  const [noticeTarget, setNoticeTarget] = useState<{ record: NotificationRecordTarget; request: number }>()
 
   const [operationalTaskPriorityFilter, setOperationalTaskPriorityFilter] =
     useState("all")
@@ -1490,7 +1500,7 @@ export default function StaffApp({
       setCheckinModal(false)
 
       showToast(
-        "Đã kích hoạt hợp đồng thuê. Khách hàng có thể xác nhận đã nhận kho trong Đơn đặt giữ kho.",
+        "Đã hoàn tất bàn giao và bắt đầu thời gian chuẩn bị hàng.",
       )
     } catch (error) {
       setPendingCheckinCompletionId(null)
@@ -2173,6 +2183,9 @@ export default function StaffApp({
   }))
 
   const notificationPage = (notification: ApiNotification) => {
+    const target = notificationRecordTarget(notification, 'staff')
+    if (target?.kind === 'rental') return 'facility-rentals'
+    if (target) return 'return'
     if (notification.title === "Khách hàng đã cập nhật lịch nhận kho") return "reservations"
     const type = notification.type
     if (type === "CHECKIN") return "checkin"
@@ -2182,6 +2195,7 @@ export default function StaffApp({
     if (type === "OVERDUE") return "dashboard"
     if (type === "PAYMENT") return "checkin"
     if (type === "RESERVATION") return "checkin"
+    if (type === 'SYSTEM' && notification.title === 'Đã gửi báo cáo nghi vấn hàng cấm') return 'facility-rentals'
     if (type === "SYSTEM") return "tasks"
     return "dashboard"
   }
@@ -2201,7 +2215,7 @@ export default function StaffApp({
       user={user}
       navItems={nav}
       currentPage={page}
-      onNavigate={setPage}
+      onNavigate={next => { setNoticeTarget(undefined); setPage(next) }}
       onLogout={onLogout}
       notifications={[
         ...staffApiNotifications,
@@ -2224,6 +2238,9 @@ export default function StaffApp({
       onNotificationClick={(notification) => {
         if (notification.id.startsWith("api-notification-")) {
           const notificationId = notification.id.replace("api-notification-", "")
+          const source = backendNotifications.find(item => item.id === notificationId)
+          const record = source ? notificationRecordTarget(source, 'staff') : undefined
+          setNoticeTarget(previous => record ? { record, request: (previous?.request ?? 0) + 1 } : undefined)
           setPage(notification.page)
           if (notification.page === "support" && notification.targetId) {
             setSupportOpenTicket(previous => ({ id: notification.targetId!, request: (previous?.request ?? 0) + 1 }))
@@ -2957,6 +2974,11 @@ export default function StaffApp({
       {page === "checkin" && <StaffCheckInOperationsPanel showToast={showToast} onOpenReturns={() => setPage("return")} />}
       {page === "credentials" && isApiAuthenticated() && <StaffCredentialReissuePanel showToast={showToast} />}
 
+      {page === "facility-rentals" && isApiAuthenticated() && (
+        <StaffFacilityRentals key={`${user.id}:${noticeTarget?.request ?? ''}`}
+          initialRentalId={noticeTarget?.record.kind === 'rental' ? noticeTarget.record.id : undefined} />
+      )}
+
       {/* ── RETURN INSPECTION ────────────────────────────────── */}
 
       {page === "return" && (
@@ -2968,7 +2990,8 @@ export default function StaffApp({
                 title="Trả kho & thu hồi"
                 subtitle="Đối chiếu hiện trạng, ghi nhận quyết toán và hoàn cọc trên dữ liệu máy chủ"
               />
-              <ReturnApiPanel role="staff" onChanged={refreshCredentialAlerts} />
+              <ReturnApiPanel key={noticeTarget?.request ?? 0} role="staff" notificationTarget={noticeTarget?.record}
+                onChanged={refreshCredentialAlerts} />
             </div>
           )}
 
@@ -4269,7 +4292,7 @@ export default function StaffApp({
                   {formatTime(selectedCheckin.appointmentTime)}
                 </span>
                 <span>
-                  <b>{"Hạn nhận kho"}:</b>{" "}
+                  <b>{"Hạn đến nhận kho"}:</b>{" "}
                   {formatDate(selectedCheckin.checkInDeadline)}
                 </span>
               </div>
@@ -4523,7 +4546,7 @@ export default function StaffApp({
             </div>
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
               {
-                "Nhân viên hoàn tất nhận kho để kích hoạt hợp đồng thuê. Khách hàng sẽ tự bấm “Tôi đã nhận kho”. Trước thời điểm đó, hồ sơ mang nhãn “Chờ khách hàng xác nhận bàn giao”."
+                "Nhân viên lưu biên bản và hoàn tất bàn giao để tạo hồ sơ thuê, bắt đầu thời gian chuẩn bị. Khách không cần xác nhận nhận kho thêm."
               }
             </div>
             <div className="space-y-1">

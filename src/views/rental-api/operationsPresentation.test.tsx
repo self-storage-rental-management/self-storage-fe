@@ -297,8 +297,11 @@ describe("D4 truthful overdue presentation", () => {
     expect(html).not.toContain("0 đ")
   })
   it("term case null money is not presented as zero debt or invented fees", () => {
-    const html = renderToStaticMarkup(<OverdueCaseSummary record={termCase} />)
+    const html = renderToStaticMarkup(<OverdueCaseSummary record={{ ...termCase, displayCode: "SH-312102", rentalDisplayCode: "SH-349647" }} />)
     expect(html).toContain("Thời hạn thuê")
+    expect(html).toContain("Mã hồ sơ thuê")
+    expect(html.match(/SH-349647/g)).toHaveLength(1)
+    expect(html).not.toContain("SH-312102")
     expect(html).not.toContain("không tự có một khoản nợ tiền")
     expect(html).not.toContain("0 đ")
     expect(html).not.toContain("term-policy")
@@ -306,7 +309,7 @@ describe("D4 truthful overdue presentation", () => {
   it.each([['WAITING_RECOVERY', 'Chờ thu hồi'], ['RECOVERING', 'Đang thu hồi'], ['COMPLETED', 'Hoàn tất']] as const)("shows %s independently from overdue priority and links the existing recovery task", (workflowStatus, label) => {
     const html = renderToStaticMarkup(<OverdueCaseSummary record={{ ...termCase, priority: 'RECOVERY', workflowStatus, recoveryTaskId: ids.event }} />)
     expect(html).toContain(label)
-    expect(html).toContain('Xem và xử lý thu hồi')
+    expect(html).toContain('Xem nhiệm vụ thu hồi')
     expect(html).not.toContain('Mở nhiệm vụ thu hồi')
     expect(html).toContain(termCase.customerName)
     expect(html).toContain(termCase.storageUnitCode)

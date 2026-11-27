@@ -12,9 +12,9 @@ export default function StaffRecordDocuments({ item, onPreview, onOpenReturns }:
   const [tab, setTab] = useState<'handover' | 'inventory'>('handover')
   const id = useId()
   const record = item.handoverRecord
-  const receiptConfirmedAt = item.customerReceiptConfirmedAt
+  const receiptConfirmedAt = item.setupStartedAt || item.checkedInAt
   const receiptConfirmed = Boolean(receiptConfirmedAt) || ['setup_in_progress', 'setup_completed', 'completed'].includes(item.checkInStatus || '')
-  const receiptStatus = receiptConfirmed ? 'Khách đã xác nhận nhận kho' : item.checkInStatus === 'handover_pending_receipt' ? 'Chờ khách xác nhận nhận kho' : 'Chưa có bản ghi xác nhận nhận kho riêng'
+  const receiptStatus = receiptConfirmed ? 'Staff đã hoàn tất bàn giao' : item.checkInStatus === 'handover_pending_receipt' ? 'Đang cập nhật bàn giao cũ' : 'Chưa hoàn tất bàn giao'
   const handover = parseEmptyStorageHandover(item.readinessNote)
   const handoverEvidence = Array.from(new Set(handover.evidenceReferences))
   const inventoryReport = item.handover
@@ -104,8 +104,8 @@ export default function StaffRecordDocuments({ item, onPreview, onOpenReturns }:
           ))}
         </div>
         <section className="space-y-2" aria-label="Khách xác nhận nhận kho">
-          <h4 className="font-semibold">Xác nhận nhận kho của khách</h4>
-          {excelTable([['Trạng thái', receiptStatus], ['Thời gian xác nhận', receiptConfirmedAt ? formatStaffDateTime(receiptConfirmedAt) : null]], 2)}
+          <h4 className="font-semibold">Hoàn tất bàn giao tại cơ sở</h4>
+          {excelTable([['Trạng thái', receiptStatus], ['Thời gian bàn giao', receiptConfirmedAt ? formatStaffDateTime(receiptConfirmedAt) : null]], 2)}
         </section>
         <section className="space-y-2" aria-label="Hồ sơ và bằng chứng bàn giao">
           <h4 className="font-semibold">Hồ sơ và bằng chứng bàn giao</h4>
@@ -114,7 +114,8 @@ export default function StaffRecordDocuments({ item, onPreview, onOpenReturns }:
             ['Ghi chú đối chiếu giấy tờ', item.identityVerificationNote || 'Không có'],
             ['Ghi chú bàn giao', record?.note || 'Không có'],
             ['Bằng chứng bàn giao', handoverEvidence.length ? <div className="flex flex-wrap gap-2">{handoverEvidence.map((assetId, index) => <Button key={assetId} type="button" size="sm" variant="outline" onClick={() => onPreview(assetId)}>Xem tệp {index + 1}</Button>)}</div> : 'Chưa có bằng chứng đã lưu'],
-            ['Bằng chứng ký hợp đồng', item.contractEvidenceReference && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.contractEvidenceReference) ? <Button type="button" size="sm" variant="outline" onClick={() => onPreview(item.contractEvidenceReference!)}>Xem tệp</Button> : 'Chưa có'],
+            ['Mã hợp đồng đã lưu', item.contractEvidenceReference ? item.contractEvidenceCode || `HD-${item.reservationCode}` : 'Chưa có'],
+            ['Hợp đồng có chữ ký', item.contractEvidenceReference && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.contractEvidenceReference) ? <Button type="button" size="sm" variant="outline" onClick={() => onPreview(item.contractEvidenceReference!)}>Xem hợp đồng</Button> : 'Chưa có'],
           ], 1)}
         </section>
       </div>

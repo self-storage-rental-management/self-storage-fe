@@ -17,6 +17,7 @@ import { loadManagerPaymentHistory, managerApiIdentity, requireManagerRead } fro
 import { managerDisplayError } from './managerPresentation'
 import { singleManagerFacility, managerFacilityNotice } from './managerFacilityUi'
 import { ApiClientError } from '../../services/apiClient'
+import { getManagerPaymentHistoryItem } from '../../services/managerPaymentHistoryApi'
 
 const typeLabels: Record<ManagerPaymentHistoryType, string> = {
   RESERVATION_DEPOSIT: 'Đặt cọc giữ chỗ',
@@ -79,20 +80,20 @@ function PaymentTime({ value }: { value: string }) {
 function receiptTitle(item: ManagerPaymentHistoryItem): string {
   switch (item.type) {
     case 'RESERVATION_DEPOSIT':
-      return 'Biên lai đặt cọc giữ chỗ'
+      return 'Phiếu ghi nhận đặt cọc giữ chỗ'
     case 'RENTAL_BALANCE':
-      return 'Biên lai thanh toán phần còn lại khi nhận kho'
+      return 'Phiếu ghi nhận thanh toán phần còn lại khi nhận kho'
     case 'RENEWAL':
     case 'RENEWAL_INSTALLMENT':
-      return 'Biên lai tiền thuê gia hạn'
+      return 'Phiếu ghi nhận tiền thuê gia hạn'
     case 'RETURN_REFUND':
-      return 'Biên lai hoàn tiền'
+      return 'Phiếu ghi nhận hoàn tiền'
     case 'RETURN_SETTLEMENT':
-      return 'Biên lai quyết toán'
+      return 'Phiếu ghi nhận quyết toán'
     case 'MONTHLY_RENT':
-      return 'Biên lai tiền thuê hàng tháng'
+      return 'Phiếu ghi nhận tiền thuê hàng tháng'
     default:
-      return 'Biên lai thanh toán'
+      return 'Phiếu ghi nhận thanh toán'
   }
 }
 
@@ -120,13 +121,13 @@ function receiptStatus(item: ManagerPaymentHistoryItem): string {
 
 function receiptFooter(item: ManagerPaymentHistoryItem): string {
   if (item.type === 'RESERVATION_DEPOSIT' || item.type === 'RENTAL_BALANCE') {
-    return 'Biên lai được lưu cùng đơn giữ kho để đối chiếu thanh toán.'
+    return 'Phiếu ghi nhận được lưu cùng đơn giữ kho để đối chiếu thanh toán.'
   }
   if (item.type === 'RENEWAL' || item.type === 'RENEWAL_INSTALLMENT') {
-    return 'Biên lai được lưu cùng yêu cầu gia hạn để đối chiếu thanh toán.'
+    return 'Phiếu ghi nhận được lưu cùng yêu cầu gia hạn để đối chiếu thanh toán.'
   }
   if (item.type === 'RETURN_REFUND' || item.type === 'RETURN_SETTLEMENT') {
-    return 'Biên lai được lưu cùng hồ sơ trả kho để đối chiếu thanh toán.'
+    return 'Phiếu ghi nhận được lưu cùng hồ sơ trả kho để đối chiếu thanh toán.'
   }
   return 'Thông tin giao dịch đã ghi nhận trong lịch sử thanh toán của cơ sở.'
 }
@@ -211,13 +212,30 @@ function ReceiptIcon({ kind }: { kind: 'preview' | 'download' }) {
     : <svg aria-hidden="true" className="show-icon h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12m-4-4 4 4 4-4M4 19h16" /></svg>
 }
 
-export default function ManagerFinancialApiPanel() {
+export default function ManagerFinancialApiPanel({ paymentTarget, onPaymentClosed }: {
+  paymentTarget?: { id: string }; onPaymentClosed?: () => void
+} = {}) {
   let actor: ApiActor
   try { actor = requireManagerRead(getAuthenticatedActor(), 'payments:read') }
   catch (error) { return <Card className="p-5" role="alert">{managerDisplayError(error)}</Card> }
   const facilityId = singleManagerFacility(actor)
   if (!facilityId) return <Card className="p-5" role="alert">{managerFacilityNotice(actor)}</Card>
-  return <ManagerPaymentHistorySession key={managerApiIdentity(actor)} actor={actor} facilityId={facilityId} />
+  return <>
+    <ManagerPaymentHistorySession key={managerApiIdentity(actor)} actor={actor} facilityId={facilityId} />
+    {paymentTarget && <ManagerPaymentNotice key={paymentTarget.id} identity={managerApiIdentity(actor)}
+      paymentId={paymentTarget.id} onClose={() => onPaymentClosed?.()} />}
+  </>
+}
+
+function ManagerPaymentNotice({ identity, paymentId, onClose }: { identity: string; paymentId: string; onClose: () => void }) {
+  const read = useRentalApiResource(`${identity}:payment-notice:${paymentId}`, () => getManagerPaymentHistoryItem(paymentId))
+  const item = read.data
+  return <Modal open title="Chi tiết khoản thanh toán" size="2xl" onClose={onClose}>
+    <ApiReadState {...read} retry={read.refresh} />
+    {item && <PaymentReceiptCard title="Thông tin khoản thanh toán" reference={receiptReference(item)}
+      status={receiptStatus(item)} confirmed={item.status === 'PAID' || item.status === 'REFUNDED'}
+      fields={receiptFields(item)} footer={receiptFooter(item)} />}
+  </Modal>
 }
 
 function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; facilityId: string }) {
@@ -325,8 +343,8 @@ function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; 
                 ? <div className="flex items-center justify-center"><EvidenceDownload id={item.receiptFileId} previewLabel="Xem trước" label="Tải xuống" compact iconOnly /></div>
                 : canReadReceipt(item)
                   ? <div className="flex items-center justify-center gap-1">
-                    <Button type="button" size="sm" variant="ghost" className={receiptActionClass} title="Xem trước" aria-label={`Xem biên lai ${receiptReference(item)}`} onClick={() => setReceipt(item)}><ReceiptIcon kind="preview" /><span className="sr-only">Xem trước</span></Button>
-                    <Button type="button" size="sm" variant="ghost" className={receiptActionClass} title={downloading === item.id ? 'Đang tải…' : 'Tải xuống'} aria-label={`Tải biên lai ${receiptReference(item)}`} disabled={!!downloading} onClick={() => void downloadReceipt(item)}><ReceiptIcon kind="download" /><span className="sr-only">{downloading === item.id ? 'Đang tải…' : 'Tải xuống'}</span></Button>
+                    <Button type="button" size="sm" variant="ghost" className={receiptActionClass} title="Xem trước" aria-label={`Xem chi tiết giao dịch ${receiptReference(item)}`} onClick={() => setReceipt(item)}><ReceiptIcon kind="preview" /><span className="sr-only">Xem trước</span></Button>
+                    <Button type="button" size="sm" variant="ghost" className={receiptActionClass} title={downloading === item.id ? 'Đang tải…' : 'Tải xuống'} aria-label={`Tải phiếu ghi nhận ${receiptReference(item)}`} disabled={!!downloading} onClick={() => void downloadReceipt(item)}><ReceiptIcon kind="download" /><span className="sr-only">{downloading === item.id ? 'Đang tải…' : 'Tải xuống'}</span></Button>
                   </div>
                   : <span className="text-xs text-stone-400">Chưa có</span>}
             </Td>

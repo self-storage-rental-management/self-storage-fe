@@ -3,6 +3,7 @@ import { readRentalEnvelope } from './rentalApi'
 import { isUuid, isInstant } from './renewalOperationsApi'
 
 export interface RenewalReceiptData {
+  receiptFileId?: string | null
   renewalLabel?: string | null
   paymentId: string; renewalId: string; transactionReference: string | null; gatewayTransactionNo: string | null
   amount: number; currency: string; paymentStatus: 'PAID'; paymentMethod: string | null; gatewayPayDate: string | null
@@ -15,7 +16,7 @@ export async function getRenewalReceipt(role: 'customer' | 'manager',id: string,
   if(!['customer','manager'].includes(role)||!isUuid(id)||!isUuid(paymentId))throw new Error('Giao dịch không hợp lệ.')
   return readRentalEnvelope<RenewalReceiptData>(await apiRequest(`/api/${role}/renewals/${id}/payments/${paymentId}/receipt`),value => {
     const v=value as RenewalReceiptData | null
-    return !!v && v.renewalId===id && v.paymentId===paymentId && v.paymentStatus==='PAID' && v.currency==='VND'
+    return !!v && (v.receiptFileId == null || isUuid(v.receiptFileId)) && v.renewalId===id && v.paymentId===paymentId && v.paymentStatus==='PAID' && v.currency==='VND'
       && typeof v.amount==='number' && Number.isFinite(v.amount) && v.amount>0 && isInstant(v.paidAt)
       && (v.processedAt===null||isInstant(v.processedAt)) && typeof v.initiatedByName==='string'
        && ['DEPOSIT','FULL_RENT','REMAINING_RENT','INSTALLMENT'].includes(v.kind) && ['SANDBOX','PRODUCTION'].includes(v.environment)

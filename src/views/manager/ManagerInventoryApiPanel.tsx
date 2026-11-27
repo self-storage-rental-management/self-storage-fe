@@ -418,6 +418,7 @@ export function InventoryContent({
   )
   return (
     <>
+      <SectionHeader title={title} action={onCreateUnitType && <Button variant="primary" onClick={onCreateUnitType}>+ Thêm loại kho</Button>} />
       <div className="manager-inventory-stats grid grid-cols-2 gap-3 xl:grid-cols-6">
         <StatCard title="Tổng số gian" value={units.length} icon={Icon.box} />
         <StatCard
@@ -442,7 +443,6 @@ export function InventoryContent({
           icon={Icon.tasks}
         />
       </div>
-      <SectionHeader title={title} action={onCreateUnitType && <Button variant="primary" onClick={onCreateUnitType}>+ Thêm loại kho</Button>} />
       <Card className="manager-inventory-filters !rounded-2xl !shadow-none p-5">
         <div className="manager-inventory-filter-grid grid items-end gap-3">
           <label className="block min-w-0 text-sm font-medium text-stone-700">

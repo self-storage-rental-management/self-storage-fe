@@ -142,10 +142,10 @@ export async function createUnitAssignment(reservationId: string, storageUnitId:
   return checkedReservationState(assertEnvelope<UnitAssignmentResult>(payload).data)
 }
 
-export async function changeUnitAssignment(reservationId: string, storageUnitId: string, reason: string) {
+export async function changeUnitAssignment(reservationId: string, storageUnitId: string, reason: string, previousUnitNeedsMaintenance = false) {
   const payload = await apiRequest<unknown>(
     `/api/manager/unit-assignments/${encodeURIComponent(reservationId)}/change`,
-    { method: 'PUT', body: JSON.stringify({ storageUnitId, reason }) },
+    { method: 'PUT', body: JSON.stringify({ storageUnitId, reason, previousUnitNeedsMaintenance }) },
   )
   return checkedReservationState(assertEnvelope<UnitAssignmentResult>(payload).data)
 }

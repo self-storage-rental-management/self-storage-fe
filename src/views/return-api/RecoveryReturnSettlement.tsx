@@ -40,6 +40,7 @@ function ReceiptForm({ role = 'staff', embedded = false, record, view, busy, onC
   const [uploading, setUploading] = useState(false)
   const [files, setFiles] = useState<string[]>([])
   const [reference, setReference] = useState('')
+  const [documentNumber, setDocumentNumber] = useState('')
   const [method, setMethod] = useState<'CASH' | 'BANK_TRANSFER'>(role === 'staff' ? 'CASH' : 'BANK_TRANSFER')
   const [confirmed, setConfirmed] = useState(false)
   const [validation, setValidation] = useState('')
@@ -81,17 +82,20 @@ function ReceiptForm({ role = 'staff', embedded = false, record, view, busy, onC
     const request = command.uncertain && pending.current ? pending.current : {
       action: 'settlement-receipts' as const, body: { expectedVersion: view?.expectedVersion ?? 0, paymentMethod: method,
         amount: (record.status === 'payment_due' ? record.amountDueFromCustomer : record.netRefundAmount) ?? 0,
-        transactionReference: requiresTransferReference ? reference.trim() : '', receiptFileId: files[0], confirmed },
+        transactionReference: requiresTransferReference ? reference.trim() : '', receiptFileId: files[0], confirmed, documentNumber: documentNumber.trim() },
     }
     try { if (view) validateRecoveryCommand(request); else validateReturnSettlementReceipt(request.body) } catch (error) { setValidation(returnError(error)); return }
     pending.current = request
     setValidation('')
     listener.current(true)
     void command.run(JSON.stringify(request), key => {
-      if (!view) return recordReturnSettlement(record.id, request.body, key, role)
-      const { amount: _amount, ...body } = request.body
-      return sendRecoveryCommand('staff', record.recoveryTaskId!, { action: request.action, body }, key)
+      const { documentNumber: document, ...receipt } = request.body
+      if (!view) return recordReturnSettlement(record.id, receipt, key, role)
+      const { amount: _amount, ...body } = receipt
+      return sendRecoveryCommand('staff', record.recoveryTaskId!, { action: request.action, body: { ...body, documentNumber: document } }, key)
     }, () => {
+      setDocumentNumber('')
+      pending.current = null
       listener.current(false)
       onChanged()
     }).finally(() => listener.current(uploadLock.current || command.isLocked()))
@@ -100,6 +104,11 @@ function ReceiptForm({ role = 'staff', embedded = false, record, view, busy, onC
     {!embedded && <h5 className="font-semibold">{record.status === 'payment_due' ? (view ? 'Thu tiền quyết toán thu hồi' : 'Thu tiền quyết toán trả kho') : (view ? 'Hoàn tiền quyết toán thu hồi' : 'Hoàn tiền quyết toán trả kho')}</h5>}
     <fieldset disabled={frozen || !allowed} className="space-y-2">
       {!view && <label className="block">Số tiền theo bảng kê (VND)<input readOnly className="block w-full rounded border p-2" value={(record.status === 'payment_due' ? record.amountDueFromCustomer : record.netRefundAmount)?.toLocaleString('vi-VN') ?? 'Chưa xác định'} /></label>}
+      {view && <label className="block">Số CCCD hoặc hộ chiếu của khách
+        <input className="block w-full rounded border p-2" type="password" autoComplete="off"
+          required maxLength={32} value={documentNumber} onChange={event => setDocumentNumber(event.target.value)} />
+        <span className="text-sm text-stone-600">Đối chiếu giấy tờ gốc với số đã dùng khi đặt kho.</span>
+      </label>}
       <label className="block">Phương thức thanh toán<select className="block w-full rounded border p-2" value={method} onChange={event => handleMethodChange(event.target.value as typeof method)}><option value="BANK_TRANSFER">Chuyển khoản</option><option value="CASH">Tiền mặt</option></select></label>
       {requiresTransferReference && <label className="block">Mã giao dịch chuyển khoản<input className="block w-full rounded border p-2" required maxLength={64} value={reference} onChange={event => handleReferenceChange(event.target.value)} /></label>}
       <EvidenceUpload compact entityType={view ? 'DUONG_RECOVERY_SETTLEMENT' : 'RETURN_CASE'} entityId={view ? record.recoveryTaskId! : record.id} label="Chọn biên lai quyết toán" limit={1} value={files} onChange={handleFilesChange}
@@ -141,7 +150,7 @@ function ReceiptForm({ role = 'staff', embedded = false, record, view, busy, onC
           uploading ||
           command.busy ||
           (!command.uncertain &&
-            ((requiresTransferReference && !reference.trim()) || !files.length || !confirmed))
+            ((!!view && !documentNumber.trim()) || (requiresTransferReference && !reference.trim()) || !files.length || !confirmed))
         }
       >
         {command.busy

@@ -35,11 +35,12 @@ const stages = {
   AWAITING_APPROVAL: 'Chờ lịch thu hồi', APPROVED: 'Chờ lịch thu hồi', IN_PROGRESS: 'Đang thu hồi',
   BLOCKED: 'Đang tạm dừng', COMPLETED: 'Đã thu hồi', CANCELLED: 'Đã hủy thu hồi',
 }
-const reasons: Record<string, string> = {
+export const reasons: Record<string, string> = {
   SETUP_OVERDUE: 'Quá hạn hoàn tất chuẩn bị', INVENTORY_NO_SHOW: 'Khách không đến kiểm kê',
   INVENTORY_IDENTITY_FAILED: 'Xác minh kiểm kê chưa thành công', INVENTORY_TIMEOUT: 'Quá hạn hoàn tất kiểm kê',
   INVENTORY_CONFIRMATION_OVERDUE: 'Quá hạn 48 giờ phản hồi kết quả kiểm kê',
   REMOVAL_OVERDUE: 'Quá hạn dọn hàng sau kiểm kê sai lệch', HANDOVER_FOLLOW_UP: 'Bàn giao sau đối soát cần xử lý',
+  CONFIRMED_PROHIBITED_GOODS: 'Vi phạm hàng cấm đã xác minh',
 }
 const replies: Record<string, string> = {
   WILL_ATTEND: 'Sẽ có mặt', CANNOT_ATTEND: 'Không thể có mặt', DISPUTED: 'Đã gửi phản đối', NO_RESPONSE: 'Chưa phản hồi',
@@ -50,7 +51,7 @@ type HistoryEvent = {
 type CommunicationEntry = {
   role: string; actorName: string; action: string; time: string; note: string | null; attachmentIds?: string[]
 }
-type Entry = {
+export type Entry = {
   id: string; unitCode: string; taskId: string | null; staffName: string | null
   reservationCode?: string | null; customerName?: string | null
   stage: keyof typeof stages; reason: string; owner: string | null; needsWitness: boolean
@@ -71,6 +72,7 @@ type Entry = {
   managerRespondedAt?: string | null
   customerAttachmentIds?: string[]
   managerAttachmentIds?: string[]
+  inventoryEvidenceIds?: string[]
   communications?: CommunicationEntry[]
   actions: Action[]
 }
@@ -94,7 +96,7 @@ const ownerLabels: Record<string, string> = {
   CUSTOMER: 'Khách hàng', ADMIN: 'Quản trị viên',
 }
 const responsiblePerson = (entry: Entry) => entry.staffName || ownerLabels[entry.owner || ''] || entry.owner || 'Chưa phân công'
-const stageLabel = (entry: Entry) => stages[entry.stage]
+export const stageLabel = (entry: Entry) => stages[entry.stage]
 const deadlineLabels: Partial<Record<Entry['stage'], string>> = {
   AWAITING_ASSIGNMENT: 'Hạn phân công',
   AWAITING_ATTENDANCE: 'Hạn hoàn tất thu hồi', BLOCKED: 'Hạn xử lý tạm dừng',
@@ -111,7 +113,7 @@ function primaryAction(entry: Entry): Action | undefined {
 const entryActionLabel = (entry: Entry, action: Action) => action === 'ASSIGN' && entry.staffName ? 'Đổi nhân viên'
   : action === 'START' && !canHandOverRecovery(entry) ? 'Thu hồi và lưu tạm' : actionLabels[action]
 
-function RecoveryCountdown({ deadline, label }: { deadline?: string | null; label: string }) {
+export function RecoveryCountdown({ deadline, label }: { deadline?: string | null; label: string }) {
   const [now, setNow] = useState(Date.now)
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
@@ -218,8 +220,8 @@ export function RecoveryAction({ entry, action, onBack, onSaved }: {
 }) {
   const assigning = action === 'ASSIGN' || action === 'ASSIGN_PICKUP'
   const witness = action === 'START' && entry.needsWitness
-  const verify = action === 'VERIFY' || action === 'VERIFY_PICKUP'
-  const pickDate = action === 'FOLLOW_UP_PICKUP' || action === 'RECORD_PRESENT' || action === 'SCHEDULE_PICKUP'
+  const verify = action === 'VERIFY' || action === 'VERIFY_PICKUP' || action === 'RECORD_PRESENT'
+  const pickDate = action === 'FOLLOW_UP_PICKUP' || action === 'SCHEDULE_PICKUP'
   const [staff, setStaff] = useState<Staff[]>([])
   const [busy, setBusy] = useState(false)
   const lock = useRef(false)
@@ -364,14 +366,14 @@ export function RecoveryAction({ entry, action, onBack, onSaved }: {
           {staff.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}
         </select><span className="text-xs text-stone-500">Chỉ hiển thị nhân viên đủ quyền tại cơ sở và không trùng lịch xử lý đơn khác.</span>
         {!staff.length && <span role="status" className="text-xs text-amber-700">Chưa có nhân viên phù hợp với thời gian này.</span>}</label>}
-      {pickDate && <label>{action === 'RECORD_PRESENT' ? 'Giờ khách đến (giờ Việt Nam)' : action === 'SCHEDULE_PICKUP' ? 'Ngày giờ nhận hàng (giờ Việt Nam)' : 'Lịch hẹn rà soát (giờ Việt Nam)'}
+      {pickDate && <label>{action === 'SCHEDULE_PICKUP' ? 'Ngày giờ nhận hàng (giờ Việt Nam)' : 'Lịch hẹn rà soát (giờ Việt Nam)'}
         <input type="datetime-local" name="appointment" className={field} value={appointmentInput}
           onChange={event => { setAppointmentInput(event.target.value); setError('') }}
           min={action === 'SCHEDULE_PICKUP' ? pickupBounds.min : undefined}
           max={action === 'SCHEDULE_PICKUP' ? pickupBounds.max : undefined}
           required={action === 'FOLLOW_UP_PICKUP' || action === 'SCHEDULE_PICKUP'} />
         {pickupError && <span role="alert" className="mt-1 block text-red-700">{pickupError}</span>}</label>}
-      {verify && <label>Số giấy tờ gốc
+      {verify && <label>{action === 'RECORD_PRESENT' ? 'Số CCCD' : 'Số giấy tờ gốc'}
         <input type="password" name="document" className={field} maxLength={32} autoComplete="off" required
           onChange={() => { attempt.current = null }} /></label>}
       {needsPhoto.has(action) && <label>{action === 'RECORD_LIQUIDATION' ? 'Ảnh biên bản hoặc bằng chứng thanh lý' : 'Ảnh hiện trường'}<input type="file" name="photo" accept="image/*" className={field} required /></label>}
@@ -858,6 +860,10 @@ export function RecoveryDetails({ entry, actionArea, actionOpen = false }: { ent
         </>
       )}
       {entry.report && <p className="whitespace-pre-wrap break-words">Biên bản · {displayRoleNames(entry.report)}</p>}
+      {!!entry.inventoryEvidenceIds?.length && <section className="space-y-2 border-t border-stone-200 pt-2">
+        <p className="text-xs font-semibold text-stone-700">Bằng chứng hàng cấm khi kiểm kê</p>
+        <div className="grid gap-2 sm:grid-cols-3">{entry.inventoryEvidenceIds.map((id, index) => <EvidenceImagePreview key={id} id={id} label={`Bằng chứng kiểm kê ${index + 1}`} />)}</div>
+      </section>}
       {entry.attendanceEvidenceId && <div className="space-y-2 border-t border-stone-200 pt-2">
         <p className="text-xs font-semibold text-stone-700">Ghi nhận khách đến hoặc vắng mặt</p>
         <div className="grid gap-2 sm:grid-cols-3"><EvidenceImagePreview id={entry.attendanceEvidenceId}
@@ -914,9 +920,11 @@ export function RecoveryPagination({ pagination, disabled, onChange }: {
   </nav>
 }
 
-export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, managerOverdueOnly = false, customerView = false, target }: {
+export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, managerOverdueOnly = false, customerView = false, target, detailOnly = false, onDetailClosed, onRecordChanged, allowDateSort = false }: {
   sourceReturnId?: string; activeOnly?: boolean; managerOverdueOnly?: boolean; customerView?: boolean; target?: { id: string; request: number }
+  detailOnly?: boolean; onDetailClosed?: () => void; onRecordChanged?: () => void; allowDateSort?: boolean
 }) {
+  const [sort, setSort] = useState<'priority' | 'createdAt,desc' | 'createdAt,asc'>('priority')
   const [page, setPage] = useState(0)
   const [entries, setEntries] = useState<Entry[]>([])
   const [pagination, setPagination] = useState<RecoveryPageInfo>()
@@ -950,15 +958,15 @@ export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, man
     setTargetId(target?.id)
     setPage(0)
     setAction(undefined)
-    setDetailId(undefined)
-  }, [target])
+    setDetailId(detailOnly ? target?.id : undefined)
+  }, [target, detailOnly])
   useEffect(() => {
     if (action) return
     let active = true
     const query = managerOverdueOnly ? `page=${page}&escalatedOnly=true`
       : sourceReturnId ? `sourceReturnId=${encodeURIComponent(sourceReturnId)}` : `page=${page}&activeOnly=${activeOnly && !showClosed}`
     const url = targetId ? `${endpoint}/${encodeURIComponent(targetId)}`
-      : customerPaging ? `${endpoint}/customer?page=${page}&pageSize=${CUSTOMER_PAGE_SIZE}` : `${endpoint}?${query}`
+      : customerPaging ? `${endpoint}/customer?page=${page}&pageSize=${CUSTOMER_PAGE_SIZE}` : `${endpoint}?${query}${allowDateSort ? `&sort=${encodeURIComponent(sort)}` : ''}`
     if (requestUrl.current !== url) {
       requestUrl.current = url
       setLoading(true)
@@ -983,14 +991,14 @@ export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, man
       .catch(err => { if (active) setError(userFacingError(err, 'Không thể tải hồ sơ thu hồi.')) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [page, refresh, sourceReturnId, activeOnly, managerOverdueOnly, targetId, showClosed, action, customerPaging])
+  }, [page, refresh, sourceReturnId, activeOnly, managerOverdueOnly, targetId, showClosed, action, customerPaging, sort, allowDateSort])
 
   useEffect(() => {
-    if (!target || target.id !== targetId || loading || error || !targetCard.current
+    if (detailOnly || !target || target.id !== targetId || loading || error || !targetCard.current
       || revealedTarget.current === target) return
     revealedTarget.current = target
     revealRecord(targetCard.current)
-  }, [target, targetId, loading, error, entries])
+  }, [target, targetId, loading, error, entries, detailOnly])
 
   const detailEntry = entries.find(entry => entry.id === detailId)
   const openAction = (entry: Entry, key: Action) => {
@@ -999,6 +1007,20 @@ export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, man
   }
 
   return <div className="recovery-panel" ref={listTop}>
+    {detailOnly && !detailEntry && <div className="flex items-center justify-between gap-3 py-3">
+      <p role={error ? 'alert' : 'status'}>{error || 'Đang tải hồ sơ thu hồi…'}</p>
+      <Button variant="outline" onClick={onDetailClosed}>Đóng</Button>
+    </div>}
+    <div hidden={detailOnly}>
+    {allowDateSort && !targetId && <label className="mb-3 ml-auto flex w-fit max-w-full items-center gap-2 whitespace-nowrap text-xs text-stone-500">
+      Sắp xếp
+      <select aria-label="Sắp xếp hồ sơ thu hồi" disabled={!!action} className="!h-9 !w-40 !min-w-0 shrink-0 rounded-lg border border-stone-200 bg-white !px-3 !py-1.5 !text-xs text-stone-700"
+        value={sort} onChange={event => { setSort(event.target.value as typeof sort); setPage(0) }}>
+        <option value="priority">Ưu tiên xử lý</option>
+        <option value="createdAt,desc">Mới nhất</option>
+        <option value="createdAt,asc">Cũ nhất</option>
+      </select>
+    </label>}
     {((activeOnly && !managerOverdueOnly) || targetId) && <div className="recovery-toolbar">
       <div className="recovery-view-switch">
         {activeOnly && !managerOverdueOnly && !targetId && <>
@@ -1013,7 +1035,8 @@ export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, man
     {!loading && !error && !entries.length && <p className="recovery-empty">{managerOverdueOnly
       ? targetId ? 'Hồ sơ này chưa quá hạn xử lý hoặc đã được xử lý tại cơ sở.' : 'Không có hồ sơ thu hồi quá hạn phân công hoặc rà soát.'
       : sourceReturnId ? 'Chưa có hồ sơ thu hồi cho yêu cầu trả kho này.' : 'Chưa có hồ sơ thu hồi trong danh sách.'}</p>}
-    {!loading && entries.map(entry => {
+    {!loading && entries.length > 0 && <div className={managerOverdueOnly ? 'recovery-card-grid' : undefined}>
+    {entries.map(entry => {
       const pendingItems = entry.items.filter(isPendingItem).length
       const closed = entry.stage === 'COMPLETED' || entry.stage === 'CANCELLED'
       const currentDueAt = entry.actionDueAt || entry.deadlineAt
@@ -1046,7 +1069,7 @@ export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, man
         {entry.financePending && <p className="recovery-item-notice">Đang chờ đối soát cọc hoặc công nợ.</p>}
         <div className="recovery-case-footer">
           <p className="recovery-next-step">
-            {entry.stage === 'AWAITING_ASSIGNMENT' ? 'Cần phân công nhân viên' :
+            {entry.stage === 'AWAITING_ASSIGNMENT' ? 'Đang chờ quản lý phân công nhân viên thu hồi' :
               entry.stage === 'AWAITING_ACCEPTANCE' || entry.stage === 'AWAITING_ATTENDANCE' ? 'Thực hiện thu hồi theo lịch đã thông báo' :
               entry.stage === 'BLOCKED' ? 'Đang tạm dừng, chờ quản lý xử lý' : ''}
             {!closed && currentDueAt && <span>{deadlineLabels[entry.stage] || 'Hạn hoàn tất'}: {dateLabel(currentDueAt)}</span>}
@@ -1058,14 +1081,16 @@ export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, man
         </div>
       </section>
     })}
+    </div>}
     {customerPaging && !targetId && pagination && <RecoveryPagination pagination={pagination} disabled={loading || !!action}
       onChange={next => { setDetailId(undefined); setPage(next); listTop.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }} />}
     {!customerPaging && !sourceReturnId && !targetId && (page > 0 || entries.length === 30) && <div className="recovery-pagination">
       <Button size="sm" variant="outline" disabled={loading || !!action || page === 0} onClick={() => setPage(value => value - 1)}>Trang trước</Button>
       <Button size="sm" variant="outline" disabled={loading || !!action || entries.length < 30} onClick={() => setPage(value => value + 1)}>Trang sau</Button>
     </div>}
+    </div>
     {detailEntry && <Modal open size="2xl" title={`Hồ sơ thu hồi · ${detailEntry.reservationCode || detailEntry.unitCode}`}
-      closeLabel="Đóng chi tiết thu hồi" onClose={() => { setDetailId(undefined); setAction(undefined) }}>
+      closeLabel="Đóng chi tiết thu hồi" onClose={() => { setDetailId(undefined); setAction(undefined); onDetailClosed?.() }}>
       <div className="recovery-detail-modal">
         {error && <p role="alert" className="recovery-error">{error}</p>}
         <RecoveryDetails key={detailEntry.id} entry={detailEntry} actionOpen={action?.id === detailEntry.id} actionArea={action && action.id === detailEntry.id ? <RecoveryAction key={action.action} entry={detailEntry} action={action.action}
@@ -1075,6 +1100,7 @@ export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, man
               return managerOverdueOnly ? next.filter(isManagerOverdueRecovery) : next
             })
             if (!keepOpen) setAction(undefined)
+            onRecordChanged?.()
           }} /> : !!detailEntry.actions.length && <div className="recovery-detail-actions">
             <h4>Thao tác với hồ sơ</h4>
             <div>{visibleRecoveryActions(detailEntry.actions, detailEntry.stage, detailEntry.responseDueAt, undefined, detailEntry.reply).map(key => <Button key={key} size="sm" variant={key === primaryAction(detailEntry) ? 'primary' : 'outline'}
