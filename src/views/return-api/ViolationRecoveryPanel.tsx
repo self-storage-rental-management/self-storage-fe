@@ -40,6 +40,7 @@ const reasons: Record<string, string> = {
   INVENTORY_IDENTITY_FAILED: 'Xác minh kiểm kê chưa thành công', INVENTORY_TIMEOUT: 'Quá hạn hoàn tất kiểm kê',
   INVENTORY_CONFIRMATION_OVERDUE: 'Quá hạn 48 giờ phản hồi kết quả kiểm kê',
   REMOVAL_OVERDUE: 'Quá hạn dọn hàng sau kiểm kê sai lệch', HANDOVER_FOLLOW_UP: 'Bàn giao sau đối soát cần xử lý',
+  CONFIRMED_PROHIBITED_GOODS: 'Vi phạm hàng cấm đã xác minh',
 }
 const replies: Record<string, string> = {
   WILL_ATTEND: 'Sẽ có mặt', CANNOT_ATTEND: 'Không thể có mặt', DISPUTED: 'Đã gửi phản đối', NO_RESPONSE: 'Chưa phản hồi',

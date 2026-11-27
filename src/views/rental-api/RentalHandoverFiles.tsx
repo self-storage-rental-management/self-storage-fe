@@ -66,7 +66,7 @@ function DocumentRow({ file }: { file: RentalHandoverFile }) {
     {preview && <FilePreviewDialog file={{ ...preview, name: file.name }} onClose={closePreview} />}
   </li>
 }
-export default function RentalHandoverFiles({ role,id,contractsOnly=false }: { role: 'customer' | 'manager'; id: string; contractsOnly?: boolean }) {
+export default function RentalHandoverFiles({ role,id,contractsOnly=false }: { role: 'customer' | 'manager' | 'staff'; id: string; contractsOnly?: boolean }) {
   const actor=getAuthenticatedActor()
   const identity=`${actor?.id}:${JSON.stringify(actor?.permissions)}:${JSON.stringify(actor?.facilityScopes)}:${role}:${id}:handover-files`
   const read=useRentalApiResource(identity,() => listRentalHandoverFiles(role,id))

@@ -106,7 +106,7 @@ describe('backend customer navigation and profile', () => {
     const staff: ApiActor = {
       ...actor,
       roles: ['STAFF'],
-      facilityScopes: { 'facility-q1': 'OPERATE' },
+      facilityScopes: { 'facility-extra': 'READ', 'facility-q1': 'OPERATE' },
       facilityNames: { 'facility-q1': 'Kho Việt - Cơ sở Quận 1' },
       permissions: ['view_reservations', 'approve_reservations'],
     }
@@ -115,7 +115,7 @@ describe('backend customer navigation and profile', () => {
     const user = actorToUser(staff)
     expect(user.facility).toBe('Kho Việt - Cơ sở Quận 1')
     expect(user.facilityId).toBe('facility-q1')
-    expect(user.facilityScopes).toEqual({ 'facility-q1': 'OPERATE' })
+    expect(user.facilityScopes).toEqual({ 'facility-extra': 'READ', 'facility-q1': 'OPERATE' })
     expect(canApiActor(user, 'reservations:approve')).toBe(true)
     expect(user.permissions).toEqual(['reservations:read', 'reservations:approve'])
     expect(canApiActor(user, 'roles:manage')).toBe(false)

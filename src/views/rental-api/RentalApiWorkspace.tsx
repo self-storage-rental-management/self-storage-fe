@@ -130,6 +130,7 @@ type WorkspaceProps = {
   role: RentalApiRole
   focusStorageUnitId?: string
   initialRentalId?: string
+  onSuspicionReportSubmitted?: (reportId: string) => void
   onRequestSupport?: (id: string, unitCode: string) => void
   onBrowseUnits?: () => void
 }
@@ -141,7 +142,7 @@ export default function RentalApiWorkspace(props: WorkspaceProps) {
   return <WorkspaceSession key={`${identity}:${initialRentalId ?? ''}`} {...props} />
 }
 
-function WorkspaceSession({ recoveryTarget, role, focusStorageUnitId, initialRentalId, onRequestSupport, onBrowseUnits }: WorkspaceProps) {
+function WorkspaceSession({ recoveryTarget, role, focusStorageUnitId, initialRentalId, onRequestSupport, onBrowseUnits, onSuspicionReportSubmitted }: WorkspaceProps) {
   const actor = getAuthenticatedActor()
   const facilityId = role === "manager" ? singleManagerFacility(actor) : undefined
   const identity = `${actor?.id}:${role}:${JSON.stringify(actor?.facilityScopes)}:${JSON.stringify(actor?.permissions)}`
@@ -192,6 +193,7 @@ function WorkspaceSession({ recoveryTarget, role, focusStorageUnitId, initialRen
       focusStorageUnitId={focusStorageUnitId}
       onRequestSupport={onRequestSupport}
       onBrowseUnits={onBrowseUnits}
+      onSuspicionReportSubmitted={onSuspicionReportSubmitted}
       key={identity}
       role={role}
       identity={identity}
@@ -220,6 +222,7 @@ function WorkspaceSession({ recoveryTarget, role, focusStorageUnitId, initialRen
 }
 
 function WorkspaceData({
+  onSuspicionReportSubmitted,
   recoveryTarget,
   focusStorageUnitId,
   onRequestSupport,
@@ -243,6 +246,7 @@ function WorkspaceData({
   focusStorageUnitId?: string
   onRequestSupport?: WorkspaceProps['onRequestSupport']
   onBrowseUnits?: WorkspaceProps['onBrowseUnits']
+  onSuspicionReportSubmitted?: WorkspaceProps['onSuspicionReportSubmitted']
   role: RentalApiRole
   identity: string
   tab: WorkspaceTab
@@ -691,6 +695,7 @@ function WorkspaceData({
           onClose={() => setDetail(undefined)}
           onAction={setAction}
           onChanged={refresh}
+          onSuspicionReportSubmitted={onSuspicionReportSubmitted}
         />
       )}
       {returnRental && <Modal open onClose={() => setReturnRental(undefined)} title="Trả kho" size="2xl">
@@ -751,6 +756,7 @@ function DetailModal({
   onClose,
   onAction,
   onChanged,
+  onSuspicionReportSubmitted,
 }: {
   role: RentalApiRole
   identity: string
@@ -758,6 +764,7 @@ function DetailModal({
   onClose: () => void
   onAction: (a: Action) => void
   onChanged: () => void
+  onSuspicionReportSubmitted?: (reportId: string) => void
 }) {
   const { manager, copy } = useManagerPresentation()
 
@@ -820,6 +827,7 @@ function DetailModal({
             rental={read.data.record as RentalApiDetail}
             role={role}
             showTechnicalWarnings={role === "manager"}
+            onSuspicionReportSubmitted={onSuspicionReportSubmitted}
             onRentalStartConfirmed={() => { read.refresh(); onChanged() }}
           />
         </div>
