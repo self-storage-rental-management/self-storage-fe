@@ -16,6 +16,16 @@ const bracketedStatusColors: Record<string, string> = {
 const statusLabelPattern = /(\[(?:Đã bảo lưu|Đã giữ chỗ|Đã công bố)\])/
 const statusLabelContainers = new Set(['div', 'span', 'p', 'li', 'td', 'th', 'dd', 'dt', 'strong', 'small'])
 
+/** Localize role words in system messages, including notices saved by older versions. */
+export function displayRoleNames(value: string): string {
+  return value.replace(/https?:\/\/\S+|\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b|\b(?:BO|Manager)\b/gi, (word, offset: number) => {
+    if (word.includes('@') || /^https?:\/\//i.test(word)) return word
+    if (word.toLowerCase() === 'bo' && word !== 'BO') return word
+    const role = word.toLowerCase() === 'bo' ? 'chủ doanh nghiệp' : 'quản lý cơ sở'
+    return offset === 0 ? role.charAt(0).toUpperCase() + role.slice(1) : role
+  })
+}
+
 /** Normalize display text without changing stored values or request payloads. */
 export function displayText(value: string): string {
   return value

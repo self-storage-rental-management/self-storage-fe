@@ -18,23 +18,69 @@ import IntakeWorkflowPanel from "../../components/IntakeWorkflowPanel"
 import { formatCustomerDateTime } from "../../i18n/customerDate"
 import { listReturns, type ApiReturn } from "../../services/returnApi"
 import { CustomerClearance } from '../return-api/ReturnClearance'
+import VietnameseDateTimeField from '../../components/VietnameseDateTimeField'
 import { getAuthenticatedActor } from '../../services/authApi'
-import { getReturn, returnError } from '../../services/returnApi'
+import { getReturn, returnError, scheduleMismatchReturnAppointment } from '../../services/returnApi'
 import { ReturnSummary } from "../return-api/ReturnApiPanel"
 import { userFacingError } from "../../presentation/userFacingError"
 import FilePreviewDialog from "../../components/FilePreviewDialog"
-import { vietnamDateInput } from "../../utils/vietnamTime"
+import { vietnamDateInput, vietnamDateTimeInput } from "../../utils/vietnamTime"
 const labelClass = "text-xs font-normal text-slate-500"
 const valueClass = "mt-1 text-sm font-medium text-slate-900"
 
-function InventoryTimeframe({ detail, now, busy, onExtend }: { detail: CustomerReservationDetail; now: number; busy: boolean; onExtend: () => void }) {
+function InventoryTimeframe({
+  detail,
+  now,
+  busy,
+  onExtend,
+  returnCase,
+  returnCaseError,
+  scheduleBusy,
+  onScheduleReturn,
+}: {
+  detail: CustomerReservationDetail
+  now: number
+  busy: boolean
+  onExtend: () => void
+  returnCase?: ApiReturn
+  returnCaseError?: string
+  scheduleBusy?: boolean
+  onScheduleReturn?: (iso: string) => void
+}) {
   const returning = detail.inventoryResolutionStatus === 'RETURN_REQUESTED'
   const awaitingResponse = detail.inventoryResolutionStatus === 'PENDING_CUSTOMER'
   const responseDeadline = detail.inventoryResultPublishedAt
     ? new Date(Date.parse(detail.inventoryResultPublishedAt) + 48 * 60 * 60 * 1000).toISOString() : null
   const deadline = returning ? detail.inventoryRemovalDeadlineAt
     : awaitingResponse ? responseDeadline : detail.inventoryFinalDeadlineAt || detail.inventoryDueAt
-  const overdue = Boolean(deadline && Date.parse(deadline) <= now)
+  const deadlineMs = deadline ? Date.parse(deadline) : NaN
+  const overdue = Boolean(Number.isFinite(deadlineMs) && deadlineMs <= now)
+  const [returnAppointmentAt, setReturnAppointmentAt] = useState(() =>
+    returnCase?.scheduledAppointmentAt ? vietnamDateTimeInput(returnCase.scheduledAppointmentAt) : '')
+  useEffect(() => {
+    setReturnAppointmentAt(returnCase?.scheduledAppointmentAt ? vietnamDateTimeInput(returnCase.scheduledAppointmentAt) : '')
+  }, [returnCase?.id, returnCase?.scheduledAppointmentAt])
+  const arrivalLocked = Boolean(
+    returnCase?.attendance?.arrivedAt
+    || returnCase?.attendance?.lateArrivalClaimedAt
+    || returnCase?.attendance?.reviewStatus === 'PENDING'
+    || returnCase?.warehouseEmptyVerified === true
+    || returnCase?.inspectedAt
+    || returnCase?.noShowAt,
+  )
+  const canScheduleReturn = Boolean(
+    returning
+    && !overdue
+    && Number.isFinite(deadlineMs)
+    && !arrivalLocked
+    && (!returnCase || ['requested', 'scheduled'].includes(returnCase.status))
+    && onScheduleReturn,
+  )
+  const minDateTime = vietnamDateTimeInput(Math.ceil(now / 60_000) * 60_000)
+  const maxDateTime = Number.isFinite(deadlineMs) ? vietnamDateTimeInput(deadlineMs - 60_000) : undefined
+  const selectedOutOfRange = Boolean(
+    returnAppointmentAt && (returnAppointmentAt < minDateTime || (maxDateTime && returnAppointmentAt > maxDateTime)),
+  )
   const milestones = returning
     ? [
       ['Công bố kết quả kiểm kê', detail.inventoryResultPublishedAt],
@@ -61,10 +107,60 @@ function InventoryTimeframe({ detail, now, busy, onExtend }: { detail: CustomerR
     {returning && detail.inventoryReturnWindowDays != null && <p className="text-xs text-stone-500">Thời hạn trả hàng: {detail.inventoryReturnWindowDays} ngày{(detail.inventoryReturnExtensionCount ?? 0) > 0 ? ` · Đã gia hạn ${detail.inventoryReturnExtensionCount} lần` : ''}.</p>}
     {returning && <div className="flex flex-wrap items-center justify-between gap-2">
       <p className="text-xs text-stone-500">Có thể gia hạn tối đa 2 lần trước khi hết hạn trả hàng.</p>
-      <Button size="sm" variant="outline" disabled={busy || overdue || !detail.inventoryReturnCanExtend} onClick={onExtend}>
+      <Button size="sm" variant="outline" disabled={busy || overdue || !detail.inventoryReturnCanExtend || arrivalLocked} onClick={onExtend}>
         {busy ? 'Đang gia hạn…' : 'Gia hạn thêm 2 ngày'}
       </Button>
     </div>}
+    {returning && returnCase?.scheduledAppointmentAt && (
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-xs">
+        <span className="text-stone-600">Lịch hẹn trả kho đã chọn:</span>
+        <span className="font-semibold text-stone-900">{formatCustomerDateTime(returnCase.scheduledAppointmentAt)}</span>
+      </div>
+    )}
+    {canScheduleReturn && (
+      <div className="space-y-2 rounded-lg border border-stone-200 bg-stone-50/70 p-3">
+        <p className="text-xs font-semibold text-stone-800">
+          {returnCase?.scheduledAppointmentAt ? 'Đổi lịch hẹn trả kho' : 'Đặt lịch hẹn trả kho'}
+        </p>
+        <p className="text-[11px] text-stone-500">
+          Chọn ngày và giờ theo giờ Việt Nam trước hạn cuối dọn hàng và trả kho. Đổi lịch không làm thay đổi hạn trả hàng.
+        </p>
+        <VietnameseDateTimeField
+          label="Ngày hẹn trả kho (dd/mm/yyyy)"
+          value={returnAppointmentAt}
+          minDate={minDateTime.slice(0, 10)}
+          maxDate={maxDateTime?.slice(0, 10)}
+          minDateTime={minDateTime}
+          maxDateTime={maxDateTime}
+          disabled={scheduleBusy}
+          onChange={setReturnAppointmentAt}
+        />
+        {selectedOutOfRange && (
+          <p role="alert" className="text-xs font-medium text-red-700">
+            Thời điểm hẹn phải nằm trong tương lai và trước hạn cuối dọn hàng và trả kho.
+          </p>
+        )}
+        {returnCaseError && (
+          <p role="alert" className="text-xs font-medium text-red-700">
+            {returnCaseError}
+          </p>
+        )}
+        {!returnCase && !returnCaseError && (
+          <p className="text-[11px] text-stone-500">Đang đồng bộ hồ sơ trả kho để mở xác nhận lịch hẹn…</p>
+        )}
+        <div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={scheduleBusy || !returnCase || !returnAppointmentAt || selectedOutOfRange}
+            onClick={() => onScheduleReturn?.(new Date(`${returnAppointmentAt}:00+07:00`).toISOString())}
+          >
+            {returnCase?.scheduledAppointmentAt ? 'Đổi lịch trả kho' : 'Đặt lịch trả kho'}
+          </Button>
+        </div>
+      </div>
+    )}
     {overdue && <p role="status" className="text-xs font-semibold text-red-700">{returning ? 'Đã hết hạn dọn hàng và trả kho.' : awaitingResponse ? 'Đã hết 48 giờ phản hồi. Hồ sơ chuyển sang thu hồi.' : 'Đã hết hạn hoàn tất kiểm kê.'}</p>}
   </section>
 }
@@ -130,6 +226,7 @@ export default function RentalDetail({
   const [inventoryActionMessage, setInventoryActionMessage] = useState('')
   const [inventoryActionError, setInventoryActionError] = useState('')
   const [activeReturnCase, setActiveReturnCase] = useState<ApiReturn>()
+  const [returnCaseLoadError, setReturnCaseLoadError] = useState('')
   const clearanceLock = useRef(false)
   const [clearanceBusy, setClearanceBusy] = useState(false)
   const [clearanceError, setClearanceError] = useState('')
@@ -139,7 +236,10 @@ export default function RentalDetail({
     setClearanceBusy(true)
     setClearanceError('')
     try {
-      setActiveReturnCase(await work())
+      const updated = await work()
+      setActiveReturnCase(updated)
+      setInventoryReload(value => value + 1)
+      onRentalStartConfirmed?.()
     } catch (error) {
       setClearanceError(returnError(error))
       try { setActiveReturnCase(await getReturn('customer', activeReturnCase.id)) } catch { /* Keep the action error visible. */ }
@@ -180,19 +280,35 @@ export default function RentalDetail({
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
     } catch (error) { tab?.close(); setInventoryPreviewError(userFacingError(error, 'Không thể mở bằng chứng kiểm kê.')) }
   }
+  const returnRequestedForRental = isReturningRental || inventoryDetail?.inventoryResolutionStatus === 'RETURN_REQUESTED'
   useEffect(() => {
-    if (!isReturningRental) { setActiveReturnCase(undefined); return }
+    if (!returnRequestedForRental) { setActiveReturnCase(undefined); setReturnCaseLoadError(''); return }
     let active = true
+    setReturnCaseLoadError('')
     const returnRole = role === 'manager' ? 'manager' : role === 'staff' ? 'staff' : 'customer'
-    void listReturns(returnRole, 0, 50)
+    void listReturns(returnRole, 0, 100)
       .then(page => {
         if (!active) return
         const found = page.data.find(item => item.rentalId === rental.id && item.status !== 'completed')
         setActiveReturnCase(found)
+        if (!found) {
+          setReturnCaseLoadError('Chưa tìm thấy hồ sơ trả kho tương ứng để lưu lịch hẹn.')
+        }
       })
-      .catch(() => {})
+      .catch(error => {
+        if (active) setReturnCaseLoadError(returnError(error))
+      })
     return () => { active = false }
-  }, [isReturningRental, rental.id, role])
+  }, [returnRequestedForRental, rental.id, role, inventoryReload])
+  const scheduleReturnFromDetail = (appointmentIso: string) => {
+    if (!activeReturnCase) return
+    void updateClearance(() => scheduleMismatchReturnAppointment(
+      activeReturnCase.id,
+      appointmentIso,
+      activeReturnCase.returnVersion,
+      crypto.randomUUID(),
+    ))
+  }
   const labelClass = "text-xs font-medium text-stone-500"
   const valueClass = "mt-1 text-sm font-semibold text-stone-900"
 
@@ -278,6 +394,7 @@ export default function RentalDetail({
     try {
       const updated = await extendCustomerInventoryReturnWindow(rental.reservationId)
       setInventoryDetail(updated)
+      setInventoryReload(value => value + 1)
       setInventoryActionMessage('Đã kéo dài thời gian trả kho theo quy định.')
       onRentalStartConfirmed?.()
     } catch (error) {
@@ -407,8 +524,18 @@ export default function RentalDetail({
               )}
               {role === 'customer' && inventoryDetail?.reservation.id === rental.reservationId && (
                 <div className="mt-3 space-y-3">
-                  <InventoryTimeframe detail={inventoryDetail} now={now} busy={resolvingInventory} onExtend={() => void extendInventoryReturn()} />
+                  <InventoryTimeframe
+                    detail={inventoryDetail}
+                    now={now}
+                    busy={resolvingInventory}
+                    onExtend={() => void extendInventoryReturn()}
+                    returnCase={activeReturnCase}
+                    returnCaseError={returnCaseLoadError}
+                    scheduleBusy={clearanceBusy}
+                    onScheduleReturn={scheduleReturnFromDetail}
+                  />
                   <InventoryResolutionNotice detail={inventoryDetail} now={now} submitting={resolvingInventory} onExtendReturnWindow={() => void extendInventoryReturn()} onResolve={(decision, scheduledDate) => void resolveInventoryDecision(decision, scheduledDate)} />
+                  {clearanceError && <p role="alert" className="text-xs font-medium text-red-700">{clearanceError}</p>}
                   {inventoryActionMessage && <p role="status" className="text-xs font-medium text-emerald-700">{inventoryActionMessage}</p>}
                   {inventoryActionError && <p role="alert" className="text-xs font-medium text-red-700">{inventoryActionError}</p>}
                 </div>
@@ -419,7 +546,16 @@ export default function RentalDetail({
             <dd className="space-y-3">{role === 'customer' && inventoryDetail?.reservation.id === rental.reservationId
               && (inventoryDetail.inventoryDecision || (inventoryDetail.inventoryResolutionStatus && inventoryDetail.inventoryResolutionStatus !== 'NOT_STARTED')) ? (
                 <>
-                  <InventoryTimeframe detail={inventoryDetail} now={now} busy={resolvingInventory} onExtend={() => void extendInventoryReturn()} />
+                  <InventoryTimeframe
+                    detail={inventoryDetail}
+                    now={now}
+                    busy={resolvingInventory}
+                    onExtend={() => void extendInventoryReturn()}
+                    returnCase={activeReturnCase}
+                    returnCaseError={returnCaseLoadError}
+                    scheduleBusy={clearanceBusy}
+                    onScheduleReturn={scheduleReturnFromDetail}
+                  />
                   <InventoryResolutionNotice
                     detail={inventoryDetail}
                     now={now}
@@ -427,6 +563,7 @@ export default function RentalDetail({
                     onExtendReturnWindow={() => void extendInventoryReturn()}
                     onResolve={(decision, scheduledDate) => void resolveInventoryDecision(decision, scheduledDate)}
                   />
+                  {clearanceError && <p role="alert" className="text-xs font-medium text-red-700">{clearanceError}</p>}
                   {inventoryActionMessage && <p role="status" className="text-xs font-medium text-emerald-700">{inventoryActionMessage}</p>}
                   {inventoryActionError && <p role="alert" className="text-xs font-medium text-red-700">{inventoryActionError}</p>}
                 </>

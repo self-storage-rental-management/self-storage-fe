@@ -3686,11 +3686,11 @@ export default function BusinessApp({
         </div>
       )}
       {page === 'recoveries' && <div className="space-y-5">
-        <SectionHeader title="Thu hồi kho" subtitle="Theo dõi hồ sơ tại các cơ sở và xử lý các trường hợp cần BO xem xét." />
+        <SectionHeader title="Thu hồi kho" subtitle="Xử lý các hồ sơ quản lý cơ sở chưa hoàn thành đúng hạn." />
         <Card className="recovery-workspace">
-          <h2>Hồ sơ thu hồi cần xử lý</h2>
-          <p>Đối chiếu biên bản, theo dõi thời hạn và ghi nhận quyết định xử lý.</p>
-          <ViolationRecoveryPanel activeOnly target={recoveryNoticeTarget} />
+          <h2>Hồ sơ quá hạn xử lý</h2>
+          <p>Các hồ sơ quá hạn phân công hoặc rà soát của quản lý cơ sở được chuyển đến chủ doanh nghiệp.</p>
+          <ViolationRecoveryPanel activeOnly managerOverdueOnly target={recoveryNoticeTarget} />
         </Card>
       </div>}
       {/* ── QUẢN LÝ CƠ SỞ (CRUD FACILITIES) ──────────────────── */}

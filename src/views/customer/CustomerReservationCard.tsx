@@ -623,6 +623,7 @@ export default function CustomerReservationCard({ user, reservation: r, facility
             {onBookAgain && <Button className="mt-2" size="sm" onClick={onBookAgain}>Đặt kho mới</Button>}
           </div>}
           <div ref={setReceiptSlot} className="reservation-receipt-slot contents" />
+          {r.status === 'PREPARING' && <p className="rounded-lg border border-violet-200 bg-violet-50 p-3 text-left text-xs text-violet-950">Đơn đã bàn giao sang <b>Hồ sơ thuê</b>. Vui lòng thực hiện xác nhận chuẩn bị, chọn lịch kiểm kê và cập nhật hồ sơ sau kiểm kê tại mục <b>Hồ sơ thuê</b>.</p>}
           {documentAvailable && <Button variant="outline" size="sm" className="reservation-action reservation-action-document min-h-10 w-full justify-center" disabled={busy} onClick={() => void prepareBookingDocument()}>{busy ? 'Đang chuẩn bị…' : 'Xem phiếu giữ kho'}</Button>}
           {handoverDocumentsAvailable && <Button variant="outline" size="sm" className="min-h-10 w-full justify-center" disabled={busy} onClick={() => void loadHandoverDocuments('contract')}>Xem hợp đồng đã ký</Button>}
           {recordsAvailable && <Button variant="outline" size="sm" className="min-h-10 w-full justify-center" disabled={busy} onClick={() => void loadHandoverDocuments('records')}>Xem biên bản</Button>}

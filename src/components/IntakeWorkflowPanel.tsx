@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { apiRequest } from '../services/apiClient'
 import { uploadCheckInEvidence } from '../services/checkInApi'
-import VietnameseDateInput from './VietnameseDateInput'
+import VietnameseDateTimeField from './VietnameseDateTimeField'
 import { Badge, Button } from './ui'
 import { canResolveAttendanceReview } from '../domain/intakePermissions'
+import { vietnamDateTimeInput } from '../utils/vietnamTime'
 
 interface VerificationAttemptView {
   attemptNumber?: number | null
@@ -55,114 +56,6 @@ interface State {
 
 const show = (s?: string | null) =>
   s ? new Date(s).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Chưa đặt'
-
-function vietnamDateTimeInput(timestamp: number) {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Ho_Chi_Minh',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-  }).formatToParts(new Date(timestamp))
-  const values = Object.fromEntries(parts.map(part => [part.type, part.value]))
-  return `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}`
-}
-
-const HOURS_24 = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'))
-const MINUTES_60 = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'))
-
-function VietnameseDateTimeField({
-  value,
-  onChange,
-  minDate,
-  maxDate,
-  minDateTime,
-  maxDateTime,
-  label = 'Ngày hẹn (dd/mm/yyyy)',
-}: {
-  value: string
-  onChange: (next: string) => void
-  minDate?: string
-  maxDate?: string
-  minDateTime?: string
-  maxDateTime?: string
-  label?: string
-}) {
-  const effectiveMinDate = minDate ?? minDateTime?.slice(0, 10)
-  const effectiveMaxDate = maxDate ?? maxDateTime?.slice(0, 10)
-  const [datePart, timePart] = value ? value.split('T') : ['', '']
-  const [rawHour, rawMinute] = timePart ? timePart.split(':') : ['09', '00']
-
-  const allowedHoursFor = (d: string) => {
-    const minH = minDateTime && d === minDateTime.slice(0, 10) ? minDateTime.slice(11, 13) : '00'
-    const maxH = maxDateTime && d === maxDateTime.slice(0, 10) ? maxDateTime.slice(11, 13) : '23'
-    return HOURS_24.filter(h => h >= minH && h <= maxH)
-  }
-
-  const allowedMinutesFor = (d: string, h: string) => {
-    const minM = minDateTime && d === minDateTime.slice(0, 10) && h === minDateTime.slice(11, 13)
-      ? minDateTime.slice(14, 16)
-      : '00'
-    const maxM = maxDateTime && d === maxDateTime.slice(0, 10) && h === maxDateTime.slice(11, 13)
-      ? maxDateTime.slice(14, 16)
-      : '59'
-    return MINUTES_60.filter(m => m >= minM && m <= maxM)
-  }
-
-  const allowedHours = datePart ? allowedHoursFor(datePart) : HOURS_24
-  const hour = allowedHours.includes(rawHour) ? rawHour : (allowedHours[0] ?? rawHour)
-  const allowedMinutes = datePart ? allowedMinutesFor(datePart, hour) : MINUTES_60
-  const minute = allowedMinutes.includes(rawMinute) ? rawMinute : (allowedMinutes[0] ?? rawMinute)
-
-  const update = (nextDate: string, nextHour: string, nextMinute: string) => {
-    if (!nextDate) {
-      onChange('')
-      return
-    }
-    const hrs = allowedHoursFor(nextDate)
-    const h = hrs.includes(nextHour) ? nextHour : (hrs[0] ?? nextHour ?? '09')
-    const mins = allowedMinutesFor(nextDate, h)
-    const m = mins.includes(nextMinute) ? nextMinute : (mins[0] ?? nextMinute ?? '00')
-    onChange(`${nextDate}T${h}:${m}`)
-  }
-
-  return (
-    <div className="flex flex-wrap items-end gap-2">
-      <div className="min-w-[11rem] flex-1">
-        <VietnameseDateInput
-          label={label}
-          value={datePart || ''}
-          min={effectiveMinDate}
-          max={effectiveMaxDate}
-          onChange={nextDate => update(nextDate, hour || '09', minute || '00')}
-        />
-      </div>
-      <div className="flex items-end gap-1">
-        <label className="block text-xs font-medium text-stone-700">
-          Giờ
-          <select
-            aria-label="Giờ hẹn"
-            className="mt-1 block rounded-lg border border-stone-300 bg-white px-2 py-2.5 text-sm text-stone-900"
-            value={hour}
-            onChange={e => update(datePart, e.target.value, minute)}
-          >
-            {allowedHours.map(h => <option key={h} value={h}>{h}</option>)}
-          </select>
-        </label>
-        <span className="pb-2.5 font-semibold text-stone-500">:</span>
-        <label className="block text-xs font-medium text-stone-700">
-          Phút
-          <select
-            aria-label="Phút hẹn"
-            className="mt-1 block rounded-lg border border-stone-300 bg-white px-2 py-2.5 text-sm text-stone-900"
-            value={minute}
-            onChange={e => update(datePart, hour, e.target.value)}
-          >
-            {allowedMinutes.map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
-        </label>
-      </div>
-    </div>
-  )
-}
 
 function formatRemaining(remainingMs: number | null): { text: string; urgent: boolean; expired: boolean } | null {
   if (remainingMs == null || !Number.isFinite(remainingMs)) return null

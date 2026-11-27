@@ -57,7 +57,21 @@ function settlementTimingText(line: CashflowReport['settlements'][number]) {
   return 'Chưa ghi nhận ngày hoàn tiền.'
 }
 
-export default function ManagerCashflowPanel({ facilityId, identity, onReport }: { facilityId: string; identity: string; onReport?: (report: CashflowReport | undefined) => void }) {
+const formatMonthLabel = (monthStr: string) => {
+  if (!monthStr) return ''
+  const parts = monthStr.split('-')
+  return parts.length === 2 ? `Tháng ${parts[1]}/${parts[0]}` : monthStr
+}
+
+export default function ManagerCashflowPanel({
+  facilityId,
+  identity,
+  onReport,
+}: {
+  facilityId: string
+  identity: string
+  onReport?: (report: CashflowReport | undefined) => void
+}) {
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [range, setRange] = useState({ from: '', to: '' })

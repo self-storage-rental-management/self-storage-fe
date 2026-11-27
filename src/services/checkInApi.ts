@@ -5,11 +5,11 @@ import { isCheckInStatus, isReservationStatus, isPaymentStatus, type CheckInStat
 import { renameEvidenceFile } from '../utils/evidenceFileName'
 
 export type CheckInStatus = WorkflowCheckInStatus | null
-export type CheckInListStatus = 'UNSCHEDULED' | NonNullable<CheckInStatus>
+export type CheckInListStatus = 'UNSCHEDULED' | 'RECOVERY_TRANSFERRED' | NonNullable<CheckInStatus>
 export type CheckInGroup = 'ONGOING' | 'PROCESSED'
 export type CheckInReservationStatus = ReservationStatus
 export type InventoryVisit = {
-  access?: { completionDeadlineAt: string | null; writable: boolean; blockedReason: string | null } | null
+  access?: { completionDeadlineAt: string | null; writable: boolean; blockedReason: string | null; recoveryTransferred?: boolean } | null
   appointmentAt: string | null
   arrivedAt: string | null
   identityVerifiedAt: string | null
@@ -599,6 +599,17 @@ export async function rejectCheckIn(
 ) {
   return assertEnvelope(await apiRequest<unknown>(
     `/api/staff/check-ins/${encodeURIComponent(checkInId)}/reject`,
+    { method: 'POST', body: JSON.stringify(request) },
+  ))
+}
+
+export async function confirmPartialInventoryRemoval(checkInId: string, request: {
+  remainderRemoved: boolean
+  evidenceReferences: string[]
+  notes: string
+}) {
+  return assertEnvelope(await apiRequest<unknown>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/inventory-partial-removal`,
     { method: 'POST', body: JSON.stringify(request) },
   ))
 }

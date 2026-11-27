@@ -13,6 +13,7 @@ import { normalizeRentalIdentity, validateRentalIdentity } from '../../domain/re
 import { CustomerProfileReminder } from '../../components/CustomerProfileFields'
 import CustomerCatalogStatus, { catalogLoadError, type CatalogLoadError } from './CustomerCatalogStatus'
 import { matchesReservationSearch, reservationPage } from './reservationList'
+import CustomerPagination from './CustomerPagination'
 import { estimatedRentalPeriod } from '../../domain/rentalTimeline'
 import { formatCustomerDate, formatCustomerDateTime } from '../../i18n/customerDate'
 import { useBackendNotifications } from '../../hooks/useBackendNotifications'
@@ -786,9 +787,22 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const [reservationTab, setReservationTab] = useState<'all' | 'active' | 'completed' | 'expired'>('all')
   const [reservationSearch, setReservationSearch] = useState('')
   const [reservationPageNumber, setReservationPageNumber] = useState(1)
-  const reservationPageSize = 3
+  const [reservationPageSize, setReservationPageSize] = useState(5)
   const [expiredReservationPageNumber, setExpiredReservationPageNumber] = useState(1)
   const [completedReservationPageNumber, setCompletedReservationPageNumber] = useState(1)
+
+  const handleReservationPageChange = (newPage: number) => {
+    setReservationPageNumber(newPage)
+    const el = document.getElementById('customer-reservations-section')
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+
+  const handleReservationPageSizeChange = (newSize: number) => {
+    setReservationPageSize(newSize)
+    setReservationPageNumber(1)
+  }
   const [rentalFacilityFilter, setRentalFacilityFilter] = useState('all')
   const [rentalTypeFilter, setRentalTypeFilter] = useState('all')
   const [rentalDeadlineFilter, setRentalDeadlineFilter] = useState<'all' | 'upcoming' | 'overdue'>('all')
@@ -2603,7 +2617,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
       {/* ── STORAGE RESERVATIONS (HOLDS) ─────────────────────── */}
       {page === 'reservations' && (
-        <div className="fade-in space-y-4">
+        <div id="customer-reservations-section" className="fade-in space-y-4">
           <SectionHeader
             title={'Đơn Đặt Giữ Kho Của Tôi'}
             action={<Button size="sm" onClick={() => navigateTo('browse-units')}>{Icon.plus} {'Đặt giữ kho mới'}</Button>}
@@ -2762,33 +2776,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   ))}
                 </div>
 
-                {/* Phân trang: Luôn hiển thị để người dùng theo dõi số trang và tổng số đơn */}
-                <nav aria-label="Phân trang đơn giữ kho" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-5 py-3 shadow-xs">
-                  <p className="text-xs text-stone-500 font-medium">
-                    Hiển thị <b>{currentTabTotalCount === 0 ? 0 : currentTabPagination.start + 1}–{Math.min(currentTabPagination.end, currentTabTotalCount)}</b> trong tổng số <b>{currentTabTotalCount}</b> đơn ({reservationPageSize} đơn/trang)
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={reservationPageNumber <= 1}
-                      onClick={() => setReservationPageNumber(p => Math.max(1, p - 1))}
-                    >
-                      Trang trước
-                    </Button>
-                    <span className="px-2 text-xs font-semibold text-stone-600">
-                      Trang {currentTabPagination.page} / {Math.max(1, currentTabPagination.pages)}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={reservationPageNumber >= currentTabPagination.pages}
-                      onClick={() => setReservationPageNumber(p => p + 1)}
-                    >
-                      Trang sau
-                    </Button>
-                  </div>
-                </nav>
+                <CustomerPagination
+                  page={currentTabPagination.page}
+                  pageCount={currentTabPagination.pages}
+                  total={currentTabTotalCount}
+                  pageSize={reservationPageSize}
+                  onPageChange={handleReservationPageChange}
+                  onPageSizeChange={handleReservationPageSizeChange}
+                />
               </div>
             )
           ) : displayedReservationHolds.length ? (
@@ -3056,32 +3051,14 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   </div>
                 </Card></div>
               )})}
-                <nav aria-label="Phân trang đơn giữ kho" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-5 py-3 shadow-xs">
-                  <p className="text-xs text-stone-500 font-medium">
-                    Hiển thị <b>{displayedReservationHolds.length === 0 ? 0 : currentTabPagination.start + 1}–{Math.min(currentTabPagination.end, displayedReservationHolds.length)}</b> trong tổng số <b>{displayedReservationHolds.length}</b> đơn ({reservationPageSize} đơn/trang)
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={reservationPageNumber <= 1}
-                      onClick={() => setReservationPageNumber(p => Math.max(1, p - 1))}
-                    >
-                      Trang trước
-                    </Button>
-                    <span className="px-2 text-xs font-semibold text-stone-600">
-                      Trang {currentTabPagination.page} / {Math.max(1, currentTabPagination.pages)}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={reservationPageNumber >= currentTabPagination.pages}
-                      onClick={() => setReservationPageNumber(p => p + 1)}
-                    >
-                      Trang sau
-                    </Button>
-                  </div>
-                </nav>
+                <CustomerPagination
+                  page={currentTabPagination.page}
+                  pageCount={currentTabPagination.pages}
+                  total={currentTabTotalCount}
+                  pageSize={reservationPageSize}
+                  onPageChange={handleReservationPageChange}
+                  onPageSizeChange={handleReservationPageSizeChange}
+                />
             </div>
           ) : (
             <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-12 text-center shadow-xs">
@@ -3349,8 +3326,8 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                     const unfinishedRenewal = renewals.find(item => item.rentalId === rental.id && ['pending', 'approved', 'deposit_paid', 'full_rent_paid', 'appointment_scheduled', 'payment_processing'].includes(item.status))
                     if (remainingDays < 0) {
                       const overdueDays = Math.abs(remainingDays)
-                      const lateFeePerDay = Math.round(((rental.monthlyRate / 30) * 0.5) * 100) / 100
-                      const currentLateFee = Math.round(overdueDays * lateFeePerDay * 100) / 100
+                      const lateFeePerDay = Math.round((rental.monthlyRate / 30) * 1.5)
+                      const currentLateFee = Math.round(overdueDays * lateFeePerDay)
                       return <div className="border-t border-red-300 bg-red-50 px-5 py-4 text-xs text-red-900"><p className="font-bold"> {`Hợp đồng đã quá hạn ${overdueDays} ngày`}</p><p className="mt-1">{`Hợp đồng đã hết hạn ngày ${displayDateValue(rental.endDate)}. Phí muộn tạm tính hiện tại: ${overdueDays} ngày × ${formatVnd(lateFeePerDay)} = ${formatVnd(currentLateFee)}. ${unfinishedRenewal ? 'Yêu cầu gia hạn vẫn chưa có hiệu lực. Bạn phải đến cơ sở ký tiếp hợp đồng để hoàn tất.' : 'Bạn vẫn có thể gửi yêu cầu gia hạn.'} Phí cuối cùng được tính đến ngày thanh toán hoặc ngày ký hợp đồng gia hạn, tùy ngày nào muộn hơn.`}</p></div>
                     }
                     if (remainingDays > reminderWindow) return null
@@ -3525,15 +3502,15 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             <Button variant={paymentHistoryFilter === 'settlement' ? 'primary' : 'outline'} onClick={() => setPaymentHistoryFilter('settlement')}>Quyết toán</Button>
           </div>
           <Card>
-            <Table>
+            <Table tableClassName="w-full table-fixed [&_td]:align-middle [&_th]:align-middle">
               <Thead>
                 <tr>
-                  <Th>{'Mã Giao Dịch'}</Th>
-                  <Th>{'Gian Kho'}</Th>
-                  <Th>{'Nội Dung'}</Th>
-                  <Th>{'Phương Thức'}</Th>
-                  <Th>{'Số Tiền'}</Th>
-                  <Th>{'Trạng Thái'}</Th>
+                  <Th className="w-[140px]">{'Mã Giao Dịch'}</Th>
+                  <Th className="w-[200px]">{'Gian Kho'}</Th>
+                  <Th className="w-[230px]">{'Nội Dung'}</Th>
+                  <Th className="w-[120px]">{'Phương Thức'}</Th>
+                  <Th className="w-[140px] text-right">{'Số Tiền'}</Th>
+                  <Th className="w-[160px] text-center">{'Trạng Thái'}</Th>
                 </tr>
               </Thead>
               <Tbody>
@@ -3541,7 +3518,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   const rental = myRentals.find(r => r.id === payment.rentalId)
                   const hold = myHolds.find(h => h.id === payment.reservationId)
                   const labels: Record<string, string> = { RESERVATION_DEPOSIT: 'Thanh toán trước 20% (giữ chỗ) 20%', INITIAL_RENT: 'Phần còn lại tại cơ sở', RENEWAL: 'Thanh toán gia hạn', DAMAGE_FEE: 'Thanh toán quyết toán trả kho', REFUND: 'Hoàn cọc sau quyết toán' }
-                  return <Tr key={payment.id}><Td><span className="text-xs text-stone-600">{payment.transactionReference || payment.id}</span><p className="mt-0.5 text-[10px] text-stone-400">{payment.paidAt ? formatCustomerDateTime(new Date(payment.paidAt)) : '-'}</p></Td><Td><b>{rental?.unitId || hold?.assignedUnitId || hold?.unitTypeName || '-'}</b><p className="text-[10px] text-stone-400">{rental?.facilityName || hold?.facilityName}</p></Td><Td>{labels[payment.type] || 'Giao dịch thanh toán'}</Td><Td><span className="text-xs text-stone-500">{formatHistoryPaymentMethod(payment.paymentMethod)}</span></Td><Td><b className={payment.type === 'REFUND' ? 'text-emerald-700' : 'text-stone-950'}>{payment.type === 'REFUND' ? '+' : ''}{formatVnd(payment.amount)}</b></Td><Td><span className={`inline-flex rounded px-2.5 py-1 text-xs font-bold ${payment.status === 'PAID' ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{payment.status === 'PAID' ? ('Hoàn tất') : ('Đang xử lý')}</span></Td></Tr>
+                  return <Tr key={payment.id}><Td><span className="text-xs text-stone-600">{payment.transactionReference || payment.id}</span><p className="mt-0.5 text-[10px] text-stone-400">{payment.paidAt ? formatCustomerDateTime(new Date(payment.paidAt)) : '—'}</p></Td><Td><b>{rental?.unitId || hold?.assignedUnitId || hold?.unitTypeName || '—'}</b><p className="text-[10px] text-stone-400">{rental?.facilityName || hold?.facilityName}</p></Td><Td>{labels[payment.type] || 'Giao dịch thanh toán'}</Td><Td><span className="text-xs text-stone-500">{formatHistoryPaymentMethod(payment.paymentMethod)}</span></Td><Td className="text-right"><b className={payment.type === 'REFUND' ? 'text-emerald-700' : 'text-stone-950'}>{payment.type === 'REFUND' ? '+' : ''}{formatVnd(payment.amount)}</b></Td><Td className="text-center"><span className={`inline-flex whitespace-nowrap rounded px-2.5 py-1 text-xs font-bold ${payment.status === 'PAID' ? 'bg-emerald-700 text-white' : 'bg-amber-100 text-amber-900'}`}>{payment.status === 'PAID' ? ('Hoàn tất') : ('Đang xử lý')}</span></Td></Tr>
                 })}
                 {!myPayments.length && <tr><td colSpan={6}><p className="py-6 text-center text-sm text-stone-500">{'Chưa có giao dịch nào.'}</p></td></tr>}
               </Tbody>

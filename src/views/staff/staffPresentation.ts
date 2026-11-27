@@ -164,7 +164,9 @@ export function parseEmptyStorageHandover(note: string | null | undefined) {
 export function staffCheckInStatusLabel(
   checkInStatus: string | null,
   reservationStatus: string,
+  recoveryTransferred = false,
 ) {
+  if (recoveryTransferred) return "Đã chuyển thu hồi"
   return checkInStatus
     ? (CHECK_IN_STATUS_LABELS[checkInStatus] ?? "Đang xử lý")
     : (RESERVATION_STATUS_LABELS[reservationStatus] ?? "Đang xử lý")

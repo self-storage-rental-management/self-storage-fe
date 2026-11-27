@@ -46,9 +46,10 @@ interface ManagerReturnsPanelProps {
   onCreateMaintenanceWork?: (draft: { referenceId: string; title: string; notes: string }) => void
   onOpenRecovery?: () => void
   reviewTarget?: { id: string; request: number }
+  onNavigateToComplaints?: (tab?: 'payment' | 'returns') => void
 }
 
-export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaintenanceWork, onOpenRecovery, reviewTarget }: ManagerReturnsPanelProps) {
+export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaintenanceWork, onOpenRecovery, reviewTarget, onNavigateToComplaints }: ManagerReturnsPanelProps) {
   const {
     returns: legacyReturns,
     users,
@@ -167,6 +168,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
   const awaitingInspectionCount = facilityReturns.filter(awaitsInspection).length
   const inspectedCount = facilityReturns.filter(r => r.status === 'inspected' || r.status === 'awaiting_business_review' || r.status === 'awaiting_customer_confirmation').length
   const needsMaintenanceCount = facilityReturns.filter(r => (r.damageClassification && r.damageClassification !== 'no_damage') || r.proposedUnitStatus === 'maintenance').length
+  const disputedCount = facilityReturns.filter(r => r.status === 'disputed').length
 
   const filteredReturns = facilityReturns.filter(r => {
     const matchTab =
@@ -577,17 +579,17 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
       <div className="space-y-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
       <header>
-        <h1 className="text-2xl font-bold text-stone-900">Trả kho và nghiệm thu</h1>
+        <h1 className="text-2xl font-bold text-stone-900">Trả kho &amp; Quyết toán</h1>
         <p className="mt-1 text-sm text-stone-500">Theo dõi nghiệm thu hiện trường, biên bản và quyết toán hồ sơ trả kho.</p>
       </header>
-        <div className="flex w-full items-center gap-2 sm:w-auto">
-          {useApi && (onOpenRecovery ? <Button variant="outline" size="sm" onClick={onOpenRecovery}>Điều phối thu hồi kho</Button> : <ViolationRecoveryEntry />)}
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
+          {useApi && (onOpenRecovery ? <Button className="shrink-0" variant="outline" size="sm" onClick={onOpenRecovery}>Điều phối thu hồi kho</Button> : <ViolationRecoveryEntry />)}
           <input
             type="text"
             placeholder={'Tìm theo mã, khách, gian kho...'}
             value={returnSearch}
             onChange={e => setReturnSearch(e.target.value)}
-            className="min-w-0 flex-1 border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 sm:w-72"
+            className="min-w-[230px] flex-1 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 sm:w-72 sm:flex-none"
           />
           <details className="relative shrink-0">
             <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 rounded-lg border border-stone-300 bg-white px-3 text-sm font-medium text-stone-700 hover:bg-stone-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700">
@@ -604,6 +606,32 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
           </details>
         </div>
         </div>
+
+      {/* Disputed Cases Unified Notice Banner */}
+      {disputedCount > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-900 text-sm shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-3 w-3 relative flex-shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-600"></span>
+            </span>
+            <div>
+              <span className="font-semibold">Cơ sở có {disputedCount} hồ sơ đang khiếu nại quyết toán.</span>
+              <span className="text-rose-700 ml-1">Đã được chuyển tập trung sang trang Quản lý khiếu nại để giải quyết.</span>
+            </div>
+          </div>
+          {onNavigateToComplaints && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-rose-400 bg-white hover:bg-rose-100 text-rose-900 font-medium whitespace-nowrap self-start sm:self-auto"
+              onClick={() => onNavigateToComplaints('returns')}
+            >
+              Đến trang Quản lý khiếu nại →
+            </Button>
+          )}
+        </div>
+      )}
         <div className="flex w-fit max-w-full flex-wrap items-center gap-1 rounded-full bg-[#eeebe1] p-1" aria-label="Trạng thái trả kho">
           {[
             ['All', `Tất cả ${facilityReturns.length}`],
@@ -791,10 +819,14 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                             size="sm"
                             className="col-span-2 bg-rose-600 hover:bg-rose-700 text-white font-medium whitespace-nowrap"
                             onClick={() => {
-                              openDisputeReview(ret)
+                              if (onNavigateToComplaints) {
+                                onNavigateToComplaints('returns')
+                              } else {
+                                openDisputeReview(ret)
+                              }
                             }}
                           >
-                            {'Xử lý khiếu nại'}
+                            {'Xử lý khiếu nại →'}
                           </Button>
                         )}
 

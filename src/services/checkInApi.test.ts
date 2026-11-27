@@ -66,6 +66,19 @@ describe('checkInApi', () => {
     expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({ method: 'POST' }))
   })
 
+  it('filters transferred cases in processed check-ins and retains their recovery marker', async () => {
+    const access = { completionDeadlineAt: null, writable: false,
+      blockedReason: 'Hồ sơ đã chuyển sang thu hồi.', recoveryTransferred: true }
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      data: [{ ...responseCase, checkInStatus: 'setup_completed', inventoryVisit: { access } }],
+      pagination: { page: 0, pageSize: 20, totalItems: 1, totalPages: 1 }, correlationId: 'c-1',
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const result = await listCheckIns({ group: 'PROCESSED', status: 'RECOVERY_TRANSFERRED' })
+    expect(fetchMock.mock.calls[0][0]).toContain('group=PROCESSED&status=RECOVERY_TRANSFERRED')
+    expect(result.data[0].inventoryVisit?.access?.recoveryTransferred).toBe(true)
+  })
+
   it('records the inventory visit separately and uploads a restricted identity photo', async () => {
     const photo = new File(['sample'], 'arrival.png', { type: 'image/png' })
     const inventoryVisit = { appointmentAt: '2026-11-02T09:30:00Z', arrivedAt: '2026-11-02T09:05:00Z',

@@ -94,8 +94,15 @@ export interface ApiReturn {
   inventoryMatch?: 'match' | 'missing' | 'excess' | null
   damageClassification?: 'no_damage' | 'minor_damage' | 'major_damage' | 'abandoned_goods' | null
   status: typeof returnStatuses[number]; scheduledDate: string | null
+  scheduledAppointmentAt?: string | null
+  inventoryRemovalPublishedAt?: string | null
   inventoryRemovalDeadlineAt?: string | null
   returnWindowDays?: number | null
+  returnExtensionDays?: number | null
+  returnExtensionCount?: number
+  maxReturnExtensions?: number
+  canExtendReturnWindow?: boolean
+  returnVersion?: number
   attendance?: {
     arrivedAt: string | null
     evidenceId: string | null
@@ -109,6 +116,15 @@ export interface ApiReturn {
     reverificationStartedAt?: string | null
     reverificationStaffId?: string | null
     handoverAppointmentAt?: string | null
+    recordedAt?: string | null
+    recordedBy?: string | null
+    evidenceNote?: string | null
+    lateArrivalClaimedAt?: string | null
+    reviewStatus?: string | null
+    reviewDeadlineAt?: string | null
+    reviewReason?: string | null
+    reviewedBy?: string | null
+    reviewedAt?: string | null
   } | null
   returnPolicyVersion?: string | null
   returnType?: 'CANCELLED_IN_SETUP' | 'RETURN_IN_SETUP' | 'INVENTORY_MISMATCH' | 'EARLY_RETURN' | 'NORMAL'
@@ -190,7 +206,9 @@ export function isApiReturn(v: unknown): v is ApiReturn {
     (v.clearanceRevision === undefined || (Number.isSafeInteger(v.clearanceRevision) && Number(v.clearanceRevision) >= 0)) &&
     (v.warehouseEmptyVerified == null || typeof v.warehouseEmptyVerified === 'boolean') &&
     (v.warehouseEmptyVerifiedBy == null || isUuid(v.warehouseEmptyVerifiedBy)) &&
-    ['customerClearedAt', 'warehouseEmptyVerifiedAt', 'noShowAt', 'recoveryEligibleAt', 'recoveryTaskCreatedAt', 'inventoryRemovalDeadlineAt'].every(k => v[k] === undefined || v[k] === null || (typeof v[k] === 'string' && Number.isFinite(Date.parse(v[k])))) &&
+    ['customerClearedAt', 'warehouseEmptyVerifiedAt', 'noShowAt', 'recoveryEligibleAt', 'recoveryTaskCreatedAt', 'inventoryRemovalDeadlineAt', 'scheduledAppointmentAt', 'inventoryRemovalPublishedAt'].every(k => v[k] === undefined || v[k] === null || (typeof v[k] === 'string' && Number.isFinite(Date.parse(v[k])))) &&
+    ['returnExtensionDays', 'returnExtensionCount', 'maxReturnExtensions', 'returnVersion'].every(k => v[k] === undefined || v[k] === null || (Number.isSafeInteger(v[k]) && Number(v[k]) >= 0)) &&
+    (v.canExtendReturnWindow === undefined || typeof v.canExtendReturnWindow === 'boolean') &&
     (v.recoveryWitnessStaffId === undefined || v.recoveryWitnessStaffId === null || isUuid(v.recoveryWitnessStaffId)) &&
     (v.recoveryWitnessStaffName === undefined || v.recoveryWitnessStaffName === null || typeof v.recoveryWitnessStaffName === 'string') &&
     (v.recoveryTaskDeadlineAt === undefined || v.recoveryTaskDeadlineAt === null || (typeof v.recoveryTaskDeadlineAt === 'string' && Number.isFinite(Date.parse(v.recoveryTaskDeadlineAt)))) &&
@@ -199,7 +217,7 @@ export function isApiReturn(v: unknown): v is ApiReturn {
     (v.legacyPricingSnapshotAvailable === undefined || typeof v.legacyPricingSnapshotAvailable === 'boolean') &&
     (v.legacyPricingEvidenceFileId === undefined || v.legacyPricingEvidenceFileId === null || isUuid(v.legacyPricingEvidenceFileId)) &&
     (v.moveInCompletedAt === undefined || v.moveInCompletedAt === null || (typeof v.moveInCompletedAt === 'string' && Number.isFinite(Date.parse(v.moveInCompletedAt)))) &&
-    ['facilityName', 'unitNumber', 'customerName'].every(k => typeof v[k] === 'string') && (date(v.scheduledDate) || v.returnType === 'INVENTORY_MISMATCH' && v.scheduledDate === null) &&
+    ['facilityName', 'unitNumber', 'customerName'].every(k => typeof v[k] === 'string') && (v.scheduledDate === null || date(v.scheduledDate)) &&
     returnStatuses.includes(v.status as ApiReturn['status']) && typeof v.customerConfirmed === 'boolean' && money(v.totalDeductions) &&
     ['damageFee', 'cleaningFee', 'lostItemFee', 'overdueFee', 'outstandingFee'].every(k => money(v[k])) &&
     (v.proposedUnitStatus === null || v.proposedUnitStatus === 'available' || v.proposedUnitStatus === 'maintenance') &&
@@ -344,14 +362,33 @@ function fees(body: ReturnFees) { if (!feeKeys.every(k => money(body[k]))) throw
 export function setCustomerClearance(record: ApiReturn, cleared: boolean) {
   return mutate('customer', record.id, 'clearance', { cleared, clearanceRevision: record.clearanceRevision ?? 0 })
 }
+export function scheduleMismatchReturnAppointment(id: string, appointmentAt: string, expectedVersion?: number, idempotencyKey?: string) {
+  return mutate('customer', id, 'appointment', { appointmentAt, expectedVersion, idempotencyKey })
+}
+export function extendMismatchReturnWindow(id: string, expectedVersion?: number, idempotencyKey?: string) {
+  return mutate('customer', id, 'extend-removal-window', { expectedVersion, idempotencyKey })
+}
+export function recordReturnArrival(
+  id: string,
+  body: { actualArrivedAt?: string; evidenceNote?: string; evidenceId?: string; expectedVersion?: number } = {},
+) {
+  return mutate('staff', id, 'arrival', body)
+}
 export function verifyReturnIdentity(id: string, attemptId: string, documentNumber: string, reverificationStartedAt?: string | null, evidenceId?: string) {
   return mutate('staff', id, 'identity', { attemptId, documentNumber, reverificationStartedAt, evidenceId })
 }
 export function reopenReturnVerification(id: string, staffId: string, reason: string) {
   return mutate('manager', id, 'identity-reopen', { staffId, reason })
 }
-export function reviewReturnArrival(id: string, accepted: boolean, reason: string, staffId?: string, appointmentAt?: string) {
-  return mutate('manager', id, 'arrival-review', { accepted, reason, staffId, appointmentAt })
+export function reviewReturnArrival(
+  id: string,
+  accepted: boolean,
+  reason: string,
+  staffId?: string,
+  appointmentAt?: string,
+  decision?: 'APPROVED_ON_TIME' | 'FACILITY_EXCEPTION' | 'CONFIRMED_ABSENT',
+) {
+  return mutate('manager', id, 'arrival-review', { accepted, reason, staffId, appointmentAt, decision })
 }
 export function savePropertyCheck(record: ApiReturn, unitVacated: boolean, staffNotes: string, evidencePhotos: string[]) {
   return mutate('staff', record.id, 'property-check', { unitVacated, staffNotes, evidencePhotos, clearanceRevision: record.clearanceRevision ?? 0 })
