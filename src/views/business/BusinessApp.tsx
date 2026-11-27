@@ -1,6 +1,5 @@
 import BusinessDeadlinePolicies from './BusinessDeadlinePolicies'
 import { recordDisplayCode } from '../../utils/recordDisplayCode'
-import ReturnPolicyNotice from '../../components/ReturnPolicyNotice'
 import { useState, useMemo, useCallback, useEffect } from "react"
 import DuongPolicyWorkspace from "../rental-support-integration/DuongPolicyWorkspace"
 import UnitTypeReviewModal from "./UnitTypeReviewModal"
@@ -69,6 +68,7 @@ import {
 } from "../../data/demoDatabase"
 
 import { formatVnd, formatVndAmount } from "../../i18n/currency"
+import { returnCleaningOptions, returnDamageCatalog, returnFeeRows, getReturnFeeDetails, getReturnFeeSchedule, publishReturnFeeSchedule, type ReturnFeeDetails, type ReturnFeeSchedule } from "../../services/returnApi"
 
 import { exportRevenueExcel } from "../../utils/excelExport"
 
@@ -97,7 +97,7 @@ import { getBusinessRackLayout } from "../../services/rackLayoutApi"
 import type { RackResult } from "../../services/rackLayoutApi"
 import { isApiAuthenticated, canApiActor } from "../../services/authApi"
 import { isUuid } from "../../services/renewalOperationsApi"
-import { listNotifications, markNotificationRead, notifyBell, type ApiNotification } from "../../services/notificationApi"
+import { businessNotificationText, listNotifications, markNotificationRead, notifyBell, type ApiNotification } from "../../services/notificationApi"
 import {
   type RentalPackagePolicyApi,
   createBusinessPackagePolicy,
@@ -715,6 +715,40 @@ export default function BusinessApp({
 
   const [pricingCollapsedMap, setPricingCollapsedMap] = useState<Record<string, boolean>>({})
   const [feeScheduleCollapsed, setFeeScheduleCollapsed] = useState(false)
+  const [feeSchedule, setFeeSchedule] = useState<ReturnFeeSchedule | null>(null)
+  const [feeDraft, setFeeDraft] = useState<Record<string, string> | null>(null)
+  const [feeDetailsDraft, setFeeDetailsDraft] = useState<Record<string, ReturnFeeDetails> | null>(null)
+  const [feeError, setFeeError] = useState("")
+  const [feeSaving, setFeeSaving] = useState(false)
+  useEffect(() => {
+    if (page !== "pricing" || !isApiAuthenticated() || feeDraft) return
+    let active = true
+    getReturnFeeSchedule().then(value => { if (active) { setFeeSchedule(value); setFeeError("") } })
+      .catch(() => { if (active) setFeeError("Không tải được biểu phí. Vui lòng tải lại trang.") })
+    return () => { active = false }
+  }, [page, !!feeDraft])
+  const editFeeSchedule = () => {
+    if (!feeSchedule) return
+    setFeeDraft(Object.fromEntries(returnFeeRows.map(row => [row.code, String(feeSchedule.prices[row.code] ?? row.price)])))
+    setFeeDetailsDraft(Object.fromEntries(returnFeeRows.map(row => [row.code, { ...getReturnFeeDetails(feeSchedule, row.code) }])))
+    setFeeError("")
+  }
+  const editFeeDetail = (code: string, field: keyof ReturnFeeDetails, value: string) => {
+    setFeeDetailsDraft(current => current ? { ...current, [code]: { ...current[code], [field]: value } } : current)
+  }
+  const submitFeeSchedule = async () => {
+    if (!feeSchedule || !feeDraft || !feeDetailsDraft || feeSaving) return
+    if (Object.values(feeDraft).some(value => !/^\d+$/.test(value) || !Number.isSafeInteger(Number(value)))) { setFeeError("Mức phí phải là số nguyên không âm hợp lệ."); return }
+    if (Object.values(feeDetailsDraft).some(detail => Object.values(detail).some(value => !value.trim()))) { setFeeError("Vui lòng điền tên phí, điều kiện và đối tượng cho mỗi hạng mục."); return }
+    setFeeSaving(true); setFeeError("")
+    try {
+      const prices = { ...feeSchedule.prices, ...Object.fromEntries(Object.entries(feeDraft).map(([key, value]) => [key, Number(value)])), clean: 0 }
+      const details = { ...feeSchedule.details, ...feeDetailsDraft }
+      const saved = await publishReturnFeeSchedule({ revision: feeSchedule.revision, prices, details })
+      setFeeSchedule(saved); setFeeDraft(null); setFeeDetailsDraft(null)
+    } catch (error) { setFeeError(error instanceof Error ? error.message : "Không công bố được biểu phí.") }
+    finally { setFeeSaving(false) }
+  }
 
   const [policiesList, setPoliciesList] = useState<PolicyItem[]>(() =>
     isApiAuthenticated() ? [] : loadInitialPolicies(),
@@ -2423,7 +2457,7 @@ export default function BusinessApp({
     }
     notifyBell({
       title: pageTitles[page] || (lang === 'vi' ? 'Thông báo kinh doanh' : 'Business Notice'),
-      message: msg,
+      message: businessNotificationText(msg),
       page,
       date: new Date().toISOString()
     })
@@ -3994,8 +4028,6 @@ export default function BusinessApp({
       {/* ── RENTAL POLICIES & PACKAGES ───────────────────────── */}
       {page === "policies" && (
         <div className="fade-in space-y-6">
-          <ReturnPolicyNotice business />
-
           <SectionHeader
             title={
               lang === "vi"
@@ -4051,7 +4083,7 @@ export default function BusinessApp({
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold text-stone-600 whitespace-nowrap">Trạng thái:</span>
                   <select
-                    className="h-9 rounded-lg border border-stone-300 bg-white px-3 text-xs font-medium text-stone-800 shadow-2xs focus:border-amber-500 focus:outline-none"
+                    className="h-11 min-w-40 rounded-lg border border-stone-300 bg-white px-3 py-0 text-xs font-medium leading-normal text-stone-800 shadow-2xs focus:border-amber-500 focus:outline-none"
                     value={packageStatusFilter}
                     onChange={e => setPackageStatusFilter(e.target.value)}
                   >
@@ -4063,7 +4095,7 @@ export default function BusinessApp({
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold text-stone-600 whitespace-nowrap">Sắp xếp:</span>
                   <select
-                    className="h-9 rounded-lg border border-stone-300 bg-white px-3 text-xs font-medium text-stone-800 shadow-2xs focus:border-amber-500 focus:outline-none"
+                    className="h-11 min-w-44 rounded-lg border border-stone-300 bg-white px-3 py-0 text-xs font-medium leading-normal text-stone-800 shadow-2xs focus:border-amber-500 focus:outline-none"
                     value={packageSort}
                     onChange={e => setPackageSort(e.target.value)}
                   >
@@ -4238,7 +4270,7 @@ export default function BusinessApp({
                                       ? "bg-stone-100 text-stone-700 border-stone-200/80"
                                       : "bg-amber-50 text-amber-800 border-amber-200/70"
                                 }`}>
-                                  <span className="text-xs">{!isSpecific ? "🌐" : "📍"}</span>
+                                  {isSpecific && <span className="text-xs">📍</span>}
                                   <span>
                                     {!isSpecific
                                       ? "Toàn hệ thống"
@@ -4400,7 +4432,7 @@ export default function BusinessApp({
                                   : "bg-amber-50 text-amber-800 border-amber-200/70"
                             }`}
                           >
-                            <span className="text-xs">{!isSpecific ? "🌐" : "📍"}</span>
+                            {isSpecific && <span className="text-xs">📍</span>}
                             <span>
                               {!isSpecific
                                 ? "Toàn hệ thống"
@@ -4877,7 +4909,7 @@ export default function BusinessApp({
 
             <Card className="p-5">
               <div
-                className="flex items-center justify-between cursor-pointer select-none mb-3"
+                className="flex flex-wrap items-center justify-between gap-3 cursor-pointer select-none mb-3"
                 onClick={() => setFeeScheduleCollapsed((prev) => !prev)}
               >
                 <div className="flex items-center gap-2">
@@ -4887,8 +4919,13 @@ export default function BusinessApp({
                   <h3 className="font-semibold text-slate-800">
                     {lang === "vi" ? "Biểu Phí Dịch Vụ Quy Định" : "Fee Schedule"}
                   </h3>
-                  <Badge variant="muted">{visibleRuntimeFees.length} loại phí</Badge>
+                  <Badge variant="muted">{visibleRuntimeFees.length + returnCleaningOptions.length + returnDamageCatalog.length} hạng mục</Badge>
                 </div>
+                <div className="flex flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                  {feeSchedule && (feeDraft ? <>
+                    <Button size="sm" disabled={feeSaving} onClick={submitFeeSchedule}>{feeSaving ? 'Đang công bố…' : 'Công bố biểu phí'}</Button>
+                    <Button size="sm" variant="outline" disabled={feeSaving} onClick={() => { setFeeDraft(null); setFeeDetailsDraft(null); setFeeError("") }}>Hủy</Button>
+                  </> : <Button size="sm" variant="outline" onClick={() => { editFeeSchedule(); setFeeScheduleCollapsed(false) }}>Chỉnh sửa biểu phí</Button>)}
                 <Button
                   variant="outline"
                   size="sm"
@@ -4900,7 +4937,12 @@ export default function BusinessApp({
                 >
                   {feeScheduleCollapsed ? "Mở rộng" : "Thu gọn"}
                 </Button>
+                </div>
               </div>
+
+              <p className="mb-2 text-sm text-slate-600">Đơn đã tạo giữ biểu phí cũ; biểu phí mới áp dụng cho đơn tạo sau khi công bố.</p>
+              <p className="mb-3 text-xs text-slate-500">Điều kiện và đối tượng là mô tả của phí, không tạo quy tắc tính phí tự động. Nhóm vệ sinh và hư hỏng trong quy trình nghiệm thu được giữ nguyên. Hạng mục kho sạch có mức phí cố định 0 ₫; tên và mô tả vẫn chỉnh sửa được.</p>
+              {feeError && <p role="alert" className="mb-3 text-sm text-red-700">{feeError}</p>}
 
               {!feeScheduleCollapsed && (
                 <Table>
@@ -4913,16 +4955,7 @@ export default function BusinessApp({
                     </tr>
                   </Thead>
                   <Tbody>
-                    {visibleRuntimeFees.length === 0 ? (
-                      <Tr>
-                        <Td colSpan={4} className="text-center py-6 text-slate-400">
-                          {lang === "vi"
-                            ? "Chưa có biểu phí dịch vụ phát sinh ngoài giá thuê & cọc."
-                            : "No fee schedule configured."}
-                        </Td>
-                      </Tr>
-                    ) : (
-                      visibleRuntimeFees.map((f) => (
+                    {visibleRuntimeFees.map((f) => (
                         <Tr key={f.type}>
                           <Td className="font-medium text-slate-900">
                             {getFeeType(f.type, lang)}
@@ -4939,8 +4972,22 @@ export default function BusinessApp({
                             </Badge>
                           </Td>
                         </Tr>
-                      ))
-                    )}
+                      ))}
+                    {feeSchedule && returnFeeRows.map(row => {
+                      const detail = feeDetailsDraft?.[row.code] ?? getReturnFeeDetails(feeSchedule, row.code)
+                      const textEditor = (field: keyof ReturnFeeDetails, title: string) => feeDetailsDraft
+                        ? <textarea aria-label={`${title}: ${row.label}`} disabled={feeSaving} className="w-full min-w-40 rounded border p-2" rows={2} value={detail[field]} onChange={e => editFeeDetail(row.code, field, e.target.value)} />
+                        : detail[field]
+                      return <Tr key={row.code}>
+                        <Td className="font-medium text-slate-900">{textEditor('label', 'Tên phí')}</Td>
+                        <Td className="font-semibold text-emerald-700 font-mono">
+                          {feeDraft ? <input aria-label={`Mức phí: ${row.label}`} disabled={feeSaving || row.code === 'clean'} title={row.code === 'clean' ? 'Kho sạch có mức phí cố định 0 ₫' : undefined} type="number" min="0" step="1" className="w-36 rounded border p-2" value={row.code === 'clean' ? '0' : feeDraft[row.code] ?? ''} onChange={e => setFeeDraft(current => current ? { ...current, [row.code]: e.target.value } : current)} /> : formatVndAmount(feeSchedule.prices[row.code] ?? row.price)}
+                          {row.unit && ` / ${row.unit}`}
+                        </Td>
+                        <Td className="text-slate-600">{textEditor('trigger', 'Điều kiện áp dụng')}</Td>
+                        <Td>{textEditor('applies', 'Đối tượng')}</Td>
+                      </Tr>
+                    })}
                   </Tbody>
                 </Table>
               )}
@@ -5014,13 +5061,13 @@ export default function BusinessApp({
                 </p>}
                 {!backendPricingLoading && backendPricingUnitTypes.map(unitType => {
                   const value = backendPricingValues[unitType.id] || { monthlyPrice: 0, securityDepositAmount: 0 }
-                  return <div key={unitType.id} className="grid gap-3 rounded-xl border border-stone-200 bg-white p-4 shadow-2xs sm:grid-cols-[1fr_190px_190px] sm:items-end">
+                  return <div key={unitType.id} className="grid gap-3 rounded-xl border border-stone-200 bg-white p-4 shadow-2xs sm:grid-cols-[1fr_190px_190px] sm:items-start">
                     <div>
                       <div className="flex items-center gap-2"><span className="rounded bg-amber-100 px-2 py-0.5 font-mono text-xs font-bold text-amber-900">{unitType.code}</span><b className="text-sm text-slate-900">{unitType.name}</b></div>
                       <p className="mt-2 text-xs text-slate-500">{unitType.lengthM} × {unitType.widthM} × {unitType.heightM} m · tải tối đa {unitType.maxLoadKg.toLocaleString('vi-VN')} kg · {unitType.availableCount ?? 0} gian khả dụng</p>
                     </div>
-                    <label className="text-[11px] font-semibold text-slate-700">Giá thuê (VNĐ/tháng)
-                      <div className="relative mt-1">
+                    <label className="block w-full text-[11px] font-semibold text-slate-700">Giá thuê (VNĐ/tháng)
+                      <div className="relative mt-1 w-full">
                         <input
                           type="text"
                           inputMode="numeric"
@@ -5038,8 +5085,8 @@ export default function BusinessApp({
                         </span>
                       </div>
                     </label>
-                    <div className="text-[11px] font-semibold text-slate-700">Tiền cọc đảm bảo kho (VNĐ)
-                      <div className="mt-1 rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-2 font-mono text-xs font-bold text-slate-900">
+                    <div className="w-full text-[11px] font-semibold text-slate-700">Tiền cọc đảm bảo kho (VNĐ)
+                      <div className="mt-1 w-full rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-2 font-mono text-xs font-bold text-slate-900">
                         {value.monthlyPrice > 0 ? `${value.monthlyPrice.toLocaleString('vi-VN')} ₫` : 'Tự động theo giá thuê 1 tháng'}
                       </div>
                       <p className="mt-1 text-[10px] font-normal text-stone-500">Luôn bằng giá thuê 1 tháng.</p>
