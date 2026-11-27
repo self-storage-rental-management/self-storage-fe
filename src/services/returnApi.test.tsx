@@ -3,12 +3,12 @@ import { awaitsCustomerClearance, CustomerClearance } from '../views/return-api/
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { setAccessToken, clearAuthTokens } from './apiClient'
+import { putProcessingLease, clearProcessingLeases } from './processingLeaseState'
 import { setCustomerClearance, completeRefund, recordReturnSettlement, isApiReturn, requestReturn, listReturns, getReturn, inspectReturn, reviewDispute, confirmReturn, paySettlement, reopenReturnVerification, verifyReturnIdentity, scheduleMismatchReturnAppointment, extendMismatchReturnWindow, recordReturnArrival, reviewReturnArrival, returnError, uploadReturnEvidence, type ApiReturn } from './returnApi'
 import ReturnApiPanel, { ReturnSummary, SettlementCalculationBreakdown, mismatchRentalUsageFee } from '../views/return-api/ReturnApiPanel'
 import ReturnAttendance, { requiresReturnAttendance } from '../views/return-api/ReturnAttendance'
 import { ids, operationsActor } from '../../tests/rentalOperationsApiFixtures'
 import type { ApiActor } from './authApi'
-import { putProcessingLease } from './processingLeaseState'
 const state = vi.hoisted(() => ({ actor: null as ApiActor | null }))
 vi.mock('./authApi', () => ({ getAuthenticatedActor: () => state.actor }))
 export const record: ApiReturn = {
@@ -21,16 +21,40 @@ export const record: ApiReturn = {
   proposedUnitStatus: 'maintenance',
 }
 function respond(data: unknown, status = 200) {
-  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } }))
+  const fetch = vi.fn().mockImplementation(async (url: string | URL | Request) => {
+    const urlStr = typeof url === 'string' ? url : url instanceof Request ? url.url : url.toString()
+    if (urlStr.includes('/api/processing-locks/')) {
+      return new Response(JSON.stringify({
+        data: { owned: true, token: 'mock-token', expiresAt: new Date(Date.now() + 60000).toISOString() }
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
+    return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })
+  })
   vi.stubGlobal('fetch', fetch); return fetch
 }
 beforeEach(() => {
-  state.actor = operationsActor('customer'); setAccessToken('TEST-token')
-  putProcessingLease({ target: 'RETURN', id: ids.event, token: 'test-return-lease', invalid: false, inFlight: false, ready: true,
-    view: { reservationId: ids.event, ownerId: ids.staff, ownerName: 'Nhân viên kiểm thử', expiresAt: new Date(Date.now() + 60_000).toISOString(),
-      revision: 1, sourceStamp: 'test-return', owned: true, occupied: true } })
+  state.actor = operationsActor('customer')
+  setAccessToken('TEST-token')
+  putProcessingLease({
+    target: 'RETURN',
+    id: ids.event,
+    token: 'mock-token',
+    view: {
+      reservationId: ids.event,
+      ownerId: 'staff-id',
+      ownerName: 'Staff',
+      expiresAt: new Date(Date.now() + 600_000).toISOString(),
+      revision: 1,
+      sourceStamp: 'stamp',
+      owned: true,
+      occupied: true,
+    },
+    invalid: false,
+    inFlight: false,
+    ready: true,
+  })
 })
-afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); clearAuthTokens() })
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); clearAuthTokens(); clearProcessingLeases() })
 describe('real Return transport and unknown settlement presentation', () => {
   it('separates inventory-mismatch rental usage from inspection fees without double-counting pallets', () => {
     expect(mismatchRentalUsageFee({ ...record, returnType: 'INVENTORY_MISMATCH', damageFee: 1000000,

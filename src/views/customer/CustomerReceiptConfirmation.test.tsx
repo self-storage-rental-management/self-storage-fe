@@ -37,24 +37,9 @@ function command(refresh: () => Promise<void>) {
   const click = find(tree); if (!click) throw new Error('Receipt command is missing'); return click
 }
 beforeEach(() => { state.confirm.mockReset(); state.messages = [] })
-describe('merged Customer receipt command', () => {
-  it('locks same-render duplicate clicks and refreshes actual BE state after success', async () => {
-    let resolve!: (value: unknown) => void
-    state.confirm.mockReturnValue(new Promise(done => { resolve = done }))
-    const refresh = vi.fn().mockResolvedValue(undefined); const click = command(refresh)
-    click(); click(); expect(state.confirm).toHaveBeenCalledTimes(1)
-    expect(state.confirm).toHaveBeenCalledWith(reservation.id)
-    resolve({}); await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1))
-    await vi.waitFor(() => expect(state.messages.at(-1)).toBe(false))
-  })
-  it('keeps rejection visible, refreshes state and allows retry only after failure finishes', async () => {
-    state.confirm.mockRejectedValueOnce(new Error('Receipt conflict')).mockResolvedValue({})
-    const refresh = vi.fn().mockResolvedValue(undefined); const click = command(refresh)
-    click(); await vi.waitFor(() => expect(state.messages).toContain('Không thể xác nhận nhận kho.'))
-    expect(state.messages).not.toContain('Receipt conflict')
-    await vi.waitFor(() => expect(state.messages.at(-1)).toBe(false))
-    expect(refresh).toHaveBeenCalledTimes(1)
-    click(); await vi.waitFor(() => expect(state.confirm).toHaveBeenCalledTimes(2))
-    await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(2))
+describe('retired customer receipt confirmation', () => {
+  it('does not expose the confirmation command or call the retired endpoint', () => {
+    expect(() => command(vi.fn())).toThrow('Receipt command is missing')
+    expect(state.confirm).not.toHaveBeenCalled()
   })
 })

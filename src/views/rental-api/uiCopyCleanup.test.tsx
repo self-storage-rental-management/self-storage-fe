@@ -24,7 +24,7 @@ const state = vi.hoisted(() => ({
   uncertain: false,
   locked: false,
 }))
-vi.mock("../../services/authApi", () => ({ getAuthenticatedActor: () => state.actor }))
+vi.mock("../../services/authApi", async original => ({ ...await original<typeof import("../../services/authApi")>(), getAuthenticatedActor: () => state.actor }))
 vi.mock("../../hooks/useRentalApiResource", () => ({
   useRentalApiResource: (key: string) => ({
     loading: state.loading, error: state.error, refresh: vi.fn(),

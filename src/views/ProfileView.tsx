@@ -1,6 +1,6 @@
 import { CustomerProfileFields, CustomerProfileReminder, validateEmergencyProfile } from '../components/CustomerProfileFields'
 import { userFacingError } from '../presentation/userFacingError'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { PermissionKey, Role, User } from '../types'
 import { Card, Button, Input, PasswordField, Badge, Modal } from '../components/ui'
 import ProfileHeaderCard from '../components/ProfileHeaderCard'
@@ -60,7 +60,7 @@ function clearProfileDraft(userId: string) {
   try { sessionStorage.removeItem(profileDraftKey(userId)) } catch {}
 }
 
-type ProfileTab = 'profile' | 'security' | 'role' | 'notifications'
+type ProfileTab = 'profile' | 'security' | 'role'
 
 export const roleLabelMap: Record<Role, string> = {
   customer: 'Khách hàng thuê kho',
@@ -321,7 +321,6 @@ function profileTabFromLocation(): ProfileTab {
   const pathname = url.pathname.replace(/\/+$/, '') || '/'
   if (pathname === '/profile/security' || url.searchParams.get('tab') === 'security') return 'security'
   if (url.searchParams.get('tab') === 'role') return 'role'
-  if (url.searchParams.get('tab') === 'notifications') return 'notifications'
   return 'profile'
 }
 
@@ -366,6 +365,8 @@ function compressAvatar(file: File): Promise<string> {
           reject(new Error('Trình duyệt không hỗ trợ xử lý ảnh.'))
           return
         }
+        context.fillStyle = '#ffffff'
+        context.fillRect(0, 0, canvas.width, canvas.height)
         context.drawImage(image, 0, 0, canvas.width, canvas.height)
         const dataUrl = canvas.toDataURL('image/jpeg', 0.82)
         if (dataUrl.length > MAX_AVATAR_DATA_LENGTH) {
@@ -519,7 +520,11 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
     emergencyContactPhone !== (user.emergencyContactPhone || '')
 
   useEffect(() => {
-    if (!isCustomer || !profileHasChanges) return
+    if (!isCustomer) return
+    if (!profileHasChanges) {
+      clearProfileDraft(user.id)
+      return
+    }
     try {
       sessionStorage.setItem(profileDraftKey(user.id), JSON.stringify({
         name, phone, permanentAddress, emergencyContactName, emergencyContactPhone, profileDetails,
@@ -538,9 +543,15 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
     setEmergencyContactPhone(user.emergencyContactPhone || '')
   }
 
+  const toastTimerRef = useRef<number | null>(null)
+  useEffect(() => () => {
+    if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current)
+  }, [])
+
   const showToast = (msg: string) => {
     setToastMessage(msg)
-    setTimeout(() => setToastMessage(null), 3500)
+    if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = window.setTimeout(() => setToastMessage(null), 3500)
   }
 
   // Synchronize notification preferences when user or role changes
@@ -564,7 +575,7 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
 
   const handleToggleChannel = (channelId: string, channelTitle: string, nextVal: boolean) => {
     const updated = { ...notifPreferences, [channelId]: nextVal }
-    setNotifPreferences(updated)
+    setNotifPreferences(prev => ({ ...prev, [channelId]: nextVal }))
     try {
       localStorage.setItem(`storagehub:notifications:${user.id}`, JSON.stringify(updated))
     } catch {
@@ -578,7 +589,7 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
     roleConfig.channels.forEach(ch => {
       updated[ch.id] = enabled
     })
-    setNotifPreferences(updated)
+    setNotifPreferences(prev => ({ ...prev, ...updated }))
     try {
       localStorage.setItem(`storagehub:notifications:${user.id}`, JSON.stringify(updated))
     } catch {
@@ -658,7 +669,15 @@ setSavingProfile(true)
   }, [user.id, user.name, user.email, user.phone, user.permanentAddress, user.emergencyContactName, user.emergencyContactPhone, user.profileDetails, user.avatar])
 
   useEffect(() => {
-    const syncProfileTab = () => setActiveTab(profileTabFromLocation())
+    const syncProfileTab = () => {
+      const url = new URL(window.location.href)
+      if (url.searchParams.get('tab') === 'notifications') {
+        url.searchParams.delete('tab')
+        window.history.replaceState({ page: 'profile', tab: 'profile' }, '', url)
+      }
+      setActiveTab(profileTabFromLocation())
+    }
+    syncProfileTab()
     window.addEventListener('popstate', syncProfileTab)
     return () => window.removeEventListener('popstate', syncProfileTab)
   }, [])
@@ -667,7 +686,7 @@ setSavingProfile(true)
     const url = new URL(window.location.href)
     url.pathname = '/'
     url.searchParams.set('page', 'profile')
-    if (tab === 'security' || tab === 'role' || tab === 'notifications') url.searchParams.set('tab', tab)
+    if (tab === 'security' || tab === 'role') url.searchParams.set('tab', tab)
     else url.searchParams.delete('tab')
     window.history.pushState({ page: 'profile', tab }, '', url)
     setActiveTab(tab)
@@ -685,8 +704,13 @@ setSavingProfile(true)
       setAvatarUrl(nextAvatarUrl)
       if (isApiAuthenticated()) {
         const actor = await updateCurrentProfileWithApi({
-          fullName: name.trim(),
+          fullName: user.name,
+          phone: user.phone || undefined,
+          permanentAddress: user.permanentAddress || undefined,
+          emergencyContactName: user.emergencyContactName || undefined,
+          emergencyContactPhone: user.emergencyContactPhone || undefined,
           avatarUrl: nextAvatarUrl,
+          profileDetails: user.profileDetails,
         })
         setAvatarUrl(actor.avatarUrl || nextAvatarUrl)
         onUpdateUser?.(actorToUser(actor))
@@ -711,8 +735,11 @@ setSavingProfile(true)
       .then(nextSessions => {
         if (!cancelled) setApiSessions(nextSessions)
       })
-      .catch(() => {
-        if (!cancelled) setApiSessions([])
+      .catch(error => {
+        if (!cancelled) {
+          setApiSessions([])
+          showToast(userFacingError(error, 'Không thể tải danh sách phiên đăng nhập.'))
+        }
       })
     return () => {
       cancelled = true
@@ -798,6 +825,10 @@ setSavingProfile(true)
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!apiMode) {
+      showToast('Đổi mật khẩu chỉ khả dụng khi tài khoản đã kết nối API.')
+      return
+    }
     if (!currentPassword) {
       showToast('Vui lòng nhập mật khẩu hiện tại.')
       return
@@ -1036,8 +1067,8 @@ setSavingProfile(true)
             <div className="space-y-2 text-sm">
               <InfoRow label="Mã nhân viên" value={`#STF-${user.id.slice(0, 8).toUpperCase()}`} />
               <InfoRow label="Cơ sở trực thuộc" value={roleFacilityName} />
-              <InfoRow label="Quản lý trực tiếp" value={apiMode ? 'Chưa có thông tin quản lý trực tiếp' : currentFacility?.manager || 'Chưa có dữ liệu quản lý'} />
-              <InfoRow label="Số điện thoại cơ sở" value={apiMode ? 'Chưa có số điện thoại cơ sở' : currentFacility?.phone || 'Chưa cập nhật'} />
+              <InfoRow label="Quản lý trực tiếp" value={apiMode ? apiFacility?.managerNames?.join(', ') || 'Chưa có thông tin quản lý trực tiếp' : currentFacility?.manager || 'Chưa có dữ liệu quản lý'} />
+              <InfoRow label="Số điện thoại cơ sở" value={apiMode ? apiFacility?.phone || 'Chưa có số điện thoại cơ sở' : currentFacility?.phone || 'Chưa cập nhật'} />
             </div>
           </Card>
           <Card className="p-6">
@@ -1148,14 +1179,13 @@ setSavingProfile(true)
         avatarUploading={avatarUploading}
         onAvatarChange={handleAvatarChange}
       />
-      {isCustomer && <CustomerProfileReminder user={{ ...user, name, phone, permanentAddress, emergencyContactName, emergencyContactPhone, profileDetails }} onOpen={() => setActiveTab('profile')} />}
+      {isCustomer && <CustomerProfileReminder user={{ ...user, name, phone, permanentAddress, emergencyContactName, emergencyContactPhone, profileDetails }} onOpen={() => selectProfileTab('profile')} />}
       {/* Tabs */}
       <div className="flex flex-wrap gap-2 border-b border-[#deddd2] pb-1">
         {([
           ['profile', 'Thông tin cơ bản'],
           ['security', 'Bảo mật tài khoản'],
           ['role', roleTabLabels[user.role]],
-          ['notifications', 'Tùy chọn thông báo'],
         ] as [ProfileTab, string][]).map(([tab, label]) => (
           <button
             key={tab}
@@ -1453,7 +1483,7 @@ setSavingProfile(true)
       {activeTab === 'role' && renderRolePanel()}
 
       {/* TAB 4: Notifications (Tailored per Role) */}
-      {activeTab === 'notifications' && (
+      {false && (
         <Card className="max-w-5xl p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-5 mb-6 border-b border-stone-100">
             <div>

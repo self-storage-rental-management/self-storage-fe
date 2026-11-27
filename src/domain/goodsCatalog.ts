@@ -20,7 +20,7 @@ export function goodsCatalogIssue(item: CatalogGoodsDraft, catalog: GoodsCatalog
   if (!category.custom && (item.catalogMaterialId || item.materialName)) {
     const material = resolveDraftMaterial(item, category)
     if (!material) return 'Vật liệu đã tạm ẩn hoặc ngừng sử dụng. Vui lòng chọn vật liệu khác.'
-    if (materialIds?.length && !materialIds.includes(material.id)) return 'Loại kho đang chọn chưa được cấu hình nhận vật liệu này. Vui lòng chọn vật liệu hoặc loại kho khác.'
+    if (categoryIds?.length && materialIds && !materialIds.includes(material.id)) return 'Loại kho đang chọn chưa được cấu hình nhận vật liệu này. Vui lòng chọn vật liệu hoặc loại kho khác.'
   }
   return ''
 }

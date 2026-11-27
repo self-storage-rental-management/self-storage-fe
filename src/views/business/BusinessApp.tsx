@@ -1,4 +1,3 @@
-import BusinessDeadlinePolicies from './BusinessDeadlinePolicies'
 import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import { useState, useMemo, useCallback, useEffect } from "react"
 import DuongPolicyWorkspace from "../rental-support-integration/DuongPolicyWorkspace"
@@ -636,6 +635,7 @@ export default function BusinessApp({
   }
 
   const NAV: NavItem[] = [
+    // ── CƠ SỞ ──
     {
       id: "facilities",
       label: "Quản lý cơ sở",
@@ -643,68 +643,67 @@ export default function BusinessApp({
       group: "Cơ sở",
       permission: "facilities:read",
     },
+
+    // ── BẢNG GIÁ & GÓI THUÊ ──
     {
       id: "pricing",
       label: "Thiết lập giá kho",
       icon: Icon.dollar,
-      group: "Thiết lập",
+      group: "Bảng giá & gói thuê",
       permission: "policies:read",
     },
     {
       id: "policies",
       label: "Gói thuê",
       icon: Icon.calendar,
-      group: "Thiết lập",
+      group: "Bảng giá & gói thuê",
       permission: "policies:read",
     },
-    {
-      id: "deadlines",
-      label: "Thiết lập thời hạn kho",
-      icon: Icon.calendar,
-      group: "Thiết lập",
-      permission: "policies:read",
-    },
-    {
-      id: "centralized-policies",
-      label: "Chính sách",
-      icon: Icon.shield,
-      group: "Thiết lập",
-      permission: "policies:read",
-    },
-    {
-      id: "rental-regulations",
-      label: "Quy định khi thuê",
-      icon: Icon.clipboard,
-      group: "Thiết lập",
-      permission: "policies:read",
-    },
-    {
-      id: "rental-source-policies",
-      label: "Chính sách gia hạn",
-      icon: Icon.policy,
-      group: "Thiết lập",
-      permission: "policies:read",
-    },
+
+    // ── VẬN HÀNH VÀ KHUYẾN MÃI ──
     {
       id: "returns",
       label: "Trả kho",
       icon: Icon.clipboard,
-      group: "Vận hành",
+      group: "Vận hành và khuyến mãi",
       permission: "returns:read",
     },
     {
       id: "recoveries",
       label: "Thu hồi kho",
       icon: Icon.clipboard,
-      group: "Vận hành",
+      group: "Vận hành và khuyến mãi",
       permission: "returns:read",
     },
     {
       id: "damage-incidents",
       label: "Xử lý sự cố",
       icon: Icon.alert,
-      group: "Vận hành",
+      group: "Vận hành và khuyến mãi",
       permission: "facilities:read",
+    },
+
+    // ── QUY ĐỊNH PHÁP LÝ ──
+    {
+      id: "centralized-policies",
+      label: "Chính sách",
+      icon: Icon.shield,
+      group: "Quy Định & Pháp Lý",
+      permission: "policies:read",
+    },
+    {
+      id: "rental-regulations",
+      label: "Quy định khi thuê",
+      icon: Icon.clipboard,
+      group: "Quy định pháp lý",
+      permission: "policies:read",
+    },
+    {
+      id: "rental-source-policies",
+      label: "Chính sách gia hạn",
+      icon: Icon.policy,
+      group: "Quy định pháp lý",
+      permission: "policies:read",
     },
   ]
 
@@ -2010,12 +2009,8 @@ export default function BusinessApp({
       try {
         const backendFacilityId = await resolveBackendFacilityId(fac)
         const page = await listAccessibleUnitTypes(backendFacilityId, 0, 100)
-        const allTypes = [...page.data]
-        for (let pageIndex = 1; pageIndex < page.pagination.totalPages; pageIndex++) {
-          allTypes.push(...(await listAccessibleUnitTypes(backendFacilityId, pageIndex, 100)).data)
-        }
-        const editableUnitTypes = allTypes.filter(unitType => isUnitTypePriceEditable(unitType.status))
-        setBackendPricingArchivedCount(allTypes.length - editableUnitTypes.length)
+        const editableUnitTypes = page.data.filter(unitType => isUnitTypePriceEditable(unitType.status))
+        setBackendPricingArchivedCount(page.data.length - editableUnitTypes.length)
         setBackendPricingUnitTypes(editableUnitTypes)
         setBackendPricingValues(Object.fromEntries(editableUnitTypes.map(unitType => [unitType.id, {
           monthlyPrice: isUnitTypePricingPending(unitType.status, unitType.monthlyPrice) ? 0 : Number(unitType.monthlyPrice) || 0,
@@ -2048,11 +2043,11 @@ export default function BusinessApp({
         return !value || value.monthlyPrice <= 0
       })
       if (invalid) {
-        showToast('Giá thuê phải lớn hơn 0. Tiền cọc bằng giá thuê một tháng.')
+        showToast('Giá thuê phải lớn hơn 0. Tiền cọc được tự động lấy bằng giá thuê 1 tháng.')
         return
       }
       try {
-        await Promise.all(editableUnitTypes.map(async unitType => {
+        await Promise.all(editableUnitTypes.map(unitType => {
           const value = backendPricingValues[unitType.id]
           return priceBusinessUnitTypeApi(unitType.id, {
             monthlyPrice: value.monthlyPrice,
@@ -2468,7 +2463,6 @@ export default function BusinessApp({
       facilities: 'Quản lý cơ sở',
       performance: 'Hiệu Suất Mặt Bằng',
       pricing: 'Thiết lập giá kho',
-      deadlines: 'Thiết lập thời hạn kho',
       policies: 'Gói thuê',
       'rental-regulations': 'Quy định khi thuê',
       'rental-source-policies': 'Chính Sách Gia Hạn',
@@ -4679,8 +4673,6 @@ export default function BusinessApp({
       )}
 
       {/* ── PRICING & FEES ────────────────────────────────────── */}
-      {page === "deadlines" && <BusinessDeadlinePolicies facilities={facilitiesList} resolveFacilityId={resolveBackendFacilityId} connected={isApiAuthenticated()} />}
-
       {page === "pricing" && (() => {
         const currentPricingFacilities = selectedPricingFacility ? [selectedPricingFacility] : facilitiesList
         const areAllPricingCollapsed =
@@ -5054,8 +5046,8 @@ export default function BusinessApp({
         size="2xl"
         title={
           editingPriceFacility
-            ? `Chỉnh sửa biểu giá: ${editingPriceFacility.name} (${editingPriceFacility.code || recordDisplayCode(editingPriceFacility.id)})`
-            : "Chỉnh sửa biểu giá cơ sở"
+            ? `Chỉnh Sửa Biểu Giá: ${editingPriceFacility.name} (${editingPriceFacility.code || recordDisplayCode(editingPriceFacility.id)})`
+            : "Chỉnh Sửa Biểu Giá Cơ Sở"
         }
       >
         {editingPriceFacility && (

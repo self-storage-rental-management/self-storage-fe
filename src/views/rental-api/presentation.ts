@@ -1,10 +1,10 @@
+import { incompleteIntakeRenewalReason, isRentalIntakePending, type RentalIntakeProgress } from './rentalIntake'
 import { parseVietnamDate } from '../../utils/vietnamTime'
 import { ApiClientError } from "../../services/apiClient"
 import type { RenewalApiAction, RenewalApiRecord } from "../../types/renewalApi"
 import type { ApiActor } from "../../services/authApi"
 import type { RentalApiRecord, RentalApiRole } from "../../types/rentalApi"
 import { renewalDisplayLabel } from "../../presentation/renewalIdentity"
-import { incompleteIntakeRenewalReason, isRentalIntakePending, type RentalIntakeProgress } from './rentalIntake'
 
 export { renewalDisplayLabel } from "../../presentation/renewalIdentity"
 
@@ -28,6 +28,14 @@ export const rentalLabels: Record<string, string> = {
   return_inspection: "Đang kiểm tra trả kho",
   closing: "Đang quyết toán",
   completed: "Hoàn tất",
+}
+
+// Keep return-processing stages in their own workflow, rather than offering
+// them as primary rental lifecycle filters.
+export const rentalFilterLabels: Record<string, string> = {
+  setup: 'Đang chuẩn bị',
+  active: 'Đang hoạt động',
+  completed: 'Hoàn tất',
 }
 
 export function rentalStatusLabel(rental: RentalIntakeProgress & Pick<RentalApiRecord, "status" | "canConfirmRentalStart" | "inventoryMismatchReturn">) {

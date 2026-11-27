@@ -77,7 +77,7 @@ async function loadChoices(
       .filter((r) => !parent || r.facility.id === parent.facilityId)
       .map((r) => ({
         id: source === "unit" ? r.storageUnit.id : r.id,
-        label: `${r.storageUnit.code} · ${r.displayCode || recordDisplayCode(r.id)}`,
+        label: `${r.storageUnit.code}, ${r.displayCode || recordDisplayCode(r.id)}`,
         facilityId: r.facility.id,
       })),
   }
