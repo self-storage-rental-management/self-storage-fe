@@ -1,4 +1,5 @@
 import { managerDisplayError } from './managerPresentation'
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import { useEffect, useMemo, useState } from 'react'
 import { Badge, Button, Card, Input, Modal, SectionHeader, Select, StatCard, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import { Icon } from '../../components/Layout'
@@ -48,7 +49,6 @@ const billingStatusFor = (rental: RentalRecord) => {
   return { key: rental.paymentStatus, label: managerStatusLabel(rental.paymentStatus, 'vi'), variant: 'muted' }
 }
 
-const normalizeRentalMessage = (message: string) => message.replace(/hợp đồng/gi, 'hồ sơ thuê')
 
 export default function ManagerRentalsPanel({ user, rentals, renewals, reservations, units, unitTypes, assignUnitToHold, showToast }: Props) {
   const [query, setQuery] = useState('')
@@ -193,16 +193,16 @@ export default function ManagerRentalsPanel({ user, rentals, renewals, reservati
 
     <Card className="p-4"><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6"><Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Tìm hồ sơ thuê, khách hàng, email hoặc gian…" /><Select value={filter} onChange={event => setFilter(event.target.value)}><option value="all">Tất cả trạng thái</option><option value="setup">Đang thiết lập miễn phí</option><option value="active">Đang hiệu lực</option><option value="return_requested">Đã yêu cầu trả kho</option><option value="return_inspection">Đang kiểm tra trả kho</option><option value="closing">Đang tất toán</option><option value="completed">Đã hoàn tất</option></Select><Select value={paymentFilter} onChange={event => setPaymentFilter(event.target.value)}><option value="all">Mọi trạng thái thanh toán</option><option value="overdue">Quá hạn</option><option value="paid">Kỳ hiện tại đã thanh toán</option><option value="pending">Kỳ hiện tại đang chờ</option></Select><Select value={expiryFilter} onChange={event => setExpiryFilter(event.target.value)}><option value="all">Mọi thời hạn</option><option value="30">Hết hạn trong 30 ngày</option><option value="later">Còn trên 30 ngày</option><option value="expired">Đã qua ngày kết thúc</option></Select><Select value={attentionFilter} onChange={event => setAttentionFilter(event.target.value)}><option value="all">Mọi mức độ xử lý</option><option value="attention">Cần xử lý</option></Select><Select value={rentalSort} onChange={event => setRentalSort(event.target.value)}><option value="priority">Cần xử lý trước</option><option value="end-asc">Hết hạn sớm nhất</option><option value="end-desc">Hết hạn xa nhất</option><option value="customer">Tên khách hàng</option></Select></div></Card>
     <Card><Table><Thead><tr><Th>Hồ sơ thuê</Th><Th>Khách hàng</Th><Th>Gian kho</Th><Th>Thời hạn</Th><Th>Giá áp dụng</Th><Th>Kỳ thanh toán</Th><Th>Trạng thái</Th><Th /></tr></Thead><Tbody>
-      {rentalPagination.items.map(rental => { const billing = billingStatusFor(rental); const appliedRate = appliedRateFor(rental); return <Tr key={rental.id}><Td className="font-mono text-xs font-bold">{rental.id}</Td><Td><p className="font-semibold text-stone-900">{rental.customerName}</p><p className="text-xs text-stone-400">{rental.customerEmail}</p></Td><Td><p className="font-mono font-bold">{rental.unitId}</p><p className="text-xs text-stone-400">{unitTypeNameFor(rental)}</p></Td><Td><p>{formatManagerDate(rental.startDate)}</p><p className="text-xs text-stone-400">→ {formatManagerDate(rental.endDate)}</p></Td><Td className="font-mono">{formatKnownMoney(appliedRate)}{appliedRate !== undefined && '/tháng'}</Td><Td><Badge variant={billing.variant}>{billing.label}</Badge></Td><Td><Badge variant={rentalVariants[rental.status] || 'muted'}>{managerStatusLabel(rental.status, 'vi')}</Badge></Td><Td className="text-right"><Button size="sm" variant="outline" onClick={() => setSelectedRental(rental)}>Chi tiết</Button></Td></Tr> })}
+      {rentalPagination.items.map(rental => { const billing = billingStatusFor(rental); const appliedRate = appliedRateFor(rental); return <Tr key={rental.id}><Td className="font-mono text-xs font-bold">{recordDisplayCode(rental.id)}</Td><Td><p className="font-semibold text-stone-900">{rental.customerName}</p><p className="text-xs text-stone-400">{rental.customerEmail}</p></Td><Td><p className="font-mono font-bold">{rental.unitId}</p><p className="text-xs text-stone-400">{unitTypeNameFor(rental)}</p></Td><Td><p>{formatManagerDate(rental.startDate)}</p><p className="text-xs text-stone-400">→ {formatManagerDate(rental.endDate)}</p></Td><Td className="font-mono">{formatKnownMoney(appliedRate)}{appliedRate !== undefined && '/tháng'}</Td><Td><Badge variant={billing.variant}>{billing.label}</Badge></Td><Td><Badge variant={rentalVariants[rental.status] || 'muted'}>{managerStatusLabel(rental.status, 'vi')}</Badge></Td><Td className="text-right"><Button size="sm" variant="outline" onClick={() => setSelectedRental(rental)}>Chi tiết</Button></Td></Tr> })}
       {!visibleRentals.length && <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-stone-500">Không có hồ sơ thuê phù hợp.</td></tr>}
     </Tbody></Table><ManagerPagination {...rentalPagination} pageSize={rentalPageSize} onPageChange={setRentalPage} onPageSizeChange={setRentalPageSize} /></Card>
 
     <Modal open={Boolean(assignmentReservation)} onClose={() => { setAssignmentReservation(null); setAssignmentUnitId('') }} title="Phân gian kho vật lý">
       {assignmentReservation && <div className="space-y-4">
         <div className="rounded-lg bg-stone-50 p-3 text-sm">
-          <p><b>{assignmentReservation.id}</b>, {assignmentReservation.customerName}</p>
+          <p><b>{recordDisplayCode(assignmentReservation.id)}</b>, {assignmentReservation.customerName}</p>
           <p className="mt-1 text-stone-500">{managerUnitTypeLabel(assignmentReservation.unitTypeName, 'vi')}, {formatManagerDate(assignmentReservation.startDate)} → {formatManagerDate(assignmentReservation.endDate)}</p>
-          {assignmentReservation.assignedUnitId && <p className="mt-1 text-stone-500">Gian hiện tại: <b className="font-mono">{assignmentReservation.assignedUnitId}</b></p>}
+          {assignmentReservation.assignedUnitId && <p className="mt-1 text-stone-500">Gian hiện tại: <b className="font-mono">{recordDisplayCode(assignmentReservation.assignedUnitId)}</b></p>}
         </div>
         {assignmentCandidates.length ? <Select label="Gian kho phù hợp và không xung đột" value={assignmentUnitId} onChange={event => setAssignmentUnitId(event.target.value)}>
           {assignmentCandidates.map(unit => <option key={unit.id} value={unit.id}>{unit.code}, {unit.zone}</option>)}
@@ -247,7 +247,7 @@ export default function ManagerRentalsPanel({ user, rentals, renewals, reservati
           <section>
             <p className="mb-2 text-xs font-bold uppercase tracking-wider text-stone-500">Hồ sơ</p>
             <div className="grid gap-3 rounded-xl bg-stone-50 p-4 sm:grid-cols-2 lg:grid-cols-3">
-              <p><span className="text-stone-400">Mã hồ sơ thuê</span><br /><b className="font-mono">{selectedRental.id}</b></p>
+              <p><span className="text-stone-400">Mã hồ sơ thuê</span><br /><b className="font-mono">{recordDisplayCode(selectedRental.id)}</b></p>
               <p><span className="text-stone-400">Khách hàng</span><br /><b>{selectedRental.customerName}</b><br /><span className="text-xs text-stone-500">{selectedRental.customerEmail}</span></p>
               <p><span className="text-stone-400">Gian kho</span><br /><b className="font-mono">{selectedRental.unitId || 'Chưa phân gian'}</b></p>
               <p><span className="text-stone-400">Loại gian</span><br /><b>{unitTypeNameFor(selectedRental)}</b></p>
@@ -288,7 +288,7 @@ export default function ManagerRentalsPanel({ user, rentals, renewals, reservati
             <ManagerActionNotice tone={renewalBlock ? 'warning' : latestRenewal?.status === 'completed' ? 'success' : 'info'}>{renewalActionReason}</ManagerActionNotice>
             <div className="mt-3 overflow-hidden rounded-xl border border-stone-200">
               {rentalRenewals.length ? rentalRenewals.map(item => <div key={item.id} className="grid gap-2 border-b border-stone-100 p-3 last:border-b-0 sm:grid-cols-4">
-                <p><span className="text-xs text-stone-400">Mã yêu cầu</span><br /><b className="font-mono">{item.id}</b></p>
+                <p><span className="text-xs text-stone-400">Mã hồ sơ</span><br /><b className="font-mono">{recordDisplayCode(item.id)}</b></p>
                 <p><span className="text-xs text-stone-400">Thời hạn yêu cầu</span><br /><b>{formatManagerDate(item.oldEndDate)} → {formatManagerDate(item.newEndDate)}</b></p>
                 <p><span className="text-xs text-stone-400">Thời gian gia hạn</span><br /><b>{item.renewalMonths} tháng</b></p>
                 <p><span className="text-xs text-stone-400">Phí ghi nhận</span><br /><b>{formatKnownMoney(normalizeManagerMoney(item.renewalFee))}</b></p>

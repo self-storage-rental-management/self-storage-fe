@@ -29,6 +29,11 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   private handleDismiss = () => {
+    // React.lazy caches a rejected import until the document is reloaded.
+    if (/dynamically imported module|importing a module script failed|loading chunk .* failed/i.test(this.state.error?.message ?? '')) {
+      this.handleReload()
+      return
+    }
     this.setState({ hasError: false, error: null })
   }
 

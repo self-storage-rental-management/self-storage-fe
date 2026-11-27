@@ -1,3 +1,5 @@
+import type { CompleteCheckInRequest } from '../services/checkInApi'
+import type { InventoryDecision } from '../services/inventoryDecision'
 import type { ApiRentalStatus as RentalStatus, PaymentStatus } from './statusContracts'
 export type RentalApiRole = "customer" | "manager" | "staff"
 export type RentalApiStatus = RentalStatus
@@ -49,6 +51,7 @@ export interface RentalApiRecord {
     reason: string
   }[]
   inventoryPending?: boolean
+  inventoryMismatchReturn?: boolean
   inventoryVerifiedAt?: string | null
   canConfirmRentalStart?: boolean
   inventoryDueAt?: string | null
@@ -59,7 +62,9 @@ export interface RentalApiRecord {
   setupExitReviewRequired?: boolean
 }
 export interface RentalApiDetail extends RentalApiRecord {
-  inventory?: { actualJson: string; mismatch: boolean; fullFit: boolean; declaredPackaging?: string | null; decision: string; acceptedQuantitiesJson?: string | null; removalDeadline?: string | null; removedAt?: string | null } | null
+  contractNumber?: string | null
+  setupReturnWindow?: boolean
+  inventory?: { report?: CompleteCheckInRequest | null; mismatchSummary?: string | null; mismatchJson?: string | null; intakeDecision?: InventoryDecision | null; actualJson: string; mismatch: boolean; fullFit: boolean; declaredPackaging?: string | null; decision: string; acceptedQuantitiesJson?: string | null; removalDeadline?: string | null; removedAt?: string | null } | null
   bookingEvidence?: RentalBookingEvidence | null
   reservationId: string | null
   actualReturnedAt: string | null

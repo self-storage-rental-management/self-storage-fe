@@ -81,7 +81,7 @@ export function CustomerProfileFields({ value, onChange, user, onNameChange, onP
   const input = 'w-full rounded-lg border border-stone-300 px-3 py-2 text-sm'
   const identity = value.identityDocumentNumber || ''
   const result = identity ? validateRentalIdentity(identity) : null
-  const locked = !!value.identityVerifiedAt
+  const locked = !!user.profileDetails?.identityDocumentNumber?.trim() || !!value.identityVerifiedAt
   const errorLine = (error?: string) => error && <p className="text-xs text-red-700" role="alert">{error}</p>
   return <div className="space-y-5">
     <fieldset id="profile-identity" className="space-y-3 rounded-xl border border-stone-200 p-4">
@@ -93,10 +93,10 @@ export function CustomerProfileFields({ value, onChange, user, onNameChange, onP
         onChange={e => { setEditingIdentity(true); setIdentityTouched(true); set('identityDocumentNumber', normalizeRentalIdentity(e.target.value)) }}
         onBlur={() => { setIdentityTouched(true); setEditingIdentity(false); setShowIdentity(false) }} />
         {!!identity && <button type="button" className="shrink-0 text-sm underline" onClick={() => setShowIdentity(!showIdentity)}>{showIdentity ? 'Ẩn' : 'Xem'}</button>}
-        {!locked && <button type="button" className="shrink-0 text-sm underline" onClick={() => { setEditingIdentity(true); setShowIdentity(true); document.getElementById('profile-cccd')?.focus() }}>Sửa</button>}
+        {!!identity && !locked && <button type="button" className="shrink-0 text-sm underline" onClick={() => { setEditingIdentity(true); setShowIdentity(true); document.getElementById('profile-cccd')?.focus() }}>Sửa</button>}
       </div>
       <div id="profile-cccd-feedback">{identityTouched && errorLine(result?.error)}{result?.warning && <p className="text-xs text-amber-800">{result.warning}</p>}</div>
-      {locked && <p className="text-xs text-stone-600">Nhân viên đã đối chiếu giấy tờ gốc. Vui lòng liên hệ nhân viên nếu cần sửa.</p>}
+      {locked && <p className="text-xs text-stone-600">Số giấy tờ đã lưu. Vui lòng liên hệ nhân viên nếu cần sửa.</p>}
     </fieldset>
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">{[false, true].map(second => {
       const index = second ? 2 : 1

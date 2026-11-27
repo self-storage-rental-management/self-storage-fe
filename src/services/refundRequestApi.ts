@@ -4,6 +4,9 @@ import { isUuid } from './renewalOperationsApi'
 
 export type RefundRequestStatus = 'REQUESTED' | 'PENDING_ESCALATION' | 'APPROVED' | 'REJECTED' | 'PROCESSING' | 'REFUNDED' | 'FAILED'
 export interface RefundRequestView {
+  displayCode?: string | null
+  paymentReceiptCode?: string | null
+  requestedByName?: string | null
   id: string
   paymentId: string | null
   returnCaseId: string | null

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import {
   Avatar,
   Badge,
@@ -924,7 +925,7 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
                 <div>
                   <p className="font-semibold text-stone-800">{selected.fullName}</p>
                   <p className="text-xs text-stone-400">
-                    ID: {selected.id} · Tham gia {formatDate(selected.createdAt)}
+                    Mã hồ sơ: {recordDisplayCode(selected.id)} · Tham gia {formatDate(selected.createdAt)}
                   </p>
                 </div>
               </div>

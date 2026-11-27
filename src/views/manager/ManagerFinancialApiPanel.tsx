@@ -1,11 +1,12 @@
 import { displayStatusLabel } from '../../presentation/statusLabels'
 import { invoiceNumberLabel } from '../customer/paymentLabels'
+import { recordDisplayCode, receiptDisplayCode, internalPaymentReference } from '../../utils/recordDisplayCode'
 import { useRef, useState, type FormEvent } from 'react'
 import { downloadPaymentReceipt } from '../../utils/downloadPaymentReceipt'
 import { getRenewalReceipt } from '../../services/renewalReceiptApi'
 import { Badge, Button, Card, Modal, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import { EvidenceDownload } from '../rental-support-integration/EvidenceControls'
-import RenewalReceipt from '../customer/RenewalReceipt'
+import RenewalReceipt, { renewalReceiptExport } from '../customer/RenewalReceipt'
 import PaymentReceiptCard from '../customer/PaymentReceiptCard'
 import { getAuthenticatedActor, type ApiActor } from '../../services/authApi'
 import { useRentalApiResource } from '../../hooks/useRentalApiResource'
@@ -131,7 +132,7 @@ function receiptFooter(item: ManagerPaymentHistoryItem): string {
 }
 
 function receiptReference(item: ManagerPaymentHistoryItem): string {
-  return item.reservationCode || item.transactionReference || item.id
+  return receiptDisplayCode(item.receiptCode, item.transactionReference, item.id)
 }
 
 function receiptFields(item: ManagerPaymentHistoryItem): [string, string][] {
@@ -160,13 +161,13 @@ function receiptFields(item: ManagerPaymentHistoryItem): [string, string][] {
       }).format(date)
 
   const fields: [string, string][] = [
-    ['Mã giao dịch StorageHub', item.id],
-    [isRemainingRental ? 'Mã tham chiếu thanh toán' : isVnpay ? 'Mã tham chiếu VNPay' : 'Mã tham chiếu giao dịch', item.transactionReference || '-'],
-    [isRemainingRental ? 'Mã phiếu thu hoặc giao dịch' : isVnpay ? 'Mã giao dịch VNPay' : 'Mã giao dịch', item.gatewayTransactionNo || item.transactionReference || '-'],
+    ['Mã biên nhận', item.receiptCode || 'Chưa cấp'],
+    [isRemainingRental ? 'Mã tham chiếu thanh toán' : isVnpay ? 'Mã tham chiếu VNPay' : 'Mã tham chiếu giao dịch', (internalPaymentReference(item.transactionReference) || item.transactionReference === item.id) ? '-' : item.transactionReference || '-'],
+    [isVnpay ? 'Mã giao dịch VNPay' : 'Mã giao dịch thanh toán', internalPaymentReference(item.gatewayTransactionNo) ? '-' : item.gatewayTransactionNo || '-'],
   ]
 
   if (item.reservationCode) {
-    fields.push([isDeposit || isRemainingRental ? 'Đơn giữ kho' : 'Mã hồ sơ', item.reservationCode])
+    fields.push([isDeposit || isRemainingRental ? 'Đơn giữ kho' : 'Mã hồ sơ', recordDisplayCode(item.reservationCode)])
   }
 
   fields.push(
@@ -247,7 +248,11 @@ function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; 
     setDownloading(item.id)
     setDownloadError(null)
     try {
-      if (item.renewalId) await getRenewalReceipt('manager', item.renewalId, item.id)
+      if (item.renewalId) {
+        const payment = await getRenewalReceipt('manager', item.renewalId, item.id)
+        downloadPaymentReceipt(renewalReceiptExport(payment))
+        return
+      }
       downloadPaymentReceipt({
         title: receiptTitle(item),
         reference: receiptReference(item),
@@ -301,12 +306,12 @@ function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; 
           <col className="w-[13%]" /><col className="w-[12%]" /><col className="w-[12%]" /><col className="w-[10%]" />
         </colgroup>
         <Thead><tr>
-          <Th>Mã giao dịch</Th><Th>Khách hàng</Th><Th>Loại</Th><Th>Phương thức</Th>
+          <Th>Mã giao dịch / biên nhận</Th><Th>Khách hàng</Th><Th>Loại</Th><Th>Phương thức</Th>
           <Th className="text-right">Số tiền</Th><Th>Trạng thái</Th><Th>Thời gian</Th><Th className="text-center">Biên lai</Th>
         </tr></Thead>
         <Tbody>
           {result.data.map((item: ManagerPaymentHistoryItem) => <Tr key={item.id} className="transition-colors hover:bg-stone-50 focus-within:bg-stone-50">
-            <Td><code className="block truncate text-xs text-stone-900" title={item.transactionReference}>{item.transactionReference}</code></Td>
+            <Td><code className="block break-all text-xs text-stone-900" title={receiptReference(item)}>{receiptReference(item)}</code></Td>
             <Td><p className="break-words font-medium text-stone-900 [overflow-wrap:anywhere]">{item.customerName}</p></Td>
             <Td><span className="block break-words text-stone-700">{typeLabels[item.type]}</span></Td>
             <Td><span className="block break-words text-stone-700">{paymentMethodLabel(item.paymentMethod)}</span></Td>
@@ -320,8 +325,8 @@ function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; 
                 ? <div className="flex items-center justify-center"><EvidenceDownload id={item.receiptFileId} previewLabel="Xem trước" label="Tải xuống" compact iconOnly /></div>
                 : canReadReceipt(item)
                   ? <div className="flex items-center justify-center gap-1">
-                    <Button type="button" size="sm" variant="ghost" className={receiptActionClass} title="Xem trước" aria-label={`Xem biên lai ${item.transactionReference}`} onClick={() => setReceipt(item)}><ReceiptIcon kind="preview" /><span className="sr-only">Xem trước</span></Button>
-                    <Button type="button" size="sm" variant="ghost" className={receiptActionClass} title={downloading === item.id ? 'Đang tải…' : 'Tải xuống'} aria-label={`Tải biên lai ${item.transactionReference}`} disabled={!!downloading} onClick={() => void downloadReceipt(item)}><ReceiptIcon kind="download" /><span className="sr-only">{downloading === item.id ? 'Đang tải…' : 'Tải xuống'}</span></Button>
+                    <Button type="button" size="sm" variant="ghost" className={receiptActionClass} title="Xem trước" aria-label={`Xem biên lai ${receiptReference(item)}`} onClick={() => setReceipt(item)}><ReceiptIcon kind="preview" /><span className="sr-only">Xem trước</span></Button>
+                    <Button type="button" size="sm" variant="ghost" className={receiptActionClass} title={downloading === item.id ? 'Đang tải…' : 'Tải xuống'} aria-label={`Tải biên lai ${receiptReference(item)}`} disabled={!!downloading} onClick={() => void downloadReceipt(item)}><ReceiptIcon kind="download" /><span className="sr-only">{downloading === item.id ? 'Đang tải…' : 'Tải xuống'}</span></Button>
                   </div>
                   : <span className="text-xs text-stone-400">Chưa có</span>}
             </Td>

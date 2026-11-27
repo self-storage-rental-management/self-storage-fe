@@ -1,3 +1,4 @@
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import { useEffect, useMemo, useState, useCallback } from "react"
 import {
   Area,
@@ -277,7 +278,7 @@ export default function BusinessDashboardPanel({
 
       return {
         id: fac.id,
-        code: fac.code || fac.id,
+        code: fac.code || recordDisplayCode(fac.id),
         name: fac.name,
         city: fac.city || "-",
         address: fac.address,
@@ -325,7 +326,7 @@ export default function BusinessDashboardPanel({
           title={isVi ? "Doanh Thu & Báo Cáo" : "Business Revenue & Reporting"}
           subtitle={
             isVi
-              ? "Tổng quan doanh thu thực thu, tiền cọc, tỷ lệ lấp đầy kho và hiệu suất toàn bộ chi nhánh"
+              ? "Tổng quan doanh thu thực thu, tiền cọc và hiệu suất toàn bộ chi nhánh"
               : "Financial metrics, security deposits, occupancy and multi-facility performance"
           }
         />
@@ -340,7 +341,7 @@ export default function BusinessDashboardPanel({
               <option value="all">{isVi ? "Toàn bộ chi nhánh" : "All Facilities"}</option>
               {facilitiesList.map((f) => (
                 <option key={f.id} value={f.id}>
-                  {f.name} ({f.code || f.id})
+                  {f.name} ({f.code || recordDisplayCode(f.id)})
                 </option>
               ))}
             </Select>
@@ -480,7 +481,7 @@ export default function BusinessDashboardPanel({
         <Card className="p-4 bg-linear-to-br from-white to-amber-50/50 border-amber-100 shadow-xs relative overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-stone-500">
-              {isVi ? "Tỷ Lệ Lấp Đầy Kho" : "System Occupancy Rate"}
+              {isVi ? "Công Suất Sử Dụng Kho" : "System Utilization Rate"}
             </span>
             <span className="p-2 rounded-lg bg-amber-100 text-amber-800 font-bold text-xs">
               {metrics.occupancyRate}%
@@ -635,7 +636,7 @@ export default function BusinessDashboardPanel({
             </h3>
             <p className="text-xs text-stone-500 mt-0.5">
               {isVi
-                ? "Theo dõi doanh thu, tỷ lệ lấp đầy gian kho và các vụ việc đang giải quyết tại mỗi cơ sở"
+                ? "Theo dõi doanh thu, hiệu suất gian kho và các vụ việc đang giải quyết tại mỗi cơ sở"
                 : "Compare revenues, occupancy, active leases and open operational tickets"}
             </p>
           </div>
@@ -649,7 +650,7 @@ export default function BusinessDashboardPanel({
             <tr>
               <Th>Mã / Tên Cơ Sở</Th>
               <Th>Khu Vực</Th>
-              <Th>Tỷ Lệ Lấp Đầy</Th>
+              <Th>{isVi ? "Công Suất Kho" : "Utilization"}</Th>
               <Th>Gian Kho (Đang thuê / Tổng)</Th>
               <Th>Doanh Thu Thực Thu</Th>
               <Th>HĐ Thuê Hiệu Lực</Th>

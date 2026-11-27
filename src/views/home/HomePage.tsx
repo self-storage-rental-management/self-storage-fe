@@ -1,3 +1,4 @@
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import { useState, useEffect } from 'react'
 import BrandLogo from '../../components/BrandLogo'
 import { useStorageHub } from '../../store/StorageHubContext'
@@ -267,7 +268,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
   // backend catalog so the landing page reflects the real database.
   const facilitiesList = DEMO_DATA_ENABLED
     ? contextFacilities.map(f => {
-      const facCode = f.code || f.id.toUpperCase()
+      const facCode = f.code || recordDisplayCode(f.id.toUpperCase())
       const physicalAvailable = units.filter(unit => (unit.facilityId === f.id || (f.code && unit.facilityId === f.code)) && unit.status === 'available' && !rentals.some(rental => rental.unitId === unit.id && ['setup', 'active', 'return_requested', 'return_inspection', 'closing'].includes(rental.status))).length
       const activeCapacityHolds = holds.filter(hold => (hold.facilityId === f.id || (f.code && hold.facilityId === f.code)) && !hold.assignedUnitId && !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(hold.status)).length
       return {
@@ -948,7 +949,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                 <div className="p-4 sm:p-5">
                   <div className="flex items-center justify-between gap-2 mb-2">
                     <span className="text-[10px] font-mono font-bold bg-amber-100 text-[#9A5A05] px-2 py-0.5 rounded">
-                       MÃ: {fac.code ?? fac.id}
+                       MÃ: {fac.code || recordDisplayCode(fac.id)}
                     </span>
                     <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
                       <span className="w-2 h-2 rounded-full bg-emerald-500" />
@@ -1133,7 +1134,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                       <div>
                          <div className="flex items-center justify-between font-bold text-stone-900 text-sm">
                            <span>{f.name}</span>
-                           <span className="text-[10px] bg-amber-100 text-[#9A5A05] px-1.5 py-0.5 rounded font-mono font-bold">{f.code ?? f.id}</span>
+                           <span className="text-[10px] bg-amber-100 text-[#9A5A05] px-1.5 py-0.5 rounded font-mono font-bold">{f.code || recordDisplayCode(f.id)}</span>
                          </div>
                          <p className="text-xs text-stone-500 mt-1 flex items-start gap-1">
                            <MapPinIcon className="w-3.5 h-3.5 shrink-0 mt-0.5 text-stone-400" />
