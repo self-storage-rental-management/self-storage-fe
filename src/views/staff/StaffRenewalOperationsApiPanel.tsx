@@ -161,7 +161,7 @@ function StaffSession({ identity, onLocked }: { identity: string; onLocked: (val
               </thead>
               <tbody className="divide-y divide-stone-100">
                 {group.rows.map(s => <tr key={s.renewalId} className="transition-colors hover:bg-stone-50">
-                  <td className="break-words px-4 py-4 align-middle"><span className="font-semibold text-stone-900" title={renewalDisplayLabel(s)}>{s.rentalDisplayCode || 'Chưa cấp mã'}</span></td>
+                  <td className="break-words px-4 py-4 align-middle"><span className="font-semibold text-stone-900" title={renewalDisplayLabel(s)}>{s.rentalDisplayCode || s.displayCode || 'Chưa cấp mã'}</span></td>
                   <td className="px-4 py-4 align-middle"><span className="inline-block rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs text-stone-800">{s.renewalSequence ? `Lần ${s.renewalSequence}` : 'Chưa xác định'}</span></td>
                   <td className="break-words px-4 py-4 align-middle [overflow-wrap:anywhere]">
                     <p className="font-medium text-stone-900">{s.appointmentDetails?.customerName || 'Chưa xác định'}</p>
