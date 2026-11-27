@@ -69,10 +69,10 @@ export default function BookingPersonalDetails({ user, identity, phone, address,
         {!!identity && <button type="button" className="rounded-lg border border-stone-300 px-3 py-2.5 text-sm" onClick={() => setVisible(!visible)}>{visible ? 'Ẩn' : 'Xem'}</button>}
         {!!identity && !locked && <button type="button" className="rounded-lg border border-stone-300 px-3 py-2.5 text-sm" onClick={() => { setEditing(true); document.getElementById('booking-identity-number')?.focus() }}>Sửa</button>}
       </div>
-      <p id="booking-identity-hint" className="mt-1.5 text-xs text-stone-500">Mang giấy tờ gốc để đối chiếu khi nhận kho và kiểm kê.{identityFromProfile && identity ? ' Lấy từ hồ sơ.' : ''}{locked ? ' Liên hệ nhân viên nếu cần sửa số đã lưu.' : ''}</p>
+      <p id="booking-identity-hint" className="mt-1.5 text-xs text-stone-500">Mang giấy tờ gốc để đối chiếu khi nhận kho và kiểm kê.{identityFromProfile && identity ? ' Lấy từ hồ sơ.' : ''}</p>
       {!!identity && !validateRentalIdentity(identity).ok && <p role="alert" className="mt-1 text-xs text-red-700">{validateRentalIdentity(identity).error}</p>}
     </div>
     <div><label className={label} htmlFor="booking-customer-address">Địa chỉ<span className={badge}>Không bắt buộc khi đặt giữ kho</span></label><input id="booking-customer-address" className={input} value={address} onChange={event => onAddressChange(event.target.value)} /></div>
-    <p className="text-xs leading-5 text-stone-500">Sau khi tạo đơn, số điện thoại, CCCD và địa chỉ đã nhập sẽ được cập nhật vào hồ sơ. Các đơn cũ vẫn giữ nguyên dữ liệu đã chụp.</p>
+    <p className="text-xs leading-5 text-stone-500">Sau khi tạo đơn, số điện thoại, CCCD và địa chỉ đã nhập sẽ được cập nhật vào hồ sơ. Các đơn cũ vẫn giữ nguyên dữ liệu đã lưu.</p>
   </section>
 }

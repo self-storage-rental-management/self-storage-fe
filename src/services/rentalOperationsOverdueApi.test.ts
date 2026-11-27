@@ -169,6 +169,7 @@ describe("D3 real API transport", () => {
           expectedVersion: 4,
           appointmentRef: ids.event,
           evidenceFileIds: [ids.file],
+          identityVerified: true,
         },
       },
       "staff",
