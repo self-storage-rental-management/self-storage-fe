@@ -1,5 +1,6 @@
 import InventoryMismatchEvidence, { parseInventoryInspectionReport } from '../staff/InventoryMismatchEvidence'
 import InventoryDecisionSummary from '../../components/InventoryDecisionSummary'
+import InventoryGoodsNotice from '../../components/InventoryGoodsNotice'
 import { displayStatusLabel } from '../../presentation/statusLabels'
 import { invoiceNumberLabel } from '../customer/paymentLabels'
 import { useManagerPresentation } from "../manager/managerPresentation"
@@ -614,6 +615,7 @@ export default function RentalDetail({
           <div className="flex flex-wrap gap-3">{item.images.map(image => <GoodsImage key={image.id} image={image} />)}</div>
         </div>)}</div>
       </Card>}
+      {role === 'customer' && (rental.status === 'setup' || rental.status === 'active') && <InventoryGoodsNotice />}
       </div>
       <div className={section === 'inventory' ? 'space-y-4' : 'hidden'}>
       {(rental.inventory?.intakeDecision || inventoryDetail?.inventoryDecision) && <InventoryDecisionSummary decision={rental.inventory?.intakeDecision || inventoryDetail?.inventoryDecision} />}

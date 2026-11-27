@@ -1324,7 +1324,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       id: `api-notification-${notification.id}`,
       date: notification.createdAt,
       title: notification.title,
-      message: notification.content,
+      message: notification.content.replace(/(Kỳ thuê tính từ\s+)(\d{4})-(\d{2})-(\d{2})(?=\.|\s|$)/g, '$1$4/$3/$2'),
       page: notification.type === 'CHECKIN' ? 'reservations'
         : notification.type === 'RENEWAL' || notification.type === 'OVERDUE' ? 'rental-records'
         : notification.type === 'RETURN' ? 'rental-records'

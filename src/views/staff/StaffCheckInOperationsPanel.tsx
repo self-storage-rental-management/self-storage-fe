@@ -4,6 +4,7 @@ import IntakeWorkflowPanel from '../../components/IntakeWorkflowPanel'
 import HandoverEvidenceRow from './HandoverEvidenceRow'
 import { intakeDecisionLabels } from '../../services/inventoryDecision'
 import InventoryResolutionPanel from './InventoryResolutionPanel'
+import InventoryGoodsNotice from '../../components/InventoryGoodsNotice'
 import InventoryReviewDetails from './InventoryReviewDetails'
 import { PACKAGING_METHOD_OPTIONS } from '../../domain/packagingMethods'
 import InventoryFieldDifference from './InventoryFieldDifference'
@@ -2731,6 +2732,7 @@ export default function StaffCheckInOperationsPanel({
             {inventoryMode && handoverTarget.inventoryVisit?.identityVerifiedAt && (
               <div hidden={inventoryStage !== 2}>
               <div className="space-y-4">
+                <InventoryGoodsNotice />
                 {!lineInventory && <div className={`rounded-xl border p-4 text-sm transition ${
                   activeDiscrepancies.length === 0
                     ? "border-emerald-300 bg-emerald-50 text-emerald-950"
