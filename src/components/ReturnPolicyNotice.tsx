@@ -29,9 +29,9 @@ export default function ReturnPolicyNotice({ terms, business = false, showQuoteF
       <p><b>Trả sớm khi kỳ thuê đã bắt đầu:</b> tiền thuê và ưu đãi được tính lại theo thời gian thực tế. Dưới 3 tháng trọn vẹn, áp dụng đơn giá niêm yết và phí chấm dứt sớm theo điều khoản đã lưu. Từ 3 tháng trọn vẹn, tính lại theo bậc gói đủ điều kiện, không thu khoản phí chấm dứt sớm này.</p>
       <div className="rounded-lg border border-amber-200 bg-white/70 p-3">
         <p><b>Trả trong thời gian chuẩn bị, trước ngày bắt đầu tính tiền:</b> áp dụng phí theo báo giá. Tiền thuê được quyết toán theo điều khoản đã chấp nhận. Tiền cọc đảm bảo được quyết toán riêng sau khi nghiệm thu.</p>
-        <p className="mt-1 text-xs text-stone-600">Nếu hư hỏng, hệ thống trừ phí hư hỏng vào cọc một tháng trước; chỉ phần vượt cọc mới yêu cầu khách thanh toán thêm. Không nhập phí tự do: nhân viên chọn hạng mục, số lượng/diện tích theo bảng giá chuẩn.</p>
-        <p className="mt-1 text-xs text-stone-600"><b>Hư hỏng nhẹ</b> gồm trầy xước, bong tróc sơn, vết bẩn khó vệ sinh; <b>hư hỏng nặng</b> gồm cửa cong, khóa hỏng, sàn nứt/vỡ hoặc hư hỏng làm mất an toàn, không thể sử dụng.</p>
-        <p className="mt-1 text-xs text-stone-600">Nếu hàng thực tế khác khai báo, nhân viên ghi nhận nguyên nhân và bằng chứng để cơ sở xem xét. Trường hợp này không tự động được coi là khách tự ý hủy.</p>
+        <p className="mt-1">Nếu hư hỏng, hệ thống trừ phí hư hỏng vào cọc một tháng trước; chỉ phần vượt cọc mới yêu cầu khách thanh toán thêm. Không nhập phí tự do: nhân viên chọn hạng mục, số lượng/diện tích theo bảng giá chuẩn.</p>
+        <p className="mt-1"><b>Hư hỏng nhẹ</b> gồm trầy xước, bong tróc sơn, vết bẩn khó vệ sinh; <b>hư hỏng nặng</b> gồm cửa cong, khóa hỏng, sàn nứt/vỡ hoặc hư hỏng làm mất an toàn, không thể sử dụng.</p>
+        <p className="mt-1">Nếu hàng thực tế khác khai báo, nhân viên ghi nhận nguyên nhân và bằng chứng để cơ sở xem xét. Trường hợp này không tự động được coi là khách tự ý hủy.</p>
       </div>
       <div className="rounded-lg border border-amber-200 bg-white/70 p-3">
         <p><b>Trả sau khi kỳ thuê đã bắt đầu:</b> tháng đã bắt đầu được tính trọn tháng; hệ thống hoàn tiền thuê của các tháng chưa bắt đầu. Nếu hư hỏng vượt tiền cọc một tháng, phần vượt tiếp tục trừ vào tiền thuê chưa sử dụng; vượt cả khoản này thì khách thanh toán thêm.</p>
