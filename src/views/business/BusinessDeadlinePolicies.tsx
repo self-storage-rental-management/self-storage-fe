@@ -108,7 +108,7 @@ export default function BusinessDeadlinePolicies({ facilities, resolveFacilityId
           </label>)}
         </div>
       </article>)}
-      {!loading && rows.length > 0 && <div className="sticky bottom-0 flex items-center justify-between gap-4 rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+      {!loading && rows.length > 0 && <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
         <p className="text-sm text-stone-600">Lưu đồng thời toàn bộ {rows.length} loại kho của cơ sở. Không được bỏ trống trường nào.</p>
         <Button type="submit" variant="primary" disabled={saving || !backendFacilityId || JSON.stringify(values) === JSON.stringify(saved)}>{saving ? 'Đang lưu...' : 'Lưu tất cả thời hạn'}</Button>
       </div>}
