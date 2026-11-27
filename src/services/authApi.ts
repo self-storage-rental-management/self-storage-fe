@@ -126,6 +126,15 @@ export function primaryRole(roles: readonly ApiRoleCode[]): Role {
   return role.toLowerCase() as Role
 }
 
+const facilityScopeRank: Record<ApiFacilityScopeLevel, number> = { READ: 0, OPERATE: 1, MANAGE: 2 }
+
+export function staffWorkingFacilityId(actor: ApiActor): string | undefined {
+  return Object.keys(actor.facilityScopes).sort((a, b) =>
+    facilityScopeRank[actor.facilityScopes[b]] - facilityScopeRank[actor.facilityScopes[a]]
+      || (a < b ? -1 : a > b ? 1 : 0),
+  )[0]
+}
+
 export function actorToUser(actor: ApiActor): User {
   const assignedFacilityIds = Object.keys(actor.facilityScopes)
   const assignedFacilityNames = assignedFacilityIds

@@ -1,3 +1,4 @@
+import type { StaffReservationSort } from '../../services/staffReservationApi'
 import { displayStatusLabel } from '../../presentation/statusLabels'
 import { useEffect, useState } from "react"
 
@@ -53,6 +54,15 @@ function progressIndex(status: ReservationStatus) {
   return 0
 }
 
+function ReservationSort({ value, onChange }: { value: StaffReservationSort; onChange: (value: StaffReservationSort) => void }) {
+  return <Select label="Sắp xếp" className="min-w-0 !text-sm" value={value} onChange={event => onChange(event.target.value as StaffReservationSort)}>
+    <option value="priority">Ưu tiên xử lý</option>
+    <option value="appointmentAt,asc">Lịch nhận sớm nhất</option>
+    <option value="createdAt,desc">Đơn mới nhất</option>
+    <option value="createdAt,asc">Đơn cũ nhất</option>
+  </Select>
+}
+
 export default function StaffReservationReviews({
   canApprove,
   facilityNames = {},
@@ -60,6 +70,8 @@ export default function StaffReservationReviews({
   canApprove: boolean
   facilityNames?: Record<string, string>
 }) {
+  const [reviewSort, setReviewSort] = useState<StaffReservationSort>("priority")
+  const [activeSort, setActiveSort] = useState<StaffReservationSort>("priority")
   const [rows, setRows] = useState<ReservationReview[]>([])
 
   const [expandedReviews, setExpandedReviews] = useState<Record<string, boolean>>({})
@@ -97,7 +109,7 @@ export default function StaffReservationReviews({
       setLoading(true)
 
       try {
-        const result = await listStaffReservationReviews(page, 20, reviewGroup === "completed")
+        const result = await listStaffReservationReviews(page, 20, reviewGroup === "completed", reviewSort)
 
         if (!disposed) {
           setRows(result.data)
@@ -122,14 +134,14 @@ export default function StaffReservationReviews({
       disposed = true
       window.clearInterval(timer)
     }
-  }, [page, revision, reviewGroup])
+  }, [page, revision, reviewGroup, reviewSort])
 
   useEffect(() => {
     let disposed = false
     const load = async () => {
       setActiveLoading(true)
       try {
-        const result = await listStaffActiveReservations({ page: activePage, size: 10, q: query, status })
+        const result = await listStaffActiveReservations({ page: activePage, size: 10, q: query, status, sort: activeSort })
         if (!disposed) {
           setActiveRows(result.data)
           setActiveTotalPages(result.pagination.totalPages)
@@ -147,7 +159,7 @@ export default function StaffReservationReviews({
       disposed = true
       window.clearInterval(timer)
     }
-  }, [activePage, query, revision, status])
+  }, [activePage, query, revision, status, activeSort])
 
   useEffect(() => {
     const refresh = () => setRevision(value => value + 1)
@@ -210,15 +222,6 @@ export default function StaffReservationReviews({
       <SectionHeader
         title="Đơn đặt giữ kho"
         subtitle={`Theo dõi hồ sơ hàng hóa tại: ${Object.values(facilityNames).join(", ") || "cơ sở được phân quyền"}.`}
-        action={
-          <Button
-            variant="outline"
-            disabled={loading}
-            onClick={() => setRevision((value) => value + 1)}
-          >
-            Làm mới
-          </Button>
-        }
       />
       {message && (
         <p
@@ -233,6 +236,7 @@ export default function StaffReservationReviews({
           <Button key={value} variant={reviewGroup === value ? 'primary' : 'outline'} aria-pressed={reviewGroup === value}
             onClick={() => { setReviewGroup(value); setPage(0); setRows([]) }}>{label}</Button>)}
       </div>
+      <div className="max-w-xs"><ReservationSort value={reviewSort} onChange={value => { setReviewSort(value); setPage(0) }} /></div>
       {loading && <p className="text-sm text-stone-500">Đang tải hồ sơ…</p>}
       {!loading && !rows.length && (
         <Card className="p-8 text-center text-stone-500">
@@ -362,16 +366,17 @@ export default function StaffReservationReviews({
       <div className="border-t border-stone-300 pt-6">
         <SectionHeader
           title="Danh sách kho đang được giữ"
-          subtitle={`Có ${activeTotalItems} đơn tại cơ sở của bạn. Ưu tiên đơn cần xử lý. Trong cùng nhóm, đơn mới nhất hiện trước.`}
+          subtitle={`Có ${activeTotalItems} đơn tại cơ sở của bạn. Thứ tự hiển thị theo lựa chọn sắp xếp.`}
         />
       </div>
       <Card className="p-4">
-        <div className="grid gap-3 md:grid-cols-[1fr_260px_auto] md:items-end">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_240px_210px_auto] md:items-end">
           <Input label="Tìm mã đơn, khách hàng, email hoặc gian kho" value={queryInput} onChange={event => setQueryInput(event.target.value)} />
-          <Select label="Trạng thái" value={status} onChange={event => { setStatus(event.target.value as ReservationStatus | ""); setActivePage(0) }}>
-            <option value="">Tất cả trạng thái đang hoạt động</option>
+          <Select label="Trạng thái" className="min-w-0 !text-sm" value={status} onChange={event => { setStatus(event.target.value as ReservationStatus | ""); setActivePage(0) }}>
+            <option value="">Tất cả trạng thái</option>
             {Object.entries(activeStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </Select>
+          <ReservationSort value={activeSort} onChange={value => { setActiveSort(value); setActivePage(0) }} />
           <Button onClick={() => { setQuery(queryInput.trim()); setActivePage(0) }}>Tìm kiếm</Button>
         </div>
       </Card>

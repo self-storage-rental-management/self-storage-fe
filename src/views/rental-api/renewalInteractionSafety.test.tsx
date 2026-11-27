@@ -39,7 +39,7 @@ vi.mock("react", async original => ({
   },
 }))
 vi.mock("../manager/managerPresentation", () => ({ useManagerPresentation: () => ({ manager: false, copy: (s: string) => s, errorText: () => "Lỗi thử nghiệm" }) }))
-vi.mock("../../services/authApi", () => ({ getAuthenticatedActor: () => h.actor }))
+vi.mock("../../services/authApi", async original => ({ ...await original<typeof import("../../services/authApi")>(), getAuthenticatedActor: () => h.actor }))
 vi.mock("../../hooks/useRentalApiResource", () => ({ useRentalApiResource: (key: string) => {
   if (key.includes(":customer-identity")) return { data: { identityDocumentNumber: "001099000001", fullName: "Nguyen Van A" }, loading: false, refresh: h.refresh }
   if (key.endsWith(':payment-events')) return { data: apiPage([]), loading: false, refresh: h.refresh }
@@ -47,7 +47,7 @@ vi.mock("../../hooks/useRentalApiResource", () => ({ useRentalApiResource: (key:
   if (key.includes(":deposit-settlement:")) return { data: h.settlement, loading: false, refresh: h.refresh }
   if (key.endsWith(":proposal")) return { ...h.proposal, refresh: h.refresh }
   if (key.includes(":renewal:")) return { data: h.detail, loading: false, refresh: h.refresh }
-  if (key.includes(':"size":20') || key.includes('{"page":0,"size":20}')) return { data: h.staffPage, loading: false, refresh: h.refresh }
+  if (key.includes('"size":20')) return { data: h.staffPage, loading: false, refresh: h.refresh }
   if (key.includes(":coordination:")) return { data: apiPage([{ ...operationEvent, kind: "INCIDENT" }]), loading: false, refresh: h.refresh }
   if (/:(statement|incidents:|assignment:|counts|rental:)/.test(key)) return { loading: false, refresh: h.refresh }
   return { data: h.operationLoading ? undefined : h.state, loading: h.operationLoading, refresh: h.refresh }

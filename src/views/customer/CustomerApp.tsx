@@ -3014,7 +3014,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       {/* COMPLETED: Check-in complete, show rental */}
                       {hold.status === 'COMPLETED' && (
                         <div className="flex flex-wrap justify-end gap-2">
-                          <Button variant="primary" size="sm" onClick={() => { try { confirmUnitReceipt(hold.id, user); setPage('rental-records'); showToast('Đã xác nhận nhận kho. Đơn giữ kho đã được chuyển sang Hồ sơ thuê của tôi.') } catch (error) { showToast(userFacingError(error, 'Không thể xác nhận bàn giao.')) } }}>Xác nhận đã nhận kho</Button>
+                          <p className="text-sm text-stone-600">Thời gian chuẩn bị bắt đầu khi staff hoàn tất bàn giao.</p>
                         </div>
                       )}
 

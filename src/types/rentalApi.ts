@@ -50,6 +50,7 @@ export interface RentalApiRecord {
     field: string
     reason: string
   }[]
+  intakeCompleted?: boolean
   inventoryPending?: boolean
   inventoryMismatchReturn?: boolean
   inventoryVerifiedAt?: string | null

@@ -914,9 +914,10 @@ export function RecoveryPagination({ pagination, disabled, onChange }: {
   </nav>
 }
 
-export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, managerOverdueOnly = false, customerView = false, target }: {
-  sourceReturnId?: string; activeOnly?: boolean; managerOverdueOnly?: boolean; customerView?: boolean; target?: { id: string; request: number }
+export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, managerOverdueOnly = false, customerView = false, target, allowDateSort = false }: {
+  allowDateSort?: boolean; sourceReturnId?: string; activeOnly?: boolean; managerOverdueOnly?: boolean; customerView?: boolean; target?: { id: string; request: number }
 }) {
+  const [sort, setSort] = useState<'priority' | 'createdAt,desc' | 'createdAt,asc'>('priority')
   const [page, setPage] = useState(0)
   const [entries, setEntries] = useState<Entry[]>([])
   const [pagination, setPagination] = useState<RecoveryPageInfo>()
@@ -958,7 +959,7 @@ export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, man
     const query = managerOverdueOnly ? `page=${page}&escalatedOnly=true`
       : sourceReturnId ? `sourceReturnId=${encodeURIComponent(sourceReturnId)}` : `page=${page}&activeOnly=${activeOnly && !showClosed}`
     const url = targetId ? `${endpoint}/${encodeURIComponent(targetId)}`
-      : customerPaging ? `${endpoint}/customer?page=${page}&pageSize=${CUSTOMER_PAGE_SIZE}` : `${endpoint}?${query}`
+      : customerPaging ? `${endpoint}/customer?page=${page}&pageSize=${CUSTOMER_PAGE_SIZE}` : `${endpoint}?${query}${allowDateSort ? `&sort=${encodeURIComponent(sort)}` : ''}`
     if (requestUrl.current !== url) {
       requestUrl.current = url
       setLoading(true)
@@ -983,7 +984,7 @@ export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, man
       .catch(err => { if (active) setError(userFacingError(err, 'Không thể tải hồ sơ thu hồi.')) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [page, refresh, sourceReturnId, activeOnly, managerOverdueOnly, targetId, showClosed, action, customerPaging])
+  }, [page, refresh, sourceReturnId, activeOnly, managerOverdueOnly, targetId, showClosed, action, customerPaging, sort, allowDateSort])
 
   useEffect(() => {
     if (!target || target.id !== targetId || loading || error || !targetCard.current
@@ -999,6 +1000,15 @@ export function ViolationRecoveryPanel({ sourceReturnId, activeOnly = false, man
   }
 
   return <div className="recovery-panel" ref={listTop}>
+    {allowDateSort && !targetId && <label className="mb-3 ml-auto flex w-fit max-w-full items-center gap-2 whitespace-nowrap text-xs text-stone-500">
+      Sắp xếp
+      <select aria-label="Sắp xếp hồ sơ thu hồi" disabled={!!action} className="!h-9 !w-40 !min-w-0 shrink-0 rounded-lg border border-stone-200 bg-white !px-3 !py-1.5 !text-xs text-stone-700"
+        value={sort} onChange={event => { setSort(event.target.value as typeof sort); setPage(0) }}>
+        <option value="priority">Ưu tiên xử lý</option>
+        <option value="createdAt,desc">Mới nhất</option>
+        <option value="createdAt,asc">Cũ nhất</option>
+      </select>
+    </label>}
     {((activeOnly && !managerOverdueOnly) || targetId) && <div className="recovery-toolbar">
       <div className="recovery-view-switch">
         {activeOnly && !managerOverdueOnly && !targetId && <>

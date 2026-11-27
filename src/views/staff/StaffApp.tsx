@@ -41,6 +41,7 @@ import StaffCredentialReissuePanel from "./StaffCredentialReissuePanel"
 import StaffMaintenanceOperationsPanel from "./StaffMaintenanceOperationsPanel"
 import StaffRenewalOperationsApiPanel from "./StaffRenewalOperationsApiPanel"
 import StaffDailyTaskQueue from "./StaffDailyTaskQueue"
+import StaffFacilityRentals from "./StaffFacilityRentals"
 import RecoveryTaskDetail from "../rental-api/RecoveryTaskDetail"
 import ReturnApiPanel from "../return-api/ReturnApiPanel"
 import {
@@ -867,6 +868,13 @@ export default function StaffApp({
       permission: "reservations:read",
     },
 
+    ...(isApiAuthenticated() ? [{
+      id: "facility-rentals",
+      label: "Hồ sơ thuê",
+      icon: Icon.clipboard,
+      group: "Vận hành",
+      permission: "rentals:read" as const,
+    }] : []),
     {
       id: "return",
 
@@ -1490,7 +1498,7 @@ export default function StaffApp({
       setCheckinModal(false)
 
       showToast(
-        "Đã kích hoạt hợp đồng thuê. Khách hàng có thể xác nhận đã nhận kho trong Đơn đặt giữ kho.",
+        "Đã hoàn tất bàn giao và bắt đầu thời gian chuẩn bị hàng.",
       )
     } catch (error) {
       setPendingCheckinCompletionId(null)
@@ -2182,6 +2190,7 @@ export default function StaffApp({
     if (type === "OVERDUE") return "dashboard"
     if (type === "PAYMENT") return "checkin"
     if (type === "RESERVATION") return "checkin"
+    if (type === 'SYSTEM' && notification.title === 'Đã gửi báo cáo nghi vấn hàng cấm') return 'facility-rentals'
     if (type === "SYSTEM") return "tasks"
     return "dashboard"
   }
@@ -2956,6 +2965,10 @@ export default function StaffApp({
       {/* ── CHECK-IN / HANDOVER ───────────────────────────────── */}
       {page === "checkin" && <StaffCheckInOperationsPanel showToast={showToast} onOpenReturns={() => setPage("return")} />}
       {page === "credentials" && isApiAuthenticated() && <StaffCredentialReissuePanel showToast={showToast} />}
+
+      {page === "facility-rentals" && isApiAuthenticated() && (
+        <StaffFacilityRentals key={user.id} />
+      )}
 
       {/* ── RETURN INSPECTION ────────────────────────────────── */}
 
@@ -4269,7 +4282,7 @@ export default function StaffApp({
                   {formatTime(selectedCheckin.appointmentTime)}
                 </span>
                 <span>
-                  <b>{"Hạn nhận kho"}:</b>{" "}
+                  <b>{"Hạn đến nhận kho"}:</b>{" "}
                   {formatDate(selectedCheckin.checkInDeadline)}
                 </span>
               </div>
@@ -4523,7 +4536,7 @@ export default function StaffApp({
             </div>
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
               {
-                "Nhân viên hoàn tất nhận kho để kích hoạt hợp đồng thuê. Khách hàng sẽ tự bấm “Tôi đã nhận kho”. Trước thời điểm đó, hồ sơ mang nhãn “Chờ khách hàng xác nhận bàn giao”."
+                "Nhân viên lưu biên bản và hoàn tất bàn giao để tạo hồ sơ thuê, bắt đầu thời gian chuẩn bị. Khách không cần xác nhận nhận kho thêm."
               }
             </div>
             <div className="space-y-1">

@@ -32,7 +32,7 @@ export const reservationStatusLabels: Record<ReservationStatus, string> = {
   AWAITING_PAYMENT: 'Chờ thanh toán trước 20% (giữ chỗ)', PAYMENT_GRACE: 'Chờ khiếu nại thanh toán',
   PAYMENT_REVIEW: 'Đang đối soát thanh toán', CONFIRMED: 'Đã xác nhận giữ kho',
   UNIT_RESERVED: 'Đã phân kho', READY_FOR_CHECKIN: 'Sẵn sàng nhận kho',
-  AWAITING_CUSTOMER_RECEIPT: 'Chờ xác nhận nhận kho', PREPARING: 'Đang chuẩn bị hàng', COMPLETED: 'Đã hoàn tất nhận kho',
+  AWAITING_CUSTOMER_RECEIPT: 'Đang cập nhật bàn giao', PREPARING: 'Đang chuẩn bị hàng', COMPLETED: 'Đã hoàn tất nhận kho',
   CANCELLED: 'Đã hủy', EXPIRED: 'Đã hết hạn', REJECTED: 'Hàng hóa bị từ chối',
 }
 
