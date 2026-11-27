@@ -158,7 +158,9 @@ function completeApiLogin(response: ApiEnvelope<ApiAuthResponse>, invalidMessage
   }
   setAccessToken(response.data.accessToken)
   setRefreshToken(response.data.refreshToken)
-  return persistActor(normalizeApiActor(response.data.actor))!
+  const actor = persistActor(normalizeApiActor(response.data.actor))!
+  window.dispatchEvent(new Event('storagehub:actor-updated'))
+  return actor
 }
 
 export async function loginWithApi(email: string, password: string): Promise<ApiActor> {

@@ -1722,9 +1722,10 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                       <div className="space-y-2.5">
                         <p className="text-xs font-semibold text-stone-700">Ảnh hiện trường theo khu vực</p>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                          {(['Trần', 'Vách', 'Sàn', 'Cửa'] as const).map((area) => (
-                            <label key={area} className="relative cursor-pointer rounded-xl border border-dashed border-stone-300 bg-stone-50/50 p-3 text-center text-xs font-semibold text-stone-700 hover:border-stone-400 hover:bg-stone-100/50 transition">
-                              Thêm ảnh {area.toLowerCase()}
+                          {(['Trần', 'Vách', 'Sàn', 'Cửa'] as const).map((area) => {
+                            const areaCount = evidenceFiles.filter(file => file.name.startsWith(`${area} - `)).length
+                            return <label key={area} className={`relative cursor-pointer rounded-xl border border-dashed p-3 text-center text-xs font-semibold transition ${areaCount ? 'border-emerald-400 bg-emerald-50 text-emerald-800' : 'border-stone-300 bg-stone-50/50 text-stone-700 hover:border-stone-400 hover:bg-stone-100/50'}`}>
+                              {areaCount ? `Đã thêm ${areaCount} ảnh ${area.toLowerCase()}` : `Thêm ảnh ${area.toLowerCase()}`}
                               <input
                                 type="file"
                                 multiple
@@ -1739,7 +1740,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                                 }}
                               />
                             </label>
-                          ))}
+                          })}
                         </div>
                         <p className="text-[11px] text-stone-500">Đối chiếu với ảnh và hiện trạng kho trống trong hồ sơ nhận kho.</p>
                         <label className="text-xs font-semibold text-stone-700 block">
