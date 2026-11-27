@@ -249,13 +249,16 @@ export function cancelRenewal(
   reason: string,
   expectedVersion: number,
   key: string,
+  acknowledgeDepositForfeiture = false,
+  acknowledgePaymentForfeiture = false,
 ) {
   version(expectedVersion)
   text(reason, true)
   return command(
     `/api/customer/renewals/${encodeURIComponent(id)}/cancel`,
     "POST",
-    { reason, expectedVersion },
+    { reason, expectedVersion, ...(acknowledgeDepositForfeiture ? { acknowledgeDepositForfeiture: true } : {}),
+      ...(acknowledgePaymentForfeiture ? { acknowledgePaymentForfeiture: true } : {}) },
     key,
     record => record.id === id,
   )
