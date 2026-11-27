@@ -308,6 +308,7 @@ export interface ReturnFeeSchedule {
   prices: Record<string, number>
   details: Record<string, ReturnFeeDetails>
   editableCatalog?: boolean
+  overdueMultiplier?: number
   publishedAt?: string | null
 }
 export async function getReturnFeeSchedule(): Promise<ReturnFeeSchedule> {

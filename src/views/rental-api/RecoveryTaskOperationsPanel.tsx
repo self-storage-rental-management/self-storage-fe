@@ -191,6 +191,7 @@ export default function RecoveryTaskOperationsPanel({ role, task, view, identity
     </form>}
     {validation && <p role="alert" className="text-sm text-red-700">{validation}</p>}
     {!!command.error && <p role="alert" className="text-sm text-red-700">{recoveryOperationError(command.error)}</p>}
+    {command.conflict && <Button type="button" variant="outline" onClick={() => { command.clear(); pending.current = null; refresh() }}>Tải lại nhiệm vụ</Button>}
     {view.status === 'CLOSED' && <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">Đã hoàn tất thu hồi{view.completedAt ? ` lúc ${rentalDate(view.completedAt)}` : ''}.</p>}
     {(view.evidenceFileIds.length > 0 || view.receiptFileId || view.completionFileId) && <section aria-label="Chứng từ thu hồi" className="rounded-xl border border-stone-200">
       <h4 className="border-b border-stone-200 px-4 py-3 text-sm font-semibold">Chứng từ</h4>

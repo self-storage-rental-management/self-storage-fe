@@ -15,6 +15,7 @@ import {
 } from "../manager/ManagerOverdueApiPanel"
 import { rentalError } from "./presentation"
 import { ApiClientError } from "../../services/apiClient"
+import { recoveryOperationError } from "../../services/recoveryTaskOperationsApi"
 import { isOperationEvent, isOperationState } from "../../services/renewalOperationsApi"
 import {
   isUncertainRenewalOutcome,
@@ -348,4 +349,10 @@ describe("D4 truthful overdue presentation", () => {
       ),
     ).toContain("Một nguồn dữ liệu cần thiết")
   })
+})
+
+it("explains missing rental-period evidence during recovery inspection", () => {
+  const error = new ApiClientError("DEFERRED_SOURCE: Rental date provenance is unknown", { status: 409 })
+  expect(recoveryOperationError(error)).toContain("Chưa xác minh được kỳ thuê")
+  expect(recoveryOperationError(error)).toContain("liên hệ quản lý")
 })

@@ -715,6 +715,7 @@ export default function BusinessApp({
   const [feeScheduleCollapsed, setFeeScheduleCollapsed] = useState(false)
   const [feeSchedule, setFeeSchedule] = useState<ReturnFeeSchedule | null>(null)
   const [feeDraft, setFeeDraft] = useState<Record<string, string> | null>(null)
+  const [overdueMultiplierDraft, setOverdueMultiplierDraft] = useState("1.5")
   const [feeDetailsDraft, setFeeDetailsDraft] = useState<Record<string, ReturnFeeDetails> | null>(null)
   const [feeError, setFeeError] = useState("")
   const [feeSaving, setFeeSaving] = useState(false)
@@ -750,6 +751,7 @@ export default function BusinessApp({
   const editFeeSchedule = () => {
     if (!feeSchedule) return
     setNewFeeKind('custom_minor')
+    setOverdueMultiplierDraft(String(feeSchedule.overdueMultiplier ?? 1.5))
     setFeeDraft(Object.fromEntries(scheduleRows(feeSchedule).map(row => [row.code, String(feeSchedule.prices[row.code] ?? row.price)])))
     setFeeDetailsDraft(Object.fromEntries(scheduleRows(feeSchedule).map(row => [row.code, { ...getReturnFeeDetails(feeSchedule, row.code) }])))
     setFeeError("")
@@ -761,11 +763,12 @@ export default function BusinessApp({
     if (!feeSchedule || !feeDraft || !feeDetailsDraft || feeSaving) return
     if (Object.values(feeDraft).some(value => !/^\d+$/.test(value) || !Number.isSafeInteger(Number(value)))) { setFeeError("Mức phí phải là số nguyên không âm hợp lệ."); return }
     if (Object.values(feeDetailsDraft).some(detail => Object.values(detail).some(value => !value.trim()))) { setFeeError("Vui lòng điền tên phí, điều kiện và đối tượng cho mỗi hạng mục."); return }
+    if (!/^(?:\d|10)(?:\.\d{1,2})?$/.test(overdueMultiplierDraft) || Number(overdueMultiplierDraft) > 10) { setFeeError("Hệ số phí quá hạn phải từ 0 đến 10 và tối đa 2 chữ số thập phân."); return }
     setFeeSaving(true); setFeeError("")
     try {
       const prices = Object.fromEntries(Object.entries(feeDraft).map(([key, value]) => [key, Number(value)]))
       const details = feeDetailsDraft
-      const saved = await publishReturnFeeSchedule({ revision: feeSchedule.revision, prices, details })
+      const saved = await publishReturnFeeSchedule({ revision: feeSchedule.revision, prices, details, overdueMultiplier: Number(overdueMultiplierDraft) })
       setFeeSchedule(saved); setFeeDraft(null); setFeeDetailsDraft(null)
     } catch (error) { setFeeError(error instanceof Error ? error.message : "Không công bố được biểu phí.") }
     finally { setFeeSaving(false) }
@@ -4961,6 +4964,12 @@ export default function BusinessApp({
 
               <p className="mb-2 text-sm text-slate-600">Các thay đổi áp dụng cho đơn đặt sau khi công bố. Đơn đã tạo giữ biểu phí cũ.</p>
               <p className="mb-3 text-xs text-slate-500">Chọn nhóm phí để thêm hạng mục vào phần nghiệm thu tương ứng. Mức phí kho sạch là 0 ₫.</p>
+              {feeSchedule && !feeScheduleCollapsed && <div className="mb-4 rounded-lg bg-stone-50 p-3 text-sm">
+                <label className="flex flex-wrap items-center gap-3 font-medium">Hệ số phí quá hạn
+                  {feeDraft ? <input aria-label="Hệ số phí quá hạn" type="number" min="0" max="10" step="0.01" disabled={feeSaving} value={overdueMultiplierDraft} onChange={event => setOverdueMultiplierDraft(event.target.value)} className="w-24 rounded border border-stone-300 bg-white p-2" /> : <strong>{feeSchedule.overdueMultiplier ?? 1.5}</strong>}
+                </label>
+                <p className="mt-1 text-stone-600">Phí mỗi ngày = tiền thuê tháng ÷ 30 × hệ số. Áp dụng theo biểu phí tại thời điểm đặt kho.</p>
+              </div>}
               {feeError && <p role="alert" className="mb-3 text-sm text-red-700">{feeError}</p>}
 
               {!feeScheduleCollapsed && (

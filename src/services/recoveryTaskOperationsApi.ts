@@ -91,6 +91,7 @@ export function recoveryOperationError(error: unknown) {
     if (error.status === 409) {
       const known: Record<string, string> = {
         'Hồ sơ thiếu giấy tờ đối chiếu để quyết toán thu hồi.': 'Hồ sơ thiếu giấy tờ đối chiếu để quyết toán thu hồi.',
+        'DEFERRED_SOURCE: Rental date provenance is unknown': 'Chưa xác minh được kỳ thuê để tính phí quá hạn. Vui lòng liên hệ quản lý đối soát hồ sơ thuê.',
         'Recovery version changed; reload before submitting': 'Nhiệm vụ đã được cập nhật. Tải lại trước khi lưu.',
         'Recovery task has already started or closed': 'Nhiệm vụ đã được tiếp nhận hoặc đóng.',
         'Recovery inventory has already been recorded': 'Kiểm kê đã được lưu.',
