@@ -270,6 +270,17 @@ describe("D1/D2 wire contracts", () => {
       /\/api\/customer\/renewals\/n1\/cancel$/,
     )
   })
+  it('sends explicit deposit forfeiture acknowledgement only after customer confirmation', async () => {
+    const fetch = response({ data: { ...renewal, status: 'cancelled' } })
+    await cancelRenewal('n1', 'Hủy gia hạn để trả kho', 2, 'deposit-cancel', true)
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ reason: 'Hủy gia hạn để trả kho', expectedVersion: 2, acknowledgeDepositForfeiture: true })
+    expect(fetch.mock.calls[0][0]).toMatch(/\/api\/customer\/renewals\/n1\/cancel$/)
+  })
+  it('sends separate acknowledgement for forfeiting all fully paid renewal money', async () => {
+    const fetch = response({ data: { ...renewal, status: 'cancelled' } })
+    await cancelRenewal('n1', 'Hủy gia hạn để trả kho', 2, 'full-cancel', false, true)
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ reason: 'Hủy gia hạn để trả kho', expectedVersion: 2, acknowledgePaymentForfeiture: true })
+  })
   it("does not fabricate legacy version0", async () => {
     response({ data: { ...renewal, version: null } })
     expect((await getRenewal("manager", "n1")).version).toBeNull()

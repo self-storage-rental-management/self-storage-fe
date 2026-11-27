@@ -1,3 +1,4 @@
+import ReturnAppointment from './ReturnAppointment'
 import { recordDisplayCode, receiptDisplayCode } from '../../utils/recordDisplayCode'
 import { compareReturnQueue } from '../../utils/returnQueueSort'
 import { ClearanceStatus, CustomerClearance, ReturnContract, ReturnPreparation } from './ReturnClearance'
@@ -20,6 +21,8 @@ import { rentalDate, rentalMoney } from '../rental-api/presentation'
 import { VIETNAM_TIME_ZONE, vietnamDateInput } from '../../utils/vietnamTime'
 import RecoveryReturnSettlement from './RecoveryReturnSettlement'
 import RecoveryTaskLink from '../rental-api/RecoveryTaskLink'
+import { getReturnRenewalEligibility } from '../../services/returnRenewalEligibility'
+import ReturnRenewalBlock from './ReturnRenewalBlock'
 import {
   getReturn,
   confirmReturn,
@@ -137,6 +140,9 @@ export function ReturnSummary({ record, hideTerminationFee = false, hideHeader =
       {['requested', 'scheduled'].includes(record.status) && record.recoveryEligibleAt && !record.attendance?.arrivedAt && <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">Nếu khách chưa đến và chưa hoàn tất trả kho, hồ sơ sẽ chuyển sang nhiệm vụ xử lý sau <strong>{returnRecoveryCountdown(record.recoveryEligibleAt, now) || returnRecoveryCutoff(record.recoveryEligibleAt)}</strong>. Hàng chưa được tự động di chuyển.</p>}
       {inventoryMismatch && <div className="rounded-lg border border-orange-300 bg-orange-50 p-3 text-sm text-orange-950">
         <p className="font-bold">Đơn trả kho do kiểm kê sai lệch</p>
+        <p className="mt-1">Thời hạn trả kho đã chốt: {record.returnWindowDays != null ? `${record.returnWindowDays} ngày` : 'Chưa có thông tin'}.</p>
+        <p className="mt-1">Gia hạn mỗi lần tối đa: {record.returnExtensionDays != null ? `${record.returnExtensionDays} ngày` : 'Chưa có thông tin'} · Đã gia hạn {record.returnExtensionCount ?? 0}/{record.maxReturnExtensions ?? 2} lần.</p>
+        {(record.inventoryRemovalDeadlineAt ?? record.recoveryEligibleAt) && <p className="mt-1 font-semibold">Hạn cuối dọn hàng: {returnRecoveryCutoff(record.inventoryRemovalDeadlineAt ?? record.recoveryEligibleAt)}</p>}
         <p className="mt-1">Tính tiền theo số ngày sử dụng thực tế (Đơn giá tháng × Số ngày / 30).</p>
         <p className="mt-1 text-xs font-medium">Khách dọn hàng trong hạn và xác nhận khi sẵn sàng bàn giao.</p>
       </div>}
@@ -447,11 +453,13 @@ export default function ReturnApiPanel({
   rentalId,
   rentalActive = false,
   onChanged,
+  onOpenRenewal,
 }: {
   role: ReturnRole
   rentalId?: string
   rentalActive?: boolean
   onChanged?: () => void
+  onOpenRenewal?: (id: string) => void
 }) {
   const actor = getAuthenticatedActor()
   const identity = `${actor?.id}:${JSON.stringify(actor?.permissions)}:${JSON.stringify(actor?.facilityScopes)}:${role}:${rentalId ?? ''}`
@@ -462,6 +470,7 @@ export default function ReturnApiPanel({
       rentalId={rentalId}
       rentalActive={rentalActive}
       onChanged={onChanged}
+      onOpenRenewal={onOpenRenewal}
       identity={identity}
     />
   )
@@ -472,12 +481,14 @@ function ReturnWorkspace({
   rentalId,
   rentalActive,
   onChanged,
+  onOpenRenewal,
   identity,
 }: {
   role: ReturnRole
   rentalId?: string
   rentalActive: boolean
   onChanged?: () => void
+  onOpenRenewal?: (id: string) => void
   identity: string
 }) {
   const actor = getAuthenticatedActor()
@@ -602,6 +613,9 @@ function ReturnWorkspace({
   const selectedRecord = useMemo(() => {
     return selectedRecordId ? rows.find((r) => r.id === selectedRecordId) ?? null : null
   }, [rows, selectedRecordId])
+  const eligibilityRentalId = rentalId || selectedRecord?.rentalId
+  const renewalGate = useRentalApiResource(`${identity}:return-renewal-eligibility:${eligibilityRentalId}`, async () =>
+    role === 'customer' && eligibilityRentalId ? getReturnRenewalEligibility(eligibilityRentalId) : null)
 
   const counts = useMemo(() => {
     const pending = rows.filter((r) => ['requested', 'scheduled'].includes(r.status)).length
@@ -640,6 +654,11 @@ function ReturnWorkspace({
   )
 
   if (!readable) return null
+
+  if (role === 'customer' && eligibilityRentalId && (renewalGate.loading || renewalGate.error || !renewalGate.data?.allowed))
+    return <ReturnRenewalBlock gate={renewalGate.data} loading={renewalGate.loading}
+      error={renewalGate.error ? returnError(renewalGate.error) : undefined}
+      onRetry={renewalGate.refresh} onOpenRenewal={onOpenRenewal} />
 
   if (role === 'customer' && rentalId && !selectedRecord) {
     if (read.loading && !read.data) return <p role="status">Đang tải thông tin trả kho…</p>
@@ -783,6 +802,7 @@ function ReturnWorkspace({
               countdown={pendingMismatch ? returnRecoveryCountdown(selectedRecord.inventoryRemovalDeadlineAt ?? selectedRecord.recoveryEligibleAt, now) : undefined}
               extension={pendingMismatch ? {
                 count: selectedRecord.returnExtensionCount ?? removal.data?.inventoryReturnExtensionCount ?? 0,
+                days: selectedRecord.returnExtensionDays ?? removal.data?.inventoryReturnExtensionDays,
                 onExtend: selectedRecord.canExtendReturnWindow !== false
                   && (selectedRecord.returnExtensionCount ?? removal.data?.inventoryReturnExtensionCount ?? 0) < (selectedRecord.maxReturnExtensions ?? 2)
                   && Date.parse(selectedRecord.inventoryRemovalDeadlineAt ?? removal.data?.inventoryRemovalDeadlineAt ?? '') > now
@@ -791,10 +811,6 @@ function ReturnWorkspace({
                   && selectedRecord.attendance?.reviewStatus !== 'PENDING'
                   ? () => extendRemovalWindow(selectedRecord) : undefined,
               } : undefined} />
-            {contract.data && <details className="rounded-xl border border-stone-200 px-4 py-3 text-sm">
-              <summary className="cursor-pointer font-semibold text-stone-800">Thông tin hợp đồng</summary>
-              <div className="mt-2"><ReturnContract rental={contract.data} record={selectedRecord} /></div>
-            </details>}
           </>}
           {/* Form Actions / 2-Column Inspection */}
           {role === 'staff' && <ReturnAttendance key={selectedRecord.id} record={selectedRecord} role="staff"
@@ -825,6 +841,8 @@ function ReturnWorkspace({
             }}
           />}
 
+
+          {role === 'customer' && selectedRecord.sourceType === 'RECOVERY' && <ReturnAppointment key={selectedRecord.id + ':' + selectedRecord.returnVersion} record={selectedRecord} busy={busy || read.loading} run={run} />}
 
           {role === 'customer' && !selectedRecord.attendance?.arrivedAt && selectedRecord.returnType !== 'INVENTORY_MISMATCH' && selectedRecord.status === 'requested' && editing !== selectedRecord.id && (
             <div className="mt-3 flex justify-end border-t border-stone-100 pt-3">

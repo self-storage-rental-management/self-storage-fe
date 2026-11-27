@@ -118,6 +118,7 @@ export function isRentalRecord(value: unknown): boolean {
     typeof r.currency === "string" &&
     isRentalStatus(r.status) &&
     (r.inventoryMismatchReturn === undefined || typeof r.inventoryMismatchReturn === "boolean") &&
+    (r.intakeCompleted === undefined || typeof r.intakeCompleted === "boolean") &&
     r.currency === "VND" &&
     validDateSemantics(r) &&
     (r.monthlyPrice === null || (Number.isFinite(r.monthlyPrice) && r.monthlyPrice >= 0)) &&

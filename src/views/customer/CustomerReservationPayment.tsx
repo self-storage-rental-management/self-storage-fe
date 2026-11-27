@@ -237,11 +237,11 @@ export default function CustomerReservationPayment({ receiptSlot, user, reservat
       <div className="space-y-4">
         {hasCurrentHandoverTerms ? (
           <ul className="list-disc space-y-2 pl-5 text-sm leading-6">
-            <li>{HANDOVER_WINDOW_NOTICE}{attendanceDeadline && <> Hạn nhận kho <b>{formatDisplayDateTime(attendanceDeadline)}</b>.</>}</li>
+            <li>{HANDOVER_WINDOW_NOTICE}{attendanceDeadline && <> Hạn đến nhận kho <b>{formatDisplayDateTime(attendanceDeadline)}</b>.</>}</li>
             <li>{HANDOVER_IDENTITY_NOTICE}</li>
             <li>{HANDOVER_FORFEITURE_NOTICE}</li>
           </ul>
-        ) : attendanceDeadline && <p className="text-sm">{LEGACY_HANDOVER_TERMS_NOTICE} Hạn nhận kho <b>{formatDisplayDateTime(attendanceDeadline)}</b>.</p>}
+        ) : attendanceDeadline && <p className="text-sm">{LEGACY_HANDOVER_TERMS_NOTICE} Hạn đến nhận kho <b>{formatDisplayDateTime(attendanceDeadline)}</b>.</p>}
         <div className="rounded-xl border-2 border-rose-300 bg-rose-50 p-4 text-rose-950">
           <div className="space-y-2 text-xs">
             <p className="font-bold uppercase tracking-wider text-rose-900 text-sm">
