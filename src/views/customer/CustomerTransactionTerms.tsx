@@ -1,7 +1,7 @@
 import { HANDOVER_TERMS_NOTICE, HANDOVER_TERMS_VERSION, LEGACY_HANDOVER_TERMS_NOTICE, LEGACY_HANDOVER_TERMS_VERSION } from '../../domain/reservationCheckInPolicy'
 import { formatVndAmount } from '../../i18n/currency'
 import ReturnPolicyNotice from '../../components/ReturnPolicyNotice'
-export default function CustomerTransactionTerms({ handoverTermsVersion, depositAmount }: { handoverTermsVersion?: string | null; depositAmount?: number }) {
+export default function CustomerTransactionTerms({ handoverTermsVersion, depositAmount, showReturnPolicy = true }: { handoverTermsVersion?: string | null; depositAmount?: number; showReturnPolicy?: boolean }) {
   const hasCurrentHandoverTerms = (handoverTermsVersion === undefined ? HANDOVER_TERMS_VERSION : handoverTermsVersion) === HANDOVER_TERMS_VERSION
   const handoverNotice = hasCurrentHandoverTerms ? HANDOVER_TERMS_NOTICE
     : handoverTermsVersion === LEGACY_HANDOVER_TERMS_VERSION ? LEGACY_HANDOVER_TERMS_NOTICE
@@ -20,7 +20,7 @@ export default function CustomerTransactionTerms({ handoverTermsVersion, deposit
     <h4 className="font-bold text-stone-900">Điều khoản cần biết trước khi xác nhận</h4>
     <dl className="space-y-3">{terms.map(([title, text]) => <div key={title}><dt className="font-semibold text-stone-900">{title}</dt><dd className="mt-1 text-stone-700">{text}</dd></div>)}</dl>
     {hasCurrentHandoverTerms && depositAmount != null && <p className="font-medium text-stone-900">Khoản giữ chỗ có thể không được hoàn lại <b>{formatVndAmount(depositAmount)}</b>.</p>}
-    <ReturnPolicyNotice />
+    {showReturnPolicy && <ReturnPolicyNotice />}
     <p className="text-xs text-stone-600">Phiên bản mới chỉ áp dụng cho đơn đã xác nhận đồng ý. Số tiền, thời hạn và phiên bản điều khoản được lưu cùng báo giá hoặc hợp đồng.</p>
   </section>
 }

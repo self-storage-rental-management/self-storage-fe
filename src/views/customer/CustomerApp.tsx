@@ -1,6 +1,6 @@
 import { recordDisplayCode, receiptDisplayCode } from '../../utils/recordDisplayCode'
 import { revealRecord } from '../../utils/revealRecord'
-import { compareCustomerReservations } from '../../utils/reservationQueueSort'
+import { compareReservationCreatedAt } from '../../utils/reservationQueueSort'
 import { HANDOVER_TERMS_VERSION, LEGACY_HANDOVER_TERMS_NOTICE } from '../../domain/reservationCheckInPolicy'
 import { displayStatusLabel } from '../../presentation/statusLabels'
 import { getRentalRenewalEligibility } from '../rental-api/RentalDeadlineNotice'
@@ -109,13 +109,21 @@ type CustomerCatalogUnit = StorageUnit & {
 }
 
 async function loadCustomerReservationRecords() {
-  const currentPage = await listCustomerReservations(undefined, 0, 100)
+  const loadAll = async (status?: Parameters<typeof listCustomerReservations>[0]) => {
+    const first = await listCustomerReservations(status, 0, 100)
+    const remaining = await Promise.all(Array.from(
+      { length: Math.max(0, first.pagination.totalPages - 1) },
+      (_, index) => listCustomerReservations(status, index + 1, 100),
+    ))
+    return [first, ...remaining].flatMap(page => page.data)
+  }
+  const currentRecords = await loadAll()
   // Read expired records after the active list so a deadline transition between
   // requests is picked up by the history request.
-  const expiredPage = await listCustomerReservations('EXPIRED', 0, 100)
+  const expiredRecords = await loadAll('EXPIRED')
   const records = new Map<string, CustomerReservation>()
-  currentPage.data.forEach(reservation => records.set(reservation.id, reservation))
-  expiredPage.data.forEach(reservation => records.set(reservation.id, reservation))
+  currentRecords.forEach(reservation => records.set(reservation.id, reservation))
+  expiredRecords.forEach(reservation => records.set(reservation.id, reservation))
   return [...records.values()]
 }
 
@@ -787,6 +795,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const [reservationSizeFilter, setReservationSizeFilter] = useState('all')
   const [reservationTab, setReservationTab] = useState<'all' | 'active' | 'completed' | 'expired'>('all')
   const [reservationSearch, setReservationSearch] = useState('')
+  const [reservationSortOrder, setReservationSortOrder] = useState<'newest' | 'oldest'>('newest')
   const [reservationPageNumber, setReservationPageNumber] = useState(1)
   const [reservationPageSize, setReservationPageSize] = useState(5)
   const [expiredReservationPageNumber, setExpiredReservationPageNumber] = useState(1)
@@ -1239,15 +1248,15 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     const holdSize = storageSizeCode(assignedUnit?.type || hold.unitTypeName || hold.unitId)
     if (!matchesReservationSearch(reservationSearch, [hold.id, hold.unitTypeName, facilities.find(item => item.id === hold.facilityId)?.name])) return false
     return reservationSizeFilter === 'all' || holdSize === reservationSizeFilter
-  }).sort(compareCustomerReservations)
-  // Server orders every page by the customer's next action and its authoritative deadline.
+  }).sort((a, b) => compareReservationCreatedAt(a, b, reservationSortOrder))
+  // Sort the filtered records by creation time before dividing them into pages.
   const pendingHandoverReservations = [...backendReservations]
   const filteredBackendReservations = pendingHandoverReservations.filter(reservation => {
     if (reservationFacilityFilter !== 'all' && reservation.facilityId !== reservationFacilityFilter) return false
     const unitType = backendUnitTypes.find(item => item.id === reservation.unitTypeId)
     if (!matchesReservationSearch(reservationSearch, [reservation.reservationCode, reservation.customerName, reservation.customerPhone, reservation.customerEmail, reservation.unitTypeName || unitType?.name, reservation.assignedUnitCode, facilities.find(item => item.id === reservation.facilityId)?.name])) return false
     return reservationSizeFilter === 'all' || storageSizeCode(unitType?.name || unitType?.code || '') === reservationSizeFilter
-  })
+  }).sort((a, b) => compareReservationCreatedAt(a, b, reservationSortOrder))
 
   const activeBackendReservations = filteredBackendReservations.filter(reservation => !reservation.violationRecovery && !['EXPIRED', 'REJECTED', 'CANCELLED', 'COMPLETED'].includes(reservation.status))
   const expiredBackendReservations = filteredBackendReservations.filter(reservation => ['EXPIRED', 'REJECTED'].includes(reservation.status))
@@ -1282,9 +1291,9 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
   const pagedBackendReservations = displayedBackendReservations.slice(currentTabPagination.start, currentTabPagination.end)
   const pagedReservationHolds = displayedReservationHolds.slice(currentTabPagination.start, currentTabPagination.end)
 
-  useEffect(() => { setReservationPageNumber(1) }, [reservationTab, reservationSearch, reservationFacilityFilter, reservationSizeFilter, reservationPageSize])
-  useEffect(() => { setExpiredReservationPageNumber(1) }, [reservationSearch, reservationFacilityFilter, reservationSizeFilter, reservationPageSize])
-  useEffect(() => { setCompletedReservationPageNumber(1) }, [reservationSearch, reservationFacilityFilter, reservationSizeFilter, reservationPageSize])
+  useEffect(() => { setReservationPageNumber(1) }, [reservationTab, reservationSearch, reservationFacilityFilter, reservationSizeFilter, reservationSortOrder, reservationPageSize])
+  useEffect(() => { setExpiredReservationPageNumber(1) }, [reservationSearch, reservationFacilityFilter, reservationSizeFilter, reservationSortOrder, reservationPageSize])
+  useEffect(() => { setCompletedReservationPageNumber(1) }, [reservationSearch, reservationFacilityFilter, reservationSizeFilter, reservationSortOrder, reservationPageSize])
   useEffect(() => { setReservationPageNumber(current => Math.min(current, currentTabPagination.pages)) }, [currentTabPagination.pages])
   useEffect(() => { setExpiredReservationPageNumber(current => Math.min(current, expiredReservationPagination.pages)) }, [expiredReservationPagination.pages])
   useEffect(() => { setCompletedReservationPageNumber(current => Math.min(current, completedReservationPagination.pages)) }, [completedReservationPagination.pages])
@@ -2627,11 +2636,12 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
           />
 
           <Card className="p-4">
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[2fr_1fr_1fr_auto] md:items-end">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[2fr_1fr_1fr_1fr_auto] md:items-end">
               <Input label="Tìm kiếm đơn giữ kho" placeholder="Mã đơn, cơ sở, loại kho hoặc thông tin liên hệ" value={reservationSearch} onChange={event => setReservationSearch(event.target.value)} />
               <Select label="Lọc theo cơ sở" value={reservationFacilityFilter} onChange={event => setReservationFacilityFilter(event.target.value)}><option value="all">Tất cả cơ sở</option>{facilities.map(facility => <option key={facility.id} value={facility.id}>{CUSTOMER_FACILITY_DISPLAY[facility.id]?.name || facility.name}</option>)}</Select>
               <Select label="Lọc theo kích thước kho" value={reservationSizeFilter} onChange={event => setReservationSizeFilter(event.target.value)}><option value="all">Tất cả kích thước</option><option value="S">Kho nhỏ (S)</option><option value="M">Kho vừa (M)</option><option value="L">Kho lớn (L)</option><option value="XL">Kho rất lớn (XL)</option></Select>
-              <Button variant="outline" disabled={!reservationSearch && reservationFacilityFilter === 'all' && reservationSizeFilter === 'all'} onClick={() => { setReservationSearch(''); setReservationFacilityFilter('all'); setReservationSizeFilter('all') }}>Xóa bộ lọc</Button>
+              <Select label="Sắp xếp theo ngày đặt" value={reservationSortOrder} onChange={event => setReservationSortOrder(event.target.value as 'newest' | 'oldest')}><option value="newest">Mới nhất</option><option value="oldest">Cũ nhất</option></Select>
+              <Button variant="outline" disabled={!reservationSearch && reservationFacilityFilter === 'all' && reservationSizeFilter === 'all' && reservationSortOrder === 'newest'} onClick={() => { setReservationSearch(''); setReservationFacilityFilter('all'); setReservationSizeFilter('all'); setReservationSortOrder('newest') }}>Xóa bộ lọc</Button>
             </div>
             <p className="mt-3 text-xs text-stone-500">Hiển thị {isApiAuthenticated() ? filteredBackendReservations.length : filteredReservationHolds.length}/{isApiAuthenticated() ? pendingHandoverReservations.length : visibleMyHolds.length} đơn đặt giữ kho.</p>
 
@@ -3718,7 +3728,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                   </ul>
                   <details>
                     <summary className="cursor-pointer text-sm font-medium">Xem toàn bộ điều khoản</summary>
-                    <div className="mt-2"><CustomerTransactionTerms /></div>
+                    <div className="mt-2"><CustomerTransactionTerms showReturnPolicy={false} /></div>
                   </details>
                 </details>
               </div>
@@ -3835,7 +3845,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
             {bookingStep === 3 && bookingReview && isApiAuthenticated() && serverQuote && (
               <label className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
                 <input type="checkbox" className="mt-1 h-4 w-4" checked={termsAccepted} onChange={event => setTermsAccepted(event.target.checked)} />
-                <span>Tôi đồng ý với báo giá, thời gian chuẩn bị miễn phí và điều khoản về hạn nhận kho 7 ngày và đối chiếu CCCD. Tôi hiểu khoản giữ chỗ có thể không được hoàn là <b>{formatVndAmount(serverQuote.reservationDepositAmount)}</b>. Phiên bản điều khoản được lưu cùng đơn.</span>
+                <span>Tôi đồng ý với báo giá, thời gian chuẩn bị miễn phí và điều khoản về hạn nhận kho 7 ngày và đối chiếu CCCD. Tôi hiểu khoản giữ chỗ có thể không được hoàn là <b>{formatVndAmount(serverQuote.reservationDepositAmount)}</b>.</span>
               </label>
             )}
             {reservationSubmitError && <div role="alert" className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900">
