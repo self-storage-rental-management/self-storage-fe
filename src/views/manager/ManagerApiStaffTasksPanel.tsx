@@ -1,3 +1,5 @@
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
+import { compareWorkQueue } from '../../utils/workQueueSort'
 import { displayStatusLabel } from '../../presentation/statusLabels'
 import EmergencyContactsPanel from '../../components/EmergencyContactsPanel'
 import './managerStaffTasks.css'
@@ -13,9 +15,7 @@ import { listAllRecoveryTasks, type RecoveryTask } from '../../services/recovery
 import RecoveryTaskDetail, { recoveryStatusLabels } from '../rental-api/RecoveryTaskDetail'
 import { rentalDate } from '../rental-api/presentation'
 import { managerFacilityNotice, singleManagerFacility } from './managerFacilityUi'
-import ManagerCheckInReminderPanel from './ManagerCheckInReminderPanel'
-import ManagerInventoryAppointments from './ManagerInventoryAppointments'
-import ManagerIntakeWorkflowPanel from './ManagerIntakeWorkflowPanel'
+import { ViolationRecoveryPanel } from '../return-api/ViolationRecoveryPanel'
 import {
   assignMaintenanceTask,
   cancelMaintenanceTask,
@@ -34,6 +34,7 @@ interface Props {
   showToast: (message: string) => void
   initialUnit?: { unitId: string; unitCode: string } | null
   onInitialUnitConsumed?: () => void
+  initialRecovery?: { id: string; request: number }
 }
 
 const taskStatusLabel: Record<MaintenanceTaskApi['status'], string> = {
@@ -56,10 +57,9 @@ function statusVariant(status: MaintenanceTaskApi['status']) {
   return 'warning'
 }
 
-export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onInitialUnitConsumed }: Props) {
-  const [activeTab, setActiveTab] = useState<'tasks' | 'handover'>('tasks')
-  const [receiptCount, setReceiptCount] = useState<number | null>(null)
-  const [inventoryCount, setInventoryCount] = useState<number | null>(null)
+export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onInitialUnitConsumed, initialRecovery }: Props) {
+  const [activeTab, setActiveTab] = useState<'tasks' | 'recovery'>('tasks')
+  useEffect(() => { if (initialRecovery) setActiveTab('recovery') }, [initialRecovery])
   const actor = getAuthenticatedActor()
   const facilityId = singleManagerFacility(actor)
   const [tasks, setTasks] = useState<MaintenanceTaskApi[]>([])
@@ -118,7 +118,7 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
       if (recoveryResult.reason instanceof ApiClientError && recoveryResult.reason.code === 'FEATURE_DISABLED') setRecoveryDisabled(true)
       else setRecoveryError(recoveryResult.reason)
     }
-    if (taskResult.status === 'fulfilled') setTasks(taskResult.value.data)
+    if (taskResult.status === 'fulfilled') setTasks(taskResult.value.data.filter(task => task.recoveryType !== 'VIOLATION'))
     else {
       setTasks([])
       setTaskError(taskResult.reason)
@@ -154,6 +154,16 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
   }, [initialUnit, loading, unitReadFailed, staffReadFailed, units, staff])
 
   const openTasks = useMemo(() => tasks.filter(task => !['completed', 'cancelled'].includes(task.status)), [tasks])
+  const queueRows = [
+    ...recoveryTasks.map(task => ({ kind: 'recovery' as const, task, order: {
+      id: `recovery-${task.id}`, closed: task.status === 'CLOSED', waitingSince: task.receivedAt,
+    } })),
+    ...tasks.map(task => ({ kind: 'maintenance' as const, task, order: {
+      id: `maintenance-${task.id}`, closed: ['completed', 'cancelled'].includes(task.status),
+      urgent: task.priority === 'high', dueAt: task.deadlineAt ?? task.dueAt,
+      waitingSince: task.createdAt, completedAt: task.completedAt,
+    } })),
+  ].sort((a, b) => compareWorkQueue(a.order, b.order))
 
   const resetForm = () => {
     setTitle('')
@@ -269,17 +279,17 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
         <button type="button" role="tab" id="staff-tasks-tab" aria-selected={activeTab === 'tasks'} aria-controls="staff-tasks-panel"
           className={`border-b-2 px-4 py-3 text-sm font-semibold ${activeTab === 'tasks' ? 'border-amber-500 text-stone-900' : 'border-transparent text-stone-600 hover:text-stone-900'}`}
           onClick={() => setActiveTab('tasks')}>Nhiệm vụ</button>
-        <button type="button" role="tab" id="staff-handover-tab" aria-selected={activeTab === 'handover'} aria-controls="staff-handover-panel"
-          className={`border-b-2 px-4 py-3 text-sm font-semibold ${activeTab === 'handover' ? 'border-amber-500 text-stone-900' : 'border-transparent text-stone-600 hover:text-stone-900'}`}
-          onClick={() => setActiveTab('handover')}>Bàn giao &amp; kiểm kê
-          {receiptCount !== null && inventoryCount !== null && <span className="ml-2 rounded-full bg-stone-100 px-2 py-0.5 text-xs tabular-nums">{receiptCount + inventoryCount}</span>}
-        </button>
+        <button type="button" role="tab" id="staff-recovery-tab" aria-selected={activeTab === 'recovery'} aria-controls="staff-recovery-panel"
+          className={`border-b-2 px-4 py-3 text-sm font-semibold ${activeTab === 'recovery' ? 'border-amber-500 text-stone-900' : 'border-transparent text-stone-600 hover:text-stone-900'}`}
+          onClick={() => setActiveTab('recovery')}>Thu hồi kho</button>
       </div>
 
-      <div id="staff-handover-panel" role="tabpanel" aria-labelledby="staff-handover-tab" hidden={activeTab !== 'handover'} className="space-y-5">
-        <ManagerCheckInReminderPanel showToast={showToast} onCountChange={setReceiptCount} />
-        <ManagerInventoryAppointments onCountChange={setInventoryCount} />
-        <ManagerIntakeWorkflowPanel />
+      <div id="staff-recovery-panel" role="tabpanel" aria-labelledby="staff-recovery-tab" hidden={activeTab !== 'recovery'} className="space-y-5">
+        <Card className="recovery-workspace">
+          <h2 className="text-lg font-semibold text-stone-900">Thu hồi kho cần điều phối</h2>
+          <p>Theo dõi và phân công xử lý các hồ sơ thu hồi tại cơ sở.</p>
+          <ViolationRecoveryPanel activeOnly target={initialRecovery} />
+        </Card>
       </div>
 
       <div id="staff-tasks-panel" role="tabpanel" aria-labelledby="staff-tasks-tab" hidden={activeTab !== 'tasks'} className="space-y-5">
@@ -305,9 +315,8 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
             {loading && <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-stone-500">Đang tải dữ liệu nhiệm vụ…</td></tr>}
             {!loading && Boolean(taskError) && <tr><td colSpan={7} className="px-4 py-6 text-center text-sm text-amber-800"><span>Chưa tải được nhiệm vụ bảo trì. {managerDisplayError(taskError)}</span><Button className="ml-3" size="sm" variant="outline" onClick={() => void reload()}>Thử lại</Button></td></tr>}
             {!loading && Boolean(recoveryError) && <tr><td colSpan={7} className="px-4 py-6 text-center text-sm text-amber-800"><span>Chưa tải được nhiệm vụ thu hồi kho. {managerDisplayError(recoveryError)}</span><Button className="ml-3" size="sm" variant="outline" onClick={() => void reload()}>Thử lại</Button></td></tr>}
-            {!loading && recoveryDisabled && <tr><td colSpan={7} className="px-4 py-3 text-center text-sm text-stone-500">Chức năng nhiệm vụ thu hồi kho chưa được bật.</td></tr>}
             {!loading && !taskError && !recoveryError && !tasks.length && !recoveryTasks.length && <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-stone-500">{recoveryDisabled ? 'Chưa có nhiệm vụ bảo trì tại cơ sở này.' : 'Chưa có nhiệm vụ tại cơ sở này.'}</td></tr>}
-            {!loading && recoveryTasks.map(task => <Tr key={`recovery-${task.id}`}>
+            {!loading && queueRows.map(row => row.kind === 'recovery' ? ((task: RecoveryTask) => <Tr key={`recovery-${task.id}`}>
               <Td><p className="font-semibold text-stone-900">Thu hồi kho - {task.customerName}</p><p className="mt-1 text-xs text-stone-500">{task.reason === 'AUTO_OVERDUE_DAY_8' ? 'Hợp đồng quá hạn, chưa gia hạn.' : managerDisplayText(task.reason)}</p></Td>
               <Td><Badge variant="warning">Thu hồi kho</Badge></Td>
               <Td>{task.storageUnitCode}</Td>
@@ -315,10 +324,9 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
               <Td className="tabular-nums"><p className="text-xs text-stone-500">Tiếp nhận</p>{rentalDate(task.receivedAt)}</Td>
               <Td><Badge variant={task.status === 'CLOSED' ? 'muted' : task.status === 'IN_PROGRESS' ? 'info' : 'warning'}>{recoveryStatusLabels[task.status]}</Badge></Td>
               <Td><Button size="sm" variant="outline" onClick={() => setSelectedRecovery(task)}>Chi tiết</Button></Td>
-            </Tr>)}
-            {!loading && tasks.map(task => (
+            </Tr>)(row.task) : ((task: MaintenanceTaskApi) => (
               <Tr key={task.id}>
-                <Td><p className="font-semibold text-stone-900">{task.title}</p><p className="mt-1 text-xs text-stone-500">Ưu tiên: {taskPriorityLabel[task.priority]}</p><details className="mt-1 text-xs text-stone-600"><summary className="w-fit cursor-pointer">Xem nội dung</summary><p className="mt-1 whitespace-pre-wrap">{task.reason}</p><p className="mt-1 break-all">Mã nhiệm vụ: {task.id}</p></details></Td>
+                <Td><p className="font-semibold text-stone-900">{task.title}</p><p className="mt-1 text-xs text-stone-500">Ưu tiên: {taskPriorityLabel[task.priority]}</p><details className="mt-1 text-xs text-stone-600"><summary className="w-fit cursor-pointer">Xem nội dung</summary><p className="mt-1 whitespace-pre-wrap">{task.reason}</p><p className="mt-1 break-all">Mã nhiệm vụ: {task.displayCode || recordDisplayCode(task.id)}</p></details></Td>
                 <Td><Badge variant="muted">Bảo trì</Badge></Td>
                 <Td>{task.unitCode}<div className="manager-task-contacts mt-1"><EmergencyContactsPanel key={task.storageUnitId} unitId={task.storageUnitId} /></div></Td>
                 <Td>
@@ -345,7 +353,7 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
                   )}
                 </Td>
               </Tr>
-            ))}
+            ))(row.task))}
           </Tbody>
         </Table>
       </Card>

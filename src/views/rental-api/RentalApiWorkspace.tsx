@@ -28,6 +28,7 @@ import RenewalOperationsPanel, { RenewalDocumentHistory, RenewalPaymentHistory }
 import RenewalDecisionModal from "./RenewalDecisionModal"
 import CustomerRenewalRequestModal from "../customer/CustomerRenewalRequestModal"
 import ReturnApiPanel from "../return-api/ReturnApiPanel"
+import { ViolationRecoveryPanel } from "../return-api/ViolationRecoveryPanel"
 import {
   rentalDate,
   rentalMoney,
@@ -114,7 +115,16 @@ function Pager({
   )
 }
 
+type WorkspaceTab = "rental" | "renewal" | "recovery"
+
+const workspaceTabs: ReadonlyArray<readonly [WorkspaceTab, string]> = [
+  ["rental", "Hồ sơ thuê"],
+  ["renewal", "Yêu cầu gia hạn"],
+  ["recovery", "Thu hồi kho"],
+]
+
 type WorkspaceProps = {
+  recoveryTarget?: { id: string; request: number }
   role: RentalApiRole
   focusStorageUnitId?: string
   initialRentalId?: string
@@ -129,7 +139,7 @@ export default function RentalApiWorkspace(props: WorkspaceProps) {
   return <WorkspaceSession key={`${identity}:${initialRentalId ?? ''}`} {...props} />
 }
 
-function WorkspaceSession({ role, focusStorageUnitId, initialRentalId, onRequestSupport, onBrowseUnits }: WorkspaceProps) {
+function WorkspaceSession({ recoveryTarget, role, focusStorageUnitId, initialRentalId, onRequestSupport, onBrowseUnits }: WorkspaceProps) {
   const actor = getAuthenticatedActor()
   const facilityId = role === "manager" ? singleManagerFacility(actor) : undefined
   const identity = `${actor?.id}:${role}:${JSON.stringify(actor?.facilityScopes)}:${JSON.stringify(actor?.permissions)}`
@@ -140,18 +150,19 @@ function WorkspaceSession({ role, focusStorageUnitId, initialRentalId, onRequest
     return role==="customer"&&params.get("vnpayReturn")==="true"&&renewalId
       ? {renewalId,status:params.get("status")} : null
   })
-  const [tab, setTab] = useState<"rental" | "renewal">(paymentReturn?"renewal":"rental")
+  const [tab, setTab] = useState<WorkspaceTab>(recoveryTarget ? "recovery" : paymentReturn ? "renewal" : "rental")
+  const [focusedRecovery, setFocusedRecovery] = useState(recoveryTarget)
   const [rq, setRq] = useState<RentalApiQuery>({
     page: 0,
     size: role === "manager" ? 10 : 20,
     facilityId,
-    sort: "createdAt,desc",
+    sort: "priority,asc",
   })
   const [nq, setNq] = useState<RenewalApiQuery>({
     page: 0,
     size: role === "manager" ? 10 : 20,
     facilityId,
-    sort: "createdAt,desc",
+    sort: "priority,asc",
   })
   const [search, setSearch] = useState("")
   const [detail, setDetail] = useState<Detail|undefined>(paymentReturn?{kind:"renewal",id:paymentReturn.renewalId}:initialRentalId?{kind:"rental",id:initialRentalId}:undefined)
@@ -175,6 +186,7 @@ function WorkspaceSession({ role, focusStorageUnitId, initialRentalId, onRequest
     return <Card className="p-5" role="alert">{managerFacilityNotice(actor)}</Card>
   return (
     <WorkspaceData
+      recoveryTarget={focusedRecovery}
       focusStorageUnitId={focusStorageUnitId}
       onRequestSupport={onRequestSupport}
       onBrowseUnits={onBrowseUnits}
@@ -183,6 +195,7 @@ function WorkspaceSession({ role, focusStorageUnitId, initialRentalId, onRequest
       identity={identity}
       tab={tab}
       setTab={(t) => {
+        if (t !== "recovery") setFocusedRecovery(undefined)
         setTab(t)
         setSearch("")
         setRq((q) => ({ ...q, search: undefined, page: 0 }))
@@ -205,6 +218,7 @@ function WorkspaceSession({ role, focusStorageUnitId, initialRentalId, onRequest
 }
 
 function WorkspaceData({
+  recoveryTarget,
   focusStorageUnitId,
   onRequestSupport,
   onBrowseUnits,
@@ -223,13 +237,14 @@ function WorkspaceData({
   action,
   setAction,
 }: {
+  recoveryTarget?: WorkspaceProps["recoveryTarget"]
   focusStorageUnitId?: string
   onRequestSupport?: WorkspaceProps['onRequestSupport']
   onBrowseUnits?: WorkspaceProps['onBrowseUnits']
   role: RentalApiRole
   identity: string
-  tab: "rental" | "renewal"
-  setTab: (t: "rental" | "renewal") => void
+  tab: WorkspaceTab
+  setTab: (t: WorkspaceTab) => void
   rq: RentalApiQuery
   nq: RenewalApiQuery
   setRq: (q: RentalApiQuery) => void
@@ -365,10 +380,12 @@ function WorkspaceData({
   return (
     <div className="space-y-5">
       <section className="space-y-5 rounded-2xl border border-stone-200 bg-white p-4 sm:p-5">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{role === 'customer' ? 'Kho của bạn' : 'Quản lý hợp đồng'}</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-stone-900">{role === "manager" ? "Hồ sơ thuê & Gia hạn" : "Hồ sơ thuê"}</h1>
-          <p className="mt-1 text-sm text-stone-500">Thông tin hợp đồng, thời hạn thuê, gia hạn và trả kho trong cùng một nơi.</p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{role === 'customer' ? 'Kho của bạn' : 'Quản lý hợp đồng'}</p>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight text-stone-900">{role === "manager" ? "Hồ sơ thuê & Gia hạn" : "Hồ sơ thuê"}</h1>
+            <p className="mt-1 text-sm text-stone-500">Thông tin hợp đồng, thời hạn thuê, gia hạn và trả kho trong cùng một nơi.</p>
+          </div>
         </div>
       <div className={role === "customer" ? "grid grid-cols-2 gap-2 lg:grid-cols-4" : "grid gap-3 sm:grid-cols-2"}>
         {[
@@ -385,13 +402,13 @@ function WorkspaceData({
           </Card>
         ))}
       </div>
-      {counts.error ? (
+      {tab !== "recovery" && counts.error ? (
         <ApiReadState {...counts} retry={counts.refresh} />
       ) : null}
-      <div className="grid grid-cols-2 gap-2 rounded-2xl border border-stone-200 bg-white p-1.5">
-        {([["rental", "Hồ sơ thuê"], ["renewal", "Yêu cầu gia hạn"]] as const).map(([value, label]) => (
+      <div role="group" aria-label="Mục hồ sơ thuê" className={`grid gap-2 rounded-2xl border border-stone-200 bg-white p-1.5 ${role === "customer" ? "grid-cols-3" : "grid-cols-2"}`}>
+        {workspaceTabs.filter(([value]) => value !== "recovery" || role === "customer").map(([value, label]) => (
           <Button key={value} type="button" aria-pressed={tab === value} variant={tab === value ? "primary" : "ghost"}
-            className={`min-h-11 rounded-xl px-2 ${tab === value ? renewalPrimaryClass : "!text-stone-600 hover:!bg-stone-50"}`}
+            className={`min-h-11 whitespace-normal rounded-xl px-2 ${tab === value ? renewalPrimaryClass : "!text-stone-600 hover:!bg-stone-50"}`}
             onClick={() => setTab(value)}>
             {label}
           </Button>
@@ -399,7 +416,8 @@ function WorkspaceData({
       </div>
       {tab === "renewal" && role === "manager" && <RenewalSearch value={search} onChange={setSearch} onSearch={() => change({ search: search.trim() || undefined })}>
         <select aria-label="Sắp xếp yêu cầu gia hạn" className="h-11 w-full rounded-lg border border-stone-200 bg-white px-3 text-sm text-stone-700 sm:w-auto"
-          value={query.sort || "createdAt,desc"} onChange={e => change({ sort: e.target.value })}>
+          value={query.sort || "priority,asc"} onChange={e => change({ sort: e.target.value })}>
+          <option value="priority,asc">Cần xử lý / hạn gần nhất</option>
           <option value="createdAt,desc">Mới nhất</option>
           <option value="createdAt,asc">Cũ nhất</option>
           <option value="newEndDate,asc">Ngày kết thúc đề nghị gần nhất</option>
@@ -448,9 +466,10 @@ function WorkspaceData({
             Sắp xếp
             <select
               className={`${inputClass} mt-1 block h-[42px] w-full`}
-              value={query.sort || "createdAt,desc"}
+              value={query.sort || "priority,asc"}
               onChange={(e) => change({ sort: e.target.value })}
             >
+              <option value="priority,asc">Cần xử lý / hạn gần nhất</option>
               <option value="createdAt,desc">Mới nhất</option>
               <option value="createdAt,asc">Cũ nhất</option>
               <option value="contractEndDate,asc">Ngày hết hạn gần nhất</option>
@@ -460,16 +479,23 @@ function WorkspaceData({
         )}
       </div>}
       </section>
-      <ApiReadState {...read} retry={refresh} />
-      {read.data && (
+      {tab === "recovery" ? <ViolationRecoveryPanel target={recoveryTarget} customerView={role === 'customer'} /> : <ApiReadState {...read} retry={refresh} />}
+      {tab !== "recovery" && read.data && (
         <Card className={role === 'customer' || (role === 'manager' && read.data.kind === 'rental') ? '!border-0 !bg-transparent !shadow-none' : 'overflow-hidden rounded-2xl'}>
           {role === 'manager' ? (read.data.kind === 'rental'
             ? <ManagerRentalGroups kind="rental" rows={read.data.page.data} onDetail={id => setDetail({ kind: 'rental', id })} />
             : <ManagerRentalGroups kind="renewal" rows={read.data.page.data} onDetail={id => setDetail({ kind: 'renewal', id })} />
-          ) : role === 'customer' && read.data.kind === 'renewal' ? <CustomerRenewalGroups rows={read.data.page.data} onDetail={id => setDetail({ kind: 'renewal', id })} /> : role === 'customer' && read.data.kind === 'rental' ? <div className="space-y-5">{[
-            { id: 'ongoing', title: 'Đang diễn ra', subtitle: 'Hồ sơ đang thuê, quá hạn hoặc đang xử lý trả kho.', rows: read.data.page.data.filter(row => row.status !== 'completed'), active: true },
-            { id: 'finished', title: 'Hồ sơ đã kết thúc', subtitle: 'Hồ sơ thuê đã hoàn tất xử lý.', rows: read.data.page.data.filter(row => row.status === 'completed'), active: false },
-          ].map(group => {
+          ) : role === 'customer' && read.data.kind === 'renewal' ? <CustomerRenewalGroups rows={read.data.page.data} onDetail={id => setDetail({ kind: 'renewal', id })} /> : role === 'customer' && read.data.kind === 'rental' ? <div className="space-y-5">{(() => {
+            const returningStatuses = ['return_requested', 'return_inspection', 'closing']
+            const returningRows = read.data.page.data.filter(row => returningStatuses.includes(row.status))
+            return [
+              { id: 'ongoing', title: 'Đang diễn ra', subtitle: 'Hồ sơ đang thuê, trong thời gian chuẩn bị hoặc quá hạn.', rows: read.data.page.data.filter(row => row.status !== 'completed' && !returningStatuses.includes(row.status)), active: true },
+              ...(returningRows.length > 0 ? [{ id: 'returning', title: 'Đang trả kho', subtitle: 'Hồ sơ đã chuyển sang quy trình trả kho, nghiệm thu và quyết toán.', rows: returningRows, active: true }] : []),
+              { id: 'finished', title: 'Hồ sơ đã kết thúc', subtitle: 'Hồ sơ thuê đã hoàn tất xử lý.', rows: read.data.page.data.filter(row => row.status === 'completed'), active: false },
+            ]
+          })().sort((a, b) => Number(b.active) - Number(a.active)
+            || (a.rows.length ? read.data!.page.data.findIndex(row => row.id === a.rows[0].id) : Infinity) - (b.rows.length ? read.data!.page.data.findIndex(row => row.id === b.rows[0].id) : Infinity))
+          .map(group => {
             const pages = Math.ceil(group.rows.length / 5)
             const page = Math.min(rentalPages[group.id] ?? 0, Math.max(0, pages - 1))
             return <RentalRecordGroup key={group.id} id={`rental-group-${group.id}`} title={group.title} subtitle={group.subtitle}
@@ -684,7 +710,7 @@ function WorkspaceData({
           onChanged={refresh}
         />
       )}
-      {returnRental && <Modal open onClose={() => setReturnRental(undefined)} title="Trả kho & quyết toán" size="3xl">
+      {returnRental && <Modal open onClose={() => setReturnRental(undefined)} title="Trả kho" size="2xl">
         <ReturnApiPanel role="customer" rentalId={returnRental.id} rentalActive={returnRental.active} onChanged={refresh} />
       </Modal>}
       {action?.kind === "request" && (

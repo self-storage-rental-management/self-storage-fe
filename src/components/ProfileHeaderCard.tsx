@@ -1,4 +1,5 @@
 import { userFacingError } from '../presentation/userFacingError'
+import { recordDisplayCode } from '../utils/recordDisplayCode'
 import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react'
 import type { User } from '../types'
 
@@ -186,7 +187,7 @@ export default function ProfileHeaderCard({
         </div>
 
         <div className="flex min-w-0 w-full flex-col justify-center border-t-[0.5px] border-stone-600 pt-5 max-[559px]:text-center min-[560px]:w-72 min-[560px]:min-w-72 min-[560px]:shrink-0 min-[560px]:border-l-[0.5px] min-[560px]:border-t-0 min-[560px]:pl-6 min-[560px]:pt-0 min-[560px]:text-left">
-          <p className="text-xs font-medium tracking-wide text-stone-300">Mã người dùng</p>
+          <p className="text-xs font-medium tracking-wide text-stone-300">Mã hồ sơ</p>
           <div className="mt-2 flex min-w-0 max-w-full items-center gap-2 max-[559px]:justify-center">
             <code title={user.id} className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-md border border-stone-600 bg-stone-800 px-3 py-2 font-mono text-sm text-stone-100">{displayUserId}</code>
             <button

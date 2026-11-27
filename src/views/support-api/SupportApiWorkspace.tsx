@@ -1,4 +1,5 @@
 import { parseVietnamDate } from '../../utils/vietnamTime'
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { singleManagerFacility, managerFacilityNotice } from "../manager/managerFacilityUi"
 import { useEffect, useRef, useState } from "react"
@@ -95,7 +96,7 @@ function SupportSession({
     page: 0,
     size: role === "manager" ? 10 : 20,
     ...(facilityId ? { facilityId } : {}),
-    sort: role === "staff" ? "updatedAt,desc" : "createdAt,desc",
+    sort: "priority,asc",
   })
   const [search, setSearch] = useState(""),
     [selected, setSelected] = useState<string>()
@@ -232,7 +233,7 @@ function SupportSession({
               <summary className="flex min-h-9 cursor-pointer list-none items-center gap-2 rounded-lg px-2 text-xs font-medium text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-800 focus-visible:outline-2 focus-visible:outline-amber-600 [&::-webkit-details-marker]:hidden">
                 <svg aria-hidden="true" className="show-icon h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></svg>
                 <span className="flex-1">Tìm kiếm & lọc</span>
-                {(!!query.search || !!query.status || query.sort !== 'createdAt,desc') && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] text-amber-800">Đang áp dụng</span>}
+                {(!!query.search || !!query.status || query.sort !== 'priority,asc') && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] text-amber-800">Đang áp dụng</span>}
                 <svg aria-hidden="true" className="show-icon h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-180 motion-reduce:transition-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
               </summary>
               <form className="mt-2 space-y-2 border-t border-stone-200/70 pt-3" onSubmit={e => { e.preventDefault(); change({ search: search.trim() }) }}>
@@ -247,13 +248,13 @@ function SupportSession({
                 </label>}
                 <label className="block text-xs text-stone-500">Sắp xếp
                   <select className={`${supportInputClass} !mt-1 !min-h-9 !py-1.5 !text-xs`} value={query.sort} disabled={locked} onChange={e => change({ sort: e.target.value })}>
-                    <option value="createdAt,desc">Mới nhất</option><option value="createdAt,asc">Cũ nhất</option><option value="updatedAt,desc">Vừa cập nhật</option><option value="subject,asc">Nội dung A-Z</option>
+                    <option value="priority,asc">Cần xử lý / hạn gần nhất</option><option value="createdAt,desc">Mới nhất</option><option value="createdAt,asc">Cũ nhất</option><option value="updatedAt,desc">Vừa cập nhật</option><option value="subject,asc">Nội dung A-Z</option>
                   </select>
                 </label>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" type="submit" variant="outline" className="!min-h-8 !px-3 !py-1 !text-xs" disabled={locked}>Áp dụng</Button>
-                <Button size="sm" type="button" variant="ghost" className="!min-h-8 !px-3 !py-1 !text-xs" disabled={locked} onClick={() => { setSearch(''); setQuery({ page: 0, size: role === 'manager' ? 10 : 20, ...(facilityId ? { facilityId } : {}), sort: 'createdAt,desc' }) }}>Đặt lại</Button>
+                <Button size="sm" type="button" variant="ghost" className="!min-h-8 !px-3 !py-1 !text-xs" disabled={locked} onClick={() => { setSearch(''); setQuery({ page: 0, size: role === 'manager' ? 10 : 20, ...(facilityId ? { facilityId } : {}), sort: 'priority,asc' }) }}>Đặt lại</Button>
               </div>
               </form>
             </details>}
@@ -262,10 +263,10 @@ function SupportSession({
             <SupportReadState {...read} loading={read.loading && !read.data} retry={reload} />
             {invalidScope ? <p role="alert" className="p-4 text-sm text-red-700">Không thể hiển thị hội thoại ngoài phạm vi truy cập của bạn.</p> : <>
               <div className="max-h-[550px] divide-y divide-stone-100 overflow-y-auto">
-                {visibleTickets.map(t => <button key={t.id} type="button" disabled={locked} aria-pressed={selected === t.id} aria-label={`Mở hội thoại: ${t.subject}`} className={`block w-full border-l-4 p-4 text-left transition-colors disabled:opacity-60 ${selected === t.id ? 'border-amber-500 bg-amber-50' : 'border-transparent hover:bg-white'}`} onClick={() => { if (command.locked || uploadLock.current) return; setCreation(undefined); setSelected(t.id); command.clearError() }}>
+                {visibleTickets.map(t => <button key={t.id} type="button" disabled={locked} aria-pressed={selected === t.id} aria-label={`Mở hội thoại: ${t.subject}`} className={`block w-full p-4 text-left transition-colors disabled:opacity-60 ${selected === t.id ? 'bg-amber-50 shadow-[inset_2px_0_0_#f59e0b]' : 'hover:bg-white'}`} onClick={() => { if (command.locked || uploadLock.current) return; setCreation(undefined); setSelected(t.id); command.clearError() }}>
                   <div className="flex items-center gap-3"><span aria-hidden="true" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#f5e3e1] text-sm font-semibold text-[#95575f]">{(role === 'customer' ? 'HT' : t.customerName?.trim().split(/\s+/).slice(-2).map(word => word[0]).join('') || 'KH')}</span><div className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-stone-900">{role === 'customer' ? actor.facilityNames?.[t.facilityId ?? ''] ?? 'Nhân viên hỗ trợ' : t.customerName ?? 'Khách hàng'}</span><span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${supportStatusClass(t.status)}`}>{supportStatusLabels[t.status]}</span></div></div>
                   <p className="mt-1.5 line-clamp-2 break-words text-xs leading-5 text-stone-600">{t.subject}</p>
-                  <p className="mt-2 flex justify-between gap-2 text-[10px] text-stone-400"><span>{t.displayCode || `#${t.id.slice(0, 8)}`}</span><span>{new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit' }).format(parseVietnamDate(t.createdAt))}</span></p>
+                  <p className="mt-2 flex justify-between gap-2 text-[10px] text-stone-400"><span>{t.displayCode || recordDisplayCode(t.id)}</span><span>{new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit' }).format(parseVietnamDate(t.createdAt))}</span></p>
                 </button>)}
                 {read.data && !visibleTickets.length && <p className="p-6 text-center text-sm text-stone-500">{'Chưa có cuộc trò chuyện phù hợp.'}</p>}
               </div>

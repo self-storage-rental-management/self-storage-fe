@@ -1,7 +1,9 @@
+import { recordDisplayCode, receiptDisplayCode, internalPaymentReference } from '../../utils/recordDisplayCode'
 import { displayStatusLabel } from '../../presentation/statusLabels'
 import { useRentalApiResource } from '../../hooks/useRentalApiResource'
 import { getAuthenticatedActor } from '../../services/authApi'
-import { getRenewalReceipt } from '../../services/renewalReceiptApi'
+import type { PaymentReceiptExport } from '../../utils/downloadPaymentReceipt'
+import { getRenewalReceipt, type RenewalReceiptData } from '../../services/renewalReceiptApi'
 import { formatVndAmount } from '../../i18n/currency'
 import { rentalDate } from '../rental-api/presentation'
 import ApiReadState from '../rental-api/ApiReadState'
@@ -16,20 +18,29 @@ export default function RenewalReceipt({ id,paymentId,role='customer' }: { id: s
   const read=useRentalApiResource(`${actor?.id}:${JSON.stringify(actor?.permissions)}:${JSON.stringify(actor?.facilityScopes)}:${receiptRole}:${id}:receipt:${paymentId}`,()=>getRenewalReceipt(receiptRole,id,paymentId))
   const p=read.data
   if(!p)return <ApiReadState {...read} retry={read.refresh} />
+  return <PaymentReceiptCard {...renewalReceiptExport(p)} />
+}
+
+export function renewalReceiptExport(p: RenewalReceiptData): PaymentReceiptExport {
   const remaining=p.kind==='REMAINING_RENT'
   const content=p.kind==='DEPOSIT'?'Thanh toán cọc gia hạn':p.kind==='INSTALLMENT'?'Thanh toán kỳ gia hạn':remaining?'Thanh toán tiền thuê còn lại và phí quá hạn nếu có':'Thanh toán toàn kỳ gia hạn'
   const method=paymentMethodLabel(remaining ? p.paymentMethod : p.paymentMethod || 'VNPAY', !remaining)
   const gatewayTime=p.gatewayPayDate && /^\d{14}$/.test(p.gatewayPayDate)
     ? `${p.gatewayPayDate.slice(8,10)}:${p.gatewayPayDate.slice(10,12)}:${p.gatewayPayDate.slice(12,14)} ${p.gatewayPayDate.slice(6,8)}/${p.gatewayPayDate.slice(4,6)}/${p.gatewayPayDate.slice(0,4)}`
     : rentalDate(p.paidAt)
-  return <PaymentReceiptCard title={p.kind==='DEPOSIT'?'Biên lai tiền thuê gia hạn trả trước':remaining?'Biên lai thanh toán khi ký gia hạn':'Biên lai tiền thuê gia hạn'} reference={p.renewalId}
-    status="Khoản thu đã đối soát" fields={[
-      ['Mã phiếu thu',p.receiptCode || p.transactionReference || p.paymentId], ['Mã giao dịch StorageHub',p.paymentId], [remaining?'Mã tham chiếu thanh toán':'Mã tham chiếu VNPay',p.transactionReference || '-'],
-      [remaining?'Mã phiếu thu hoặc giao dịch':'Mã giao dịch VNPay',p.gatewayTransactionNo || '-'],['Yêu cầu gia hạn',p.renewalId],
+  return {
+    title: p.kind==='DEPOSIT'?'Biên lai tiền thuê gia hạn trả trước':remaining?'Biên lai thanh toán khi ký gia hạn':'Biên lai tiền thuê gia hạn',
+    reference: receiptDisplayCode(p.receiptCode, p.transactionReference, p.paymentId),
+    status: 'Khoản thu đã đối soát',
+    fields: [
+      ['Mã phiếu thu',p.receiptCode || 'Chưa cấp'], [remaining?'Mã tham chiếu thanh toán':'Mã tham chiếu VNPay',internalPaymentReference(p.transactionReference) ? '-' : p.transactionReference || '-'],
+      [remaining?'Mã giao dịch thanh toán':'Mã giao dịch VNPay',p.gatewayTransactionNo || '-'],['Yêu cầu gia hạn',p.renewalLabel || recordDisplayCode(p.renewalId)],
       [remaining?'Thời điểm ghi nhận tại quầy':'Thời điểm VNPay ghi nhận',remaining ? rentalDate(p.paidAt) : gatewayTime],['Thời điểm StorageHub xử lý',rentalDate(p.processedAt)],
       ['Phương thức thanh toán',method],['Người ghi nhận',p.initiatedByName || '-'],
       ['Nội dung',content],['Số tiền',formatVndAmount(p.amount)],['Tiền tệ',paymentCurrencyLabel(p.currency)],
       ['Số hóa đơn',invoiceNumberLabel(p.invoiceNumber)],['Trạng thái hóa đơn',displayStatusLabel(p.invoiceStatus)],
       ['Ngày phát hành hóa đơn',p.invoiceIssuedAt ? rentalDate(p.invoiceIssuedAt) : '-'],
-    ]} footer={p.environment==='SANDBOX'?'Biên lai VNPay thử nghiệm được lưu cùng yêu cầu gia hạn để đối chiếu thanh toán.':'Biên lai được lưu cùng yêu cầu gia hạn để đối chiếu thanh toán.'} />
+    ],
+    footer: p.environment==='SANDBOX'?'Biên lai VNPay thử nghiệm được lưu cùng yêu cầu gia hạn để đối chiếu thanh toán.':'Biên lai được lưu cùng yêu cầu gia hạn để đối chiếu thanh toán.',
+  }
 }

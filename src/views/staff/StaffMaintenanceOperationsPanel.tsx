@@ -1,3 +1,4 @@
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import { useRef, useState } from 'react'
 import { Badge, Button, Card } from '../../components/ui'
 import { getAuthenticatedActor } from '../../services/authApi'
@@ -83,7 +84,7 @@ function MaintenanceWorkspace({ actorId, identity, taskId, showToast }: {
   const openCompletion = (task: MaintenanceTaskApi) => {
     setSelected(task)
     setResultReport(task.resultReport || '')
-    setMakeUnitAvailable(true)
+    setMakeUnitAvailable(!task.unitReadinessCheck)
     setEvidenceFiles([])
     setRecoveryHandoverLocation(task.recoveryHandoverLocation || '')
     setRecoveryWitnessStaffId(task.recoveryWitnessStaffId || '')
@@ -151,9 +152,10 @@ function MaintenanceWorkspace({ actorId, identity, taskId, showToast }: {
             </div>
             {task.resultReport && <p className="mt-2 rounded bg-stone-50 p-2 text-sm text-stone-700">Kết quả: {task.resultReport}</p>}
             <div className="mt-3 flex flex-wrap justify-end gap-2">
-              {task.status === 'open' && <Button size="sm" disabled={busy} onClick={() => start(task)}>Bắt đầu xử lý</Button>}
+              {task.status === 'open' && task.recoveryType !== 'VIOLATION' && <Button size="sm" disabled={busy} onClick={() => start(task)}>Bắt đầu xử lý</Button>}
               {task.recoveryType === 'RETURN_NO_SHOW' && !['completed', 'cancelled'].includes(task.status) && <span className="text-xs font-semibold text-red-700">Hoàn tất trong biên bản trả kho</span>}
-              {task.recoveryType !== 'RETURN_NO_SHOW' && task.status === 'in_progress' && <Button size="sm" disabled={busy} onClick={() => openCompletion(task)}>Hoàn thành nhiệm vụ</Button>}
+              {task.recoveryType === 'VIOLATION' && !['completed', 'cancelled'].includes(task.status) && <span className="text-xs font-semibold">Tiếp tục tại mục Thu hồi kho</span>}
+              {task.recoveryType !== 'RETURN_NO_SHOW' && task.recoveryType !== 'VIOLATION' && task.status === 'in_progress' && <Button size="sm" disabled={busy} onClick={() => openCompletion(task)}>Hoàn thành nhiệm vụ</Button>}
               {task.status === 'completed' && <span className="text-xs font-semibold text-emerald-700">Đã gửi kết quả</span>}
             </div>
           </div>
@@ -162,8 +164,9 @@ function MaintenanceWorkspace({ actorId, identity, taskId, showToast }: {
 
       {selected && (
         <div className="space-y-3 rounded border border-stone-300 bg-stone-50 p-4" aria-label="Hoàn thành nhiệm vụ bảo trì">
-          <div><p className="font-semibold">Hoàn thành: {formatMaintenanceTaskTitle(selected)}</p><p className="text-xs text-stone-500">Mã nhiệm vụ: {selected.id}</p></div>
+          <div><p className="font-semibold">Hoàn thành: {formatMaintenanceTaskTitle(selected)}</p><p className="text-xs text-stone-500">Mã nhiệm vụ: {selected.displayCode || recordDisplayCode(selected.id)}</p></div>
           {selected.recoveryRequired && <p className="rounded border border-red-300 bg-red-50 p-3 text-xs font-semibold text-red-900">Cần có bằng chứng kiểm kê và bàn giao hàng. Gian kho chưa được mở lại ở bước này.</p>}
+          {selected.unitReadinessCheck && <p className="text-sm">Kiểm tra gian trống, khóa và quyền truy cập cũ. Ghi kết quả vệ sinh, sửa chữa, đính kèm ảnh rồi chọn Đã sẵn sàng khai thác.</p>}
           <label className="block text-sm font-medium text-stone-700">
             Báo cáo kết quả
             <textarea className="mt-1 block min-h-24 w-full rounded border border-stone-300 bg-white p-2" maxLength={4000} disabled={busy} required value={resultReport} onChange={(event) => setResultReport(event.target.value)} placeholder="Mô tả hạng mục đã kiểm tra, sửa chữa và kết quả nghiệm thu…" />
@@ -184,7 +187,7 @@ function MaintenanceWorkspace({ actorId, identity, taskId, showToast }: {
           </label>
           <div className="flex justify-end gap-2">
             <Button variant="outline" disabled={busy} onClick={() => setSelected(null)}>Đóng</Button>
-            <Button disabled={busy || !resultReport.trim() || selected.recoveryRequired && (!recoveryHandoverLocation.trim() || ['INVENTORY_OVERDUE', 'SETUP_OVERDUE', 'MISMATCH_REMOVAL'].includes(selected.recoveryType || '') && !recoveryWitnessStaffId)} onClick={complete}>{busy ? 'Đang lưu…' : 'Gửi báo cáo và hoàn thành'}</Button>
+            <Button disabled={busy || !resultReport.trim() || selected.unitReadinessCheck && (!makeUnitAvailable || !evidenceFiles.length) || selected.recoveryRequired && (!recoveryHandoverLocation.trim() || ['INVENTORY_OVERDUE', 'SETUP_OVERDUE', 'MISMATCH_REMOVAL'].includes(selected.recoveryType || '') && !recoveryWitnessStaffId)} onClick={complete}>{busy ? 'Đang lưu…' : 'Gửi báo cáo và hoàn thành'}</Button>
           </div>
         </div>
       )}

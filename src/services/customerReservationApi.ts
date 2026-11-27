@@ -1,3 +1,4 @@
+import type { InventoryDecision } from './inventoryDecision'
 import { apiDownload, apiRequest } from './apiClient'
 import type { ApiInvoiceStatus, ApiPaymentStatus, ApiReservationStatus } from '../types/statusContracts'
 import { checkedPayment, checkedReservation, checkedReservationDetail, checkedReservationState, checkedStatusPage } from './statusContractValidation'
@@ -380,6 +381,7 @@ export interface ReservationQuote {
 }
 
 export interface CreateReservationInput {
+  acceptedHandoverTermsVersion?: string
   acceptedSetupEarlyExitPolicyVersion?: string | null
   quoteId: string
   identityDocumentNumber: string
@@ -397,6 +399,7 @@ export interface CustomerReservation {
   setupEarlyExitPolicyVersion?: string | null
   setupEarlyExitFee?: number | null
   setupReturnRentalId?: string | null
+  violationRecovery?: boolean
   setupReturnCaseId?: string | null
   setupReturnScheduledDate?: string | null
   pricingPolicyVersion?: string | null
@@ -481,7 +484,7 @@ export interface CheckInDocument {
   entityId: string
   status: string
   createdAt: string
-  kind?: 'SIGNED_CONTRACT' | 'PAYMENT_RECEIPT' | 'HANDOVER_EVIDENCE' | 'INVENTORY_EVIDENCE' | 'OTHER'
+  kind?: 'SIGNED_CONTRACT' | 'SIGNED_HANDOVER_RECORD' | 'PAYMENT_RECEIPT' | 'HANDOVER_EVIDENCE' | 'INVENTORY_EVIDENCE' | 'INVENTORY_DECISION_EVIDENCE' | 'IDENTITY_VERIFICATION_PHOTO' | 'OTHER'
 }
 
 export interface ReservationGoodsItem extends GoodsItemInput {
@@ -504,6 +507,7 @@ export interface ReservationGoodsItem extends GoodsItemInput {
 }
 
 export interface CustomerReservationDetail {
+  attendance?: import('../domain/reservationCheckInPolicy').HandoverAttendance | null
   currentFacility?: Pick<NonNullable<CustomerReservation['facilitySnapshot']>, 'name' | 'address' | 'city' | 'phone' | 'accessHours'> | null
   currentUnitType?: { name: string } & {
     [Field in Exclude<keyof NonNullable<CustomerReservation['unitTypeSnapshot']>, 'name' | 'areaM2'>]: number | null
@@ -524,6 +528,7 @@ export interface CustomerReservationDetail {
   goodsItems: ReservationGoodsItem[]
   payments: ReservationPaymentResult[]
   checkInStatus?: string | null
+  identityCorrectedAtHandover?: boolean
   handoverCompletedAt?: string | null
   lockReference?: string | null
   receiptConfirmationDueAt?: string | null
@@ -541,11 +546,17 @@ export interface CustomerReservationDetail {
   inventoryRemainderDeadlineAt?: string | null
   inventoryRemovalPublishedAt?: string | null
   inventoryRemovalDeadlineAt?: string | null
+  inventoryReturnWindowDays?: number | null
+  inventoryReturnExtensionDays?: number | null
+  inventoryReturnExtensionCount?: number | null
+  inventoryReturnCanExtend?: boolean | null
+  inventoryReturnPolicyVersion?: string | null
   inventoryEscalatedAt?: string | null
   setupCompletedAt?: string | null
   inventoryAppointmentAt?: string | null
   inventoryArrivedAt?: string | null
   inventoryIdentityVerifiedAt?: string | null
+  inventoryDecision?: InventoryDecision | null
   inventoryResolutionStatus?: InventoryResolutionStatus | null
   inventoryFullFit?: boolean
   inventoryPartialFitAvailable?: boolean
@@ -701,10 +712,14 @@ export async function withdrawPaymentComplaint(complaintId: string) {
   return response.data
 }
 
-export async function createVnpayPaymentUrl(reservationId: string, idempotencyKey: string) {
+export async function createVnpayPaymentUrl(reservationId: string, idempotencyKey: string, acceptedHandoverTermsVersion?: string) {
   const response = await apiRequest<ApiEnvelope<VnpayPaymentUrlResult>>(
     `/api/customer/reservations/${reservationId}/vnpay/payment-url`,
-    { method: 'POST', headers: { 'Idempotency-Key': idempotencyKey } },
+    {
+      method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey },
+      ...(acceptedHandoverTermsVersion ? { body: JSON.stringify({ acceptedHandoverTermsVersion }) } : {}),
+    },
   )
   return response.data
 }
@@ -882,7 +897,7 @@ export async function setCustomerInventoryAppointment(reservationId: string, app
 
 export async function resolveCustomerInventory(
   reservationId: string,
-  decision: 'ACCEPT_FULL' | 'ACCEPT_PARTIAL' | 'CANCEL_AND_RETURN',
+  decision: 'ACCEPT_FULL' | 'CANCEL_AND_RETURN',
   note?: string,
   scheduledDate?: string,
 ) {
@@ -892,6 +907,14 @@ export async function resolveCustomerInventory(
       method: 'POST',
       body: JSON.stringify({ decision, note: note?.trim() || null, scheduledDate: scheduledDate || null }),
     },
+  )
+  return checkedReservationDetail(response.data)
+}
+
+export async function extendCustomerInventoryReturnWindow(reservationId: string) {
+  const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
+    `/api/customer/reservations/${encodeURIComponent(reservationId)}/inventory-return-extension`,
+    { method: 'POST' },
   )
   return checkedReservationDetail(response.data)
 }

@@ -10,6 +10,7 @@ export interface ApiNotification {
   title: string
   content: string
   relatedEntityId: string | null
+  relatedEntityType?: string | null
   isRead: boolean
   createdAt: string
 }

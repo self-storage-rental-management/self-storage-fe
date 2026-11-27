@@ -1055,7 +1055,6 @@ const RETURN_TEST_CASES: ReturnCase[] = [
   { id: 'RET-TEST-EXCESS', rentalId: 'RNT-TEST-RETURN-EXCESS', unitId: 'A-106', facilityId: 'fac-001', facilityName: 'Kho Việt - Cơ sở Quận 1', customerId: 'demo-customer', customerName: 'Demo Customer', customerEmail: 'customer@storagehub.demo', customerPhone: '+84 908 123 456', requestedAt: new Date().toISOString(), scheduledDate: demoDateOffset(0), status: 'requested', initialConditionSnapshot: 'Kho sạch, khóa và tường nguyên vẹn.', packageCount: 4, initialWeightKg: 40, damageFee: 0, outstandingFee: 0, depositAmount: 5_500_000, netRefundAmount: 5_500_000, evidence: ['TEST · Phí trễ vượt tiền đảm bảo'], customerConfirmed: false }
 ]
 
-const mergeReturnTestCases = (returns: ReturnCase[]) => [...RETURN_TEST_CASES.filter(sample => !returns.some(item => item.id === sample.id)), ...returns]
 
 const INITIAL_RETURNS: ReturnCase[] = [
   ...RETURN_TEST_CASES,
@@ -3167,8 +3166,8 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const contractEndDay = toValidDate(rental.endDate); contractEndDay.setHours(0, 0, 0, 0)
     const inspectionDay = new Date(now); inspectionDay.setHours(0, 0, 0, 0)
     const overdueDays = inspectionDay.getTime() > contractEndDay.getTime() ? Math.floor((inspectionDay.getTime() - contractEndDay.getTime()) / 86_400_000) : 0
-    const lateFeePerDay = Math.round(((rental.monthlyRate / 30) * 0.5) * 100) / 100
-    const calculatedOverdueFee = Math.round(overdueDays * lateFeePerDay * 100) / 100
+    const lateFeePerDay = Math.round((rental.monthlyRate / 30) * 1.5)
+    const calculatedOverdueFee = Math.round(overdueDays * lateFeePerDay)
 
     // VẤN ĐỀ 2: Nếu lỗi phát sinh do cơ sở (thấm dột trần/vách, máy lạnh hỏng), khách hàng được miễn trừ phí hư hỏng/vệ sinh
     const isFacilityFault = params.moistureOrigin === 'facility_fault' || params.structuralInspection?.ceiling === 'leaking' || params.structuralInspection?.wall === 'damp_seepage'

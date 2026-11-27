@@ -157,8 +157,8 @@ export const ROLE_NOTIFICATION_CONFIGS: Record<Role, RoleNotificationConfig> = {
       },
       {
         id: 'biz_occupancy_threshold',
-        title: 'Cảnh Báo Tỷ Lệ Lấp Đầy & Hiệu Suất Cơ Sở',
-        description: 'Thông báo khi tỷ lệ lấp đầy tại một cơ sở đạt ngưỡng cao (>90%) để mở rộng, hoặc xuống thấp (<50%) cần chạy ưu đãi.',
+        title: 'Cảnh Báo Công Suất & Hiệu Suất Cơ Sở',
+        description: 'Thông báo khi công suất sử dụng tại một cơ sở đạt ngưỡng cao (>90%) để mở rộng, hoặc xuống thấp (<50%) cần chạy ưu đãi.',
         defaultEnabled: true,
         badge: 'Hiệu suất',
         badgeColor: 'bg-blue-50 text-blue-700 border-blue-200'

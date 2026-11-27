@@ -20,6 +20,27 @@ export function inventoryDeadlineText(value: string | null | undefined, now: num
   return `Còn ${days > 0 ? `${days} ngày ` : ''}${hours > 0 ? `${hours} giờ ` : ''}${minutes % 60} phút`
 }
 
+function formatVietnamDateOption(isoDate: string) {
+  const [year, month, day] = isoDate.split('-')
+  return `${day}/${month}/${year}`
+}
+
+function listValidVietnamDates(startMs: number, endInclusiveMs: number) {
+  if (!Number.isFinite(startMs) || !Number.isFinite(endInclusiveMs) || endInclusiveMs < startMs) return []
+  const startIso = vietnamDateTimeInput(startMs).slice(0, 10)
+  const endIso = vietnamDateTimeInput(endInclusiveMs).slice(0, 10)
+  const [sy, sm, sd] = startIso.split('-').map(Number)
+  const [ey, em, ed] = endIso.split('-').map(Number)
+  let cursor = Date.UTC(sy, sm - 1, sd)
+  const limit = Date.UTC(ey, em - 1, ed)
+  const dates: string[] = []
+  while (cursor <= limit && dates.length < 60) {
+    dates.push(new Date(cursor).toISOString().slice(0, 10))
+    cursor += 86_400_000
+  }
+  return dates
+}
+
 export default function InventoryAppointmentPanel({ detail, now, onSaved }: {
   detail: CustomerReservationDetail
   now: number
@@ -32,15 +53,18 @@ export default function InventoryAppointmentPanel({ detail, now, onSaved }: {
   const [saving, setSaving] = useState(false)
   const savingLock = useRef(false)
   const deadline = Date.parse(detail.inventoryFinalDeadlineAt ?? '')
-  const timeRemaining = inventoryDeadlineText(detail.inventoryFinalDeadlineAt, now)
   const expired = deadline <= now || Boolean(detail.inventoryEscalatedAt)
   const awaitingResult = detail.inventoryResolutionStatus != null && detail.inventoryResolutionStatus !== 'NOT_STARTED'
   const firstMinute = Math.floor(now / 60_000) * 60_000 + 60_000
   const canPlan = !expired && firstMinute < deadline && !detail.inventoryArrivedAt && !awaitingResult
+  const validDates = listValidVietnamDates(firstMinute, deadline - 1)
+  const selectedDate = appointment ? appointment.slice(0, 10) : (validDates[0] ?? '')
+  const selectedTime = appointment ? appointment.slice(11, 16) : '09:00'
 
   async function save() {
     if (savingLock.current) return
-    const candidate = parseVietnamDate(appointment)
+    const value = `${selectedDate}T${selectedTime}`
+    const candidate = parseVietnamDate(value)
     const timestamp = candidate.getTime()
     if (!canPlan || !Number.isFinite(timestamp) || timestamp <= Date.now() || timestamp >= deadline) {
       setError('Chọn giờ trong tương lai và trước hạn kiểm kê.')
@@ -64,10 +88,7 @@ export default function InventoryAppointmentPanel({ detail, now, onSaved }: {
   return (
     <section className="space-y-2 rounded-lg border border-violet-200 bg-violet-50 p-3 text-left text-xs text-violet-950">
       <p className="font-semibold text-sm text-violet-900">Lịch kiểm kê đầu vào</p>
-      {detail.setupCompletedAt && <p>Báo chuẩn bị xong lúc {formatTime(detail.setupCompletedAt)}</p>}
       {detail.inventoryAppointmentAt && <p>Giờ hẹn <b>{formatTime(detail.inventoryAppointmentAt)}</b></p>}
-      {detail.inventoryDueAt && <p>Mốc nhắc {formatTime(detail.inventoryDueAt)}</p>}
-      {detail.inventoryFinalDeadlineAt && <p>Hạn kiểm kê <b>{formatTime(detail.inventoryFinalDeadlineAt)}</b>{!expired && timeRemaining ? ` · ${timeRemaining}` : ''}</p>}
       {detail.inventoryEscalatedAt
         ? <p className="font-semibold text-red-800">Đang chờ thu hồi. Vui lòng liên hệ cơ sở.</p>
         : awaitingResult
@@ -79,12 +100,33 @@ export default function InventoryAppointmentPanel({ detail, now, onSaved }: {
             : <p>{detail.inventoryAppointmentAt ? 'Mang giấy tờ gốc đã đăng ký khi đến kiểm kê.' : 'Chọn ngày giờ đến cơ sở để kiểm kê.'}</p>}
       {canPlan && (editing ? (
         <form className="space-y-2" onSubmit={event => { event.preventDefault(); void save() }}>
-          <label className="grid gap-1">
-            Giờ hẹn theo giờ Việt Nam
-            <input type="datetime-local" required value={appointment} min={vietnamDateTimeInput(firstMinute)}
-              max={vietnamDateTimeInput(deadline - 1)} disabled={saving} onChange={event => setAppointment(event.target.value)}
-              className="min-w-0 rounded-md border border-violet-300 bg-white p-2" />
-          </label>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="grid gap-1">
+              Ngày hẹn (dd/mm/yyyy)
+              <select
+                required
+                value={selectedDate}
+                disabled={saving}
+                onChange={event => setAppointment(`${event.target.value}T${selectedTime}`)}
+                className="min-w-0 rounded-md border border-violet-300 bg-white p-2"
+              >
+                {validDates.map(isoDate => (
+                  <option key={isoDate} value={isoDate}>{formatVietnamDateOption(isoDate)}</option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1">
+              Giờ hẹn (giờ Việt Nam)
+              <input
+                type="time"
+                required
+                value={selectedTime}
+                disabled={saving}
+                onChange={event => setAppointment(`${selectedDate}T${event.target.value}`)}
+                className="min-w-0 rounded-md border border-violet-300 bg-white p-2"
+              />
+            </label>
+          </div>
           {detail.inventoryAppointmentAt && <label className="grid gap-1">
             Lý do đổi lịch (không bắt buộc)
             <textarea value={reason} maxLength={500} disabled={saving} onChange={event => setReason(event.target.value)}
@@ -92,13 +134,13 @@ export default function InventoryAppointmentPanel({ detail, now, onSaved }: {
           </label>}
           {error && <p role="alert" className="text-red-800">{error}</p>}
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" type="submit" disabled={saving || !appointment}>{saving ? 'Đang lưu…' : 'Lưu lịch kiểm kê'}</Button>
+            <Button size="sm" type="submit" disabled={saving || !selectedDate || !selectedTime}>{saving ? 'Đang lưu…' : 'Lưu lịch kiểm kê'}</Button>
             <Button size="sm" type="button" variant="outline" disabled={saving} onClick={() => setEditing(false)}>Hủy</Button>
           </div>
         </form>
       ) : (
         <Button size="sm" type="button" variant="outline" onClick={() => {
-          setAppointment(detail.inventoryAppointmentAt ? vietnamDateTimeInput(detail.inventoryAppointmentAt) : '')
+          setAppointment(detail.inventoryAppointmentAt ? vietnamDateTimeInput(detail.inventoryAppointmentAt) : `${validDates[0] ?? ''}T09:00`)
           setReason('')
           setError('')
           setEditing(true)

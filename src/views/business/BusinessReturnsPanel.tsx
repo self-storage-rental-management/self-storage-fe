@@ -1,5 +1,7 @@
+import { receiptDisplayCode } from '../../utils/recordDisplayCode'
 import ProcessingLeaseBoundary from '../../components/ProcessingLeaseBoundary'
 import ReturnPolicyNotice from '../../components/ReturnPolicyNotice'
+import { ViolationRecoveryEntry } from '../return-api/ViolationRecoveryPanel'
 import { useReturnRecords } from '../../hooks/useReturnRecords'
 import LocalizedDateInput from '../../components/LocalizedDateInput'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -39,12 +41,26 @@ export const statusLabels: Record<string, string> = {
   inspected: 'Đã nghiệm thu hiện trường',
   awaiting_business_review: 'Chờ duyệt quyết toán',
   recovery_required: 'Cần xử lý thu hồi',
+  withdrawn_for_recovery: 'Đã chuyển sang thu hồi',
   awaiting_customer_confirmation: 'Chờ khách xác nhận quyết toán',
   disputed: 'Đang khiếu nại (Chờ Quản lý thẩm định)',
   payment_due: 'Chờ khách nộp phụ phí',
   refund_pending: 'Chờ giải ngân hoàn cọc',
   completed: 'Đã hoàn tất thanh lý & trả kho',
   cancelled: 'Đã hủy yêu cầu',
+}
+
+export const returnTypeLabels: Record<string, string> = {
+  NORMAL: 'Đúng hạn / Thông thường',
+  EARLY_RETURN: 'Trả kho trước hạn',
+  CANCELLED_IN_SETUP: 'Hủy trong thời gian chuẩn bị',
+  RETURN_IN_SETUP: 'Trả trong thời gian chuẩn bị',
+  INVENTORY_MISMATCH: 'Trả kho do sai lệch kiểm kê',
+}
+
+export const settlementModeLabels: Record<string, string> = {
+  AUTO: 'Tự động (Hệ thống tính)',
+  MANUAL_REVIEW: 'Thẩm định thủ công',
 }
 
 export const statusBadgeVariant = (status: string) => {
@@ -75,7 +91,7 @@ const SAMPLE_RETURNS: Array<{
   facilityName: string
   customerName: string
   customerPhone?: string
-  scheduledDate: string
+  scheduledDate: string | null
   status: string
   returnType?: ApiReturn['returnType']
   settlementMode?: ApiReturn['settlementMode']
@@ -109,6 +125,49 @@ const SAMPLE_RETURNS: Array<{
   legacyPricingSnapshotAvailable?: boolean
   legacyPricingEvidenceFileId?: string | null
 }> = [
+  {
+    id: 'sample-ret-gemini',
+    rentalId: 'sample-rnt-gemini',
+    unitNumber: 'HCM-BN-F01-S-002',
+    facilityName: 'Kho Bình Nước',
+    customerName: 'gemini 3.8',
+    customerPhone: '0901 888 999',
+    scheduledDate: '2026-11-26',
+    status: 'requested',
+    returnType: 'EARLY_RETURN',
+    settlementMode: 'AUTO',
+    depositAmount: 1200000,
+    totalDeductions: 0,
+    netRefundAmount: 1200000,
+    amountDueFromCustomer: 0,
+    damageFee: 0,
+    cleaningFee: 0,
+    lostItemFee: 0,
+    overdueFee: 0,
+    outstandingFee: 0,
+    returnedKey: false,
+    returnedCard: false,
+    returnedLock: false,
+    inspectionNotes: 'Khách hàng gemini 3.8 xin thanh lý và trả kho sớm.',
+    customerDecisionNote: null,
+    managerResolutionNote: null,
+    proposedUnitStatus: 'available',
+    activeReturnPolicy: {
+      recalculationRequired: true,
+      completedRentalMonths: 1,
+      pricingTierMonths: 1,
+      setupDaysUsed: 0,
+      chargeableSetupDays: 0,
+      rentalDaysUsed: 30,
+      noticeShortfallDays: 0,
+      dailyPrice: 40000,
+      earlyTerminationFee: 240000,
+      noticeCharge: 0,
+      totalRentalCharge: 1200000,
+      rentalRefundAmount: 960000,
+      noticeDays: 0,
+    },
+  },
   {
     id: 'sample-ret-001',
     rentalId: 'sample-rnt-001',
@@ -339,12 +398,6 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
   const [newRentalId, setNewRentalId] = useState('')
   const [newScheduledDate, setNewScheduledDate] = useState(() => new Date(Date.now() + 86400000 * 3).toISOString().slice(0, 10))
   const [newNotes, setNewNotes] = useState('Hết hạn hợp đồng, đề nghị nghiệm thu đúng hẹn để nhận lại tiền cọc.')
-
-  // Modal Demo Auto-runner
-  const [demoModalOpen, setDemoModalOpen] = useState(false)
-  const [demoStep, setDemoStep] = useState(0)
-  const [demoRunning, setDemoRunning] = useState(false)
-  const [demoLogs, setDemoLogs] = useState<string[]>([])
 
   // Lưu cache local state
   const saveLocalState = (items: typeof localReturns) => {
@@ -749,7 +802,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
       setFeedback('Ban điều hành phê duyệt và giám sát. Nhân viên ghi nhận khoản thu hoặc hoàn tiền kèm biên lai.')
       return
     }
-    if (useApi && !refundReference.trim()) {
+    if (useApi && refundMethod === 'BANK_TRANSFER' && !refundReference.trim()) {
       setFeedback('Vui lòng nhập mã giao dịch hoàn tiền thực tế trước khi hoàn tất hồ sơ.')
       return
     }
@@ -766,13 +819,13 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
       if (useApi) {
         let receiptFileId = refundUpload.current?.file === refundFile ? refundUpload.current.id : undefined
         if (!receiptFileId) {
-          const asset = await uploadReturnEvidence(selectedItem.id, refundFile!)
+          const asset = await uploadReturnEvidence(selectedItem.id, refundFile!, 'business', 'bien-lai-thuc-hoan-tra-kho')
           receiptFileId = asset.id
           refundUpload.current = { file: refundFile!, id: asset.id }
         }
         const proof = {
           amount: selectedItem.netRefundAmount!,
-          transactionReference: refundReference.trim(),
+          transactionReference: refundMethod === 'BANK_TRANSFER' ? refundReference.trim() : '',
           paymentMethod: refundMethod,
           receiptFileId,
           confirmed: refundConfirmed,
@@ -933,77 +986,6 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
     }
   }
 
-  // 7. Thao tác: Chạy Demo toàn trình tự động 5 bước (Automated E2E Flow Runner)
-  const runAutomatedDemo = async () => {
-    if (useApi) return
-    setDemoRunning(true)
-    setDemoLogs([])
-    setDemoStep(1)
-
-    const addLog = (msg: string) => {
-      setDemoLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`])
-    }
-
-    addLog('BẮT ĐẦU DEMO QUY TRÌNH TOÀN TRÌNH: TRẢ KHO & QUYẾT TOÁN CỌC (STORAGEHUB)')
-
-    // Bước 1
-    await new Promise((r) => setTimeout(r, 1200))
-    addLog('1. Khách hàng tạo yêu cầu trả kho cho gian HCM-Q1-M-001 (Cọc: 9,500,000 ₫, Hẹn trả: 2026-10-18)')
-    setDemoStep(2)
-
-    // Bước 2
-    await new Promise((r) => setTimeout(r, 1500))
-    addLog('2. Nhân viên nghiệm thu: Thu đủ chìa & thẻ, phát hiện xước sàn (-200k), vệ sinh bụi (-100k) -> Tổng trừ: 300,000 ₫')
-    setDemoStep(3)
-
-    // Bước 3
-    await new Promise((r) => setTimeout(r, 1600))
-    addLog('3. Khách hàng xem biên bản: Không đồng ý phí vệ sinh 100k, gửi khiếu nại lên Ban Điều Hành -> Trạng thái: DISPUTED')
-    setDemoStep(4)
-
-    // Bước 4
-    await new Promise((r) => setTimeout(r, 1800))
-    addLog('4. Ban Điều Hành (BO) thẩm định: Miễn giảm 100% phí vệ sinh (100k -> 0k). Tái quyết toán: Hoàn cọc 9,300,000 ₫ -> Trạng thái: REFUND_PENDING')
-    setDemoStep(5)
-
-    // Bước 5
-    await new Promise((r) => setTimeout(r, 1800))
-    addLog('5. Kế toán giải ngân hoàn tiền cọc 9,300,000 ₫ qua VNPay (Mã GD: VNPAY-REFUND-20261017) -> Hợp đồng thanh lý thành công, Gian kho chuyển sang AVAILABLE!')
-
-    // Cập nhật demo record vào danh sách
-    const demoRecord = {
-      id: `demo-e2e-${Date.now()}`,
-      rentalId: 'demo-rental-q1',
-      unitNumber: 'HCM-Q1-M-001 (Demo E2E)',
-      facilityName: 'Kho Việt - Cơ sở Quận 1',
-      customerName: 'Demo Khách Hàng Toàn Trình',
-      customerPhone: '0901 888 999',
-      scheduledDate: new Date().toISOString().slice(0, 10),
-      status: 'completed',
-      depositAmount: 9500000,
-      totalDeductions: 200000,
-      netRefundAmount: 9300000,
-      amountDueFromCustomer: 0,
-      damageFee: 200000,
-      cleaningFee: 0,
-      lostItemFee: 0,
-      overdueFee: 0,
-      outstandingFee: 0,
-      returnedKey: true,
-      returnedCard: true,
-      returnedLock: true,
-      inspectionNotes: 'Sàn kho xước nhẹ, đã làm sạch. BO đã duyệt miễn phí vệ sinh.',
-      customerDecisionNote: 'Tôi khiếu nại phí vệ sinh vì đã dọn dẹp trước đó.',
-      managerResolutionNote: 'BO đồng ý miễn phí vệ sinh 100k. Đã chuyển hoàn 9,300,000 ₫ cho khách.',
-      proposedUnitStatus: 'available' as const,
-      settlementPaymentId: 'VNPAY-REFUND-20261017-OK',
-      completedAt: new Date().toLocaleString('vi-VN'),
-    }
-
-    saveLocalState([demoRecord, ...localReturns])
-    setDemoRunning(false)
-  }
-
   // 8. Nạp lại bộ dữ liệu mẫu chuẩn (Reset/Seed demo)
   const handleSeedDemoData = () => {
     if (useApi) return
@@ -1157,7 +1139,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                       <p className="break-words text-xs text-stone-500">{item.customerPhone || 'Khách hàng cá nhân'}</p>
                     </Td>
                     <Td className="whitespace-nowrap font-mono text-xs text-stone-600 font-semibold">
-                      {item.scheduledDate}
+                      {item.scheduledDate || 'Chưa có lịch'}
                     </Td>
                     <Td className="whitespace-nowrap text-xs font-semibold text-stone-800">
                       {formatAmount(item.depositAmount)}
@@ -1285,17 +1267,29 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
           open={modalOpen}
           onClose={() => { if (!submitting && !refundLock.current) setModalOpen(false) }}
           size="2xl"
-          title={`Hồ sơ trả kho: ${selectedItem.unitNumber}`}
+          title={`Hồ sơ trả kho: ${selectedItem.unitNumber} (${selectedItem.facilityName})`}
         >
           <ProcessingLeaseBoundary target="RETURN" id={selectedItem.id} enabled={isApiAuthenticated() && selectedItem.status !== 'completed'} onAcquired={async () => {
             const latest = await getReturn('business', selectedItem.id)
-            setSelectedItem(previous => previous ? { ...previous, ...latest, scheduledDate: latest.scheduledDate || previous.scheduledDate, customerPhone: latest.customerPhone || undefined } : null)
+            setSelectedItem(previous => previous ? {
+              ...previous,
+              ...latest,
+              netRefundAmount: latest.netRefundAmount ?? Number.NaN,
+              amountDueFromCustomer: latest.amountDueFromCustomer ?? Number.NaN,
+              scheduledDate: latest.scheduledDate || previous.scheduledDate,
+              customerPhone: latest.customerPhone || '',
+              customerDecisionNote: latest.customerDecisionNote ?? null,
+              returnedKey: latest.returnedKey ?? null,
+              returnedCard: latest.returnedCard ?? null,
+              returnedLock: latest.returnedLock ?? null,
+            } : null)
           }}><div className="space-y-5 text-sm">
             <p className="text-sm text-stone-500">{selectedItem.facilityName}</p>
+            {useApi && selectedItem.status === 'withdrawn_for_recovery' && <ViolationRecoveryEntry sourceReturnId={selectedItem.id} label="Mở hồ sơ thu hồi" />}
             {/* 1. THANH TIẾN TRÌNH 5 BƯỚC QUY TRÌNH CHUẨN HOÁ */}
-            <div className="space-y-3">
-              <p className="text-sm font-semibold text-stone-800">
-                Tiến trình nghiệp vụ
+            <div className="p-3.5 bg-stone-50 rounded-xl border border-stone-200">
+              <p className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-2.5">
+                Tiến trình quy trình nghiệp vụ trả kho
               </p>
               <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-5">
                 {[
@@ -1422,12 +1416,16 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                 <h3 className="font-semibold text-stone-900">Tổng quan & đối soát</h3>
                 <div className={selectedItem.activeReturnPolicy?.recalculationRequired ? "grid gap-3 md:grid-cols-2" : ""}>
                 {/* Thông tin hồ sơ */}
-                <div className="grid grid-cols-2 gap-4 p-4 bg-white rounded-xl border border-stone-200">
-                  <p className="col-span-2 font-semibold text-stone-800">Thông tin hồ sơ</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5 p-4 bg-stone-50 rounded-xl border border-stone-200">
                   <div>
                     <p className="text-xs text-stone-500 font-medium">Khách hàng</p>
                     <p className="font-bold text-stone-900">{selectedItem.customerName}</p>
                     <p className="text-xs text-stone-500 mt-0.5">{selectedItem.customerPhone || 'Chưa có số điện thoại'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-stone-500 font-medium">Gian kho & Cơ sở</p>
+                    <p className="font-bold text-stone-900 font-mono">{selectedItem.unitNumber}</p>
+                    <p className="text-xs text-stone-500 truncate mt-0.5">{selectedItem.facilityName}</p>
                   </div>
                   <div>
                     <p className="text-xs text-stone-500 font-medium">Ngày hẹn trả kho</p>
@@ -1435,27 +1433,33 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                   </div>
                   <div>
                     <p className="text-xs text-stone-500 font-medium">Trạng thái hồ sơ</p>
-                    <Badge variant={statusBadgeVariant(selectedItem.status)}>
-                      {returnStatusLabel(selectedItem)}
-                    </Badge>
+                    <div className="mt-0.5">
+                      <Badge variant={statusBadgeVariant(selectedItem.status)}>
+                        {returnStatusLabel(selectedItem)}
+                      </Badge>
+                    </div>
                   </div>
                   <div>
                     <p className="text-xs text-stone-500 font-medium">Phân loại trả kho</p>
-                    <p className="font-bold text-stone-900">{selectedItem.returnType ? ({
-                      CANCELLED_IN_SETUP: 'Hủy trong thời gian chuẩn bị',
-                      RETURN_IN_SETUP: 'Trả kho trong thời gian chuẩn bị',
-                      INVENTORY_MISMATCH: 'Trả kho do sai lệch kiểm kê',
-                      EARLY_RETURN: 'Trả kho trước hạn',
-                      NORMAL: 'Trả kho thông thường',
-                    } as const)[selectedItem.returnType] : 'Chưa phân loại'}</p>
+                    <p className="font-bold text-stone-900">
+                      {returnTypeLabels[selectedItem.returnType || ''] || (selectedItem.returnType ? ({
+                        CANCELLED_IN_SETUP: 'Hủy trong thời gian chuẩn bị',
+                        RETURN_IN_SETUP: 'Trả kho trong thời gian chuẩn bị',
+                        INVENTORY_MISMATCH: 'Trả kho do sai lệch kiểm kê',
+                        EARLY_RETURN: 'Trả kho trước hạn',
+                        NORMAL: 'Trả kho thông thường',
+                      } as const)[selectedItem.returnType] : 'Chưa phân loại')}
+                    </p>
                   </div>
                   <div>
-                    <p className="text-xs text-stone-500 font-medium">Cách quyết toán</p>
-                    <p className="font-bold text-stone-900">{selectedItem.settlementMode === 'AUTO' ? 'Tự động' : selectedItem.settlementMode === 'MANUAL_REVIEW' ? 'Xem xét thủ công' : 'Chưa xác định'}</p>
+                    <p className="text-xs text-stone-500 font-medium">Phương thức quyết toán</p>
+                    <p className="font-bold text-stone-900">
+                      {settlementModeLabels[selectedItem.settlementMode || ''] || (selectedItem.settlementMode === 'AUTO' ? 'Tự động' : selectedItem.settlementMode === 'MANUAL_REVIEW' ? 'Xem xét thủ công' : 'Chưa xác định')}
+                    </p>
                   </div>
                   <div>
                     <p className="text-xs text-stone-500 font-medium">Tiền cọc an ninh ban đầu</p>
-                    <p className="font-bold text-stone-900">{formatAmount(selectedItem.depositAmount)}</p>
+                    <p className="font-bold text-emerald-800 font-mono">{formatAmount(selectedItem.depositAmount)}</p>
                   </div>
                 </div>
                 {selectedItem.activeReturnPolicy?.recalculationRequired && (
@@ -1570,8 +1574,15 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                 )}
 
                 {selectedItem.activeReturnPolicy?.recalculationRequired && (
-                  <div className="mb-3 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950">
-                    <p><b>Quy tắc đối soát:</b> Tính lại ưu đãi do trả kho sau khi kỳ thuê bắt đầu. Tiền đảm bảo kho được đối soát riêng, không gộp vào tiền thuê dự kiến hoàn.</p>
+                  <div className="mb-3 rounded-xl border border-blue-200 bg-blue-50 p-3.5 text-xs text-blue-950">
+                    <p className="font-bold text-sm">Tính lại ưu đãi do trả kho trước hạn sau khi kích hoạt hợp đồng</p>
+                    <p className="mt-1 leading-relaxed">
+                      Đã sử dụng {selectedItem.activeReturnPolicy.completedRentalMonths} tháng (áp dụng mức giá gói {selectedItem.activeReturnPolicy.pricingTierMonths != null ? `${selectedItem.activeReturnPolicy.pricingTierMonths} tháng` : 'niêm yết'}).
+                      Phí chấm dứt sớm: <b>{formatAmount(selectedItem.activeReturnPolicy.earlyTerminationFee)}</b> ·
+                      Phí thời gian sử dụng & báo trước: <b>{formatAmount(selectedItem.activeReturnPolicy.totalRentalCharge - selectedItem.activeReturnPolicy.earlyTerminationFee)}</b> ·
+                      Hoàn tiền thuê dự kiến: <b>{formatAmount(selectedItem.activeReturnPolicy.rentalRefundAmount)}</b>.
+                      (Tiền đảm bảo kho vẫn được đối soát riêng bên dưới).
+                    </p>
                   </div>
                 )}
 
@@ -1613,7 +1624,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                         <span className="text-red-600 font-mono">-{formatAmount(selectedItem.activeReturnPolicy.totalRentalCharge)}</span>
                       </div>
                       <div className="flex justify-between p-2 border-b border-stone-100 text-stone-600 text-xs">
-                        <span>• Hoàn tiền thuê theo bảng giá đã lưu</span>
+                        <span>• Tiền thuê hoàn lại dự kiến theo chính sách</span>
                         <span className="text-emerald-700 font-mono">+{formatAmount(selectedItem.activeReturnPolicy.rentalRefundAmount)}</span>
                       </div>
                     </>}
@@ -1680,7 +1691,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                   <section className="rounded-xl border border-stone-200 bg-white p-4">
                     <h4 className="text-sm font-semibold text-stone-900">Chứng từ quyết toán</h4>
                     <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2">
-                      <div className="min-w-0"><dt className="text-stone-500">Mã giao dịch giải ngân</dt><dd className="mt-1 break-all font-medium text-stone-800">{selectedItem.settlementPaymentId}</dd></div>
+                      <div className="min-w-0"><dt className="text-stone-500">Mã phiếu hoặc giao dịch giải ngân</dt><dd className="mt-1 break-all font-medium text-stone-800">{receiptDisplayCode(selectedItem.settlementReceipt?.receiptCode, selectedItem.settlementPaymentId)}</dd></div>
                       {selectedItem.completedAt && <div><dt className="text-stone-500">Thời điểm hoàn tất</dt><dd className="mt-1 font-medium text-stone-800">{Number.isNaN(Date.parse(selectedItem.completedAt)) ? selectedItem.completedAt : new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(selectedItem.completedAt))}</dd></div>}
                     </dl>
                   </section>
@@ -1818,8 +1829,8 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                       onChange={(e) => setInspectProposedUnit(e.target.value as any)}
                       className="w-full px-2.5 py-1.5 border border-stone-300 rounded-lg bg-white text-xs"
                     >
-                      <option value="available">Sẵn sàng đón khách mới (Available)</option>
-                      <option value="maintenance">Cần bảo trì sửa chữa (Maintenance)</option>
+                      <option value="available">Sẵn sàng đón khách mới</option>
+                      <option value="maintenance">Cần bảo trì sửa chữa</option>
                     </select>
                   </div>
                 </div>
@@ -1932,8 +1943,8 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                       onChange={(e) => setProposedUnit(e.target.value as any)}
                       className="w-full px-2 py-1 border border-stone-300 rounded bg-white text-xs"
                     >
-                      <option value="available">Sẵn sàng (Available)</option>
-                      <option value="maintenance">Bảo trì (Maintenance)</option>
+                      <option value="available">Sẵn sàng đưa vào sử dụng</option>
+                      <option value="maintenance">Bảo trì / Sửa chữa kho</option>
                     </select>
                   </div>
                 </div>
@@ -1984,9 +1995,10 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                   </span>
                 </div>
 
-                <div>
+                {useApi && <label className="block text-xs font-bold text-stone-700">Phương thức hoàn tiền<select className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-normal" value={refundMethod} disabled={submitting} onChange={event => { setRefundMethod(event.target.value as 'CASH' | 'BANK_TRANSFER'); setRefundConfirmed(false) }}><option value="BANK_TRANSFER">Chuyển khoản</option><option value="CASH">Tiền mặt</option></select></label>}
+                {(!useApi || refundMethod === 'BANK_TRANSFER') && <div>
                   <label className="block text-xs font-bold text-stone-700 mb-1">
-                    Mã giao dịch chuyển khoản / biên nhận tiền mặt (*)
+                    Mã giao dịch chuyển khoản
                   </label>
                   <input
                     type="text"
@@ -1994,10 +2006,10 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                     disabled={submitting}
                     maxLength={120}
                     onChange={(e) => { setRefundReference(e.target.value); setRefundConfirmed(false) }}
-                    placeholder="VD: VNPAY-REFUND-992288 hoặc FT261017001"
+                    placeholder="VD: FT261017001"
                     className="w-full px-2.5 py-1.5 border border-stone-300 rounded-lg bg-white text-xs font-mono"
                   />
-                </div>
+                </div>}
 
                 <div>
                   <label className="block text-xs font-bold text-stone-700 mb-1">
@@ -2013,8 +2025,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                 </div>
 
                 {useApi && <>
-                  <label className="block text-xs font-bold text-stone-700">Phương thức hoàn tiền<select className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-normal" value={refundMethod} disabled={submitting} onChange={event => { setRefundMethod(event.target.value as 'CASH' | 'BANK_TRANSFER'); setRefundConfirmed(false) }}><option value="BANK_TRANSFER">Chuyển khoản</option><option value="CASH">Tiền mặt</option></select></label>
-                  <label className="block text-xs font-bold text-stone-700">Biên lai thực hoàn (*)<input key={selectedItem.id} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" disabled={submitting} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-normal" onChange={event => { setRefundFile(event.target.files?.[0] ?? null); setRefundConfirmed(false); refundUpload.current = null }} /></label>
+                  <label className="block text-xs font-bold text-stone-700">Biên lai thực hoàn trả kho (*)<input key={selectedItem.id} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" disabled={submitting} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-normal" onChange={event => { setRefundFile(event.target.files?.[0] ?? null); setRefundConfirmed(false); refundUpload.current = null }} /></label>
                   <label className="flex items-start gap-2 text-xs text-stone-700"><input type="checkbox" className="mt-0.5" checked={refundConfirmed} disabled={submitting || !refundFile} onChange={event => setRefundConfirmed(event.target.checked)} /><span>Tôi xác nhận đã thực hoàn đúng số tiền hiển thị và đã đối chiếu biên lai. Hệ thống chỉ ghi nhận chứng từ, không tự chuyển tiền.</span></label>
                 </>}
                 <div className="flex justify-end gap-2 pt-1">
@@ -2024,7 +2035,7 @@ export default function BusinessReturnsPanel({ user, refreshVersion = 0 }: Props
                   <Button
                     variant="primary"
                     size="sm"
-                    disabled={submitting || (useApi && (!refundFile || !refundConfirmed || !refundReference.trim() || selectedItem.status !== 'refund_pending'))}
+                    disabled={submitting || (useApi && (!refundFile || !refundConfirmed || (refundMethod === 'BANK_TRANSFER' && !refundReference.trim()) || selectedItem.status !== 'refund_pending'))}
                     className="bg-purple-600 hover:bg-purple-700 text-white font-bold cursor-pointer"
                     onClick={handleCompleteRefund}
                   >

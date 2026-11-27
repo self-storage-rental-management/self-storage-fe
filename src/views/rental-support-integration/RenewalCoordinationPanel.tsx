@@ -12,6 +12,7 @@ import {
   isUuid,
 } from "../../services/renewalOperationsApi"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import {
   useRenewalCommand,
   isUncertainRenewalOutcome,
@@ -163,7 +164,7 @@ export default function RenewalCoordinationPanel({
                     .filter((e) => e.kind === "INCIDENT")
                     .map((e) => (
                       <option key={e.id} value={e.id}>
-                        {e.occurredAt}, {e.id}
+                        {e.occurredAt}, {recordDisplayCode(e.id)}
                       </option>
                     ))}
                 </select>
@@ -259,7 +260,7 @@ export function RenewalAssignmentSummary({ assignment, expectedVersion }: {
     return <p role="status">Chưa xác minh được nhân viên phụ trách. Kiểm tra lại hồ sơ.</p>
   if (assignment.status === "UNASSIGNED") return <p>Chưa phân công nhân viên.</p>
   return <div>
-    <p>Nhân viên phụ trách: {assignment.staffName || assignment.staffId}</p>
+    <p>Nhân viên phụ trách: {assignment.staffName || 'Chưa có tên nhân viên'}</p>
     {assignment.status === "INELIGIBLE" && <p role="status">Nhân viên được phân công hiện không đủ điều kiện xử lý hồ sơ.</p>}
   </div>
 }

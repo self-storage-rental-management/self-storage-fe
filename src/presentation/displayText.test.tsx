@@ -1,10 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { displayText, displayProps } from './displayText'
+import { displayRoleNames, displayText, displayProps } from './displayText'
 import { userFacingError } from './userFacingError'
 import { ApiClientError } from '../services/apiClient'
 
 describe('câu hiển thị', () => {
+  it('hiển thị tên vai trò bằng tiếng Việt trong thông báo và lịch sử cũ', () => {
+    expect(displayRoleNames('BO tiếp tục xử lý khi Manager quá hạn.'))
+      .toBe('Chủ doanh nghiệp tiếp tục xử lý khi quản lý cơ sở quá hạn.')
+    expect(displayRoleNames('Manager đã báo BO.')).toBe('Quản lý cơ sở đã báo chủ doanh nghiệp.')
+  })
+
+  it('giữ nguyên địa chỉ liên hệ, đường dẫn, mã hệ thống và từ bo trong tiếng Việt', () => {
+    const source = 'manager@storagehub.demo · BO@example.com · https://example.com/manager/BO · BO_REVIEW_OVERDUE · bo tròn'
+    expect(displayRoleNames(source)).toBe(source)
+  })
+
   it('giải mã các ký tự HTML thành nội dung hiển thị đúng', () => {
     const html = renderToStaticMarkup(<p>Sách &amp; hồ sơ &gt; &quot;Gỗ&quot;</p>)
     expect(html).toContain('Sách &amp; hồ sơ &gt; &quot;Gỗ&quot;')

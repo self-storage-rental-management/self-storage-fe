@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Badge, Button, Card, SectionHeader, StatCard, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import { getAdminDashboard, type AdminApiDashboard } from '../../services/adminApi'
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import type { ApiRoleCode } from '../../services/authApi'
 import type { Role } from '../../types'
 import { RefreshIcon, roleColors, roleLabels } from './adminPanelTypes'

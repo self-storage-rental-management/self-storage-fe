@@ -129,15 +129,18 @@ export function staffGoodsCategoryLabel(value: string) {
 }
 
 export function inventoryReportNote(notes?: string | null, identityNote?: string | null) {
-  let text = notes?.trim() || ""
-  const current = "Ghi chú kiểm kê: "
-  if (text.startsWith(current)) return text.slice(current.length)
-  if (identityNote?.trim()) {
-    const legacyIdentity = "Ghi chú xác minh: " + identityNote.trim()
-    if (text === legacyIdentity) return ""
-    if (text.startsWith(legacyIdentity + "\n")) text = text.slice(legacyIdentity.length + 1)
-  }
-  return text.replace(/^Ghi chú bàn giao: /, "")
+  const identity = identityNote?.trim()
+  const cleaned = (notes || '').split(/\r?\n/).map(line => {
+    let text = line.trim()
+    // Old reports embedded generated conclusions and identity notes inside the free-text note.
+    while (/^(Ghi chú kiểm kê|Ghi chú bàn giao):\s*/.test(text)) {
+      text = text.replace(/^(Ghi chú kiểm kê|Ghi chú bàn giao):\s*/, '')
+    }
+    if (!text || text.startsWith('Kết quả đối chiếu hàng hóa:')) return ''
+    if (identity && text === `Ghi chú xác minh: ${identity}`) return ''
+    return text
+  }).filter(Boolean)
+  return Array.from(new Set(cleaned)).join('\n')
 }
 
 export function parseEmptyStorageHandover(note: string | null | undefined) {
@@ -161,7 +164,9 @@ export function parseEmptyStorageHandover(note: string | null | undefined) {
 export function staffCheckInStatusLabel(
   checkInStatus: string | null,
   reservationStatus: string,
+  recoveryTransferred = false,
 ) {
+  if (recoveryTransferred) return "Đã chuyển thu hồi"
   return checkInStatus
     ? (CHECK_IN_STATUS_LABELS[checkInStatus] ?? "Đang xử lý")
     : (RESERVATION_STATUS_LABELS[reservationStatus] ?? "Đang xử lý")
@@ -356,7 +361,12 @@ export function extractStaffFieldErrors(error: unknown): Record<string, string> 
   if (msg.includes("initialUnitCondition") || msg.includes("hiện trạng kho trống")) {
     fieldErrors.initialCondition = "Cần ghi nhận hiện trạng kho trống trước khi bàn giao"
   }
-  if (msg.includes("lockReference") || msg.includes("mã ổ khóa")) {
+  const normalizedMessage = msg.toLocaleLowerCase("vi-VN")
+  if (normalizedMessage.includes("mã ổ khóa đang được sử dụng")
+    || normalizedMessage.includes("chưa đủ điều kiện cấp lại")
+    || normalizedMessage.includes("active credential of this type already exists")) {
+    fieldErrors.keyLockReference = "Mã ổ khóa đang được sử dụng tại cơ sở này. Vui lòng chọn mã khác."
+  } else if (msg.includes("lockReference") || normalizedMessage.includes("mã ổ khóa")) {
     fieldErrors.keyLockReference = "Vui lòng kiểm tra lại mã ổ khóa bàn giao"
   }
 

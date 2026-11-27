@@ -1,3 +1,4 @@
+import { receiptDisplayCode } from './recordDisplayCode'
 import { displayStatusLabel } from '../presentation/statusLabels'
 import * as XLSX from 'xlsx'
 import type { MonthlyRevenueRecord } from '../data/demoDatabase'
@@ -42,7 +43,7 @@ export function exportRevenueExcel(options: RevenueExportOptions = {}): string {
     ['Phạm vi: Tháng 4 - Tháng 9'],
     [`Cơ sở: ${facilityName}`, '', `Ngày xuất báo cáo: ${todayStr}`],
     [],
-    ['Tháng', 'Doanh thu', 'Tăng trưởng', 'Số hợp đồng', 'Tỷ lệ lấp đầy']
+    ['Tháng', 'Doanh thu', 'Tăng trưởng', 'Số hợp đồng']
   ]
 
   // Thêm từng dòng tháng
@@ -51,8 +52,7 @@ export function exportRevenueExcel(options: RevenueExportOptions = {}): string {
       r.month,
       r.revenue,
       r.growth,
-      r.contracts,
-      r.occupancyRate
+      r.contracts
     ])
   })
 
@@ -72,8 +72,7 @@ export function exportRevenueExcel(options: RevenueExportOptions = {}): string {
     { wch: 28 }, // Tháng / Chỉ số
     { wch: 20 }, // Doanh thu
     { wch: 16 }, // Tăng trưởng
-    { wch: 16 }, // Số hợp đồng
-    { wch: 18 }  // Tỷ lệ lấp đầy
+    { wch: 16 }  // Số hợp đồng
   ]
 
   // Định dạng format số tiền cho các ô doanh thu: #,##0 "₫"
@@ -203,7 +202,6 @@ export function exportManagerFacilityExcel(options: ManagerFacilityExportOptions
     [`Cơ sở: ${facilityName}`, '', `Ngày xuất báo cáo: ${todayStr}`],
     [],
     ['CHỈ SỐ VẬN HÀNH', 'GIÁ TRỊ', 'ĐƠN VỊ / MÔ TẢ'],
-    ['Tỷ lệ lấp đầy', typeof m.occupancyRate === 'number' ? `${m.occupancyRate}%` : m.occupancyRate, 'Tỷ lệ gian kho đang có khách thuê'],
     ['Tổng số gian kho', m.totalUnits, 'Tổng quy mô cơ sở'],
     ['Gian kho đang sử dụng', m.occupiedUnits, 'Số gian có hợp đồng thuê hoạt động'],
     ['Gian kho còn trống', m.availableUnits, 'Khả dụng cho khách thuê mới'],
@@ -229,8 +227,8 @@ export function exportManagerFacilityExcel(options: ManagerFacilityExportOptions
     ])
     XLSX.utils.book_append_sheet(wb, flow, 'Thu và hoàn tiền')
     const refunds = XLSX.utils.aoa_to_sheet([
-      ['Đơn', 'Khách', 'Trạng thái', 'Cọc', 'Ghi có tiền thuê', 'Khấu trừ', 'Tiền hoàn', 'Ngày chi', 'Tham chiếu', 'Đã xác minh chi'],
-      ...f.settlements.map(s => [s.reservationCode, s.customerName, displayStatusLabel(s.status), s.deposit ?? 'Chưa phân bổ', s.rentalCredit ?? 'Chưa phân bổ', s.deductions ?? 'Chưa phân bổ', s.refund, s.paidAt || '', s.reference || '', s.payoutRecorded ? 'Đã ghi nhận' : 'Chưa hoàn']),
+      ['Đơn', 'Khách', 'Trạng thái', 'Cọc', 'Ghi có tiền thuê', 'Khấu trừ', 'Tiền hoàn', 'Ngày chi', 'Mã phiếu', 'Tham chiếu đối soát', 'Đã xác minh chi'],
+      ...f.settlements.map(s => [s.reservationCode, s.customerName, displayStatusLabel(s.status), s.deposit ?? 'Chưa phân bổ', s.rentalCredit ?? 'Chưa phân bổ', s.deductions ?? 'Chưa phân bổ', s.refund, s.paidAt || '', s.receiptCode || '', s.reference ? receiptDisplayCode(null, s.reference) : '', s.payoutRecorded ? 'Đã ghi nhận' : 'Chưa hoàn']),
     ])
     XLSX.utils.book_append_sheet(wb, refunds, 'Quyết toán tiền hoàn')
   }

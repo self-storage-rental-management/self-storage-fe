@@ -65,3 +65,21 @@ it('shows suitable but sold-out types when the selected type is incompatible', (
   expect(html).toContain('Kho vừa')
   expect(html).toContain('Hết kho')
 })
+
+it('shows insufficient capacity message when pallet slots are exhausted', () => {
+  const html = renderToStaticMarkup(<CustomerNoCompatibleWarehouse
+    check={{
+      ...baseCheck,
+      totalGoodsWeightKg: 1476,
+      issues: ['Không đủ vị trí tấm kê hoặc tải trọng còn lại để xếp hàng 1. Thuật toán xếp ba chiều đã thử các hướng đặt được phép nhưng còn 99 kiện chưa được xếp. Còn 0 vị trí tấm kê trống.'],
+    }}
+    goodsItems={[{ category: 'FURNITURE', quantity: 123, lengthCm: 123, widthCm: 123, heightCm: 78, weightPerItemKg: 12, fragile: false }]}
+    maxSupportedStorageLimits={{ maxCargoLengthCm: 210, maxCargoWidthCm: 170, maxCargoHeightCm: 97, maxCargoWeightKg: 3600 }}
+    onEditGoods={() => {}}
+    onSupport={() => {}}
+  />)
+
+  expect(html).toContain('Chưa có loại kho đủ sức chứa')
+  expect(html).toContain('vượt quá sức chứa của các loại kho hiện có')
+  expect(html).toContain('Không đủ vị trí tấm kê hoặc tải trọng còn lại để xếp hàng 1')
+})

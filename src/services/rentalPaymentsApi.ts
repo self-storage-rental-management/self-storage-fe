@@ -24,10 +24,12 @@ const RENTAL_PAYMENT_PURPOSES: RentalPaymentPurpose[] = [
 ]
 
 export interface RentalPaymentReceipt {
+  rentalDisplayCode?: string | null
   paymentId: string; rentalId: string; renewalId: string | null; purpose: RentalPaymentPurpose
   status: 'PENDING' | 'PROCESSING' | 'PAID' | 'NOT_RECEIVED' | 'FAILED' | 'CANCELLED'
   amount: number; currency: string; refundedAmount: number; transactionReference: string | null; gatewayTransactionNo: string | null
   paymentMethod: string | null; gatewayPayDate: string | null; paidAt: string | null; processedAt: string | null; createdAt: string
+  receiptCode?: string | null
   initiatedByName: string; verification: 'VERIFIED' | 'SANDBOX' | 'SIMULATED' | 'UNVERIFIED' | 'DISPUTED' | 'ATTEMPT'
 }
 export async function listRentalPayments(id: string) {
@@ -39,6 +41,7 @@ export async function listRentalPayments(id: string) {
       && ['VERIFIED','SANDBOX','SIMULATED','UNVERIFIED','DISPUTED','ATTEMPT'].includes(p.verification)
       && Number.isFinite(p.amount) && p.amount>=0 && Number.isFinite(p.refundedAmount) && p.refundedAmount>=0
       && p.currency==='VND' && typeof p.initiatedByName==='string' && isInstant(p.createdAt)
+      && (p.receiptCode == null || typeof p.receiptCode === 'string')
       && [p.paidAt,p.processedAt].every(date=>date===null || isInstant(date))
       && [p.transactionReference,p.gatewayTransactionNo,p.paymentMethod,p.gatewayPayDate].every(x=>x===null || typeof x==='string')))
 }
