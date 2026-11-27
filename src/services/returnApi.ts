@@ -305,7 +305,7 @@ export interface ReturnFeeSchedule {
   revision: number
   prices: Record<string, number>
   details: Record<string, ReturnFeeDetails>
-  publishedAt?: string
+  publishedAt?: string | null
 }
 export async function getReturnFeeSchedule(): Promise<ReturnFeeSchedule> {
   const result = await apiRequest<{ data: ReturnFeeSchedule }>('/api/return-fee-schedule')
@@ -314,6 +314,11 @@ export async function getReturnFeeSchedule(): Promise<ReturnFeeSchedule> {
 export async function getReturnFeeScheduleForReturn(returnId: string): Promise<ReturnFeeSchedule> {
   if (!isUuid(returnId)) throw new Error('Mã hồ sơ không hợp lệ.')
   const result = await apiRequest<{ data: ReturnFeeSchedule }>(`/api/return-fee-schedule/returns/${returnId}`)
+  return result.data
+}
+export async function getReturnFeeScheduleForRental(rentalId: string): Promise<ReturnFeeSchedule> {
+  if (!isUuid(rentalId)) throw new Error('Mã hồ sơ không hợp lệ.')
+  const result = await apiRequest<{ data: ReturnFeeSchedule }>(`/api/return-fee-schedule/rentals/${rentalId}`)
   return result.data
 }
 export async function publishReturnFeeSchedule(schedule: ReturnFeeSchedule): Promise<ReturnFeeSchedule> {
@@ -459,15 +464,7 @@ export function inspectReturn(id: string, body: InspectionInput, clearanceRevisi
     })))) throw new Error('Kiểm tra thông tin nghiệm thu.')
   return mutate('staff', id, clearanceRevision == null ? 'inspection' : `inspection?clearanceRevision=${clearanceRevision}`, { ...safeBody, inspectionNotes: body.staffNotes })
 }
-export async function completeRefund(id: string, body: {
-  transactionReference?: string
-  notes?: string
-  receiptFileId?: string
-  paymentMethod?: 'CASH' | 'BANK_TRANSFER' | 'VNPAY'
-  originalPaymentId?: string
-  amount?: number
-  confirmed?: boolean
-} = {}) {
+export async function completeRefund(id: string, body: ReturnSettlementReceipt & { notes?: string }) {
   const business = getAuthenticatedActor()?.roles.includes('BUSINESS') === true
   const role: ReturnRole = business ? 'business' : 'staff'
   const a = actor(role, true)
@@ -475,11 +472,10 @@ export async function completeRefund(id: string, body: {
     throw new ApiClientError('Bạn chưa có quyền thực hiện hoàn tiền.', { status: 403 })
   }
   if (!isUuid(id)) throw new Error('Mã hồ sơ hoặc giao dịch gốc hoàn tiền không hợp lệ.')
+  validateReturnSettlementReceipt(body)
   const safeBody = {
-    paymentMethod: body.paymentMethod || 'BANK_TRANSFER',
-    notes: body.notes || 'Xác nhận hoàn tất nghĩa vụ tài chính và đóng hồ sơ trả kho',
-    confirmed: true,
     ...body,
+    notes: body.notes || 'Xác nhận hoàn tất nghĩa vụ tài chính và đóng hồ sơ trả kho',
     transactionReference: body.paymentMethod === 'CASH' ? undefined : body.transactionReference?.trim(),
   }
   return bound(await apiRequest(`/api/${role}/returns/${id}/complete-refund`, {
