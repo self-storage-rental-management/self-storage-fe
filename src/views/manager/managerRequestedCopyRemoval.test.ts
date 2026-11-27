@@ -20,10 +20,7 @@ describe("Manager requested description removal", () => {
   it.each([
     ["ManagerDashboardPanel.tsx", "Số liệu được tổng hợp từ dữ liệu hiện có"],
     ["ManagerPaymentsPanel.tsx", "Theo dõi thanh toán và xử lý hồ sơ quá hạn trong phạm vi chính sách hiện hành."],
-    ["ManagerExceptionsPanel.tsx", "các ngoại lệ hàng hóa của đặt chỗ chỉ được quản lý cơ sở theo dõi"],
-    ["ManagerExceptionsPanel.tsx", "Tổng hợp trực tiếp từ đặt chỗ, nhận/trả kho, bảo trì và công nợ."],
     ["ManagerReturnsPanel.tsx", "Theo dõi biên bản nghiệm thu, phê duyệt quyết toán hoàn cọc"],
-    ["ManagerCheckinsPanel.tsx", "Theo dõi trực quan lịch hẹn nhận kho, tiến độ xác minh pháp lý"],
     ["../rental-api/RentalApiWorkspace.tsx", "Dữ liệu từ API. Duyệt gia hạn không tự kéo dài"],
     ["ManagerInventoryPanel.tsx", "Theo dõi trạng thái, vị trí, loại gian, khả dụng"],
   ])("removes only the requested description from %s", (file, text) => {

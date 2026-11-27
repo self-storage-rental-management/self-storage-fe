@@ -59,6 +59,7 @@ export default function ManagerUnitAssignmentPanel({ showToast, embedded = false
   const [submitting, setSubmitting] = useState(false)
   const [flow, setFlow] = useState<'select' | 'confirm' | 'change'>('select')
   const [changeReason, setChangeReason] = useState('')
+  const [previousUnitNeedsMaintenance, setPreviousUnitNeedsMaintenance] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -86,6 +87,7 @@ export default function ManagerUnitAssignmentPanel({ showToast, embedded = false
     setAvailableUnitCount(0)
     setStorageUnitId('')
     setChangeReason('')
+    setPreviousUnitNeedsMaintenance(false)
     setFlow(item.assignedStorageUnitId ? 'change' : 'select')
     setLoadingUnits(true)
     setError(null)
@@ -106,7 +108,7 @@ export default function ManagerUnitAssignmentPanel({ showToast, embedded = false
   }
 
   const submitAssignment = async () => {
-    if (!selected || !storageUnitId || (flow === 'change' && !changeReason.trim())) return
+    if (!selected || !storageUnitId || (Boolean(selected?.assignedStorageUnitId) && !changeReason.trim())) return
     const currentUnitId = selected.assignedStorageUnitId
     const selectedUnit = units.find(unit => unit.storageUnitId === storageUnitId)
     if (!selectedUnit || selectedUnit.status !== 'available' || selectedUnit.storageUnitId === currentUnitId) {
@@ -128,7 +130,7 @@ export default function ManagerUnitAssignmentPanel({ showToast, embedded = false
         return
       }
       const result = selected.assignedStorageUnitId
-        ? await changeUnitAssignment(selected.reservationId, storageUnitId, changeReason.trim())
+        ? await changeUnitAssignment(selected.reservationId, storageUnitId, changeReason.trim(), previousUnitNeedsMaintenance)
         : await createUnitAssignment(selected.reservationId, storageUnitId)
       showToast(selected.assignedStorageUnitId
         ? `Đã đổi sang kho ${result.storageUnitCode} cho đơn đặt chỗ ${result.reservationCode}.`
@@ -224,7 +226,7 @@ export default function ManagerUnitAssignmentPanel({ showToast, embedded = false
         if (!latest) throw new Error('Hồ sơ không còn chờ phân kho. Đóng cửa sổ và tải lại danh sách.')
         const available = await listAssignableUnits(latest.reservationId)
         setSelected(latest); setUnits(available.data); setAvailableUnitCount(available.pagination.totalItems)
-        setStorageUnitId(''); setChangeReason(''); setFlow(latest.assignedStorageUnitId ? 'change' : 'select')
+        setStorageUnitId(''); setChangeReason(''); setPreviousUnitNeedsMaintenance(false); setFlow(latest.assignedStorageUnitId ? 'change' : 'select')
       }}><div className="space-y-4">
         <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm">
           <p><b>Đặt chỗ:</b> {selected.reservationCode}</p>
@@ -235,12 +237,12 @@ export default function ManagerUnitAssignmentPanel({ showToast, embedded = false
           {[
             ['select', '1. Chọn gian kho'],
             ['confirm', '2. Xác nhận'],
-            ...(selected.assignedStorageUnitId ? [['change', '3. Đổi khi không phù hợp']] : []),
+            ...(selected.assignedStorageUnitId ? [['change', '3. Đổi gian kho']] : []),
           ].map(([key, label]) => <button type="button" key={key} disabled={key === 'confirm' && !storageUnitId} onClick={() => setFlow(key as typeof flow)} className={`rounded-full border px-2 py-1 ${flow === key ? 'border-amber-400 bg-amber-50 font-semibold text-amber-900' : 'border-stone-200 text-stone-500'} disabled:cursor-not-allowed disabled:opacity-60`}>{label}</button>)}
         </div>
         {selected.assignedStorageUnitId && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
           Gian hiện tại: <b className="font-mono">{selected.assignedStorageUnitCode}</b> · {selected.assignedStorageUnitStatus ? managerStatusLabel(selected.assignedStorageUnitStatus, 'vi') : 'Đang sử dụng'}.
-          Chỉ đổi khi gian bảo trì hoặc không còn phù hợp.
+          Bạn có thể đổi sang gian còn trống, đủ điều kiện. Chọn gian mới và nhập lý do để xác nhận đổi.
         </div>}
         {loadingUnits
           ? <p className="text-sm text-stone-500">Đang kiểm tra kho khả dụng…</p>
@@ -259,7 +261,14 @@ export default function ManagerUnitAssignmentPanel({ showToast, embedded = false
         {flow === 'confirm' && storageUnitId && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950">
           Đã chọn <b className="font-mono">{units.find(unit => unit.storageUnitId === storageUnitId)?.storageUnitCode}</b>. Kiểm tra lại rồi xác nhận để giữ gian cho khách hàng.
         </div>}
-        {flow === 'change' && <Input label="Lý do đổi kho *" value={changeReason} onChange={event => setChangeReason(event.target.value)} placeholder="Ví dụ: kho đang bảo trì hoặc không còn phù hợp kích thước" />}
+        {selected.assignedStorageUnitId && <div className="space-y-2">
+          <Input label="Lý do đổi gian *" value={changeReason} onChange={event => setChangeReason(event.target.value)} placeholder="Nhập lý do đổi gian kho" />
+          <label className="flex items-start gap-2 text-sm text-stone-800">
+            <input type="checkbox" className="mt-1" checked={previousUnitNeedsMaintenance} onChange={event => setPreviousUnitNeedsMaintenance(event.target.checked)} />
+            <span>Gian cũ bị hỏng, cần bảo trì</span>
+          </label>
+          {previousUnitNeedsMaintenance && <p className="text-xs text-stone-600">Sau khi đổi thành công, gian cũ chuyển sang bảo trì và không được phân cho đơn khác.</p>}
+        </div>}
         {units.find(unit => unit.storageUnitId === storageUnitId) && (() => {
           const unit = units.find(item => item.storageUnitId === storageUnitId)!
           return <dl className="grid gap-3 rounded-lg border border-stone-200 bg-white p-3 text-sm sm:grid-cols-2">
@@ -272,11 +281,11 @@ export default function ManagerUnitAssignmentPanel({ showToast, embedded = false
           </dl>
         })()}
         <div className="rounded-lg bg-stone-50 p-3 text-xs text-stone-600">
-          Xác nhận để phân kho đã chọn cho đặt chỗ này. Kho sẽ được giữ cho khách hàng.
+          {selected.assignedStorageUnitId ? 'Nhập lý do và xác nhận để đổi sang gian đã chọn. Gian mới sẽ được giữ cho khách hàng.' : 'Xác nhận để phân kho đã chọn cho đặt chỗ này. Kho sẽ được giữ cho khách hàng.'}
         </div>
         <div className="flex justify-end gap-2">
           <Button variant="outline" disabled={submitting} onClick={() => setSelected(null)}>Đóng</Button>
-          <Button disabled={submitting || loadingUnits || !hasSuitableSelectedUnit || (flow === 'change' && !changeReason.trim())} onClick={() => void submitAssignment()}>
+          <Button disabled={submitting || loadingUnits || !hasSuitableSelectedUnit || (Boolean(selected?.assignedStorageUnitId) && !changeReason.trim())} onClick={() => void submitAssignment()}>
             {submitting ? 'Đang lưu…' : selected.assignedStorageUnitId ? 'Xác nhận đổi kho' : 'Xác nhận phân kho'}
           </Button>
         </div>

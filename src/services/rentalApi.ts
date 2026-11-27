@@ -118,6 +118,7 @@ export function isRentalRecord(value: unknown): boolean {
     typeof r.currency === "string" &&
     isRentalStatus(r.status) &&
     (r.inventoryMismatchReturn === undefined || typeof r.inventoryMismatchReturn === "boolean") &&
+    (r.intakeCompleted === undefined || typeof r.intakeCompleted === "boolean") &&
     r.currency === "VND" &&
     validDateSemantics(r) &&
     (r.monthlyPrice === null || (Number.isFinite(r.monthlyPrice) && r.monthlyPrice >= 0)) &&
@@ -141,7 +142,7 @@ export async function listRentals(
       "endFrom",
       "endTo",
       "sort",
-      ...(role === "manager" ? ["facilityId"] : []),
+      ...(role !== "customer" ? ["facilityId"] : []),
     ],
     ["priority", "createdAt", "contractEndDate", "startDate", "monthlyPrice", "id"],
   )
@@ -193,6 +194,24 @@ export async function getRental(role: RentalApiRole, id: string) {
 }
 
 // Keep D1's nested read contract separate from the shared Customer list DTO.
+export interface StaffRentalDetail {
+  rental: RentalApiRecord
+  reservationCode: string
+  contractNumber: string | null
+}
+
+export async function getStaffRental(id: string) {
+  return readRentalEnvelope<StaffRentalDetail>(
+    await apiRequest(`/api/staff/rentals/${encodeURIComponent(id)}`),
+    value => {
+      const record = value as StaffRentalDetail | null
+      return !!record && isRentalRecord(record.rental) && record.rental.id === id
+        && typeof record.reservationCode === 'string'
+        && (record.contractNumber == null || typeof record.contractNumber === 'string')
+    },
+  )
+}
+
 function rentalReadPath(role: RentalApiRole) {
-  return role === "customer" ? "/api/customer/rental-records" : "/api/manager/rentals"
+  return role === "customer" ? "/api/customer/rental-records" : `/api/${role}/rentals`
 }

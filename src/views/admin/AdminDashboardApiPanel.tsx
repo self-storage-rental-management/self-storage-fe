@@ -121,7 +121,7 @@ export default function AdminDashboardApiPanel() {
           <Table>
             <Thead><Tr><Th>Sự kiện</Th><Th>Người thực hiện</Th><Th>Thời điểm</Th></Tr></Thead>
             <Tbody>{dashboard.recentSecurityEvents.length ? dashboard.recentSecurityEvents.map(item => <Tr key={item.id}>
-              <Td><span className="font-medium text-stone-800">{activityActionLabel(item.action)}</span><span className="mt-0.5 block text-xs text-stone-500">{activityEntityLabel(item.entityType)} · {item.entityId}</span></Td>
+              <Td><span className="font-medium text-stone-800">{activityActionLabel(item.action)}</span><span className="mt-0.5 block text-xs text-stone-500">{activityEntityLabel(item.entityType)} · {recordDisplayCode(item.entityId)}</span></Td>
               <Td>{item.actorName}</Td>
               <Td className="whitespace-nowrap text-xs">{formatDateTime(item.createdAt)}</Td>
             </Tr>) : <Tr><Td colSpan={3} className="py-8 text-center text-stone-500">Chưa có sự kiện an ninh gần đây.</Td></Tr>}</Tbody>

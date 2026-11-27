@@ -302,8 +302,8 @@ export async function listRenewalAppointments(
     throw new Error("Mã cơ sở không hợp lệ.")
   const suffix = rentalQuery(
     query,
-    ["page", "size", "facilityId", "date", "status"],
-    [],
+    ["page", "size", "facilityId", "date", "status", "sort"],
+    ["appointmentStart", "createdAt"],
   )
   return readRentalPage<RenewalOperationState>(
     await apiRequest(`/api/staff/renewal-appointments${suffix}`),

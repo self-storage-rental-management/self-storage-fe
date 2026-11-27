@@ -46,6 +46,13 @@ function isPaymentHistoryItem(value: unknown): value is ManagerPaymentHistoryIte
     && (row.gatewayTransactionNo == null || typeof row.gatewayTransactionNo === "string")
 }
 
+export async function getManagerPaymentHistoryItem(id: string): Promise<ManagerPaymentHistoryItem> {
+  if (!isUuid(id)) return invalidResponse()
+  const response = await apiRequest<{ data: unknown }>(`/api/manager/payment-history/${id}`)
+  if (!isPaymentHistoryItem(response?.data) || response.data.id !== id) return invalidResponse()
+  return response.data
+}
+
 export async function listManagerPaymentHistory(
   query: ManagerPaymentHistoryQuery,
 ): Promise<ManagerPaymentHistoryPage> {

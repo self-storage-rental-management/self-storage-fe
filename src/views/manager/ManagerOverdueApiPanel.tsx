@@ -9,7 +9,7 @@ import {
   getOverdueCase,
   listOverdueCases,
   listOverdueFollowUps,
-  sendOverdueFollowUp,
+  openOverdueRecovery,
 } from "../../services/overdueApi"
 import { validateText } from "../../services/renewalOperationsApi"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
@@ -28,7 +28,6 @@ import { operationsInputClass } from "../rental-api/RenewalOperationsPanel"
 import { managerDisplayError } from './managerPresentation'
 import {
   rentalDate,
-  rentalError,
   rentalMoney,
 } from "../rental-api/presentation"
 import "./managerOverdueList.css"
@@ -53,7 +52,7 @@ const statusStyles: Record<string, string> = {
   COMPLETED: "border-emerald-200 bg-emerald-50 text-emerald-800",
   PAYMENT_DUE: "border-orange-200 bg-orange-50 text-orange-800",
 }
-function OverdueStatusBadge({ status }: { status: string }) {
+export function OverdueStatusBadge({ status }: { status: string }) {
   return <span data-status={status} className={`overdue-status inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${statusStyles[status] ?? "border-stone-200 bg-stone-50 text-stone-700"}`}>
     <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
     {priorityLabels[status] ?? displayStatusLabel(status)}
@@ -69,11 +68,11 @@ export function OverdueCompleteness({ page: p }: { page: OverduePage }) {
 }
 export function OverdueCaseSummary({ record: r, onChanged, actions }: { record: OverdueCase; onChanged?: () => void; actions?: ReactNode }) {
   const status = r.workflowStatus ?? r.priority
+  const rentalCode = r.rentalDisplayCode || recordDisplayCode(r.rentalId)
   return (
     <section className="min-w-0 space-y-4 rounded-xl border border-stone-200 p-4 text-sm sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-100 pb-4">
         <div className="min-w-0 flex-1">
-          {r.displayCode && <p className="mb-1 font-mono text-xs text-stone-500">{r.displayCode}</p>}
           <h3 className="break-words text-lg font-semibold text-stone-900 [overflow-wrap:anywhere]">{r.customerName}</h3>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -82,6 +81,7 @@ export function OverdueCaseSummary({ record: r, onChanged, actions }: { record: 
         </div>
       </div>
       <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+        <div><dt className="text-xs text-stone-500">Mã hồ sơ thuê</dt><dd className="mt-1 break-all font-mono text-stone-700">{rentalCode}</dd></div>
         <div className="min-w-0 sm:col-span-2"><dt className="text-xs text-stone-500">Gian kho</dt><dd className="mt-1 break-words font-medium text-stone-800 [overflow-wrap:anywhere]">{r.storageUnitCode}</dd></div>
         <div><dt className="text-xs text-stone-500">Loại quá hạn</dt><dd className="mt-1 font-medium">{r.kind === "RENTAL_TERM" ? "Thời hạn thuê" : "Thanh toán"}</dd></div>
         <div><dt className="text-xs text-stone-500">{r.kind === "RENTAL_TERM" ? "Hạn cuối gia hạn" : "Hạn thanh toán"}</dt><dd className="mt-1 font-medium tabular-nums">{rentalDate(r.kind === "RENTAL_TERM" ? r.recoveryCutoff : r.dueAt)}</dd></div>
@@ -90,20 +90,12 @@ export function OverdueCaseSummary({ record: r, onChanged, actions }: { record: 
       <p className="text-xs leading-relaxed text-stone-600">{r.kind === 'PAYMENT_DUE'
         ? 'Đây là khoản thanh toán đã đến hạn còn nợ, không phải trạng thái hết thời hạn thuê hoặc kết quả của một giao dịch.'
         : 'Đây là quá hạn thời hạn sử dụng kho. Thanh toán thành công chưa tự động hoàn tất gia hạn, hồ sơ cần hoàn tất ký theo quy định.'}</p>
-      <details className="border-t border-stone-100 pt-3 text-xs text-stone-500">
-        <summary className="w-fit cursor-pointer py-1 hover:text-stone-800">Mã tham chiếu</summary>
-        <dl className="mt-2 grid gap-3 rounded-lg bg-stone-50 p-3 sm:grid-cols-2">
-          <div className="min-w-0"><dt>Mã theo dõi</dt><dd className="mt-1 break-all font-mono text-stone-700">{r.displayCode || recordDisplayCode(r.caseRef)}</dd></div>
-          <div className="min-w-0"><dt>Hồ sơ thuê</dt><dd className="mt-1 break-all font-mono text-stone-700">{r.rentalDisplayCode || recordDisplayCode(r.rentalId)}</dd></div>
-          {r.obligationRef && <div className="min-w-0"><dt>Nghĩa vụ thanh toán</dt><dd className="mt-1 break-all font-mono text-stone-700">{recordDisplayCode(r.obligationRef)}</dd></div>}
-        </dl>
-      </details>
       <div className={`space-y-3 rounded-lg p-3 ${r.kind === "RENTAL_TERM" ? "border border-blue-100 bg-blue-50/60" : "bg-stone-50"}`}>
       {r.kind === "RENTAL_TERM" && <p className="text-xs leading-relaxed text-blue-900">
         {status === "COMPLETED" ? "Đã hoàn tất thu hồi. Bạn có thể mở nhiệm vụ để xem chứng từ." : r.recoveryTaskId ? "Đã tạo nhiệm vụ thu hồi, chờ hoàn tất các bước xử lý tại cơ sở." : r.recoveryEligible ? "Đã đến thời điểm chuyển thu hồi." : "Chưa đến thời điểm chuyển thu hồi."}
       </p>}
       <div className="flex flex-wrap items-center gap-2">
-        {r.kind === "RENTAL_TERM" && r.recoveryTaskId && <RecoveryTaskLink role="manager" taskId={r.recoveryTaskId} facilityId={r.facilityId} onChanged={onChanged} />}
+        {r.kind === "RENTAL_TERM" && r.recoveryTaskId && <RecoveryTaskLink role="manager" taskId={r.recoveryTaskId} facilityId={r.facilityId} rentalDisplayCode={rentalCode} onChanged={onChanged} />}
         {actions}
       </div>
       </div>
@@ -148,7 +140,7 @@ export function OverdueFollowUpCard({ event: e }: { event: OverdueFollowUp }) {
     </article>
   )
 }
-export default function ManagerOverdueApiPanel() {
+export default function ManagerOverdueApiPanel({ embedded = false, onLocked }: { embedded?: boolean; onLocked?: (value: boolean) => void } = {}) {
   const actor = getAuthenticatedActor()
   if (
     !actor ||
@@ -162,22 +154,26 @@ export default function ManagerOverdueApiPanel() {
   const identity = `${actor.id}:${JSON.stringify(actor.facilityScopes)}:${JSON.stringify(actor.permissions)}`
   const facilityId = singleManagerFacility(actor)
   if (!facilityId) return <Card className="p-5" role="alert">{managerFacilityNotice(actor)}</Card>
-  return <OverdueWorkspace key={identity} identity={identity} facilityId={facilityId} />
+  return <OverdueWorkspace key={identity} identity={identity} facilityId={facilityId} embedded={embedded} onLocked={onLocked} />
 }
-function OverdueWorkspace({ identity, facilityId }: { identity: string; facilityId: string }) {
-  const [, setLocked] = useState(false)
+function OverdueWorkspace({ identity, facilityId, embedded, onLocked }: {
+  identity: string
+  facilityId: string
+  embedded: boolean
+  onLocked?: (value: boolean) => void
+}) {
   return <div className="space-y-5 sm:space-y-7">
-    <header>
+    {!embedded && <header>
       <h1 className="text-2xl font-bold tracking-tight text-stone-900 sm:text-3xl">Theo dõi quá hạn</h1>
       <p className="mt-2 text-sm text-stone-600 sm:text-base">Theo dõi thời hạn thuê, công nợ và tiến độ xử lý tại cơ sở.</p>
-    </header>
-    <OverdueSession identity={identity} facilityId={facilityId} onLocked={setLocked} />
+    </header>}
+    <OverdueSession identity={identity} facilityId={facilityId} onLocked={onLocked} />
   </div>
 }
 function OverdueSession({ identity, facilityId, onLocked }: {
   identity: string
   facilityId: string
-  onLocked: (value: boolean) => void
+  onLocked?: (value: boolean) => void
 }) {
   const [query, setQuery] = useState<OverdueQuery>({
     page: 0,
@@ -271,11 +267,12 @@ function OverdueSession({ identity, facilityId, onLocked }: {
                 <tbody role="rowgroup" className="divide-y divide-stone-200">
                   {read.data.data.map(r => {
                     const status = r.workflowStatus ?? r.priority
+                    const rentalCode = r.rentalDisplayCode || recordDisplayCode(r.rentalId)
                     return <tr role="row" key={r.caseRef} className="transition-colors hover:bg-stone-50/75 focus-within:bg-stone-50/75">
                       <td role="cell" className="min-w-0 wrap-anywhere">
                         <span aria-hidden="true" className="overdue-mobile-label">Khách hàng</span>
                         <p className="text-base">{r.customerName}</p>
-                        {r.displayCode && <p className="mt-0.5 font-mono text-xs text-stone-600">{r.displayCode}</p>}
+                        <p className="mt-0.5 font-mono text-xs text-stone-600">{rentalCode}</p>
                       </td>
                       <td role="cell" className="min-w-0 wrap-anywhere">
                         <span aria-hidden="true" className="overdue-mobile-label">Gian kho</span>
@@ -297,7 +294,7 @@ function OverdueSession({ identity, facilityId, onLocked }: {
                       </td>
                       <td role="cell" className="text-right">
                         <Button type="button" variant="outline" className="min-h-11 whitespace-nowrap !rounded-[10px] !px-3 !font-medium"
-                          aria-label={`Chi tiết hồ sơ ${r.displayCode ?? r.customerName}`} onClick={() => setSelected(r.caseRef)}>
+                          aria-label={`Chi tiết hồ sơ ${rentalCode}`} onClick={() => setSelected(r.caseRef)}>
                           Chi tiết <span aria-hidden="true" className="overdue-detail-chevron" />
                         </Button>
                       </td>
@@ -329,7 +326,7 @@ function OverdueSession({ identity, facilityId, onLocked }: {
             key={`${identity}:${selected}`}
             identity={identity}
             caseRef={selected}
-            onLocked={value => { setLocked(value); onLocked(value) }}
+            onLocked={value => { setLocked(value); onLocked?.(value) }}
             onChanged={read.refresh}
           />
         </Modal>
@@ -337,7 +334,7 @@ function OverdueSession({ identity, facilityId, onLocked }: {
     </div>
   )
 }
-function OverdueDetail({
+export function OverdueDetail({
   identity,
   caseRef,
   onLocked,
@@ -365,6 +362,9 @@ function OverdueDetail({
     !!read.data &&
     actor.permissions.includes("rentals:update") &&
     actor.facilityScopes[read.data.facilityId] === "MANAGE"
+  const canOpenRecovery = canWrite && read.data?.kind === "RENTAL_TERM" &&
+    read.data.recoveryEligible && !read.data.recoveryTaskId && read.data.workflowStatus !== "COMPLETED"
+  const updateLock = (value: boolean) => { setLocked(value); onLocked(value) }
   return (
     <div className="space-y-4">
       <ApiReadState {...read} retry={read.refresh} />
@@ -376,22 +376,15 @@ function OverdueDetail({
       ) : null}
       {read.data && (
         <>
-          <OverdueCaseSummary record={read.data} onChanged={() => { read.refresh(); onChanged() }} actions={<Button
-            variant="outline"
-            disabled={!canWrite || locked}
-            onClick={() => setForm(true)}
-          >
-            Ghi nhận xử lý
-          </Button>} />
+          <OverdueCaseSummary record={read.data} onChanged={() => { read.refresh(); onChanged() }} actions={<>
+            {canOpenRecovery && !form && <Button disabled={locked} onClick={() => setForm(true)}>Mở thu hồi</Button>}
+          </>} />
           {!canWrite && <p>Bạn chưa có quyền xử lý hồ sơ tại cơ sở này.</p>}
-          {form && (
-            <OverdueForm
+          {form && canOpenRecovery && (
+            <OpenRecoveryForm
               key={tick}
               record={read.data}
-              onLocked={(v) => {
-                setLocked(v)
-                onLocked(v)
-              }}
+              onLocked={updateLock}
               onCancel={() => {
                 setForm(false)
                 setTick((v) => v + 1)
@@ -435,7 +428,7 @@ function OverdueDetail({
     </div>
   )
 }
-function OverdueForm({
+function OpenRecoveryForm({
   record: r,
   onLocked,
   onCancel,
@@ -447,9 +440,6 @@ function OverdueForm({
   onSuccess: (event: OverdueFollowUp) => void
 }) {
   const command = useRenewalCommand()
-  const [type, setType] = useState<"NOTE" | "REMINDER" | "RECOVERY_HANDOFF">(
-    "NOTE",
-  )
   const [content, setContent] = useState("")
   const [validation, setValidation] = useState<string>()
   const locked = command.busy || command.uncertain
@@ -460,25 +450,7 @@ function OverdueForm({
     <Card className="p-4 space-y-3">
       <fieldset disabled={locked} className="space-y-3">
         <label className="block">
-          Thao tác
-          <select
-            className={operationsInputClass}
-            value={type}
-            onChange={(e) => setType(e.target.value as typeof type)}
-          >
-            <option value="NOTE">Ghi chú xử lý (không thay đổi nợ)</option>
-            {r.workflowStatus !== "COMPLETED" && <option value="REMINDER">
-              Yêu cầu gửi nhắc nợ
-            </option>}
-            {r.kind === "RENTAL_TERM" && r.recoveryEligible && (
-              <option value="RECOVERY_HANDOFF">
-                Đề nghị bàn giao tới thu hồi kho
-              </option>
-            )}
-          </select>
-        </label>
-        <label className="block">
-          Nội dung / lý do (bắt buộc)
+          Lý do mở thu hồi (bắt buộc)
           <textarea
             className={operationsInputClass}
             value={content}
@@ -507,39 +479,24 @@ function OverdueForm({
             }
             onLocked(true)
             let result: OverdueFollowUp | undefined
-            void command
-              .run(
-                JSON.stringify({
-                  ref: r.caseRef,
-                  type,
-                  content,
-                  version: r.followUpVersion,
-                }),
-                async (key) => {
-                  result = await sendOverdueFollowUp(
-                    r.caseRef,
-                    type,
-                    content,
-                    r.followUpVersion,
-                    key,
-                  )
-                  return result
-                },
-                () => {
-                  onLocked(false)
-                  onSuccess(result!)
-                },
-              )
-              .then(() => {
-                /* uncertain remains locked until successful retry; HTTP errors can be dismissed below */
-              })
+            void command.run(
+              JSON.stringify({ ref: r.caseRef, content, version: r.followUpVersion }),
+              async (key) => {
+                result = await openOverdueRecovery(r.caseRef, content, r.followUpVersion, key)
+                return result
+              },
+              () => {
+                onLocked(false)
+                onSuccess(result!)
+              },
+            )
           }}
         >
           {command.busy
             ? "Đang gửi…"
             : command.uncertain
               ? "Thử lại cùng yêu cầu"
-              : "Gửi yêu cầu"}
+              : "Xác nhận mở thu hồi"}
         </Button>
         <Button
           variant="outline"

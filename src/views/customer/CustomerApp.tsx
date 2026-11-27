@@ -44,6 +44,7 @@ import { goodsCatalogIssue, resolveDraftMaterial } from '../../domain/goodsCatal
 import { listNotifications, markNotificationRead, type ApiNotification } from '../../services/notificationApi'
 import { goodsReviewLabels, reservationProgress } from './reservationPresentation'
 import ReturnApiPanel from '../return-api/ReturnApiPanel'
+import { notificationRecordTarget, type NotificationRecordTarget } from '../../services/notificationRecordTarget'
 import ReturnSettlementModal from '../../components/ReturnSettlementModal'
 import { isGeneratedDefaultRentalPackageList, resolveRentalPackagesForUnit } from '../../domain/packageRules'
 import { LEGACY_RENEWAL_NOTICE, LEGACY_RENEWAL_HISTORY_NOTICE, legacyRenewalMoney, isLegacyRenewalPayment } from '../../domain/legacyRenewal'
@@ -1088,6 +1089,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
     if (!isApiAuthenticated()) setSupportChatbotOpen(true)
   }, [])
   const [recoveryNotificationTarget, setRecoveryNotificationTarget] = useState<{ id: string; request: number }>()
+  const [recordNotice, setRecordNotice] = useState<{ target: NotificationRecordTarget; request: number }>()
   const notificationRevealTimers = useRef<number[]>([])
   const [supportTab, setSupportTab] = useState('All')
   const [supportSearch, setSupportSearch] = useState('')
@@ -1324,7 +1326,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       id: `api-notification-${notification.id}`,
       date: notification.createdAt,
       title: notification.title,
-      message: notification.content,
+      message: notification.content.replace(/(Kỳ thuê tính từ\s+)(\d{4})-(\d{2})-(\d{2})(?=\.|\s|$)/g, '$1$4/$3/$2'),
       page: notification.type === 'CHECKIN' ? 'reservations'
         : notification.type === 'RENEWAL' || notification.type === 'OVERDUE' ? 'rental-records'
         : notification.type === 'RETURN' ? 'rental-records'
@@ -1445,6 +1447,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   const navigateTo = (nextPage: string, options?: { facilityId?: string | null }) => {
     setRecoveryNotificationTarget(undefined)
+    setRecordNotice(undefined)
     if (window.location.hash === '#booking-prohibited-rules') { const url = new URL(window.location.href); url.hash = ''; window.history.replaceState(window.history.state, '', url) }
     if (nextPage === 'support') { openSupportWidget(); return }
     setPreviousPage(page)
@@ -1456,6 +1459,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   const handleLayoutNavigate = (nextPage: string) => {
     setRecoveryNotificationTarget(undefined)
+    setRecordNotice(undefined)
     if (nextPage === 'support') { openSupportWidget(); return }
     notificationRevealTimers.current.forEach(timer => window.clearTimeout(timer))
     notificationRevealTimers.current = []
@@ -1661,16 +1665,20 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   const selectedSizeCode = storageSizeCode(selectedTarget?.unitType.name || selectedUnit?.type) as CustomerCatalogUnit['sizeCode']
   const selectedBackendUnitType = backendUnitTypes.find(item => item.id === selectedTarget?.unitType.id)
+  const isScopedUnitType = Boolean(selectedBackendUnitType?.acceptedGoodsCategoryIds && selectedBackendUnitType.acceptedGoodsCategoryIds.length > 0)
   const bookingCategories = (goodsCatalog?.categories || []).filter(category =>
-    !selectedBackendUnitType?.acceptedGoodsCategoryIds?.length || selectedBackendUnitType.acceptedGoodsCategoryIds.includes(category.id))
+    !isScopedUnitType || selectedBackendUnitType!.acceptedGoodsCategoryIds!.includes(category.id))
   const bookingCategoryOptions = bookingCategories.map(category => [category.code, category.label] as const)
   const bookingMaterials = (categoryCode: string) => {
     const category = bookingCategories.find(item => item.code === categoryCode)
     if (!category) return []
+    if (!isScopedUnitType) return (category.materials || []).filter(m => m.status === 'ACTIVE')
+    const acceptedMatIds = selectedBackendUnitType?.acceptedGoodsMaterialIds || []
     return (category.materials || []).filter(material =>
-      !selectedBackendUnitType?.acceptedGoodsMaterialIds?.length || selectedBackendUnitType.acceptedGoodsMaterialIds.includes(material.id))
+      material.status === 'ACTIVE' && acceptedMatIds.includes(material.id))
   }
-  const isMaterialOptional = (categoryCode: string) => OPTIONAL_MATERIAL_CATEGORY_CODES.has(categoryCode)
+  const isMaterialOptional = (categoryCode: string) =>
+    OPTIONAL_MATERIAL_CATEGORY_CODES.has(categoryCode) || (isScopedUnitType && bookingMaterials(categoryCode).length === 0)
   const catalogIssues = goodsItems.map(item => goodsCatalogIssue(item, goodsCatalog,
     selectedBackendUnitType?.acceptedGoodsCategoryIds, selectedBackendUnitType?.acceptedGoodsMaterialIds))
   const hasValidQuotedGoods = bookingReview && !!serverQuote && Date.parse(serverQuote.expiresAt) > Date.now() && !!quotedGoodsItems.current
@@ -1858,9 +1866,15 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
         setBackendNotifications(current => current.map(item => item.id === updated.id ? updated : item))
       }).catch(reason => notificationFeed.reportFailure(reason))
       const source = backendNotifications.find(item => item.id === notificationId)
-      if (source?.relatedEntityType === 'VIOLATION_RECOVERY' && source.relatedEntityId) {
+      const target = source ? notificationRecordTarget(source, 'customer') : undefined
+      if (target?.kind === 'violation-recovery') {
         navigateTo('rental-records')
-        setRecoveryNotificationTarget({ id: source.relatedEntityId, request: Date.now() })
+        setRecoveryNotificationTarget({ id: target.id, request: Date.now() })
+        return
+      }
+      if (target?.kind === 'rental' || target?.kind === 'return') {
+        navigateTo('rental-records')
+        setRecordNotice({ target, request: Date.now() })
         return
       }
     }
@@ -3010,7 +3024,7 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
                       {/* COMPLETED: Check-in complete, show rental */}
                       {hold.status === 'COMPLETED' && (
                         <div className="flex flex-wrap justify-end gap-2">
-                          <Button variant="primary" size="sm" onClick={() => { try { confirmUnitReceipt(hold.id, user); setPage('rental-records'); showToast('Đã xác nhận nhận kho. Đơn giữ kho đã được chuyển sang Hồ sơ thuê của tôi.') } catch (error) { showToast(userFacingError(error, 'Không thể xác nhận bàn giao.')) } }}>Xác nhận đã nhận kho</Button>
+                          <p className="text-sm text-stone-600">Thời gian chuẩn bị bắt đầu khi staff hoàn tất bàn giao.</p>
                         </div>
                       )}
 
@@ -3108,11 +3122,16 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
       )}
 
       {/* ── MY RENTALS (HỒ SƠ THUÊ CỦA TÔI) ───────────────────── */}
-      {page === 'rental-records' && isApiAuthenticated() && <CustomerRentalsApiPanel key={`${user.id}:${rentalMenuVisit}:${recoveryNotificationTarget?.request ?? ''}`}
+      {page === 'rental-records' && isApiAuthenticated() && <CustomerRentalsApiPanel key={`${user.id}:${rentalMenuVisit}:${recoveryNotificationTarget?.request ?? ''}:${recordNotice?.target.kind === 'rental' ? recordNotice.request : ''}`}
         recoveryTarget={recoveryNotificationTarget}
+        initialRentalId={recordNotice?.target.kind === 'rental' ? recordNotice.target.id : undefined}
         focusStorageUnitId={receiptRentalTarget}
         onBrowseUnits={() => navigateTo('browse-units')}
         onRequestSupport={(id, unitCode) => openRecordSupport({ linkedRecord: { type: 'RENTAL', id }, label: `hồ sơ thuê gian ${unitCode}` })} />}
+      {page === 'rental-records' && isApiAuthenticated() && recordNotice?.target.kind === 'return' &&
+        <Modal open title="Chi tiết trả kho" size="2xl" onClose={() => setRecordNotice(undefined)}>
+          <ReturnApiPanel key={recordNotice.request} role="customer" notificationTarget={recordNotice.target} />
+        </Modal>}
       {page === 'rental-records' && !isApiAuthenticated() && (
         <div className="fade-in space-y-4">
           <section className="space-y-4">

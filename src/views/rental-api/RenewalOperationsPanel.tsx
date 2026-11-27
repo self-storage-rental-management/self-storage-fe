@@ -50,7 +50,7 @@ import RenewalCoordinationPanel, { canCoordinateRenewal } from "../rental-suppor
 import { EvidenceUpload, EvidenceDownload } from "../rental-support-integration/EvidenceControls"
 import { maskCccd } from "../../domain/cccd"
 
-type RenewalFormAction = Exclude<RenewalOperationAction, "noShow">
+type RenewalFormAction = RenewalOperationAction
 
 function verifiedFacilityFaultIncidentIds(events: RenewalOperationEvent[]) {
   const latest = new Map<string, { occurredAt: number; facilityFault: boolean; ambiguous: boolean }>()
@@ -177,7 +177,7 @@ export function OperationEventCard({
       {e.kind === "FAULT_REVIEW" && typeof d.facilityFault === "boolean" && (
         <p>{d.facilityFault ? "Xác nhận lỗi từ cơ sở" : "Không xác nhận lỗi từ cơ sở"}</p>
       )}
-      {e.kind === "REFUND_EXECUTION" && <p>{d.environment === "SANDBOX" ? "Đã ghi nhận chứng từ hoàn khoản trả trước qua VNPay thử nghiệm." : "Đã ghi nhận khoản hoàn theo chứng từ tại cơ sở."}</p>}
+      {e.kind === "REFUND_EXECUTION" && <p>{d.environment === "SANDBOX" ? "Đã ghi nhận chứng từ hoàn thử nghiệm; không xác nhận chuyển tiền thực tế." : "Đã ghi nhận khoản hoàn theo chứng từ tại cơ sở."}</p>}
       {e.kind !== 'ARRIVAL' && <p className="break-all">
         Mã sự kiện: {recordDisplayCode(e.id)}
       </p>}
@@ -1096,7 +1096,7 @@ export default function RenewalOperationsPanel({
             ...(paymentEventsRead.data?.data ?? []),
             ...(lastEvent ? [lastEvent] : []),
           ]}
-        />}
+        />
       </>}
       {!appointmentOnly && role !== "staff" && (
         <EventTimeline
@@ -1377,6 +1377,16 @@ function OperationForm({
       case "confirmation":
         if (!attested) throw new Error("Cần xác nhận đã đọc và đồng ý với lịch và hạn ký mới.")
         return exceptionConfirmationCommand(s, proposal)
+      case "noShow":
+        if (!s.appointmentRef) throw new Error("Thiếu lịch ký.")
+        return {
+          action,
+          body: {
+            ...base,
+            appointmentRef: s.appointmentRef,
+            reason: reason.trim() || "Khách không đến theo lịch hẹn",
+          },
+        }
     }
   }
   return (
@@ -1436,7 +1446,7 @@ function OperationForm({
                   .filter((e) => e.kind === "INCIDENT")
                   .map((e) => (
                     <option key={e.id} value={e.id}>
-                      {rentalDate(e.occurredAt)} · {recordDisplayCode(e.id)}
+                      {rentalDate(e.occurredAt)}, {recordDisplayCode(e.id)}
                     </option>
                   ))}
               </select>

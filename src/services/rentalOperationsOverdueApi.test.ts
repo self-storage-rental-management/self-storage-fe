@@ -11,7 +11,7 @@ import {
   getOverdueCase,
   listOverdueCases,
   listOverdueFollowUps,
-  sendOverdueFollowUp,
+  openOverdueRecovery,
 } from "./overdueApi"
 import type { RenewalOperationCommand } from "../types/renewalOperationsApi"
 import {
@@ -169,6 +169,7 @@ describe("D3 real API transport", () => {
           expectedVersion: 4,
           appointmentRef: ids.event,
           evidenceFileIds: [ids.file],
+          identityVerified: true,
         },
       },
       "staff",
@@ -548,40 +549,14 @@ describe("D4 real overdue transport", () => {
       encodeURIComponent(termCase.caseRef),
     )
   })
-  it.each(["NOTE", "REMINDER", "RECOVERY_HANDOFF"] as const)(
-    "sends %s without fee/amount/financial version",
-    async (type) => {
-      const fetch = respond(
-        {
-          data: {
-            ...followUp,
-            type,
-            externalRef: type === "NOTE" ? null : ids.event,
-          },
-        },
-        201,
-      )
-      await sendOverdueFollowUp(
-        termCase.caseRef,
-        type,
-        "Nội dung thật",
-        2,
-        "key",
-      )
-      const [url, options] = fetch.mock.calls[0]
-      expect(url).toContain(
-        `/${encodeURIComponent(termCase.caseRef)}/${
-          type === "RECOVERY_HANDOFF" ? "recovery-handoffs" : "follow-ups"
-        }`,
-      )
-      expect(JSON.parse(options.body)).toEqual(
-        type === "RECOVERY_HANDOFF"
-          ? { reason: "Nội dung thật", expectedVersion: 2 }
-          : { type, content: "Nội dung thật", expectedVersion: 2 },
-      )
-      expect(new Headers(options.headers).get("Idempotency-Key")).toBe("key")
-    },
-  )
+  it("opens recovery with the reason and case version", async () => {
+    const fetch = respond({ data: { ...followUp, type: "RECOVERY_HANDOFF", externalRef: ids.event } }, 201)
+    await openOverdueRecovery(termCase.caseRef, "Đã hết hạn thuê", 2, "key")
+    const [url, options] = fetch.mock.calls[0]
+    expect(url).toContain("/" + encodeURIComponent(termCase.caseRef) + "/recovery-handoffs")
+    expect(JSON.parse(options.body)).toEqual({ reason: "Đã hết hạn thuê", expectedVersion: 2 })
+    expect(new Headers(options.headers).get("Idempotency-Key")).toBe("key")
+  })
   it("reads immutable history independently after resolved current case", async () => {
     respond(
       { error: { code: "CONFLICT", message: "Case is no longer overdue" } },
@@ -600,23 +575,23 @@ describe("D4 real overdue transport", () => {
     const fetch = respond({ data: followUp })
     await expect(getOverdueCase("CASE-01")).rejects.toThrow()
     await expect(
-      sendOverdueFollowUp(termCase.caseRef, "NOTE", " ", 2, "key"),
+      openOverdueRecovery(termCase.caseRef, " ", 2, "key"),
     ).rejects.toThrow()
     await expect(
-      sendOverdueFollowUp(termCase.caseRef, "NOTE", "note", -1, "key"),
+      openOverdueRecovery(termCase.caseRef, "note", -1, "key"),
     ).rejects.toThrow()
     await expect(
-      sendOverdueFollowUp(termCase.caseRef, "NOTE", "note", 2, ""),
+      openOverdueRecovery(termCase.caseRef, "note", 2, ""),
     ).rejects.toThrow()
     await expect(
       listOverdueCases({ sort: "monthlyPrice,desc" }),
     ).rejects.toThrow()
     expect(fetch).not.toHaveBeenCalled()
   })
-  it("does not accept reminder/recovery success without external ACK", async () => {
-    respond({ data: { ...followUp, type: "REMINDER" } }, 201)
+  it("does not accept recovery success without external ACK", async () => {
+    respond({ data: { ...followUp, type: "RECOVERY_HANDOFF", externalRef: null } }, 201)
     await expect(
-      sendOverdueFollowUp(termCase.caseRef, "REMINDER", "Nhắc nợ", 2, "key"),
+      openOverdueRecovery(termCase.caseRef, "Hết hạn thuê", 2, "key"),
     ).rejects.toMatchObject({ code: "INVALID_RESPONSE" })
   })
   it("keeps key/body identical on explicit network retry", async () => {
@@ -624,17 +599,16 @@ describe("D4 real overdue transport", () => {
       .fn()
       .mockRejectedValueOnce(new TypeError("network"))
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ data: followUp }), {
+        new Response(JSON.stringify({ data: { ...followUp, type: "RECOVERY_HANDOFF", externalRef: ids.event } }), {
           headers: { "Content-Type": "application/json" },
         }),
       )
     vi.stubGlobal("fetch", fetch)
     await expect(
-      sendOverdueFollowUp(termCase.caseRef, "NOTE", "Nội dung", 2, "retry-key"),
+      openOverdueRecovery(termCase.caseRef, "Nội dung", 2, "retry-key"),
     ).rejects.toMatchObject({ code: "NETWORK_ERROR" })
-    await sendOverdueFollowUp(
+    await openOverdueRecovery(
       termCase.caseRef,
-      "NOTE",
       "Nội dung",
       2,
       "retry-key",

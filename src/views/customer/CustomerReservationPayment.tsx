@@ -197,7 +197,7 @@ export default function CustomerReservationPayment({ receiptSlot, user, reservat
     {(depositReceiptAvailable || remainingReceiptAvailable) && (receiptSlot ? createPortal(receiptButton, receiptSlot) : receiptButton)}
     <Modal size="2xl" open={payOpen} onClose={() => { if (!busy) { setPayOpen(false); setConfirmModalOpen(false); setAcceptedTermsKey(null) } }} title="Thanh toán trước 20% (giữ chỗ)">
       <div className="space-y-4">
-        <div className="grid gap-1 text-sm"><p>Đơn giữ kho: <b>{reservation.reservationCode}</b></p><p>Cơ sở: <b>{facilityName}</b></p><p>Loại kho: <b>{unitTypeName}</b></p><p>{reservation.rentalPeriodConfirmed ? 'Kỳ thuê đã chốt:' : 'Kỳ thuê dự kiến sau thời gian chuẩn bị:'} <b>{snapshot.startDate.split('-').reverse().join('/')} đến {rentalEndDateForDisplay(snapshot.endDate).split('-').reverse().join('/')}</b></p></div>
+        <div className="grid gap-1 text-sm"><p>Đơn giữ kho: <b>{reservation.reservationCode}</b></p><p>Cơ sở: <b>{facilityName}</b></p><p>Loại kho: <b>{unitTypeName}</b></p><p>{reservation.rentalPeriodConfirmed ? 'Kỳ thuê có tính phí (đã chốt):' : 'Kỳ thuê có tính phí (dự kiến):'} <b>{snapshot.startDate.split('-').reverse().join('/')} đến {rentalEndDateForDisplay(snapshot.endDate).split('-').reverse().join('/')}</b></p></div>
         <section className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm">
           <p className="font-bold text-stone-900">Thông tin khách hàng đã khai báo</p>
           <div className="mt-2 grid gap-x-4 gap-y-1.5 sm:grid-cols-2">
@@ -210,15 +210,15 @@ export default function CustomerReservationPayment({ receiptSlot, user, reservat
         </section>
         <ReservationQuoteSummary quote={{ ...snapshot, facilityName, unitTypeName }} needsReview={false} context="reservation" handoverTermsVersion={handoverTermsVersion} hidePaymentNotices={reservation.goodsReviewStatus === 'APPROVED'} />
         <section className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">
-          <p className="font-bold">Các mốc thời gian</p>
+          <p className="font-bold">Các mốc thời gian (giờ Việt Nam)</p>
           <div className="mt-2 space-y-1.5">
-            <p><span className="text-blue-800">Thời điểm đăng ký:</span> <b>{formatDisplayDateTime(reservation.createdAt)}</b></p>
-            <p><span className="text-blue-800">Lịch nhận kho:</span> <b>{formatDisplayDateTime(reservation.appointmentAt)}</b></p>
-            <p><span className="text-blue-800">{reservation.rentalPeriodConfirmed ? 'Ngày bắt đầu kỳ thuê đã chốt:' : 'Ngày bắt đầu kỳ thuê dự kiến:'}</span> <b>{formatDisplayDate(snapshot.startDate)}</b></p>
-            <p><span className="text-blue-800">Ngày bắt đầu tính tiền:</span> <b>{formatDisplayDate(snapshot.startDate)}</b></p>
+            <p>Tạo đơn: <b>{formatDisplayDateTime(reservation.createdAt)}</b></p>
+            <p>Hẹn nhận kho: <b>{formatDisplayDateTime(reservation.appointmentAt)}</b></p>
+            <p>Chuẩn bị miễn phí: <b>{snapshot.freeSetupDays} ngày từ lịch hẹn</b></p>
+            <p>{reservation.rentalPeriodConfirmed ? 'Tính tiền thuê từ (đã chốt):' : 'Tính tiền thuê từ (dự kiến):'} <b>{formatDisplayDate(snapshot.startDate)}</b></p>
           </div>
-          <p className="mt-2 text-xs leading-5 text-blue-800">{reservation.rentalPeriodConfirmed ? 'Kỳ thuê đã được chốt theo ngày khách hàng xác nhận nhận kho và số ngày chuẩn bị miễn phí đã lưu.' : 'Ngày bắt đầu tính tiền bằng ngày khách hàng xác nhận nhận kho cộng số ngày chuẩn bị miễn phí đã chốt. Trước bàn giao, các mốc trên chỉ là dự kiến.'}</p>
-          <p className="mt-2 text-xs leading-5 text-blue-800">Nếu thanh toán thất bại rõ ràng, bạn có thể thử lại trước hạn. Khi hết hạn, hệ thống đối soát VNPay trước khi giải phóng suất kho. Nếu chưa có kết quả cuối cùng, kho tiếp tục được giữ trong thời hạn gửi khiếu nại hiển thị trên đơn. Khi có khiếu nại hợp lệ, kho được giữ trong thời gian quản lý xử lý.</p>
+          <p className="mt-2 text-xs leading-5 text-blue-800">Ngày tính tiền = ngày hẹn nhận kho + {snapshot.freeSetupDays} ngày miễn phí.</p>
+          <p className="mt-2 text-xs leading-5 text-blue-800">Thanh toán lỗi: thử lại trước hạn. Đã trừ tiền nhưng chưa xác nhận: không thanh toán lại; gửi khiếu nại theo hạn trên đơn.</p>
         </section>
         <div className="rounded-xl border-2 border-amber-500 bg-amber-50 p-4 text-center">
           <p className="text-xs font-bold uppercase tracking-wide text-amber-900">Số tiền cần thanh toán ngay</p>
@@ -300,7 +300,7 @@ export default function CustomerReservationPayment({ receiptSlot, user, reservat
         {receiptSection === 'deposit' && payment && <div role="tabpanel" className="w-full min-w-0"><ReservationReceipt payment={payment} reservationCode={reservation.reservationCode} /></div>}
         {receiptSection === 'remaining' && remainingPayment && <div role="tabpanel" className="w-full min-w-0"><ReservationReceipt payment={remainingPayment} reservationCode={reservation.reservationCode} /></div>}
         {selectedReceipt?.paymentStatus === 'PAID' && <div className="flex justify-end border-t border-stone-200 pt-4">
-          <Button type="button" variant="outline" onClick={() => downloadPaymentReceipt(reservationPaymentReceiptExport(selectedReceipt, reservation.reservationCode))}>Tải biên lai xuống</Button>
+          <Button type="button" variant="outline" onClick={() => downloadPaymentReceipt(reservationPaymentReceiptExport(selectedReceipt, reservation.reservationCode))}>Tải phiếu ghi nhận giao dịch</Button>
         </div>}
       </div>
     </Modal>
