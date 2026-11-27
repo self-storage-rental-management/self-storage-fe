@@ -5,7 +5,7 @@ import type { CheckInCase } from '../../services/checkInApi'
 
 function render(overrides: Partial<CheckInCase>) {
   return renderToStaticMarkup(<InventoryResolutionPanel item={{ checkInId: 'checkin', inventoryResolutionStatus: 'PENDING_CUSTOMER', inventoryReturnWindowDays: 7, ...overrides } as CheckInCase}
-    busy={false} onRefresh={vi.fn()} onOpenReturns={vi.fn()} />)
+    busy={false} onOpenReturns={vi.fn()} />)
 }
 
 it('records full intake onsite without suggesting another warehouse when changed goods fit', () => {
@@ -15,15 +15,24 @@ it('records full intake onsite without suggesting another warehouse when changed
   expect(html).not.toContain('Xác nhận phần dư đã đưa ra')
 })
 it('replaces retired partial intake with forced return within 7 days', () => {
-  expect(render({ inventoryResolutionStatus: 'PARTIAL_ACCEPTED', inventoryFullFit: false })).toContain('Buộc trả kho và quyết toán (hạn 7 ngày)')
+  expect(render({ inventoryResolutionStatus: 'PARTIAL_ACCEPTED', inventoryFullFit: false })).toContain('Xác nhận buộc trả kho và tạo hồ sơ trả kho')
   expect(render({ inventoryFullFit: false })).not.toContain('Tạo yêu cầu thu xếp chuyển hàng')
   expect(render({ inventoryFullFit: false })).not.toContain('Xác nhận phần dư đã đưa ra')
   expect(render({ inventoryResolutionStatus: 'PARTIAL_ACCEPTED', inventoryRemainderRemovedAt: '2026-11-24T00:00:00Z' })).not.toContain('Xác nhận phần dư đã đưa ra')
 })
 
 it('routes an actual return request to inspection and settlement', () => {
-  const html = render({ inventoryResolutionStatus: 'RETURN_REQUESTED', inventoryFullFit: false })
+  const html = render({
+    inventoryResolutionStatus: 'RETURN_REQUESTED',
+    inventoryFullFit: false,
+    inventoryRemovalPublishedAt: '2026-11-24T17:00:00Z',
+    inventoryRemovalDeadlineAt: '2026-12-01T17:00:00Z',
+  })
   expect(html).toContain('Mở Trả kho &amp; nghiệm thu')
+  expect(html).toContain('Hệ thống tự nhắc khách khi còn 48 giờ và 24 giờ đến hạn trả kho.')
+  expect(html).not.toContain('Nhắc khách trả kho</button>')
+  expect(html).toContain('Thời điểm xác nhận buộc trả kho:')
+  expect(html).toContain('Hạn cuối trả kho:')
   expect(html).not.toContain('Xác nhận phần dư đã đưa ra')
 })
 
@@ -51,7 +60,10 @@ it('offers only forced 7-day return when the inspected goods exceed capacity', (
   expect(html).not.toContain('Nhận phần vừa kho')
   expect(html).not.toContain('Số kiện cần đưa ra')
   expect(html).not.toContain('Tạo yêu cầu thu xếp chuyển hàng')
-  expect(html).toContain('Buộc trả kho và quyết toán (hạn 7 ngày)')
-  expect(render({ inventoryFullFit: false, inventoryReturnWindowDays: 3 })).toContain('Buộc trả kho và quyết toán (hạn 3 ngày)')
-  expect(render({ inventoryFullFit: false, inventoryReturnWindowDays: 10 })).toContain('Buộc trả kho và quyết toán (hạn 10 ngày)')
+  expect(html).toContain('Xác nhận buộc trả kho và tạo hồ sơ trả kho')
+  expect(html).toContain('border-red-300 bg-red-50 text-red-900')
+  expect(html).toContain('Nhân viên tạo yêu cầu buộc khách trả kho')
+  expect(html).not.toContain('Staff')
+  expect(render({ inventoryFullFit: false, inventoryReturnWindowDays: 3 })).toContain('trong vòng 3 ngày')
+  expect(render({ inventoryFullFit: false, inventoryReturnWindowDays: 10 })).toContain('trong vòng 10 ngày')
 })

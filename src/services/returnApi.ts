@@ -5,7 +5,7 @@ import { isUuid } from './renewalOperationsApi'
 import { renameEvidenceFile } from '../utils/evidenceFileName'
 
 export type ReturnRole = 'customer' | 'staff' | 'manager' | 'business'
-export const returnStatuses = ['requested', 'scheduled', 'inspected', 'awaiting_business_review', 'awaiting_customer_confirmation', 'disputed', 'payment_due', 'refund_pending', 'recovery_required', 'completed'] as const
+export const returnStatuses = ['requested', 'scheduled', 'inspected', 'awaiting_business_review', 'awaiting_customer_confirmation', 'disputed', 'payment_due', 'refund_pending', 'recovery_required', 'completed', 'withdrawn_for_recovery'] as const
 export interface OverdueSettlement {
   accruedAmount: number | null
   settlementAmount: number | null
@@ -58,6 +58,17 @@ export function isOverdueSettlement(value: unknown): value is OverdueSettlement 
       && amount(v.overdueDays) && typeof v.calculatedAt === 'string' && Number.isFinite(Date.parse(v.calculatedAt)))
 }
 export interface ApiReturn {
+  settlementVersion?: number
+  settlementPublishedAt?: string | null
+  settlementPaymentDueAt?: string | null
+  settlementReceipts?: ApiReturn['settlementReceipt'][]
+  displayCode?: string | null
+  rentalDisplayCode?: string | null
+  customerClearedAt?: string | null
+  warehouseEmptyVerified?: boolean | null
+  warehouseEmptyVerifiedAt?: string | null
+  warehouseEmptyVerifiedBy?: string | null
+  clearanceRevision?: number
   missingPalletCount?: number
   palletLossFee?: number
   equipment?: { rackCount: number; frameCount: number; palletCount: number | null; palletUnitPrice: number }
@@ -82,9 +93,39 @@ export interface ApiReturn {
   lockInspectionResult?: LockInspectionResult | null
   inventoryMatch?: 'match' | 'missing' | 'excess' | null
   damageClassification?: 'no_damage' | 'minor_damage' | 'major_damage' | 'abandoned_goods' | null
-  status: typeof returnStatuses[number]; scheduledDate: string
+  status: typeof returnStatuses[number]; scheduledDate: string | null
+  scheduledAppointmentAt?: string | null
+  inventoryRemovalPublishedAt?: string | null
   inventoryRemovalDeadlineAt?: string | null
   returnWindowDays?: number | null
+  returnExtensionDays?: number | null
+  returnExtensionCount?: number
+  maxReturnExtensions?: number
+  canExtendReturnWindow?: boolean
+  returnVersion?: number
+  attendance?: {
+    arrivedAt: string | null
+    evidenceId: string | null
+    expiresAt: string | null
+    attempts: number
+    verifiedAt: string | null
+    reviewStartsAt: string | null
+    reviewAccepted: boolean | null
+    handoverDueAt?: string | null
+    handoverStaffId?: string | null
+    reverificationStartedAt?: string | null
+    reverificationStaffId?: string | null
+    handoverAppointmentAt?: string | null
+    recordedAt?: string | null
+    recordedBy?: string | null
+    evidenceNote?: string | null
+    lateArrivalClaimedAt?: string | null
+    reviewStatus?: string | null
+    reviewDeadlineAt?: string | null
+    reviewReason?: string | null
+    reviewedBy?: string | null
+    reviewedAt?: string | null
+  } | null
   returnPolicyVersion?: string | null
   returnType?: 'CANCELLED_IN_SETUP' | 'RETURN_IN_SETUP' | 'INVENTORY_MISMATCH' | 'EARLY_RETURN' | 'NORMAL'
   settlementMode?: 'AUTO' | 'MANUAL_REVIEW'
@@ -93,6 +134,7 @@ export interface ApiReturn {
   customerNotes?: string | null
   customerDecisionNote?: string | null
   inspectedAt?: string | null
+  reviewedAt?: string | null
   managerReviewDueAt?: string | null
   managerApprovalRequired?: boolean
   customerConfirmationDueAt?: string | null
@@ -161,7 +203,12 @@ export function isApiReturn(v: unknown): v is ApiReturn {
     (v.settlementPaymentId === undefined || v.settlementPaymentId === null || typeof v.settlementPaymentId === 'string') &&
     (v.settlementPaidAt === undefined || v.settlementPaidAt === null || (typeof v.settlementPaidAt === 'string' && Number.isFinite(Date.parse(v.settlementPaidAt)))) &&
     (v.completedAt === undefined || v.completedAt === null || (typeof v.completedAt === 'string' && Number.isFinite(Date.parse(v.completedAt)))) &&
-    ['noShowAt', 'recoveryEligibleAt', 'recoveryTaskCreatedAt', 'inventoryRemovalDeadlineAt'].every(k => v[k] === undefined || v[k] === null || (typeof v[k] === 'string' && Number.isFinite(Date.parse(v[k])))) &&
+    (v.clearanceRevision === undefined || (Number.isSafeInteger(v.clearanceRevision) && Number(v.clearanceRevision) >= 0)) &&
+    (v.warehouseEmptyVerified == null || typeof v.warehouseEmptyVerified === 'boolean') &&
+    (v.warehouseEmptyVerifiedBy == null || isUuid(v.warehouseEmptyVerifiedBy)) &&
+    ['customerClearedAt', 'warehouseEmptyVerifiedAt', 'noShowAt', 'recoveryEligibleAt', 'recoveryTaskCreatedAt', 'inventoryRemovalDeadlineAt', 'scheduledAppointmentAt', 'inventoryRemovalPublishedAt'].every(k => v[k] === undefined || v[k] === null || (typeof v[k] === 'string' && Number.isFinite(Date.parse(v[k])))) &&
+    ['returnExtensionDays', 'returnExtensionCount', 'maxReturnExtensions', 'returnVersion'].every(k => v[k] === undefined || v[k] === null || (Number.isSafeInteger(v[k]) && Number(v[k]) >= 0)) &&
+    (v.canExtendReturnWindow === undefined || typeof v.canExtendReturnWindow === 'boolean') &&
     (v.recoveryWitnessStaffId === undefined || v.recoveryWitnessStaffId === null || isUuid(v.recoveryWitnessStaffId)) &&
     (v.recoveryWitnessStaffName === undefined || v.recoveryWitnessStaffName === null || typeof v.recoveryWitnessStaffName === 'string') &&
     (v.recoveryTaskDeadlineAt === undefined || v.recoveryTaskDeadlineAt === null || (typeof v.recoveryTaskDeadlineAt === 'string' && Number.isFinite(Date.parse(v.recoveryTaskDeadlineAt)))) &&
@@ -170,7 +217,7 @@ export function isApiReturn(v: unknown): v is ApiReturn {
     (v.legacyPricingSnapshotAvailable === undefined || typeof v.legacyPricingSnapshotAvailable === 'boolean') &&
     (v.legacyPricingEvidenceFileId === undefined || v.legacyPricingEvidenceFileId === null || isUuid(v.legacyPricingEvidenceFileId)) &&
     (v.moveInCompletedAt === undefined || v.moveInCompletedAt === null || (typeof v.moveInCompletedAt === 'string' && Number.isFinite(Date.parse(v.moveInCompletedAt)))) &&
-    ['facilityName', 'unitNumber', 'customerName'].every(k => typeof v[k] === 'string') && date(v.scheduledDate) &&
+    ['facilityName', 'unitNumber', 'customerName'].every(k => typeof v[k] === 'string') && (v.scheduledDate === null || date(v.scheduledDate)) &&
     returnStatuses.includes(v.status as ApiReturn['status']) && typeof v.customerConfirmed === 'boolean' && money(v.totalDeductions) &&
     ['damageFee', 'cleaningFee', 'lostItemFee', 'overdueFee', 'outstandingFee'].every(k => money(v[k])) &&
     (v.proposedUnitStatus === null || v.proposedUnitStatus === 'available' || v.proposedUnitStatus === 'maintenance') &&
@@ -312,7 +359,41 @@ async function mutate(role: ReturnRole, id: string, action: string, body: object
   return bound(await apiRequest(`/api/${role}/returns/${id}/${action}`, { method: 'POST', body: JSON.stringify(body) }), role, id)
 }
 function fees(body: ReturnFees) { if (!feeKeys.every(k => money(body[k]))) throw new Error('Phí phải là số tiền VND không âm, tối đa hai chữ số thập phân.') }
-export function inspectReturn(id: string, body: InspectionInput) {
+export function setCustomerClearance(record: ApiReturn, cleared: boolean) {
+  return mutate('customer', record.id, 'clearance', { cleared, clearanceRevision: record.clearanceRevision ?? 0 })
+}
+export function scheduleMismatchReturnAppointment(id: string, appointmentAt: string, expectedVersion?: number, idempotencyKey?: string) {
+  return mutate('customer', id, 'appointment', { appointmentAt, expectedVersion, idempotencyKey })
+}
+export function extendMismatchReturnWindow(id: string, expectedVersion?: number, idempotencyKey?: string) {
+  return mutate('customer', id, 'extend-removal-window', { expectedVersion, idempotencyKey })
+}
+export function recordReturnArrival(
+  id: string,
+  body: { actualArrivedAt?: string; evidenceNote?: string; evidenceId?: string; expectedVersion?: number } = {},
+) {
+  return mutate('staff', id, 'arrival', body)
+}
+export function verifyReturnIdentity(id: string, attemptId: string, documentNumber: string, reverificationStartedAt?: string | null, evidenceId?: string) {
+  return mutate('staff', id, 'identity', { attemptId, documentNumber, reverificationStartedAt, evidenceId })
+}
+export function reopenReturnVerification(id: string, staffId: string, reason: string) {
+  return mutate('manager', id, 'identity-reopen', { staffId, reason })
+}
+export function reviewReturnArrival(
+  id: string,
+  accepted: boolean,
+  reason: string,
+  staffId?: string,
+  appointmentAt?: string,
+  decision?: 'APPROVED_ON_TIME' | 'FACILITY_EXCEPTION' | 'CONFIRMED_ABSENT',
+) {
+  return mutate('manager', id, 'arrival-review', { accepted, reason, staffId, appointmentAt, decision })
+}
+export function savePropertyCheck(record: ApiReturn, unitVacated: boolean, staffNotes: string, evidencePhotos: string[]) {
+  return mutate('staff', record.id, 'property-check', { unitVacated, staffNotes, evidencePhotos, clearanceRevision: record.clearanceRevision ?? 0 })
+}
+export function inspectReturn(id: string, body: InspectionInput, clearanceRevision?: number) {
   const safeBody: InspectionInput = { ...body, ...sanitizeFees(body) }
   fees(safeBody)
   if (!['match', 'missing', 'excess'].includes(body.inventoryMatch) ||
@@ -327,7 +408,7 @@ export function inspectReturn(id: string, body: InspectionInput) {
       const price = returnDamageCatalog.find((entry) => entry.code === item.code)
       return !price || !Number.isFinite(item.quantity) || item.quantity <= 0
     })))) throw new Error('Kiểm tra thông tin nghiệm thu.')
-  return mutate('staff', id, 'inspection', { ...safeBody, inspectionNotes: body.staffNotes })
+  return mutate('staff', id, clearanceRevision == null ? 'inspection' : `inspection?clearanceRevision=${clearanceRevision}`, { ...safeBody, inspectionNotes: body.staffNotes })
 }
 export async function completeRefund(id: string, body: {
   transactionReference?: string
@@ -347,10 +428,10 @@ export async function completeRefund(id: string, body: {
   if (!isUuid(id)) throw new Error('Mã hồ sơ hoặc giao dịch gốc hoàn tiền không hợp lệ.')
   const safeBody = {
     paymentMethod: body.paymentMethod || 'BANK_TRANSFER',
-    transactionReference: body.transactionReference || ('AUTO_REFUND_' + id.substring(0, 8)),
     notes: body.notes || 'Xác nhận hoàn tất nghĩa vụ tài chính và đóng hồ sơ trả kho',
     confirmed: true,
     ...body,
+    transactionReference: body.paymentMethod === 'CASH' ? undefined : body.transactionReference?.trim(),
   }
   return bound(await apiRequest(`/api/${role}/returns/${id}/complete-refund`, {
     method: 'POST', body: JSON.stringify(safeBody),
@@ -365,8 +446,9 @@ export interface ReturnSettlementReceipt {
   confirmed: boolean
 }
 export function validateReturnSettlementReceipt(body: ReturnSettlementReceipt) {
-  if (!money(body.amount) || body.amount <= 0 || !['CASH', 'BANK_TRANSFER'].includes(body.paymentMethod) || (body.paymentMethod === 'BANK_TRANSFER' && !body.transactionReference.trim())
-    || body.transactionReference.length > 120 || !isUuid(body.receiptFileId) || body.confirmed !== true)
+  if (!money(body.amount) || body.amount <= 0 || !['CASH', 'BANK_TRANSFER'].includes(body.paymentMethod)
+    || (body.paymentMethod === 'BANK_TRANSFER' && (!body.transactionReference.trim() || body.transactionReference.length > 120))
+    || !isUuid(body.receiptFileId) || body.confirmed !== true)
     throw new Error('Kiểm tra phương thức, tải biên lai và xác nhận đã thực thu hoặc thực hoàn tiền. Với chuyển khoản, nhập mã giao dịch.')
 }
 export async function recordReturnSettlement(id: string, body: ReturnSettlementReceipt, key: string, role: ReturnRole = 'staff') {
@@ -376,8 +458,9 @@ export async function recordReturnSettlement(id: string, body: ReturnSettlementR
   validateReturnSettlementReceipt(body)
 
   if (role === 'business') return completeRefund(id, body)
+  const receipt = { ...body, transactionReference: body.paymentMethod === 'CASH' ? '' : body.transactionReference.trim() }
   return bound(await apiRequest(`/api/${role}/returns/${id}/settlement-receipts`, {
-    method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify(body),
+    method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify(receipt),
   }), role, id)
 }
 
@@ -479,10 +562,10 @@ export async function decideLegacyPricing(id: string, body: {
     body: JSON.stringify({ ...body, resolutionNote: body.resolutionNote.trim() }),
   }), 'business', id, undefined, 'MANAGE')
 }
-export function confirmReturn(id: string, decision: 'accepted' | 'disputed', note: string, role: ReturnRole = 'customer') {
+export function confirmReturn(id: string, decision: 'accepted' | 'disputed', note: string, role: ReturnRole = 'customer', settlementVersion?: number) {
   if (decision === 'disputed' && !note.trim()) throw new Error('Nhập lý do yêu cầu xem xét lại.')
   if (note.length > 2000) throw new Error('Ghi chú quá dài.')
-  return mutate(role, id, 'confirm', { decision, note })
+  return mutate(role, id, 'confirm', { decision, note, settlementVersion })
 }
 export function paySettlement(id: string, paymentMethod: string, notes = '') {
   if (!paymentMethod.trim() || paymentMethod.length > 40) throw new Error('Nhập phương thức thanh toán hợp lệ.')
@@ -499,6 +582,8 @@ export function returnError(error: unknown) {
       if (msg === 'Cần đối soát lại phí quá hạn trước khi xác nhận hoặc thu hoàn tiền.') {
         return 'Cần cơ sở đối soát lại phí quá hạn trước khi xác nhận hoặc thu hoàn tiền.'
       }
+      if (msg.startsWith('Tình trạng dọn kho đã thay đổi') || msg.startsWith('Cần xác minh gian kho trống')
+        || msg.startsWith('Hồ sơ đã qua giai đoạn cập nhật')) return msg
       if (msg.includes('Vui lòng thanh toán tại cơ sở')) {
         return 'Vui lòng thanh toán tại cơ sở.'
       }

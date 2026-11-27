@@ -1,9 +1,15 @@
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
+import { compareWorkQueue, compareQueueTime } from '../../utils/workQueueSort'
+import { compareReturnQueue } from '../../utils/returnQueueSort'
+import ProcessingLeaseBoundary from '../../components/ProcessingLeaseBoundary'
 import { displayStatusLabel } from '../../presentation/statusLabels'
 import { isApiAuthenticated } from '../../services/authApi'
 import { useReturnRecords } from '../../hooks/useReturnRecords'
 import { returnScreenRecord } from '../../services/returnScreenAdapter'
-import { getRental } from '../../services/rentalApi'
 import { approveInventoryMismatch, getReturn, reviewDispute, recordReturnSettlement, uploadReturnEvidence, returnError } from '../../services/returnApi'
+import { getAuthenticatedActor } from '../../services/authApi'
+import ReturnAttendance, { isReturnIdentityReviewPending } from '../return-api/ReturnAttendance'
+import { ViolationRecoveryEntry } from '../return-api/ViolationRecoveryPanel'
 import React, { useEffect, useRef, useState } from 'react'
 import { Badge, Button, Card, Table, Thead, Tbody, Th, Td, Tr, Modal, Select, Input } from '../../components/ui'
 import { formatVndAmount as formatVnd } from '../../i18n/currency'
@@ -22,19 +28,6 @@ import ManagerPagination from './ManagerPagination'
 import { formatManagerDate, formatManagerDateTime, formatManagerMoney as legacyManagerMoney, managerDateValue, matchesManagerSearch, normalizeManagerMoney, paginateManagerItems } from './managerList'
 import useManagerSoftDelete from './useManagerSoftDelete'
 
-function RentalDisplayCode({ rentalId, useApi }: { rentalId: string; useApi: boolean }) {
-  const [code, setCode] = useState<string | null>(null)
-  useEffect(() => {
-    let active = true
-    setCode(null)
-    if (useApi) void getRental('manager', rentalId).then(record => {
-      if (active) setCode(record.displayCode ?? null)
-    }).catch(() => { if (active) setCode(null) })
-    return () => { active = false }
-  }, [rentalId, useApi])
-  return <span className="font-semibold text-stone-900">{code ?? 'Chưa xác định mã hồ sơ'}</span>
-}
-
 function isAwaitingManagerReview(record: ReturnCase) {
   return record.status === 'awaiting_business_review'
     && (record.managerApprovalRequired ?? record.returnType === 'INVENTORY_MISMATCH')
@@ -51,10 +44,12 @@ interface ManagerReturnsPanelProps {
   showToast: (msg: string) => void
   sb: (v: string) => React.ReactNode
   onCreateMaintenanceWork?: (draft: { referenceId: string; title: string; notes: string }) => void
+  onOpenRecovery?: () => void
+  reviewTarget?: { id: string; request: number }
   onNavigateToComplaints?: (tab?: 'payment' | 'returns') => void
 }
 
-export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaintenanceWork, onNavigateToComplaints }: ManagerReturnsPanelProps) {
+export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaintenanceWork, onOpenRecovery, reviewTarget, onNavigateToComplaints }: ManagerReturnsPanelProps) {
   const {
     returns: legacyReturns,
     users,
@@ -88,7 +83,8 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [sortBy, setSortBy] = useState('priority')
-  const [page, setPage] = useState(1)
+  const [ongoingPage, setOngoingPage] = useState(1)
+  const [completedPage, setCompletedPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [selectedReturn, setSelectedReturn] = useState<ReturnCase | null>(null)
   const [detailModalOpen, setDetailModalOpen] = useState(false)
@@ -99,7 +95,6 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
   const [facilityCompensation, setFacilityCompensation] = useState<number>(0)
   const [disputeSettlement, setDisputeSettlement] = useState<ManagerReturnSettlementFees>({ damageFee: 0, cleaningFee: 0, lostItemFee: 0, overdueFee: 0, outstandingFee: 0 })
   const [refundTxnRef, setRefundTxnRef] = useState('')
-  const [deleteTarget, setDeleteTarget] = useState<ReturnCase | null>(null)
   const returnHistory = useManagerSoftDelete(`storagehub:manager:${user.id}:hidden-returns`)
 
   // Settlement document modal state (invoice, receipt, payment history)
@@ -135,11 +130,32 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
     setRefundFile(null); setRefundConfirmed(false); refundUpload.current = null; refundKey.current = null
   }, [apiRead.identity])
 
+  const openedReviewTarget = useRef<typeof reviewTarget>(undefined)
+  useEffect(() => {
+    if (!reviewTarget || openedReviewTarget.current === reviewTarget) return
+    const record = apiRead.rows.find(row => row.id === reviewTarget.id)
+    if (!record) return
+    openedReviewTarget.current = reviewTarget
+    setReturnTab(isReturnIdentityReviewPending(record, Date.now()) ? 'awaiting_identity_review' : 'All')
+    setSelectedReturn(returnScreenRecord(record))
+    setDetailModalOpen(true)
+  }, [apiRead.rows, reviewTarget])
+
   const availableStaff = users.filter(member => canManagerAssignStaff(user, member))
 
   // Filter returns by facility
   const scopedReturns = useApi ? storeReturns : storeReturns.filter(r => isManagerFacilityVisible(user, r.facilityId, r.facilityName))
   const facilityReturns = scopedReturns.filter(r => !returnHistory.isHidden(r.id))
+  const [reviewNow, setReviewNow] = useState(Date.now)
+  const hasReviewTimes = useApi && apiRead.rows.some(row => row.attendance?.reviewStartsAt)
+  useEffect(() => {
+    if (!hasReviewTimes) return
+    setReviewNow(Date.now())
+    const timer = window.setInterval(() => setReviewNow(Date.now()), 15_000)
+    return () => window.clearInterval(timer)
+  }, [hasReviewTimes])
+  const pendingIdentityReviews = new Set(useApi ? apiRead.rows.filter(row => isReturnIdentityReviewPending(row, reviewNow)).map(row => row.id) : [])
+  const apiRowsById = new Map(apiRead.rows.map(row => [row.id, row]))
   const hiddenFacilityCount = scopedReturns.length - facilityReturns.length
   const moneyValue = (value?: number) => useApi ? value ?? Number.NaN : normalizeManagerMoney(value) ?? 0
 
@@ -147,7 +163,9 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
   const recoveryRequiredCount = facilityReturns.filter(r => r.status === 'recovery_required').length
   const refundPendingCount = facilityReturns.filter(r => r.status === 'refund_pending').length
   const completedCount = scopedReturns.filter(r => r.status === 'completed').length
-  const awaitingInspectionCount = facilityReturns.filter(r => r.status === 'requested' || r.status === 'scheduled').length
+  const awaitingIdentityReviewCount = facilityReturns.filter(r => pendingIdentityReviews.has(r.id)).length
+  const awaitsInspection = (r: ReturnCase) => (r.status === 'requested' || r.status === 'scheduled') && !pendingIdentityReviews.has(r.id)
+  const awaitingInspectionCount = facilityReturns.filter(awaitsInspection).length
   const inspectedCount = facilityReturns.filter(r => r.status === 'inspected' || r.status === 'awaiting_business_review' || r.status === 'awaiting_customer_confirmation').length
   const needsMaintenanceCount = facilityReturns.filter(r => (r.damageClassification && r.damageClassification !== 'no_damage') || r.proposedUnitStatus === 'maintenance').length
   const disputedCount = facilityReturns.filter(r => r.status === 'disputed').length
@@ -157,36 +175,44 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
       returnTab === 'All' ||
       returnTab === 'Tất cả' ||
       (returnTab === 'recovery_required' && r.status === 'recovery_required') ||
-      (returnTab === 'awaiting_inspection' && (r.status === 'requested' || r.status === 'scheduled')) ||
+      (returnTab === 'awaiting_identity_review' && pendingIdentityReviews.has(r.id)) ||
+      (returnTab === 'awaiting_inspection' && awaitsInspection(r)) ||
       (returnTab === 'inspected' && (r.status === 'inspected' || r.status === 'awaiting_business_review' || r.status === 'awaiting_customer_confirmation')) ||
       (returnTab === 'needs_maintenance' && ((r.damageClassification && r.damageClassification !== 'no_damage') || r.proposedUnitStatus === 'maintenance')) ||
       (returnTab === 'refund_pending' && r.status === 'refund_pending') ||
       (returnTab === 'payment_due' && r.status === 'payment_due') ||
       (returnTab === 'completed' && r.status === 'completed')
 
-    const matchSearch = matchesManagerSearch(returnSearch, [r.id, r.rentalId, r.customerId, r.customerName, r.unitId, r.customerEmail, r.customerPhone, r.staffNotes, r.customerDecisionNote])
+    const matchSearch = matchesManagerSearch(returnSearch, [r.displayCode || recordDisplayCode(r.id), r.rentalDisplayCode || recordDisplayCode(r.rentalId), r.id, r.rentalId, r.customerId, r.customerName, r.unitId, r.customerEmail, r.customerPhone, r.staffNotes, r.customerDecisionNote])
     const matchDamage = damageFilter === 'all' || r.damageClassification === damageFilter
     const matchSettlement = settlementFilter === 'all' || (settlementFilter === 'refund' ? r.netRefundAmount > 0 : settlementFilter === 'customer_due' ? (r.amountDueFromCustomer || 0) > 0 : r.netRefundAmount === 0 && (r.amountDueFromCustomer || 0) === 0)
     const matchDate = (!dateFrom || r.scheduledDate >= dateFrom) && (!dateTo || r.scheduledDate <= dateTo)
     return matchTab && matchSearch && matchDamage && matchSettlement && matchDate
   }).sort((left, right) => {
-    if (sortBy === 'date-asc') return managerDateValue(left.scheduledDate) - managerDateValue(right.scheduledDate)
-    if (sortBy === 'date-desc') return managerDateValue(right.scheduledDate) - managerDateValue(left.scheduledDate)
+    if (sortBy === 'date-asc') return compareQueueTime(left.scheduledDate, right.scheduledDate) || left.id.localeCompare(right.id)
+    if (sortBy === 'date-desc') return compareQueueTime(left.scheduledDate, right.scheduledDate, true) || left.id.localeCompare(right.id)
     if (sortBy === 'amount-desc') {
       const amount = (record: ReturnCase) => Number.isFinite(record.netRefundAmount) && Number.isFinite(record.amountDueFromCustomer ?? 0)
         ? record.netRefundAmount + (record.amountDueFromCustomer ?? 0) : -Infinity
       const leftAmount = amount(left), rightAmount = amount(right)
-      return leftAmount === rightAmount ? 0 : rightAmount - leftAmount
+      return (leftAmount === rightAmount ? 0 : rightAmount - leftAmount) || left.id.localeCompare(right.id)
     }
-    const leftDue = managerReviewDeadline(left) ?? Infinity
-    const rightDue = managerReviewDeadline(right) ?? Infinity
-    if (leftDue !== rightDue) return leftDue - rightDue
-    const statusPriority: Record<string, number> = { recovery_required: -1, requested: 0, scheduled: 1, inspected: 2, awaiting_business_review: 3, disputed: 4, refund_pending: 5, payment_due: 6, awaiting_customer_confirmation: 7, completed: 8 }
-    return (statusPriority[left.status] ?? 99) - (statusPriority[right.status] ?? 99) || managerDateValue(left.requestedAt) - managerDateValue(right.requestedAt)
+    const rawLeft = apiRowsById.get(left.id), rawRight = apiRowsById.get(right.id)
+    if (useApi && rawLeft && rawRight) return compareReturnQueue(rawLeft, rawRight, 'manager', reviewNow)
+    const order = (record: ReturnCase) => ({
+      id: record.id, closed: record.status === 'completed',
+      actionable: pendingIdentityReviews.has(record.id) || isAwaitingManagerReview(record) || record.status === 'disputed' || record.status === 'refund_pending',
+      dueAt: record.managerReviewDueAt,
+      waitingSince: record.requestedAt, completedAt: record.completedAt,
+    })
+    return compareWorkQueue(order(left), order(right), reviewNow)
   })
-  const pagination = paginateManagerItems(filteredReturns, page, pageSize)
+  const returnGroups = [
+    { id: 'ongoing', title: 'Đang diễn ra', rows: filteredReturns.filter(r => r.status !== 'completed'), page: ongoingPage, setPage: setOngoingPage },
+    { id: 'completed', title: 'Đã hoàn tất / đã xử lý', rows: filteredReturns.filter(r => r.status === 'completed'), page: completedPage, setPage: setCompletedPage },
+  ]
 
-  useEffect(() => setPage(1), [returnTab, returnSearch, damageFilter, settlementFilter, dateFrom, dateTo, sortBy, pageSize])
+  useEffect(() => { setOngoingPage(1); setCompletedPage(1) }, [returnTab, returnSearch, damageFilter, settlementFilter, dateFrom, dateTo, sortBy, pageSize])
 
   const openAssignModal = (returnCase: ReturnCase) => {
     setAssignTarget(returnCase)
@@ -221,7 +247,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
       onCreateMaintenanceWork({
         referenceId: returnCase.unitId,
         title: `Bảo trì gian ${returnCase.unitId} sau trả kho`,
-        notes: `Hồ sơ trả kho ${returnCase.id}. Tình trạng: ${returnCase.damageClassification ? getDamageLabel(returnCase.damageClassification) : ''}. Ghi chú: ${returnCase.staffNotes || ''}`
+        notes: `Hồ sơ trả kho ${returnCase.displayCode || recordDisplayCode(returnCase.id)}. Tình trạng: ${returnCase.damageClassification ? getDamageLabel(returnCase.damageClassification) : ''}. Ghi chú: ${returnCase.staffNotes || ''}`
       })
       return
     }
@@ -320,7 +346,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
             resolutionNote: completeNotes || 'Quản lý cơ sở đã duyệt bảng kê kiểm kê sai lệch và gửi khách xác nhận.',
             proposedUnitStatus: completeTarget.proposedUnitStatus || 'available',
           })
-          showToast(`Đã duyệt bảng kê kiểm kê sai lệch và gửi khách xác nhận hồ sơ ${completeTarget.id}.`)
+          showToast(`Đã duyệt bảng kê kiểm kê sai lệch và gửi khách xác nhận hồ sơ ${completeTarget.displayCode || recordDisplayCode(completeTarget.id)}.`)
         } else if (completeTarget.status === 'awaiting_customer_confirmation') {
           showToast('Đang chờ khách hàng đồng ý quyết toán hoặc gửi yêu cầu xem xét lại.')
           return
@@ -334,7 +360,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
             resolutionNote: completeNotes || 'Quản lý duyệt hoàn tất trả kho',
             proposedUnitStatus: 'available',
           })
-          showToast(`Đã duyệt bỏ qua khiếu nại và cho trả kho ngay hồ sơ ${completeTarget.id}!`)
+          showToast(`Đã duyệt bỏ qua khiếu nại và cho trả kho ngay hồ sơ ${completeTarget.displayCode || recordDisplayCode(completeTarget.id)}!`)
         } else {
           showToast(`Hồ sơ đang ở trạng thái ${displayStatusLabel(completeTarget.status)}, vui lòng xử lý theo đúng quy trình.`)
           return
@@ -351,7 +377,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
     }
     try {
       completeReturnCase(completeTarget.id, user, completeNotes)
-      showToast(`Đã xác nhận hoàn tất hồ sơ trả kho ${completeTarget.id}!`)
+      showToast(`Đã xác nhận hoàn tất hồ sơ trả kho ${completeTarget.displayCode || recordDisplayCode(completeTarget.id)}!`)
       setCompleteModalOpen(false)
       setCompleteTarget(null)
     } catch (err: any) {
@@ -378,6 +404,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
     if (isAwaitingManagerReview(record)) return <Badge variant="warning">Chờ quản lý cơ sở duyệt</Badge>
     if (record.status === 'awaiting_business_review') return <Badge variant="warning">Chờ Ban điều hành duyệt</Badge>
     if (record.status === 'recovery_required') return <Badge variant="error">Cần xử lý thu hồi</Badge>
+    if (record.status === 'withdrawn_for_recovery') return <Badge variant="warning">Đã chuyển sang thu hồi</Badge>
     return sb(record.status)
   }
 
@@ -484,7 +511,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
         facilityCompensation > 0 ? facilityCompensation : undefined
       )
       showToast(
-        `Đã xử lý khiếu nại của hồ sơ ${selectedReturn.id}.`
+        `Đã xử lý khiếu nại của hồ sơ ${selectedReturn.displayCode || recordDisplayCode(selectedReturn.id)}.`
       )
       setDisputeModalOpen(false)
       setDisputeResolutionNote('')
@@ -500,7 +527,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
       if (apiLock.current) return
       apiLock.current = true; setApiBusy(true)
       try {
-        if (!refundFile || !refundConfirmed || !refundTxnRef.trim()) throw new Error('Cần phương thức, biên lai và xác nhận thực hoàn trước khi ghi nhận.')
+        if (!refundFile || !refundConfirmed || (refundMethod === 'BANK_TRANSFER' && !refundTxnRef.trim())) throw new Error('Cần biên lai và xác nhận thực hoàn. Nếu chuyển khoản, vui lòng nhập mã giao dịch.')
         const latest = await getReturn('manager', selectedReturn.id)
         if (latest.status !== 'refund_pending' || latest.sourceType === 'RECOVERY' || latest.settlementBlocker || latest.netRefundAmount == null || latest.netRefundAmount <= 0) throw new Error(latest.settlementBlocker || 'Hồ sơ chưa đủ điều kiện hoàn tiền.')
         const expected = Math.round(selectedReturn.netRefundAmount * 100) / 100
@@ -508,7 +535,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
         let receiptFileId = refundUpload.current?.returnId === latest.id && refundUpload.current.file === refundFile ? refundUpload.current.id : null
         if (!receiptFileId) { const uploaded = await uploadReturnEvidence(latest.id, refundFile, 'manager', 'bien-lai-thuc-hoan-tra-kho'); receiptFileId = uploaded.id; refundUpload.current = { returnId: latest.id, file: refundFile, id: receiptFileId } }
         refundKey.current ??= crypto.randomUUID()
-        const updated = await recordReturnSettlement(latest.id, { amount: latest.netRefundAmount, paymentMethod: refundMethod, transactionReference: refundTxnRef.trim(), receiptFileId, confirmed: refundConfirmed }, refundKey.current, 'manager')
+        const updated = await recordReturnSettlement(latest.id, { amount: latest.netRefundAmount, paymentMethod: refundMethod, transactionReference: refundMethod === 'BANK_TRANSFER' ? refundTxnRef.trim() : '', receiptFileId, confirmed: refundConfirmed }, refundKey.current, 'manager')
         await apiRead.refresh(); setSelectedReturn(returnScreenRecord(updated)); setRefundModalOpen(false)
         showToast('Đã ghi nhận chứng từ theo kết quả của hệ thống.')
       } catch (error) { showToast(returnError(error)) }
@@ -552,16 +579,17 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
       <div className="space-y-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
       <header>
-        <h1 className="text-2xl font-bold text-stone-900">Trả kho và nghiệm thu</h1>
+        <h1 className="text-2xl font-bold text-stone-900">Trả kho &amp; Quyết toán</h1>
         <p className="mt-1 text-sm text-stone-500">Theo dõi nghiệm thu hiện trường, biên bản và quyết toán hồ sơ trả kho.</p>
       </header>
-        <div className="flex w-full items-center gap-2 sm:w-auto">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
+          {useApi && (onOpenRecovery ? <Button className="shrink-0" variant="outline" size="sm" onClick={onOpenRecovery}>Điều phối thu hồi kho</Button> : <ViolationRecoveryEntry />)}
           <input
             type="text"
             placeholder={'Tìm theo mã, khách, gian kho...'}
             value={returnSearch}
             onChange={e => setReturnSearch(e.target.value)}
-            className="min-w-0 flex-1 border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 sm:w-72"
+            className="min-w-[230px] flex-1 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 sm:w-72 sm:flex-none"
           />
           <details className="relative shrink-0">
             <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 rounded-lg border border-stone-300 bg-white px-3 text-sm font-medium text-stone-700 hover:bg-stone-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700">
@@ -608,7 +636,8 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
           {[
             ['All', `Tất cả ${facilityReturns.length}`],
             ['awaiting_inspection', `Chờ nghiệm thu ${awaitingInspectionCount}`],
-            ['recovery_required', `Cần xử lý thu hồi ${recoveryRequiredCount}`],
+            ...(useApi ? [['awaiting_identity_review', `Chờ đối soát danh tính ${awaitingIdentityReviewCount}`]] : []),
+            ...(recoveryRequiredCount > 0 ? [['recovery_required', `Hồ sơ trả cần thu hồi ${recoveryRequiredCount}`]] : []),
             ['inspected', `Đã kiểm tra ${inspectedCount}`],
             ['needs_maintenance', `Cần bảo trì ${needsMaintenanceCount}`],
             ['completed', `Hoàn tất ${completedCount}`],
@@ -628,7 +657,8 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
       )}
 
       {/* Returns Table */}
-      <Card className="manager-return-card overflow-hidden !border-stone-200 !bg-white !shadow-none">
+      {returnGroups.map(group => { const pagination = paginateManagerItems(group.rows, group.page, pageSize); return <Card key={group.id} className="manager-return-card overflow-hidden !border-stone-200 !bg-white !shadow-none">
+        <div className="flex items-center justify-between px-5 py-4"><h2 className="font-bold text-stone-900">{group.title}</h2><span className="text-xs text-stone-500">{group.rows.length} hồ sơ</span></div>
         <Table tableClassName="manager-return-table">
           <Thead>
             <tr>
@@ -643,7 +673,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
             </tr>
           </Thead>
           <Tbody>
-            {filteredReturns.length === 0 ? (
+            {group.rows.length === 0 ? (
               <tr>
                 <td colSpan={8} className="text-center py-12 text-stone-400 text-sm">
                   {'Không có hồ sơ trả kho nào trong danh mục này.'}
@@ -672,7 +702,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                     }
                   >
                     <Td>
-                      <RentalDisplayCode rentalId={ret.rentalId} useApi={useApi} />
+                      <span className="font-semibold text-stone-900">{ret.rentalDisplayCode || recordDisplayCode(ret.rentalId)}</span>
                     </Td>
                     <Td>
                       <div className="flex items-center gap-2">
@@ -782,17 +812,6 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                           </Button>
                         )}
 
-                        {isDamaged && ret.status !== 'completed' && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="border-amber-500 text-amber-700 hover:bg-amber-50 font-medium whitespace-nowrap"
-                            onClick={() => openMaintenanceModal(ret)}
-                          >
-                            {'Lập bảo trì'}
-                          </Button>
-                        )}
-
 
                         {ret.status === 'disputed' && (
                           <Button
@@ -826,11 +845,6 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                           </Button>
                         )}
 
-                        {ret.status === 'completed' && (
-                          <Button variant="outline" size="sm" className="col-start-2 !border-red-200 !bg-red-50 !text-red-700 hover:!bg-red-100" onClick={() => setDeleteTarget(ret)}>
-                            Xóa
-                          </Button>
-                        )}
                       </div>
                     </Td>
                   </Tr>
@@ -839,8 +853,8 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
             )}
           </Tbody>
         </Table>
-        <ManagerPagination {...pagination} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
-      </Card>
+        <ManagerPagination {...pagination} pageSize={pageSize} onPageChange={group.setPage} onPageSizeChange={setPageSize} />
+      </Card> })}
 
       {/* Return Details Modal */}
       <Modal
@@ -853,8 +867,8 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
             {/* Header info */}
             <div className="p-4 rounded-xl bg-slate-900 text-white shadow-inner">
               <div className="flex justify-between items-center text-xs font-mono text-amber-400">
-                <span>{selectedReturn.id}</span>
-                <span>HĐ: {selectedReturn.rentalId}</span>
+                <span>{selectedReturn.displayCode || recordDisplayCode(selectedReturn.id)}</span>
+                <span>Hồ sơ thuê: {selectedReturn.rentalDisplayCode || recordDisplayCode(selectedReturn.rentalId)}</span>
               </div>
               <div className="mt-2 flex justify-between items-end">
                 <div>
@@ -872,6 +886,9 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
               </div>
             </div>
 
+            {currentApiReturn && <ReturnAttendance key={currentApiReturn.id} record={currentApiReturn} role="manager"
+              editable={!!getAuthenticatedActor()?.permissions.includes('rentals:update')} onChanged={apiRead.refresh} />}
+            {currentApiReturn?.status === 'withdrawn_for_recovery' && (onOpenRecovery ? <Button onClick={onOpenRecovery}>Mở điều phối thu hồi</Button> : <ViolationRecoveryEntry sourceReturnId={currentApiReturn.id} label="Mở hồ sơ thu hồi" />)}
             {/* Inspection & Fees Breakdown Bento Box */}
             <div className="grid grid-cols-2 gap-3 text-xs bg-stone-50 p-3.5 rounded-lg border border-stone-200">
               <div>
@@ -1069,18 +1086,6 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                   {selectedReturn.status === 'scheduled' ? 'Đổi nhân viên nghiệm thu' : 'Giao nhân viên nghiệm thu'}
                 </Button>
               )}
-              {((selectedReturn.damageClassification && selectedReturn.damageClassification !== 'no_damage') || selectedReturn.proposedUnitStatus === 'maintenance') && selectedReturn.status !== 'completed' && (
-                <Button
-                  variant="outline"
-                  className="border-amber-500 text-amber-700 hover:bg-amber-50"
-                  onClick={() => {
-                    setDetailModalOpen(false)
-                    openMaintenanceModal(selectedReturn)
-                  }}
-                >
-                  Lập phiếu bảo trì
-                </Button>
-              )}
               {(
                 (['inspected', 'awaiting_customer_confirmation', 'payment_due'] as string[]).includes(selectedReturn.status)
                 || isAwaitingManagerReview(selectedReturn)
@@ -1133,13 +1138,13 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
         title={'Phân Xử & Giải Quyết Khiếu Nại Quyết Toán'}
       >
         {selectedReturn && (
-          <div className="space-y-4">
+          <ProcessingLeaseBoundary target="RETURN" id={selectedReturn.id} enabled={useApi} onAcquired={async () => { openDisputeReview(returnScreenRecord(await getReturn('manager', selectedReturn.id))) }}><div className="space-y-4">
             <div className="bg-rose-50 border border-rose-200 p-3 rounded-lg text-xs space-y-1.5">
               <p className="font-bold text-rose-900 text-sm">
                 {`Khiếu nại từ khách: ${selectedReturn.customerName}`}
               </p>
               <p className="text-rose-800 font-mono">
-                {`Kho ${selectedReturn.unitId}, Hồ sơ ${selectedReturn.id}`}
+                {`Kho ${selectedReturn.unitId}, Hồ sơ ${selectedReturn.displayCode || recordDisplayCode(selectedReturn.id)}`}
               </p>
               <div className="mt-2 pt-2 border-t border-rose-200/80">
                 <p className="text-stone-500">{'Ý kiến phản ánh của khách:'}</p>
@@ -1257,7 +1262,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                 {'Gửi kết luận cho khách'}
               </Button>
             </div>
-          </div>
+          </div></ProcessingLeaseBoundary>
         )}
       </Modal>
 
@@ -1268,7 +1273,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
         title={'Xác Nhận Hoàn Tiền Cọc Cho Khách'}
       >
         {selectedReturn && (
-          <div className="space-y-4">
+          <ProcessingLeaseBoundary target="RETURN" id={selectedReturn.id} enabled={useApi} onAcquired={async () => { setSelectedReturn(returnScreenRecord(await getReturn('manager', selectedReturn.id))); setRefundConfirmed(false) }}><div className="space-y-4">
             <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl text-xs space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-emerald-800">{'Khách thụ hưởng'}</span>
@@ -1284,12 +1289,12 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
               </div>
             </div>
 
-            <Input
+            {(!useApi || refundMethod === 'BANK_TRANSFER') && <Input
               label={'Mã chứng từ / Tham chiếu chuyển khoản ngân hàng'}
               value={refundTxnRef}
               disabled={apiBusy} onChange={e => { setRefundTxnRef(e.target.value); setRefundConfirmed(false) }}
-              placeholder="e.g. VCB-REF-849204"
-            />
+              placeholder="VD: VCB-REF-849204"
+            />}
             {useApi && <>
               <label className="block text-xs font-semibold text-stone-700">Phương thức hoàn tiền<select value={refundMethod} disabled={apiBusy} onChange={event => { setRefundMethod(event.target.value as 'CASH' | 'BANK_TRANSFER'); setRefundConfirmed(false) }} className="mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2"><option value="BANK_TRANSFER">Chuyển khoản</option><option value="CASH">Tiền mặt</option></select></label>
               <label className="block text-xs font-semibold text-stone-700">Biên lai thực hoàn trả kho<input key={selectedReturn.id} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" disabled={apiBusy} className="mt-1 block w-full rounded-lg border border-stone-300 px-3 py-2" onChange={event => { setRefundFile(event.target.files?.[0] ?? null); setRefundConfirmed(false); refundUpload.current = null; refundKey.current = null }} /></label>
@@ -1303,17 +1308,13 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
               <Button
                 variant="primary"
                 className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                disabled={apiBusy || (useApi && (!refundFile || !refundConfirmed || !refundTxnRef.trim()))} onClick={handleCompleteRefund}
+                disabled={apiBusy || (useApi && (!refundFile || !refundConfirmed || (refundMethod === 'BANK_TRANSFER' && !refundTxnRef.trim())))} onClick={handleCompleteRefund}
               >
                 {'Xác nhận hoàn cọc'}
               </Button>
             </div>
-          </div>
+          </div></ProcessingLeaseBoundary>
         )}
-      </Modal>
-
-      <Modal open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)} title="Ẩn khỏi danh sách hồ sơ trả kho">
-        {deleteTarget && <div className="space-y-4"><ManagerActionNotice tone="warning">Hồ sơ {deleteTarget.id} chỉ bị ẩn khỏi lịch sử của quản lý cơ sở. Dữ liệu dùng chung, quyết toán và báo cáo không bị xóa.</ManagerActionNotice><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setDeleteTarget(null)}>Hủy</Button><Button variant="danger" onClick={() => { returnHistory.hide(deleteTarget.id); setDeleteTarget(null); showToast(`Đã ẩn hồ sơ ${deleteTarget.id} khỏi lịch sử quản lý cơ sở.`) }}>Xóa khỏi lịch sử</Button></div></div>}
       </Modal>
 
       {/* 1. Modal Giao NV Nghiệm Thu */}
@@ -1321,7 +1322,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
         {assignTarget && (
           <div className="space-y-4">
             <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3 text-xs space-y-1.5">
-              <div className="flex justify-between"><span className="text-blue-800 font-medium">Hồ sơ trả kho:</span><b className="font-mono text-blue-950">{assignTarget.id}</b></div>
+              <div className="flex justify-between"><span className="text-blue-800 font-medium">Hồ sơ trả kho:</span><b className="font-mono text-blue-950">{assignTarget.displayCode || recordDisplayCode(assignTarget.id)}</b></div>
               <div className="flex justify-between"><span className="text-blue-800 font-medium">Gian kho / Cơ sở:</span><b className="font-mono text-blue-950">{assignTarget.unitId} · {assignTarget.facilityName}</b></div>
               <div className="flex justify-between"><span className="text-blue-800 font-medium">Khách hàng:</span><b>{assignTarget.customerName} ({assignTarget.customerPhone})</b></div>
             </div>
@@ -1367,7 +1368,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
           <div className="space-y-4">
             <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-xs space-y-1.5">
               <div className="flex justify-between"><span className="text-amber-800 font-medium">Gian kho cần bảo dưỡng:</span><b className="font-mono text-amber-950 text-sm">{maintenanceTarget.unitId}</b></div>
-              <div className="flex justify-between"><span className="text-amber-800 font-medium">Hồ sơ nghiệm thu gốc:</span><span className="font-mono text-stone-600">{maintenanceTarget.id}</span></div>
+              <div className="flex justify-between"><span className="text-amber-800 font-medium">Hồ sơ nghiệm thu gốc:</span><span className="font-mono text-stone-600">{maintenanceTarget.displayCode || recordDisplayCode(maintenanceTarget.id)}</span></div>
               <div className="flex justify-between"><span className="text-amber-800 font-medium">Hiện trạng phát hiện:</span><b className="text-rose-700">{getDamageLabel(maintenanceTarget.damageClassification)}</b></div>
             </div>
 
@@ -1415,9 +1416,9 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
       {/* 3. Modal Xác Nhận Hoàn Tất Trả Kho */}
       <Modal open={completeModalOpen} onClose={() => { setCompleteModalOpen(false); setCompleteTarget(null) }} title="Xác Nhận Hoàn Tất Hồ Sơ Trả Kho">
         {completeTarget && (
-          <div className="space-y-4">
+          <ProcessingLeaseBoundary target="RETURN" id={completeTarget.id} enabled={useApi} onAcquired={async () => { setCompleteTarget(returnScreenRecord(await getReturn('manager', completeTarget.id))) }}><div className="space-y-4">
             <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 text-xs space-y-2">
-              <div className="flex justify-between items-center"><span className="text-stone-500">Mã trả kho:</span><b className="font-mono text-stone-900">{completeTarget.id}</b></div>
+              <div className="flex justify-between items-center"><span className="text-stone-500">Mã trả kho:</span><b className="font-mono text-stone-900">{completeTarget.displayCode || recordDisplayCode(completeTarget.id)}</b></div>
               <div className="flex justify-between items-center"><span className="text-stone-500">Gian kho:</span><b className="font-mono text-stone-900">{completeTarget.unitId}</b></div>
               <div className="flex justify-between items-center"><span className="text-stone-500">Khách hàng:</span><b className="text-stone-900">{completeTarget.customerName}</b></div>
               <div className="flex justify-between items-center"><span className="text-stone-500">Đánh giá hiện trường:</span><b>{getDamageLabel(completeTarget.damageClassification)}</b></div>
@@ -1464,7 +1465,7 @@ export default function ManagerReturnsPanel({ user, showToast, sb, onCreateMaint
                 {isAwaitingManagerReview(completeTarget) ? 'Duyệt bảng kê & gửi khách' : 'Xác nhận hoàn tất trả kho'}
               </Button>
             </div>
-          </div>
+          </div></ProcessingLeaseBoundary>
         )}
       </Modal>
 

@@ -1,6 +1,6 @@
 export interface InventoryDecision {
   outcome: 'ACCEPTED' | 'REFUSED' | 'RETURN_REQUESTED' | 'TRANSFER_REQUESTED'
-  source: 'STAFF' | 'CUSTOMER'
+  source: 'STAFF' | 'CUSTOMER' | 'MANAGER'
   decidedBy: string | null
   decidedByName: string | null
   decidedAt: string | null

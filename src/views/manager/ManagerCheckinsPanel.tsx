@@ -1,3 +1,4 @@
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import React, { useEffect, useState } from 'react'
 import { Badge, Button, Card, StatCard, Table, Thead, Tbody, Th, Td, Tr, SectionHeader, Modal, Avatar, ProgressBar, Select, Tabs } from '../../components/ui'
 import { Icon } from '../../components/Layout'
@@ -240,15 +241,15 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
                 return (
                   <Tr key={c.id}>
                     <Td>
-                      <span className="font-mono text-xs font-bold text-stone-800">{c.id}</span>
-                      <p className="text-[11px] text-stone-400 font-mono">Đơn: {c.holdId}</p>
+                      <span className="font-mono text-xs font-bold text-stone-800">{recordDisplayCode(c.id)}</span>
+                      <p className="text-[11px] text-stone-400 font-mono">Đơn: {recordDisplayCode(c.holdId)}</p>
                     </Td>
                     <Td>
                       <div className="flex items-center gap-2">
                         <Avatar name={c.customerName} size="sm" />
                         <div>
                           <p className="font-medium text-sm text-stone-900">{c.customerName}</p>
-                          <p className="text-xs text-stone-400">Mã: {c.customerId}</p>
+                          <p className="text-xs text-stone-400">Mã: {recordDisplayCode(c.customerId)}</p>
                         </div>
                       </div>
                     </Td>
@@ -281,7 +282,6 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
                     <Td>
                       <div className="text-xs">
                         <p className="font-medium text-stone-800">{c.staffName || 'Chưa phân công'}</p>
-                        <p className="text-[11px] text-stone-400">{c.staffId}</p>
                       </div>
                     </Td>
                     <Td>{sb(c.status)}</Td>
@@ -327,8 +327,8 @@ export default function ManagerCheckinsPanel({ user, sb }: ManagerCheckinsPanelP
             {/* Header banner */}
             <div className="p-4 rounded-xl bg-slate-900 text-white shadow-inner">
               <div className="flex justify-between items-center text-xs font-mono text-amber-400">
-                <span>{selectedCheckin.id}</span>
-                <span>{selectedCheckin.holdId}</span>
+                <span>{recordDisplayCode(selectedCheckin.id)}</span>
+                <span>{recordDisplayCode(selectedCheckin.holdId)}</span>
               </div>
               <div className="mt-2 flex justify-between items-end">
                 <div>

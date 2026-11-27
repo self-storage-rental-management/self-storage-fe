@@ -1,3 +1,4 @@
+import { receiptDisplayCode } from './recordDisplayCode'
 import { displayStatusLabel } from '../presentation/statusLabels'
 import * as XLSX from 'xlsx'
 import type { MonthlyRevenueRecord } from '../data/demoDatabase'
@@ -226,8 +227,8 @@ export function exportManagerFacilityExcel(options: ManagerFacilityExportOptions
     ])
     XLSX.utils.book_append_sheet(wb, flow, 'Thu và hoàn tiền')
     const refunds = XLSX.utils.aoa_to_sheet([
-      ['Đơn', 'Khách', 'Trạng thái', 'Cọc', 'Ghi có tiền thuê', 'Khấu trừ', 'Tiền hoàn', 'Ngày chi', 'Tham chiếu', 'Đã xác minh chi'],
-      ...f.settlements.map(s => [s.reservationCode, s.customerName, displayStatusLabel(s.status), s.deposit ?? 'Chưa phân bổ', s.rentalCredit ?? 'Chưa phân bổ', s.deductions ?? 'Chưa phân bổ', s.refund, s.paidAt || '', s.reference || '', s.payoutRecorded ? 'Đã ghi nhận' : 'Chưa hoàn']),
+      ['Đơn', 'Khách', 'Trạng thái', 'Cọc', 'Ghi có tiền thuê', 'Khấu trừ', 'Tiền hoàn', 'Ngày chi', 'Mã phiếu', 'Tham chiếu đối soát', 'Đã xác minh chi'],
+      ...f.settlements.map(s => [s.reservationCode, s.customerName, displayStatusLabel(s.status), s.deposit ?? 'Chưa phân bổ', s.rentalCredit ?? 'Chưa phân bổ', s.deductions ?? 'Chưa phân bổ', s.refund, s.paidAt || '', s.receiptCode || '', s.reference ? receiptDisplayCode(null, s.reference) : '', s.payoutRecorded ? 'Đã ghi nhận' : 'Chưa hoàn']),
     ])
     XLSX.utils.book_append_sheet(wb, refunds, 'Quyết toán tiền hoàn')
   }

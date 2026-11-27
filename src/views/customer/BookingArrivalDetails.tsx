@@ -20,7 +20,7 @@ export default function BookingArrivalDetails(p: Props) {
     if (day > p.maxDate) break
     dates.push(day); cursor.setUTCDate(cursor.getUTCDate() + 1)
   }
-  const times = Array.from(new Set([...Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, '0')}:${i % 2 ? '30' : '00'}`), p.time, p.earliestTime])).filter(Boolean).sort()
+  const times = Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, '0')}:${i % 2 ? '30' : '00'}`)
   const changeDate = (date: string) => {
     p.onDate(date)
     if (!p.isAllowed(date, p.time)) {
@@ -43,7 +43,7 @@ export default function BookingArrivalDetails(p: Props) {
       {row('Chuẩn bị miễn phí', `${p.setupDays} ngày (gói ${p.months} tháng)`)}
       {row('Bắt đầu tính tiền thuê', p.startDate ? dateLabel(p.startDate) : 'Chưa xác định')}
       {row('Kết thúc kỳ thuê', p.endDate ? dateLabel(rentalEndDateForDisplay(p.endDate)) : 'Chưa xác định')}
-      <p className="mt-3 text-xs leading-5">Ngày tính tiền dự kiến theo ngày bàn giao + {p.setupDays} ngày chuẩn bị. Nếu nhận kho muộn, các mốc sẽ tính lại theo bàn giao thực tế. Hoàn tất chuẩn bị hoặc kiểm kê sớm không làm đổi ngày bắt đầu tính tiền đã chốt.</p>
+      <p className="mt-3 text-xs leading-5">Ngày tính tiền = ngày nhận kho khách đã chọn + {p.setupDays} ngày chuẩn bị miễn phí theo gói thuê. Hoàn tất chuẩn bị hoặc kiểm kê sớm không làm đổi ngày bắt đầu tính tiền đã chốt.</p>
     </section>
     {p.quote && <section className="rounded-xl border border-stone-200 bg-white p-4 text-sm"><h3 className="mb-2 font-semibold">Tóm tắt đơn</h3>
       {row('Loại kho', `${p.unit} · gói ${p.months} tháng`)}
@@ -58,7 +58,8 @@ export default function BookingArrivalDetails(p: Props) {
       <span className="space-y-1 leading-5">
         <span className="block">Tôi đã đọc, hiểu và đồng ý:</span>
         <ul className="list-disc space-y-0.5 pl-5">
-          <li>Quy định nhận kho: nếu quá hạn đến nhận kho, chỗ giữ được nhả và khoản trả trước không được hoàn lại theo điều khoản đã chấp nhận.</li>
+          <li>Đến nhận kho trong 7 ngày (ngày hẹn tính là ngày đầu), mang CCCD gốc hợp lệ; hoàn tất bàn giao trong 72 giờ từ lần đối chiếu CCCD đầu tiên.</li>
+          <li>CCCD lệch tối đa 3 số được sửa một lần sau xác minh; lệch từ 4 số sẽ bị từ chối. Không nhận kho đúng hạn hoặc bị từ chối do lệch CCCD: mất khoản giữ chỗ 20% và cần đặt đơn mới.</li>
           {hasSetupEarlyExitTerms && <li>Điều khoản trả kho trong thời gian chuẩn bị của báo giá này.</li>}
         </ul>
       </span>

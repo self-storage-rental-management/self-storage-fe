@@ -33,7 +33,7 @@ export const emptyInventoryFilters: InventoryFilters = {
   type: "all",
   floor: "all",
   zone: "all",
-  sort: "attention",
+  sort: "code",
 }
 const statuses: UnitStatus[] = [
   "available",
@@ -154,6 +154,6 @@ export function filterInventory(units: InventoryUnit[], f: InventoryFilters) {
                 f.sort === "price-desc",
               )
             : 0
-    return difference || a.code.localeCompare(b.code, "vi", { numeric: true })
+    return difference || a.code.localeCompare(b.code, "vi", { numeric: true }) || a.id.localeCompare(b.id)
   })
 }

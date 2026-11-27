@@ -49,6 +49,12 @@ describe("trình bày dữ liệu cho giao diện nhân viên", () => {
     expect(formatStaffDate(null)).toBe("Chưa xác định")
   })
 
+  it("ưu tiên trạng thái đã chuyển thu hồi thay cho bước kiểm kê trước đó", () => {
+    expect(staffCheckInStatusLabel("setup_completed", "PREPARING", true)).toBe("Đã chuyển thu hồi")
+    expect(staffCheckInStatusLabel("completed", "COMPLETED", true)).toBe("Đã chuyển thu hồi")
+    expect(staffCheckInStatusLabel("setup_completed", "PREPARING", false)).toBe("Chờ kiểm kê hàng hóa")
+  })
+
   it("không đưa thông báo kỹ thuật từ máy chủ lên giao diện", () => {
     expect(
       staffErrorMessage(

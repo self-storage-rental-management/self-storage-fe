@@ -41,21 +41,24 @@ function panel(arrived = false) {
   return { click: find(tree)!, onSaved }
 }
 
-it('records arrival before uploading and verifying from the initially visible identity form', async () => {
+it('confirms arrival on its own step without uploading or verifying yet', async () => {
   const { click, onSaved } = panel()
+  click()
+  await vi.waitFor(() => expect(state.arrival).toHaveBeenCalledWith('checkin'))
+  expect(state.upload).not.toHaveBeenCalled()
+  expect(state.verify).not.toHaveBeenCalled()
+  expect(onSaved).toHaveBeenCalledTimes(1)
+})
+
+it('uploads and verifies from the identity form once the customer is already present', async () => {
+  const { click, onSaved } = panel(true)
   click()
   await vi.waitFor(() => expect(state.verify).toHaveBeenCalledWith('checkin', {
     identityDocumentNumber: 'P1234567', photoId: 'photo', bookingCustomerPresent: true,
   }))
-  expect(state.arrival.mock.invocationCallOrder[0]).toBeLessThan(state.upload.mock.invocationCallOrder[0])
   expect(state.upload.mock.invocationCallOrder[0]).toBeLessThan(state.verify.mock.invocationCallOrder[0])
-  expect(onSaved).toHaveBeenCalledTimes(2)
-})
-
-it('does not record arrival again for a customer already marked present', async () => {
-  panel(true).click()
-  await vi.waitFor(() => expect(state.verify).toHaveBeenCalled())
   expect(state.arrival).not.toHaveBeenCalled()
+  expect(onSaved).toHaveBeenCalledTimes(1)
 })
 
 it('stops before upload and identity verification if arrival cannot be recorded', async () => {

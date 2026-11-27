@@ -94,6 +94,7 @@ it('explains the weight limit and displays the actual split of nine items', () =
     },
   }} />)
   for (const expected of ['Kho nhỏ', '108 / 600 kg', '60 kiện', '6 kiện',
+    'Kích thước khoang thông thủy (D × R × C)', '188 × 184 × 130 cm',
     'Kích thước tấm kê (D × R × C)', '120 × 80 × 14,4 cm', 'Khối lượng tấm kê rỗng',
     '25 kg/tấm kê',
     'Khung 1 · Khoang 1', '2 tấm kê', '108/75 kg', '108 kg']) {

@@ -1,9 +1,11 @@
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import ReturnPolicyNotice from '../../components/ReturnPolicyNotice'
 import { useState, useMemo, useCallback, useEffect } from "react"
 import DuongPolicyWorkspace from "../rental-support-integration/DuongPolicyWorkspace"
 import UnitTypeReviewModal from "./UnitTypeReviewModal"
 import { listFacilityContentPolicies, saveFacilityContentPolicies, type FacilityContentPolicy } from "../../services/facilityContentPolicyApi"
 import BusinessReturnsPanel from "./BusinessReturnsPanel"
+import { ViolationRecoveryPanel } from '../return-api/ViolationRecoveryPanel'
 import BusinessRefundRequestsPanel from "./BusinessRefundRequestsPanel"
 import BusinessDamageIncidentsPanel from "./BusinessDamageIncidentsPanel"
 import CentralizedPolicyWorkspace from "./CentralizedPolicyWorkspace"
@@ -419,6 +421,7 @@ export default function BusinessApp({
   const [facilityDetailLayouts, setFacilityDetailLayouts] = useState<Record<string, RackResult | null>>({})
   const [facilityDataError, setFacilityDataError] = useState<string>()
   const [businessNotifications, setBusinessNotifications] = useState<ApiNotification[]>([])
+  const [recoveryNoticeTarget, setRecoveryNoticeTarget] = useState<{ id: string; request: number }>()
   const [reviewOpen, setReviewOpen] = useState(false)
   const [reviewRequestId, setReviewRequestId] = useState<string | null>(null)
 
@@ -667,6 +670,13 @@ export default function BusinessApp({
       permission: "returns:read",
     },
     {
+      id: "recoveries",
+      label: "Thu hồi kho",
+      icon: Icon.clipboard,
+      group: "Vận hành và khuyến mãi",
+      permission: "returns:read",
+    },
+    {
       id: "damage-incidents",
       label: "Xử lý sự cố",
       icon: Icon.alert,
@@ -702,7 +712,6 @@ export default function BusinessApp({
   const [integrationLocked, setIntegrationLocked] = useState(false)
   const [returnsRefreshVersion, setReturnsRefreshVersion] = useState(0)
 
-  const [pricingModal, setPricingModal] = useState(false)
   const [pricingCollapsedMap, setPricingCollapsedMap] = useState<Record<string, boolean>>({})
   const [feeScheduleCollapsed, setFeeScheduleCollapsed] = useState(false)
 
@@ -1803,7 +1812,7 @@ export default function BusinessApp({
       ? Math.ceil(maxRevenueValue / 5000000) * 5000000
       : 10000000
 
-  const [pricingTiers, setPricingTiers] = useState<PricingTierItem[]>(() => {
+  const [pricingTiers] = useState<PricingTierItem[]>(() => {
     if (isApiAuthenticated()) return []
     try {
       const stored = localStorage.getItem("storagehub:pricingTiers")
@@ -1814,13 +1823,6 @@ export default function BusinessApp({
     } catch { }
     return RUNTIME_PRICING_TIERS
   })
-
-  const [selectedTier, setSelectedTier] =
-    useState<PricingTierItem | null>(null)
-
-  const [formTierBasePrice, setFormTierBasePrice] = useState<string>("0")
-
-  const [formTierMultiplier, setFormTierMultiplier] = useState<string>("1")
 
   const [pricingFacilityFilter, setPricingFacilityFilter] =
     useState<string>("all")
@@ -2260,133 +2262,6 @@ export default function BusinessApp({
     [getFacilitySizePrice],
   )
 
-  const handleSavePricingTier = () => {
-    if (!selectedTier) return
-    const parsedPrice = Number(String(formTierBasePrice).replace(/\D/g, ''))
-    const parsedMultiplier = Number(formTierMultiplier)
-    const updatedPrice =
-      parsedPrice > 0 ? parsedPrice : selectedTier.basePrice
-    const updatedMultiplier =
-      parsedMultiplier > 0
-        ? parsedMultiplier
-        : selectedTier.highDemandMultiplier
-
-    if (selectedPricingFacility) {
-      // Lưu phân tầng giá riêng biệt cho cơ sở được chọn và persist vào localStorage
-      const nextOverrides = {
-        ...facilityPricingOverrides,
-        [selectedPricingFacility.id]: {
-          ...facilityPricingOverrides[selectedPricingFacility.id],
-          [selectedTier.id]: {
-            basePrice: updatedPrice,
-            highDemandMultiplier: updatedMultiplier,
-          },
-        },
-      }
-      setFacilityPricingOverrides(nextOverrides)
-      try {
-        localStorage.setItem("storagehub:vnd:facility-pricing", JSON.stringify(nextOverrides))
-      } catch { }
-
-      // Cập nhật giá gian kho của cơ sở được chọn trong context
-      const sizeCode =
-        selectedTier.sizeCode ||
-        (selectedTier.name.includes("(S)")
-          ? "S"
-          : selectedTier.name.includes("(M)")
-            ? "M"
-            : selectedTier.name.includes("(XL)")
-              ? "XL"
-              : "L")
-
-      const facUnits = unitsList.filter(
-        (u) =>
-          (u.facilityId === selectedPricingFacility.id ||
-            u.facilityId === selectedPricingFacility.code) &&
-          ((u as any).size === sizeCode ||
-            u.type ===
-            (sizeCode === "S"
-              ? "Small"
-              : sizeCode === "M"
-                ? "Medium"
-                : sizeCode === "L"
-                  ? "Large"
-                  : "Extra Large")),
-      )
-      facUnits.forEach((u) => {
-        try {
-          updateUnit(u.id, { price: updatedPrice }, user)
-        } catch { }
-      })
-
-      // Nếu cập nhật Kho S (cước khởi điểm của cơ sở), cập nhật luôn price của facility
-      if (selectedTier.id === "tier-1" || selectedTier.name.includes("(S)")) {
-        updateFacility(
-          selectedPricingFacility.id,
-          { price: `${Math.round(updatedPrice).toLocaleString("vi-VN")}đ` },
-          user,
-        )
-      }
-    } else {
-      // Cập nhật giá niêm yết chuẩn toàn hệ thống
-      const nextTiers = pricingTiers.map((t) =>
-        t.id === selectedTier.id
-          ? {
-            ...t,
-            basePrice: updatedPrice,
-            highDemandMultiplier: updatedMultiplier,
-          }
-          : t,
-      )
-      setPricingTiers(nextTiers)
-      try {
-        localStorage.setItem("storagehub:pricingTiers", JSON.stringify(nextTiers))
-      } catch { }
-
-      const sizeCode =
-        selectedTier.sizeCode ||
-        (selectedTier.name.includes("(S)")
-          ? "S"
-          : selectedTier.name.includes("(M)")
-            ? "M"
-            : selectedTier.name.includes("(XL)")
-              ? "XL"
-              : "L")
-
-      // Không mutate trực tiếp object UNIT_SPECS!
-      // Cập nhật giá cho các gian kho chưa bị override riêng
-      unitsList
-        .filter(
-          (u) =>
-            ((u as any).size === sizeCode ||
-              u.type ===
-              (sizeCode === "S"
-                ? "Small"
-                : sizeCode === "M"
-                  ? "Medium"
-                  : sizeCode === "L"
-                    ? "Large"
-                    : "Extra Large")) &&
-            !facilityPricingOverrides[u.facilityId]?.[selectedTier.id],
-        )
-        .forEach((u) => {
-          try {
-            updateUnit(u.id, { price: updatedPrice }, user)
-          } catch { }
-        })
-    }
-
-    setPricingModal(false)
-    showToast(
-      lang === "vi"
-        ? `Đã cập nhật bảng giá "${selectedTier.name}"${selectedPricingFacility
-          ? ` cho ${selectedPricingFacility.name}`
-          : " (Toàn hệ thống)"
-        }: ${formatCurrency(updatedPrice)}/tháng!`
-        : "Pricing tier updated!",
-    )
-  }
-
   // ── State Quản Lý Cơ Sở (CRUD Facilities qua StorageHubContext) ──
 
   const [createFacilityModal, setCreateFacilityModal] = useState<boolean>(false)
@@ -2518,70 +2393,6 @@ export default function BusinessApp({
   const [highlightSpecCode, setHighlightSpecCode] = useState<string | null>(null)
   const [showConfirmCloseEdit, setShowConfirmCloseEdit] = useState<boolean>(false)
 
-  const handleConfirmAddUnitSpec = () => {
-    const rawCode = newSpecSizeCode.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "")
-    if (!rawCode) {
-      showToast(lang === "vi" ? "Vui lòng nhập mã loại kho (VD: XXL, MINI, LCK)!" : "Please enter unit size code!")
-      return
-    }
-    if (formFacUnitSpecs.some((s) => s.sizeCode.toUpperCase() === rawCode)) {
-      showToast(lang === "vi" ? `Loại kho "${rawCode}" đã tồn tại trong danh mục!` : `Unit type "${rawCode}" already exists!`)
-      return
-    }
-    const cleanName = newSpecName.trim() || `Kho ${rawCode}`
-    const len = Math.max(1, Number(newSpecLength) || 1)
-    const wid = Math.max(1, Number(newSpecWidth) || 1)
-    const hei = Math.max(1, Number(newSpecHeight) || 1)
-    const std = getUnitTypeVehicleStandard(rawCode, wid, len)
-    const lane = Math.max(std.minLaneM, Number(newSpecLane) || std.minLaneM)
-    const maxLoad = Math.max(100, Number(newSpecMaxLoad) || 2000)
-    const priceNum = parseInt(newSpecPrice.replace(/\D/g, ""), 10) || 10000000
-    const qty = Math.max(0, Number(newSpecCount) || 0)
-    const frameCount = Math.max(0, Math.floor(Number(newSpecFrameCount) || 0))
-    const frameLen = Math.max(0.1, Number(newSpecFrameLength) || 1)
-    const frameWid = Math.max(0.1, Number(newSpecFrameWidth) || 1)
-    const frameHei = Math.max(0.1, Number(newSpecFrameHeight) || 1)
-
-    const newSpec: FacilityCustomUnitSpec = {
-      sizeCode: rawCode,
-      name: cleanName,
-      lengthM: len,
-      widthM: wid,
-      heightM: hei,
-      laneWidthM: lane,
-      maxLoadKg: maxLoad,
-      monthlyPrice: priceNum,
-      count: qty,
-      badgeClass: "bg-rose-50 text-rose-800 border-rose-200",
-      floor: ((formFacUnitSpecs.length % 4) + 1),
-      zone: `Khu ${String.fromCharCode(65 + (formFacUnitSpecs.length % 4))}`,
-      frameCount,
-      frameDimensions: {
-        lengthM: frameLen,
-        widthM: frameWid,
-        heightM: frameHei,
-        depthM: frameLen,
-      },
-    }
-
-    setFormFacUnitSpecs((prev) => [...prev, newSpec])
-    setShowAddUnitSpecModal(false)
-    showToast(lang === "vi" ? `Đã thêm loại kho "${rawCode}" (${cleanName}) vào cơ sở!` : `Added unit type "${rawCode}"!`)
-  }
-
-  const handleDeleteUnitSpec = (sizeCode: string, occCount: number, isEditing: boolean) => {
-    if (isEditing && occCount > 0) {
-      showToast(
-        lang === "vi"
-          ? `Không thể xóa loại kho "${sizeCode}" vì đang có ${occCount} gian kho đang được khách thuê!`
-          : `Cannot delete unit type "${sizeCode}" because ${occCount} units are occupied!`,
-      )
-      return
-    }
-    setFormFacUnitSpecs((prev) => prev.filter((s) => s.sizeCode !== sizeCode))
-    showToast(lang === "vi" ? `Đã xóa loại kho "${sizeCode}" khỏi cơ sở!` : `Removed unit type "${sizeCode}"!`)
-  }
-
   const handleUpdateSpecField = (
     sizeCode: string,
     updates: Partial<FacilityCustomUnitSpec>,
@@ -2644,48 +2455,6 @@ export default function BusinessApp({
       }
     }
     reader.readAsDataURL(file)
-  }
-
-  // Tự do chỉ định số lượng từng cỡ kho (S, M, L, XL)
-
-  const handleUnitSizeChange = (size: "S" | "M" | "L" | "XL", val: number) => {
-    const safeVal = Math.max(0, Math.floor(val || 0))
-
-    let s = formFacUnitS
-    let m = formFacUnitM
-    let l = formFacUnitL
-    let xl = formFacUnitXL
-
-    if (size === "S") s = safeVal
-    if (size === "M") m = safeVal
-    if (size === "L") l = safeVal
-    if (size === "XL") xl = safeVal
-
-    setFormFacUnitS(s)
-    setFormFacUnitM(m)
-    setFormFacUnitL(l)
-    setFormFacUnitXL(xl)
-    setFormFacUnits(s + m + l + xl)
-
-    // Tự động đồng bộ "Giá cơ sở từ" theo cỡ kho nhỏ nhất có số lượng > 0
-    const activeSizes = (["S", "M", "L", "XL"] as const).filter((sz) => {
-      if (sz === "S") return s > 0
-      if (sz === "M") return m > 0
-      if (sz === "L") return l > 0
-      return xl > 0
-    })
-    if (activeSizes.length > 0) {
-      const minSz = activeSizes[0]
-      const p =
-        minSz === "S"
-          ? formFacPriceS
-          : minSz === "M"
-            ? formFacPriceM
-            : minSz === "L"
-              ? formFacPriceL
-              : formFacPriceXL
-      if (p) setFormFacPrice(p)
-    }
   }
 
   // Mở modal thêm cơ sở mới với thông tin nhận diện để trống cho BO khai báo.
@@ -3856,12 +3625,15 @@ export default function BusinessApp({
   return (
     <Layout
       user={user}
-      notifications={businessNotifications.map(item => ({ id: item.id, title: item.title, message: item.content, date: item.createdAt, isRead: item.isRead, page: item.type === 'SYSTEM' ? 'pricing' : 'facilities' }))}
+      notifications={businessNotifications.map(item => ({ id: item.id, title: item.title, message: item.content, date: item.createdAt, isRead: item.isRead, page: item.relatedEntityType === 'VIOLATION_RECOVERY' ? 'recoveries' : item.type === 'SYSTEM' ? 'pricing' : 'facilities' }))}
       additionalNotifications={additionalPricingNotifications}
       onNotificationClick={item => {
         const notification = businessNotifications.find(n => n.id === item.id)
         if (notification) {
-          if (notification.title === 'Yêu cầu duyệt thay đổi loại kho' && notification.relatedEntityId) {
+          if (notification.relatedEntityType === 'VIOLATION_RECOVERY' && notification.relatedEntityId) {
+            setPage('recoveries')
+            setRecoveryNoticeTarget({ id: notification.relatedEntityId, request: Date.now() })
+          } else if (notification.title === 'Yêu cầu duyệt thay đổi loại kho' && notification.relatedEntityId) {
             setPage('facilities')
             setReviewRequestId(notification.relatedEntityId)
             setReviewOpen(true)
@@ -3881,7 +3653,7 @@ export default function BusinessApp({
       }}
       navItems={NAV}
       currentPage={page}
-      onNavigate={next => { if (!integrationLocked) setPage(next) }}
+      onNavigate={next => { if (!integrationLocked) { setRecoveryNoticeTarget(undefined); setPage(next) } }}
       onLogout={() => { if (!integrationLocked) onLogout() }}
       canAccess={(permission) => {
         if (isApiAuthenticated()) return canApiActor(user, permission)
@@ -3913,6 +3685,14 @@ export default function BusinessApp({
           <BusinessReturnsPanel user={user} refreshVersion={returnsRefreshVersion} />
         </div>
       )}
+      {page === 'recoveries' && <div className="space-y-5">
+        <SectionHeader title="Thu hồi kho" subtitle="Xử lý các hồ sơ quản lý cơ sở chưa hoàn thành đúng hạn." />
+        <Card className="recovery-workspace">
+          <h2>Hồ sơ quá hạn xử lý</h2>
+          <p>Các hồ sơ quá hạn phân công hoặc rà soát của quản lý cơ sở được chuyển đến chủ doanh nghiệp.</p>
+          <ViolationRecoveryPanel activeOnly managerOverdueOnly target={recoveryNoticeTarget} />
+        </Card>
+      </div>}
       {/* ── QUẢN LÝ CƠ SỞ (CRUD FACILITIES) ──────────────────── */}
       {page === "facilities" && (
         <div className="fade-in space-y-5">
@@ -4073,7 +3853,7 @@ export default function BusinessApp({
             <div className="space-y-4">
               {filteredFacilities.map((f) => {
                 const cleanF = sanitizeFacilityStrings(f)
-                const facCode = cleanF.code || cleanF.id
+                const facCode = cleanF.code || recordDisplayCode(cleanF.id)
                 const facilityPricingTypes = pricingCatalogByCode[(cleanF.code || '').trim().toUpperCase()] || []
                 const canPublishPendingTypes = cleanF.status === 'active' && facilityHasPricedPendingUnitType(facilityPricingTypes)
 
@@ -4367,7 +4147,8 @@ export default function BusinessApp({
                           const primary = packageSort === 'discount-desc' ? b.discountPercent - a.discountPercent
                             : packageSort === 'discount-asc' ? a.discountPercent - b.discountPercent
                             : packageSort === 'months-desc' ? monthsB - monthsA : monthsA - monthsB
-                          return primary || Number(b.status === 'active') - Number(a.status === 'active') || a.label.localeCompare(b.label, 'vi') || a.id.localeCompare(b.id)
+                          const rank = (item: DurationDiscountItem) => item.runtimeStatus === 'ACTIVE' || (!item.runtimeStatus && item.status === 'active') ? 0 : item.runtimeStatus === 'SCHEDULED' ? 1 : 2
+                          return rank(a) - rank(b) || primary || a.label.localeCompare(b.label, 'vi') || a.id.localeCompare(b.id)
                         }).map((item) => {
                           const hasDiscount = item.discountPercent > 0
                           const isSpecific = item.scopeType === "specific"
@@ -4568,7 +4349,8 @@ export default function BusinessApp({
                     const primary = packageSort === 'discount-desc' ? b.discountPercent - a.discountPercent
                       : packageSort === 'discount-asc' ? a.discountPercent - b.discountPercent
                       : packageSort === 'months-desc' ? monthsB - monthsA : monthsA - monthsB
-                    return primary || Number(b.status === 'active') - Number(a.status === 'active') || a.label.localeCompare(b.label, 'vi') || a.id.localeCompare(b.id)
+                    const rank = (item: DurationDiscountItem) => item.runtimeStatus === 'ACTIVE' || (!item.runtimeStatus && item.status === 'active') ? 0 : item.runtimeStatus === 'SCHEDULED' ? 1 : 2
+                    return rank(a) - rank(b) || primary || a.label.localeCompare(b.label, 'vi') || a.id.localeCompare(b.id)
                   }).map((item) => {
                 const isActive = item.status === "active"
                 const hasDiscount = item.discountPercent > 0
@@ -4892,7 +4674,7 @@ export default function BusinessApp({
                         </option>
                         {facilitiesList.map((f) => (
                           <option key={f.id} value={f.id}>
-                            {f.name} ({f.code || f.id})
+                            {f.name} ({f.code || recordDisplayCode(f.id)})
                           </option>
                         ))}
                       </Select>
@@ -4906,7 +4688,7 @@ export default function BusinessApp({
               <div className="p-3.5 bg-amber-50/80 border border-amber-200/80 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs text-amber-900 shadow-xs">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-bold px-2 py-0.5 rounded bg-amber-200 text-amber-900 font-mono text-[11px] border border-amber-300">
-                    {selectedPricingFacility.code || selectedPricingFacility.id}
+                    {selectedPricingFacility.code || recordDisplayCode(selectedPricingFacility.id)}
                   </span>
                   <span className="font-semibold text-slate-900 text-sm">
                     {selectedPricingFacility.name}
@@ -4972,7 +4754,7 @@ export default function BusinessApp({
                           <div className="flex items-center gap-2">
                             <b>{fac.name}</b>
                             <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-stone-200/80 text-stone-700">
-                              {fac.code || fac.id}
+                              {fac.code || recordDisplayCode(fac.id)}
                             </span>
                           </div>
                           <p className="mt-0.5 text-xs text-stone-500">{fac.address}</p>
@@ -5180,63 +4962,6 @@ export default function BusinessApp({
       )}
 
       {/* ── MODALS ────────────────────────────────────────────── */}
-      <Modal
-        open={pricingModal}
-        onClose={() => setPricingModal(false)}
-        title={
-          selectedPricingFacility
-            ? (lang === "vi" ? `Chỉnh Sửa Biểu Giá: ${selectedPricingFacility.name}` : `Edit Facility Pricing: ${selectedPricingFacility.name}`)
-            : (lang === "vi" ? "Chỉnh Sửa Bảng Giá Cơ Sở Toàn Hệ Thống (Global Base Pricing)" : "Edit Global Base Pricing Tier")
-        }
-      >
-        {selectedTier && (
-          <div className="space-y-4">
-            <div>
-              <p className="text-sm text-slate-600">
-                {lang === "vi" ? "Đang chỉnh sửa:" : "Editing:"}{" "}
-                <strong className="text-slate-900">{selectedTier.name}</strong>
-              </p>
-              <div className={`p-3 rounded-xl border text-xs mt-2 ${selectedPricingFacility ? 'bg-blue-50 text-blue-900 border-blue-200' : 'bg-amber-50 text-amber-950 border-amber-200'}`}>
-                <p className="font-bold flex items-center gap-1.5">
-
-                  <span>
-                    {selectedPricingFacility
-                      ? `Cơ sở áp dụng: ${selectedPricingFacility.name} (${selectedPricingFacility.code || selectedPricingFacility.id})`
-                      : "Phạm vi: Bảng giá cơ sở toàn hệ thống (Global Pricing)"}
-                  </span>
-                </p>
-                <p className="mt-1 text-[11px] leading-relaxed text-slate-600">
-                  {selectedPricingFacility
-                    ? `Giá này sẽ chỉ áp dụng riêng cho cơ sở ${selectedPricingFacility.name}, không ảnh hưởng đến các cơ sở khác.`
-                    : "Lưu ý: Mức giá cơ sở này áp dụng chung cho toàn hệ thống đối với các cơ sở không có cấu hình giá riêng."}
-                </p>
-              </div>
-            </div>
-            <Input
-              label={
-                lang === "vi" ? "Giá cơ sở (VNĐ/tháng)" : "Base Price (VND/mo)"
-              }
-              type="text"
-              inputMode="numeric"
-              value={formTierBasePrice ? (parseInt(String(formTierBasePrice).replace(/\D/g, ''), 10) || 0).toLocaleString('vi-VN') : ''}
-              onChange={(e) => {
-                const n = parseInt(e.target.value.replace(/\D/g, ''), 10) || 0
-                setFormTierBasePrice(n ? n.toLocaleString('vi-VN') : '')
-              }}
-              placeholder="VD: 5.000.000"
-            />
-            <div className="flex gap-2 justify-end pt-2">
-              <Button variant="outline" onClick={() => setPricingModal(false)}>
-                {lang === "vi" ? "Hủy" : "Cancel"}
-              </Button>
-              <Button variant="primary" onClick={handleSavePricingTier}>
-                {lang === "vi" ? "Lưu bảng giá" : "Save Pricing"}
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
-
       {/* ── MODAL: CHỈNH SỬA TOÀN BỘ BIỂU GIÁ CƠ SỞ ── */}
       <Modal
         open={facilityPriceModalOpen}
@@ -5244,7 +4969,7 @@ export default function BusinessApp({
         size="2xl"
         title={
           editingPriceFacility
-            ? `Chỉnh Sửa Biểu Giá: ${editingPriceFacility.name} (${editingPriceFacility.code || editingPriceFacility.id})`
+            ? `Chỉnh Sửa Biểu Giá: ${editingPriceFacility.name} (${editingPriceFacility.code || recordDisplayCode(editingPriceFacility.id)})`
             : "Chỉnh Sửa Biểu Giá Cơ Sở"
         }
       >
@@ -5556,7 +5281,7 @@ export default function BusinessApp({
                           <div className="min-w-0 flex-1 truncate">
                             <div className="font-semibold text-slate-900 truncate">{f.name}</div>
                             <div className="text-[10px] text-slate-500 truncate">
-                              {f.city} • Mã: {f.code || f.id}
+                              {f.city} • Mã: {f.code || recordDisplayCode(f.id)}
                             </div>
                           </div>
                         </label>
@@ -5768,7 +5493,7 @@ export default function BusinessApp({
                         <div className="min-w-0 flex-1 truncate">
                           <div className="font-semibold text-slate-900 truncate">{f.name}</div>
                           <div className="text-[10px] text-slate-500 truncate">
-                            {f.city} • Mã: {f.code || f.id}
+                            {f.city} • Mã: {f.code || recordDisplayCode(f.id)}
                           </div>
                         </div>
                       </label>
@@ -6068,7 +5793,7 @@ export default function BusinessApp({
                         <div className="min-w-0 flex-1 truncate">
                           <div className="font-semibold text-slate-900 truncate">{f.name}</div>
                           <div className="text-[10px] text-slate-500 truncate">
-                            {f.city} • Mã: {f.code || f.id}
+                            {f.city} • Mã: {f.code || recordDisplayCode(f.id)}
                           </div>
                         </div>
                       </label>
@@ -6304,7 +6029,7 @@ export default function BusinessApp({
                           <div className="min-w-0 flex-1 truncate">
                             <div className="font-semibold text-slate-900 truncate">{f.name}</div>
                             <div className="text-[10px] text-slate-500 truncate">
-                              {f.city} • Mã: {f.code || f.id}
+                              {f.city} • Mã: {f.code || recordDisplayCode(f.id)}
                             </div>
                           </div>
                         </label>
@@ -6352,49 +6077,6 @@ export default function BusinessApp({
       {/* ── MODALS QUẢN LÝ CƠ SỞ (CRUD FACILITIES) ─────────── */}
       {/* ── MODALS QUẢN LÝ CƠ SỞ (CRUD FACILITIES) ─────────── */}
       {(() => {
-        const handleSyncUnitSpecs = (newSpecs: FacilityCustomUnitSpec[]) => {
-          setFormFacUnitSpecs(newSpecs)
-          const total = newSpecs.reduce((sum, s) => sum + s.count, 0)
-          setFormFacUnits(total)
-
-          newSpecs.forEach((s) => {
-            if (s.sizeCode === "S") {
-              setFormFacUnitS(s.count)
-              setFormFacLengthS(s.lengthM)
-              setFormFacWidthS(s.widthM)
-              setFormFacLaneS(s.laneWidthM || 4)
-              setFormFacLoadS(s.maxLoadKg)
-              setFormFacPriceS(`${Math.round(s.monthlyPrice).toLocaleString("vi-VN")}đ`)
-            } else if (s.sizeCode === "M") {
-              setFormFacUnitM(s.count)
-              setFormFacLengthM(s.lengthM)
-              setFormFacWidthM(s.widthM)
-              setFormFacLaneM(s.laneWidthM || 4)
-              setFormFacLoadM(s.maxLoadKg)
-              setFormFacPriceM(`${Math.round(s.monthlyPrice).toLocaleString("vi-VN")}đ`)
-            } else if (s.sizeCode === "L") {
-              setFormFacUnitL(s.count)
-              setFormFacLengthL(s.lengthM)
-              setFormFacWidthL(s.widthM)
-              setFormFacLaneL(s.laneWidthM || 4)
-              setFormFacLoadL(s.maxLoadKg)
-              setFormFacPriceL(`${Math.round(s.monthlyPrice).toLocaleString("vi-VN")}đ`)
-            } else if (s.sizeCode === "XL") {
-              setFormFacUnitXL(s.count)
-              setFormFacLengthXL(s.lengthM)
-              setFormFacWidthXL(s.widthM)
-              setFormFacLaneXL(s.laneWidthM || 4)
-              setFormFacLoadXL(s.maxLoadKg)
-              setFormFacPriceXL(`${Math.round(s.monthlyPrice).toLocaleString("vi-VN")}đ`)
-            }
-          })
-
-          const active = newSpecs.filter((s) => s.count > 0)
-          if (active.length > 0) {
-            const minP = Math.min(...active.map((s) => s.monthlyPrice))
-            setFormFacPrice(`${Math.round(minP).toLocaleString("vi-VN")}đ`)
-          }
-        }
 
         const isEditDirty = (() => {
           if (!selectedFacility || !editInitialFacility) return false
@@ -6744,7 +6426,7 @@ export default function BusinessApp({
         {selectedFacility && (
           <div className="space-y-4">
             <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-700">
-              <p>Cơ sở <b>{selectedFacility.name}</b> · mã <span className="font-mono">{selectedFacility.code || selectedFacility.id}</span></p>
+              <p>Cơ sở <b>{selectedFacility.name}</b> · mã <span className="font-mono">{selectedFacility.code || recordDisplayCode(selectedFacility.id)}</span></p>
             </div>
 
             {selectedFacilityLifecycle ? <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
