@@ -195,7 +195,7 @@ describe("Support and overdue pagination", () => {
     tree = renderSupport()
     byText(tree, "Đặt lại").props.onClick()
     tree = renderSupport(); await load()
-    expect(h.support).toHaveBeenLastCalledWith("manager", { page: 0, size: 10, facilityId: "f1", sort: "createdAt,desc" })
+    expect(h.support).toHaveBeenLastCalledWith("manager", { page: 0, size: 10, facilityId: "f1", sort: "priority,asc" })
     nodes(tree).find(n => n.type === ApiPager)!.props.onPage(1)
     renderSupport(); await load()
     expect(h.support).toHaveBeenLastCalledWith("manager", expect.objectContaining({ page: 1, size: 10, facilityId: "f1" }))

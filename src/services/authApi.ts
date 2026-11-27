@@ -159,7 +159,7 @@ function completeApiLogin(response: ApiEnvelope<ApiAuthResponse>, invalidMessage
   setAccessToken(response.data.accessToken)
   setRefreshToken(response.data.refreshToken)
   const actor = persistActor(normalizeApiActor(response.data.actor))!
-  window.dispatchEvent(new Event('storagehub:actor-updated'))
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('storagehub:actor-updated'))
   return actor
 }
 
@@ -248,7 +248,7 @@ export async function updateCurrentProfileWithApi(input: {
   })
   if (!response?.data) throw new Error('Chưa tải được thông tin. Vui lòng thử lại.')
   persistActor(normalizeApiActor(response.data))
-  window.dispatchEvent(new Event('storagehub:actor-updated'))
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('storagehub:actor-updated'))
   return currentActor!
 }
 
@@ -256,7 +256,7 @@ export async function refreshCurrentProfileWithApi(): Promise<ApiActor> {
   const response = await apiRequest<ApiEnvelope<ApiActor>>('/api/auth/me')
   if (!response?.data) throw new Error('Chưa tải được thông tin. Vui lòng thử lại.')
   persistActor(normalizeApiActor(response.data))
-  window.dispatchEvent(new Event('storagehub:actor-updated'))
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('storagehub:actor-updated'))
   return currentActor!
 }
 

@@ -84,7 +84,7 @@ export function validateRackStep(configuration: RackConfiguration, step: number)
       [rack.widthCm, 'Chiều rộng khung', false, 0, undefined],
       [rack.heightCm, 'Chiều cao khung', false, 0, undefined],
       [rack.uprightFrameCount, 'Số bộ trụ đứng', true, 2, 20],
-      [rack.levelCount, 'Số tầng mỗi khung', true, 1, 100],
+      [rack.levelCount, 'Số cặp dằm ngang', true, 1, 100],
       [configuration.requestedRackCount, 'Số khung mỗi gian', true, 1, 100],
       [rack.maxBeamPairLoadKg, 'Giới hạn tải của khoang', false, 0, undefined],
       [rack.maxRackLoadKg, 'Giới hạn tải của khung', false, 0, undefined],
@@ -309,7 +309,7 @@ export default function ManagerRackLayoutModal({ target, typeName, onClose }: {
               <Input label="Chiều rộng khung (cm)" aria-label="Chiều rộng khung (cm)" required type="number" min={0} step="any" value={display(template.widthCm)} onChange={event => changeTemplate({ widthCm: event.target.valueAsNumber })} />
               <Input label="Chiều cao khung (cm)" aria-label="Chiều cao khung (cm)" required type="number" min={0} step="any" value={display(template.heightCm)} onChange={event => changeTemplate({ heightCm: event.target.valueAsNumber })} />
               <Input label="Số bộ trụ đứng" aria-label="Số bộ trụ đứng" required type="number" min={2} max={20} step={1} value={display(template.uprightFrameCount)} onChange={event => changeTemplate({ uprightFrameCount: event.target.valueAsNumber })} />
-              <Input label="Số tầng mỗi khung" aria-label="Số tầng mỗi khung" required type="number" min={1} max={100} step={1} value={display(template.levelCount)} onChange={event => changeTemplate({ levelCount: event.target.valueAsNumber })} />
+              <Input label="Số cặp dằm ngang" aria-label="Số cặp dằm ngang" required type="number" min={1} max={100} step={1} value={display(template.levelCount)} onChange={event => changeTemplate({ levelCount: event.target.valueAsNumber })} />
               <Input label="Số khung mỗi gian" aria-label="Số khung mỗi gian" required type="number" min={1} max={100} step={1} value={display(configuration.requestedRackCount)} onChange={event => changeRackCount(event.target.valueAsNumber)} />
               <Input label="Giới hạn tải của khoang / cặp dầm (kg)" aria-label="Giới hạn tải của khoang / cặp dầm (kg)" required type="number" min={0} step="any" value={display(template.maxBeamPairLoadKg)} onChange={event => changeTemplate({ maxBeamPairLoadKg: event.target.valueAsNumber })} />
               <Input label="Giới hạn tải của khung (kg)" aria-label="Giới hạn tải của khung (kg)" required type="number" min={0} step="any" value={display(template.maxRackLoadKg)} onChange={event => changeTemplate({ maxRackLoadKg: event.target.valueAsNumber })} />

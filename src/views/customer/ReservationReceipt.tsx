@@ -29,7 +29,7 @@ export function reservationPaymentReceiptExport(payment: ReservationPaymentResul
     confirmed: accepted || isRemainingRental,
     status: isRemainingRental ? 'Đã ghi nhận thanh toán nhận kho' : accepted ? 'Đơn đã xác nhận cọc (khoản trả trước)' : 'Đơn chưa xác nhận',
     fields: [
-      ['Mã phiếu thu', payment.receiptCode || 'Chưa cấp'], [isRemainingRental ? 'Mã tham chiếu thanh toán' : 'Mã tham chiếu VNPay', internalPaymentReference(payment.transactionReference) ? '–' : payment.transactionReference],
+      ['Mã phiếu thu', payment.receiptCode || 'Chưa cấp'], ['Mã giao dịch StorageHub', payment.paymentId], [isRemainingRental ? 'Mã tham chiếu thanh toán' : 'Mã tham chiếu VNPay', internalPaymentReference(payment.transactionReference) ? '–' : payment.transactionReference],
       [isRemainingRental ? 'Mã giao dịch thanh toán' : 'Mã giao dịch VNPay', payment.gatewayTransactionNo || '-'], ['Đơn giữ kho', reservationCode],
       [isRemainingRental ? 'Thời điểm ghi nhận tại quầy' : 'Thời điểm VNPay ghi nhận', gatewayPaidAt || (payment.paidAt ? formatCustomerDateTime(new Date(payment.paidAt)) : '-')],
       ['Thời điểm StorageHub xử lý', payment.processedAt ? formatCustomerDateTime(new Date(payment.processedAt)) : '-'],

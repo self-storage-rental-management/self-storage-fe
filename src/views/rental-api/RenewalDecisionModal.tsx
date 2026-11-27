@@ -43,7 +43,7 @@ export default function RenewalDecisionModal({
     >
       <div className="space-y-4">
         <p className="break-all">
-          {renewalDisplayLabel(r)} · {r.storageUnit.code}
+          {renewalDisplayLabel(r)}, {r.storageUnit.code}
         </p>
         <p>Ngày kết thúc đề nghị: {rentalDate(r.newEndDate)}</p>
         <p>Tiền gia hạn: {rentalMoney(r.amount, r.currency)}</p>

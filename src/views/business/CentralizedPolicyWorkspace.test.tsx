@@ -46,7 +46,7 @@ describe("CentralizedPolicyWorkspace", () => {
     expect(html).toContain("Bảo Vệ Biểu Giá Đang Chạy")
   })
 
-  it("renders clean unified single overview without scattered tab bar", () => {
+  it("renders clean unified single overview without action buttons or scattered tab bar", () => {
     const html = renderToStaticMarkup(
       <CentralizedPolicyWorkspace
         user={{ id: "u1", name: "Giám Đốc BO", role: "business", email: "bo@storagehub.vn" }}
@@ -54,11 +54,11 @@ describe("CentralizedPolicyWorkspace", () => {
       />
     )
 
-    // Actions available directly on overview
-    expect(html).toContain("Xem Lịch Sử Ban Hành")
-    expect(html).toContain("Thẩm Định &amp; Ban Hành")
-    expect(html).toContain("Điều chỉnh thông số")
-    expect(html).toContain("Ban hành phiên bản mới")
+    // Action buttons are removed as requested
+    expect(html).not.toContain("Xem Lịch Sử Ban Hành")
+    expect(html).not.toContain("Thẩm Định &amp; Ban Hành")
+    expect(html).not.toContain("Điều chỉnh thông số")
+    expect(html).not.toContain("Ban hành phiên bản mới")
 
     // Old tab navigation bar is removed
     expect(html).not.toContain("border-b border-stone-200 bg-white rounded-t-xl px-2 pt-2 shadow-2xs")

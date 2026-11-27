@@ -1661,16 +1661,20 @@ export default function CustomerApp({ user, onLogout, onUpdateUser }: CustomerAp
 
   const selectedSizeCode = storageSizeCode(selectedTarget?.unitType.name || selectedUnit?.type) as CustomerCatalogUnit['sizeCode']
   const selectedBackendUnitType = backendUnitTypes.find(item => item.id === selectedTarget?.unitType.id)
+  const isScopedUnitType = Boolean(selectedBackendUnitType?.acceptedGoodsCategoryIds && selectedBackendUnitType.acceptedGoodsCategoryIds.length > 0)
   const bookingCategories = (goodsCatalog?.categories || []).filter(category =>
-    !selectedBackendUnitType?.acceptedGoodsCategoryIds?.length || selectedBackendUnitType.acceptedGoodsCategoryIds.includes(category.id))
+    !isScopedUnitType || selectedBackendUnitType!.acceptedGoodsCategoryIds!.includes(category.id))
   const bookingCategoryOptions = bookingCategories.map(category => [category.code, category.label] as const)
   const bookingMaterials = (categoryCode: string) => {
     const category = bookingCategories.find(item => item.code === categoryCode)
     if (!category) return []
+    if (!isScopedUnitType) return (category.materials || []).filter(m => m.status === 'ACTIVE')
+    const acceptedMatIds = selectedBackendUnitType?.acceptedGoodsMaterialIds || []
     return (category.materials || []).filter(material =>
-      !selectedBackendUnitType?.acceptedGoodsMaterialIds?.length || selectedBackendUnitType.acceptedGoodsMaterialIds.includes(material.id))
+      material.status === 'ACTIVE' && acceptedMatIds.includes(material.id))
   }
-  const isMaterialOptional = (categoryCode: string) => OPTIONAL_MATERIAL_CATEGORY_CODES.has(categoryCode)
+  const isMaterialOptional = (categoryCode: string) =>
+    OPTIONAL_MATERIAL_CATEGORY_CODES.has(categoryCode) || (isScopedUnitType && bookingMaterials(categoryCode).length === 0)
   const catalogIssues = goodsItems.map(item => goodsCatalogIssue(item, goodsCatalog,
     selectedBackendUnitType?.acceptedGoodsCategoryIds, selectedBackendUnitType?.acceptedGoodsMaterialIds))
   const hasValidQuotedGoods = bookingReview && !!serverQuote && Date.parse(serverQuote.expiresAt) > Date.now() && !!quotedGoodsItems.current

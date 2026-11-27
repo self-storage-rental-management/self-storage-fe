@@ -23,7 +23,7 @@ vi.mock('react', async original => {
     useState: (value: unknown) => {
       const initial = typeof value === 'function' ? value() : value
       if (state.mode === 'card') {
-        return [++state.index === 2 ? state.detail : initial, () => {}]
+        return [++state.index === 3 ? state.detail : initial, () => {}]
       }
       return [initial === undefined ? state.detail : initial, () => {}]
     },

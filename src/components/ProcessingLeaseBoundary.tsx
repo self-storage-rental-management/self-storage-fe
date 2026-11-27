@@ -169,7 +169,7 @@ export default function ProcessingLeaseBoundary({ target, id, enabled = true, on
       {view?.expiresAt && <p className="mt-1 text-xs">Quyền xử lý được gia hạn khi màn hình đang hoạt động; tự hết hạn sau 2 phút mất kết nối và tối đa 15 phút mỗi lượt. {idle && 'Đã tạm dừng gia hạn do không có thao tác trong 10 phút.'}</p>}
       {(error || lease?.invalid) && <p className="mt-1 text-xs font-semibold">{error || 'Phiên xử lý đã thay đổi. Đóng và mở lại hồ sơ trước khi tiếp tục.'}</p>}
     </div>
-    <fieldset key={generation} disabled={!owned} onInputCapture={event => {
+    <fieldset disabled={!owned} onInputCapture={event => {
       try {
         const fields = Array.from((event.currentTarget as HTMLElement).querySelectorAll('input,textarea,select')).map((field, index) => {
           const control = field as HTMLInputElement
