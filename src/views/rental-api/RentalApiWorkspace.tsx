@@ -479,7 +479,7 @@ function WorkspaceData({
         )}
       </div>}
       </section>
-      {tab === "recovery" ? <ViolationRecoveryPanel target={recoveryTarget} /> : <ApiReadState {...read} retry={refresh} />}
+      {tab === "recovery" ? <ViolationRecoveryPanel target={recoveryTarget} customerView={role === 'customer'} /> : <ApiReadState {...read} retry={refresh} />}
       {tab !== "recovery" && read.data && (
         <Card className={role === 'customer' || (role === 'manager' && read.data.kind === 'rental') ? '!border-0 !bg-transparent !shadow-none' : 'overflow-hidden rounded-2xl'}>
           {role === 'manager' ? (read.data.kind === 'rental'

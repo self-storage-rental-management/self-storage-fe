@@ -7,7 +7,15 @@ import { decideManagerPaymentComplaint, downloadComplaintImage, getManagerPaymen
 
 const labels = { PENDING: 'Đang chờ xử lý', REVIEW_OVERDUE: 'Quá hạn xử lý', APPROVED: 'Đã chấp thuận', REJECTED: 'Đã từ chối', WITHDRAWN: 'Đã rút' }
 
-export default function ManagerPaymentComplaintsPanel({ showToast }: { showToast: (message: string) => void }) {
+export default function ManagerPaymentComplaintsPanel({
+  showToast,
+  hideHeader,
+  onCountChange
+}: {
+  showToast: (message: string) => void
+  hideHeader?: boolean
+  onCountChange?: (count: number) => void
+}) {
   const [items, setItems] = useState<PaymentComplaint[]>([])
   const [selected, setSelected] = useState<PaymentComplaint | null>(null)
   const [loading, setLoading] = useState(true)
@@ -20,10 +28,15 @@ export default function ManagerPaymentComplaintsPanel({ showToast }: { showToast
 
   const load = useCallback(async () => {
     setLoading(true); setError(null)
-    try { setItems((await listManagerPaymentComplaints()).data) }
+    try {
+      const res = await listManagerPaymentComplaints()
+      setItems(res.data)
+      const count = res.data?.filter(item => item.status === 'PENDING' || item.status === 'REVIEW_OVERDUE').length ?? 0
+      onCountChange?.(count)
+    }
     catch (cause) { setError(managerDisplayError(cause)) }
     finally { setLoading(false) }
-  }, [])
+  }, [onCountChange])
 
   useEffect(() => { void load() }, [load])
 
@@ -88,7 +101,15 @@ export default function ManagerPaymentComplaintsPanel({ showToast }: { showToast
   }
 
   return <div className="space-y-5">
-    <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-amber-700">Tài chính</p><h1 className="text-2xl font-bold text-stone-900">Khiếu nại thanh toán</h1><p className="mt-1 text-sm text-stone-500">Đối soát giao dịch chưa được ghi nhận tại cơ sở bạn quản lý.</p></div></div>
+    {!hideHeader && (
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-amber-700">Tài chính</p>
+          <h1 className="text-2xl font-bold text-stone-900">Khiếu nại thanh toán</h1>
+          <p className="mt-1 text-sm text-stone-500">Đối soát giao dịch chưa được ghi nhận tại cơ sở bạn quản lý.</p>
+        </div>
+      </div>
+    )}
     {error && <p role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
     <Card className="overflow-hidden">
       {loading ? <p className="p-8 text-center text-sm text-stone-500">Đang tải khiếu nại…</p> : items.length === 0 ? <p className="p-8 text-center text-sm text-stone-500">Không có khiếu nại thanh toán đang chờ xử lý.</p> : <div className="divide-y divide-stone-200">{items.map(item => <div key={item.id} className="grid gap-3 p-4 md:grid-cols-[1fr_1fr_auto] md:items-center"><div><p className="font-bold text-stone-900">{item.reservationCode}</p><p className="text-xs text-stone-500">Gửi lúc {new Date(item.submittedAt).toLocaleString('vi-VN')}</p></div><div><Badge variant={item.status === 'REVIEW_OVERDUE' ? 'error' : 'warning'}>{labels[item.status]}</Badge><p className="mt-1 line-clamp-2 text-sm text-stone-700">{item.reason}</p></div><Button size="sm" onClick={() => void open(item.id)}>Xem và xử lý</Button></div>)}</div>}

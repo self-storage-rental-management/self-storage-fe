@@ -215,7 +215,7 @@ export function OperationEventCard({
             : "Không có tệp đính kèm"}
         </p>
       )}
-      {Array.isArray(d.evidenceFileIds) && d.evidenceFileIds.filter(isUuid).map((id, index) => <EvidenceDownload key={id} id={id} index={index + 1} />)}
+      {Array.isArray(d.evidenceFileIds) && d.evidenceFileIds.filter(isUuid).map((id, index) => <EvidenceDownload key={id} id={id} index={index + 1} label="Tải" previewLabel="Xem" />)}
       {reservation && (
         <div className="space-y-1">
           <p>
@@ -379,7 +379,7 @@ function EventTimeline({
             {e.kind === "ARRIVAL" && (() => {
               const data = e.data && typeof e.data === "object" ? e.data as Record<string, unknown> : {}
               const ids = Array.isArray(data.evidenceFileIds) ? data.evidenceFileIds.filter((value): value is string => typeof value === "string" && isUuid(value)) : []
-              return ids.length ? ids.map((fileId, index) => <EvidenceDownload key={fileId} id={fileId} index={index + 1} label="Tải" previewLabel="Xem trước" />) : <span className="text-stone-500">Không có tệp đính kèm</span>
+              return ids.length ? ids.map((fileId, index) => <EvidenceDownload key={fileId} id={fileId} index={index + 1} label="Tải" previewLabel="Xem" />) : <span className="text-stone-500">Không có tệp đính kèm</span>
             })()}
             {e.kind === "COMPLETION" && (() => {
               const data = e.data && typeof e.data === "object" ? e.data as Record<string, unknown> : {}
@@ -526,8 +526,7 @@ export default function RenewalOperationsPanel({
           setLastEvent(e)
           if (selected.action === "incident") setSuccessMessage("Đã gửi báo cáo sự cố tại cơ sở.")
           if (selected.action === "cash") {
-            const reference = e.data && typeof e.data === "object" && "transactionReference" in e.data ? e.data.transactionReference : undefined
-            setSuccessMessage(typeof reference === "string" ? `Đã ghi nhận thanh toán. Mã biên lai: ${reference}` : "Đã ghi nhận thanh toán.")
+            setSuccessMessage("Đã ghi nhận thanh toán.")
           }
           if (selected.action === "completion") setSuccessMessage("Gia hạn đã hoàn tất. Hệ thống đã đối chiếu các khoản thu và biên lai đã lưu.")
           if (e.kind === "ARRIVAL" || e.kind === "COMPLETION") onDocumentEvent?.(e)
@@ -1466,7 +1465,11 @@ function OperationForm({
                 <option value="BANK_TRANSFER">Chuyển khoản</option>
               </select>
             </label>
-            {balanceMethod === "BANK_TRANSFER" && <p className="text-sm text-stone-600">Tải ảnh chụp màn hình chuyển khoản làm minh chứng.</p>}
+            <p className="text-sm text-stone-600">
+              {balanceMethod === "BANK_TRANSFER"
+                ? "Tải ảnh chụp màn hình chuyển khoản làm minh chứng."
+                : "Tải ảnh chụp biên nhận thu tiền mặt làm minh chứng."}
+            </p>
             <EvidenceUpload entityType="DUONG_RENEWAL_CASH_RECEIPT" entityId={s.renewalId}
               disabled={locked} value={receiptFile ? [receiptFile] : []} limit={1}
               fileNamePurpose="bien-chung-thu-tien-gia-han"

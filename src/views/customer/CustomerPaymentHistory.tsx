@@ -27,6 +27,28 @@ export function paymentHistoryTimestamp(value: string | null) {
   return formatCustomerDateTime(new Date(value))
 }
 
+export function formatCompactPaymentCode(value: string | null | undefined): string {
+  if (!value) return "—"
+  const trimmed = value.trim()
+  const cleaned = trimmed.replace(
+    /^(SIMULATED-|MANUAL-RENTAL-|MANUAL-|PAY-RNW-BAL-|RET-BAL-|TM-)/i,
+    "",
+  )
+  return cleaned.slice(0, 8)
+}
+
+export function paymentStatusBadgeClass(status: string, label: string): string {
+  const isSuccess =
+    ["PAID", "SUCCEEDED", "REFUNDED", "SETTLED", "PARTIALLY_REFUNDED"].includes(status) ||
+    ["Thanh toán thành công", "Đã hoàn", "Đã đối trừ", "Hoàn tất", "Đã hoàn tiền toàn bộ", "Đã hoàn tiền một phần"].includes(label)
+  const isFailure =
+    ["FAILED", "CANCELLED", "EXPIRED"].includes(status) ||
+    ["Thanh toán thất bại", "Giao dịch đã hủy", "Phiên thanh toán hết hạn"].includes(label)
+  if (isSuccess) return "bg-emerald-700 text-white"
+  if (isFailure) return "bg-red-100 text-red-800"
+  return "bg-amber-100 text-amber-900"
+}
+
 export function historyTransactionCode(entry: HistoryEntry) {
   if (entry.returnSettlement) return receiptDisplayCode(entry.receiptCode || (entry.category === 'returnOffset' ? entry.returnSettlement.displayCode : null), entry.id)
   return receiptDisplayCode(entry.receiptCode || entry.reservationPayment?.receiptCode,
@@ -181,7 +203,7 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
           </div>
         </div>
         <Table tableClassName="manager-payment-table min-w-[950px] table-fixed [&_th]:bg-[#f6f4f1] [&_th]:normal-case [&_th]:tracking-normal [&_th]:py-2.5 [&_td]:py-2.5">
-          <colgroup><col className="w-[13%]" /><col className="w-[18%]" /><col className="w-[20%]" /><col className="w-[10%]" /><col className="w-[12%]" /><col className="w-[19%]" /><col className="w-[8%]" /></colgroup>
+          <colgroup><col className="w-[14%]" /><col className="w-[18%]" /><col className="w-[18%]" /><col className="w-[11%]" /><col className="w-[13%]" /><col className="w-[16%]" /><col className="w-[10%]" /></colgroup>
           <Thead>
             <tr>
               <Th>Mã giao dịch / biên nhận</Th>
@@ -190,31 +212,51 @@ export default function CustomerPaymentHistory({ onOpenRentals }: { onOpenRental
               <Th>Phương Thức</Th>
               <Th className="text-right">Số Tiền</Th>
               <Th className="text-center">Trạng Thái</Th>
-              <Th className="text-center">Biên lai</Th>
+              <Th className="text-center">Thao Tác</Th>
             </tr>
           </Thead>
           <Tbody>
-            {visibleEntries.map((entry) => (
-              <Tr key={entry.id}>
-                <Td>
-                  <ShortCode value={historyTransactionCode(entry)} />
-                  <p className="mt-0.5 text-[10px] text-stone-400">{paymentHistoryTimestamp(entry.timestamp)}</p>
-                </Td>
-                <Td><PaymentHistoryDossier entry={entry} onOpenRentals={onOpenRentals} /></Td>
-                <Td>{paymentCategories[entry.category]}</Td>
-                <Td><span className="whitespace-nowrap text-xs text-stone-600">{formatHistoryPaymentMethod(entry.method)}</span></Td>
-                <Td className="text-right"><b className="whitespace-nowrap text-stone-950">{historyAmount(entry.amount)}</b>
-                  {isRenewalHistoryEntry(entry) && entry.statusSource === 'RENEWAL_PROJECTION' && entry.refundedAmount != null && entry.refundedAmount > 0 && <p className="mt-1 text-xs text-stone-500">Đã hoàn: {historyAmount(entry.refundedAmount)}</p>}
-                </Td>
-                <Td>
-                  <div className="space-y-2">
-                    <span className={"inline-flex rounded-full px-3 py-1.5 text-xs font-semibold " + (entry.status === "REFUNDED" ? "bg-blue-100 text-blue-700" : ["PAID", "SUCCEEDED", "SETTLED"].includes(entry.status) ? "bg-green-100 text-green-800" : ["FAILED", "CANCELLED"].includes(entry.status) ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-900")}>{statusLabel(entry)}</span>
-                    {entry.reservationPayment?.invoiceNumber && <p className="truncate font-mono text-[10px] text-stone-500" title={`Hóa đơn: ${entry.reservationPayment.invoiceNumber} · ${displayStatusLabel(entry.reservationPayment.invoiceStatus || "DRAFT")}`}>Hóa đơn: {entry.reservationPayment.invoiceNumber} · {displayStatusLabel(entry.reservationPayment.invoiceStatus || "DRAFT")}</p>}
-                  </div>
-                </Td>
-                <Td className="text-center">{!loading && !error && canViewCustomerHistoryReceipt(entry) ? <Button variant="ghost" size="sm" className="!h-9 !w-9 !p-2 !text-stone-500 hover:!bg-stone-100" aria-label="Xem biên lai" title="Xem biên lai" onClick={() => setReceiptId(entry.id)}><svg aria-hidden="true" className="show-icon h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" /><circle cx="12" cy="12" r="2.5" /></svg></Button> : <span className="text-xs text-stone-400">Chưa có</span>}</Td>
-              </Tr>
-            ))}
+            {visibleEntries.map((entry) => {
+              const label = statusLabel(entry)
+              return (
+                <Tr key={entry.id}>
+                  <Td>
+                    <ShortCode value={historyTransactionCode(entry)} />
+                    <p className="mt-0.5 text-[10px] text-stone-400">{paymentHistoryTimestamp(entry.timestamp)}</p>
+                  </Td>
+                  <Td><PaymentHistoryDossier entry={entry} onOpenRentals={onOpenRentals} /></Td>
+                  <Td><span className="text-sm text-stone-800">{paymentCategories[entry.category]}</span></Td>
+                  <Td><span className="whitespace-nowrap text-xs text-stone-600">{formatHistoryPaymentMethod(entry.method)}</span></Td>
+                  <Td className="text-right">
+                    <b className="whitespace-nowrap text-stone-950">{historyAmount(entry.amount)}</b>
+                    {isRenewalHistoryEntry(entry) && entry.statusSource === 'RENEWAL_PROJECTION' && entry.refundedAmount != null && entry.refundedAmount > 0 && (
+                      <p className="mt-0.5 text-xs text-stone-500">Đã hoàn: {historyAmount(entry.refundedAmount)}</p>
+                    )}
+                  </Td>
+                  <Td className="text-center">
+                    <div className="flex flex-col items-center justify-center gap-1">
+                      <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold ${paymentStatusBadgeClass(entry.status, label)}`}>
+                        {label}
+                      </span>
+                      {entry.reservationPayment?.invoiceNumber && (
+                        <p className="max-w-[150px] truncate font-mono text-[10px] text-stone-500" title={`Hóa đơn: ${entry.reservationPayment.invoiceNumber} · ${displayStatusLabel(entry.reservationPayment.invoiceStatus || "DRAFT")}`}>
+                          Hóa đơn: {entry.reservationPayment.invoiceNumber} · {displayStatusLabel(entry.reservationPayment.invoiceStatus || "DRAFT")}
+                        </p>
+                      )}
+                    </div>
+                  </Td>
+                  <Td className="text-center">
+                    {!loading && !error && canViewCustomerHistoryReceipt(entry) ? (
+                      <Button variant="ghost" size="sm" className="!h-9 !w-9 !p-2 !text-stone-500 hover:!bg-stone-100" aria-label="Xem biên lai" title="Xem biên lai" onClick={() => setReceiptId(entry.id)}>
+                        <svg aria-hidden="true" className="show-icon h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" /><circle cx="12" cy="12" r="2.5" /></svg>
+                      </Button>
+                    ) : (
+                      <span className="text-xs text-stone-400">Chưa có</span>
+                    )}
+                  </Td>
+                </Tr>
+              )
+            })}
             {!loading && !error && !visibleEntries.length && (
               <tr><td colSpan={7}><p className="py-6 text-center text-sm text-stone-500">Chưa có giao dịch trong nhóm đã chọn.</p></td></tr>
             )}

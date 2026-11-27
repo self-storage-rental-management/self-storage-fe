@@ -8,6 +8,7 @@ import { userFacingError } from '../presentation/userFacingError'
 import { useDisplayPunctuation } from '../presentation/useDisplayPunctuation'
 import { managerDisplayText } from '../views/manager/managerPresentation'
 import { mergeNotificationFeed } from './notificationFeed'
+import { displayRoleNames } from '../presentation/displayText'
 
 export interface NavItem {
   id: string
@@ -616,9 +617,9 @@ export default function Layout({
                     >
                       <span className="flex items-start gap-2">
                         {!isNotificationRead(item) && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-amber-500 ring-2 ring-amber-200" />}
-                        <span className={`block text-sm ${!isNotificationRead(item) ? 'font-semibold text-stone-900' : 'font-medium text-stone-700'}`}>{user.role === 'manager' ? managerDisplayText(item.title) : item.title}</span>
+                        <span className={`block text-sm ${!isNotificationRead(item) ? 'font-semibold text-stone-900' : 'font-medium text-stone-700'}`}>{displayRoleNames(user.role === 'manager' ? managerDisplayText(item.title) : item.title)}</span>
                       </span>
-                      {item.message && <span className="mt-1 block whitespace-pre-line text-xs text-stone-600 line-clamp-3">{
+                      {item.message && <span className="mt-1 block whitespace-pre-line text-xs text-stone-600 line-clamp-3">{displayRoleNames(
                         user.role === 'manager'
                           ? managerDisplayText(item.title === 'BO từ chối thay đổi loại kho' && !item.message.includes('Lý do:')
                             ? item.message.replace(/^([^·]+ · [^·]+) · /, '$1\nLý do: ')
@@ -626,7 +627,7 @@ export default function Layout({
                           : item.title === 'BO từ chối thay đổi loại kho' && !item.message.includes('Lý do:')
                             ? item.message.replace(/^([^·]+ · [^·]+) · /, '$1\nLý do: ')
                             : item.message
-                      }</span>}
+                        )}</span>}
                       {item.date && <span className="mt-1.5 block text-[10px] text-stone-400">{formatNotificationDate(item.date)}</span>}
                     </button>
                   )) : (
