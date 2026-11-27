@@ -92,7 +92,7 @@ const CHECK_IN_STATUS_LABELS: Record<string, string> = {
   contract_signed: "Đã ký hợp đồng",
   payment_collected: "Đã thu tiền",
   handover_pending_receipt: "Đã bàn giao · Chờ khách xác nhận",
-  setup_in_progress: "Khách đang trong thời gian chuẩn bị",
+  setup_in_progress: "Đang chuẩn bị",
   setup_completed: "Chờ kiểm kê hàng hóa",
   completed: "Đã hoàn tất kiểm kê",
   rejected: "Đã từ chối nhận kho",

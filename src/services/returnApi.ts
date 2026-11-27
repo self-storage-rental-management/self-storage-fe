@@ -294,10 +294,45 @@ export async function updateReturnRequest(id: string, scheduledDate: string, not
 export const feeKeys = ['damageFee', 'cleaningFee', 'lostItemFee', 'overdueFee', 'outstandingFee'] as const
 export type ReturnFees = Record<typeof feeKeys[number], number>
 
+export const returnCleaningOptions = [
+  { id: 'clean', label: 'Kho sạch sẽ', fee: 0, desc: 'Đạt chuẩn vệ sinh (0 ₫)' },
+  { id: 'minor', label: 'Cần quét dọn bụi', fee: 100000, desc: 'Bẩn nhẹ (+100.000 ₫)' },
+  { id: 'major', label: 'Cần tổng vệ sinh', fee: 200000, desc: 'Bẩn nặng / Rác (+200.000 ₫)' },
+]
+
+export interface ReturnFeeDetails { label: string; trigger: string; applies: string }
+export interface ReturnFeeSchedule {
+  revision: number
+  prices: Record<string, number>
+  details: Record<string, ReturnFeeDetails>
+  editableCatalog?: boolean
+  publishedAt?: string | null
+}
+export async function getReturnFeeSchedule(): Promise<ReturnFeeSchedule> {
+  const result = await apiRequest<{ data: ReturnFeeSchedule }>('/api/return-fee-schedule')
+  return result.data
+}
+export async function getReturnFeeScheduleForReturn(returnId: string): Promise<ReturnFeeSchedule> {
+  if (!isUuid(returnId)) throw new Error('Mã hồ sơ không hợp lệ.')
+  const result = await apiRequest<{ data: ReturnFeeSchedule }>(`/api/return-fee-schedule/returns/${returnId}`)
+  return result.data
+}
+export async function getReturnFeeScheduleForRental(rentalId: string): Promise<ReturnFeeSchedule> {
+  if (!isUuid(rentalId)) throw new Error('Mã hồ sơ không hợp lệ.')
+  const result = await apiRequest<{ data: ReturnFeeSchedule }>(`/api/return-fee-schedule/rentals/${rentalId}`)
+  return result.data
+}
+export async function publishReturnFeeSchedule(schedule: ReturnFeeSchedule): Promise<ReturnFeeSchedule> {
+  const result = await apiRequest<{ data: ReturnFeeSchedule }>('/api/return-fee-schedule', { method: 'PUT', body: JSON.stringify(schedule) })
+  return result.data
+}
+
 export interface DamagePricingItem {
   code: string
   label: string
-  category: 'minor' | 'major'
+  trigger?: string
+  applies?: string
+  category: 'minor' | 'major' | 'equipment'
   unit: string
   suggestedMin: number
   suggestedMax: number
@@ -313,6 +348,8 @@ export const returnDamageCatalog: DamagePricingItem[] = [
   { code: 'minor_floor_scratch', label: 'Trầy xước sàn', category: 'minor', unit: 'm²', suggestedMin: 100000, suggestedMax: 200000, unitPrice: 150000 },
   { code: 'minor_metal_dent', label: 'Móp nhẹ vách kim loại', category: 'minor', unit: 'vị trí', suggestedMin: 100000, suggestedMax: 250000, unitPrice: 175000 },
   { code: 'minor_small_accessory', label: 'Hỏng phụ kiện nhỏ', category: 'minor', unit: 'cái', suggestedMin: 50000, suggestedMax: 200000, unitPrice: 125000 },
+  { code: 'equipment_frame_damage', label: 'Hư hỏng khung kệ', category: 'equipment', unit: 'khung', suggestedMin: 0, suggestedMax: 0, unitPrice: 0 },
+  { code: 'equipment_pallet_missing', label: 'Thiếu tấm kê', category: 'equipment', unit: 'tấm', suggestedMin: 300000, suggestedMax: 300000, unitPrice: 300000 },
   { code: 'major_bent_door', label: 'Cửa kho bị cong vênh', category: 'major', unit: 'cái', suggestedMin: 500000, suggestedMax: 2000000, unitPrice: 1250000 },
   { code: 'major_broken_lock', label: 'Khóa cửa bị hỏng', category: 'major', unit: 'bộ', suggestedMin: 300000, suggestedMax: 1000000, unitPrice: 650000 },
   { code: 'major_cracked_floor', label: 'Sàn kho bị nứt', category: 'major', unit: 'm²', suggestedMin: 300000, suggestedMax: 800000, unitPrice: 550000 },
@@ -323,10 +360,43 @@ export const returnDamageCatalog: DamagePricingItem[] = [
   { code: 'major_unusable_door', label: 'Cửa kho không thể sử dụng', category: 'major', unit: 'cái', suggestedMin: 1500000, suggestedMax: 4000000, unitPrice: 2750000 },
 ]
 
+// Descriptions are display metadata; fee codes continue to drive inspection rules.
+export const returnFeeRows = [
+  ...returnCleaningOptions.map(option => ({
+    code: option.id, price: option.fee, unit: '',
+    label: option.label,
+    trigger: option.id === 'clean' ? 'Kho đạt chuẩn vệ sinh' : option.id === 'minor' ? 'Bẩn nhẹ' : 'Bẩn nặng hoặc còn rác',
+    applies: 'Nghiệm thu trả kho',
+  })),
+  ...returnDamageCatalog.map(item => ({
+    code: item.code, price: item.unitPrice, unit: item.unit, label: item.label,
+    trigger: item.code === 'equipment_pallet_missing'
+      ? 'Tấm kê bàn giao bị thiếu khi nghiệm thu trả kho.'
+      : item.category === 'equipment' ? 'Khung kệ bàn giao bị hư khi nghiệm thu trả kho.' : `Hư hỏng ${item.category === 'minor' ? 'nhẹ' : 'nặng'} được ghi nhận khi nghiệm thu; tính theo số lượng thực tế.`,
+    applies: 'Nghiệm thu trả kho',
+  })),
+]
+
+export function scheduleRows(schedule: ReturnFeeSchedule) {
+  const known = returnFeeRows.filter(row => !schedule.editableCatalog || row.code in schedule.prices)
+  return [...known, ...Object.keys(schedule.prices).filter(code => isCustomFee(code)).map(code => ({
+    code, unit: code.startsWith('custom_cleaning_') ? '' : 'lần', price: schedule.prices[code], ...schedule.details[code],
+  }))]
+}
+
+export function isCustomFee(code: string) {
+  return /^custom_(minor|major|cleaning)_[0-9a-f]{32}$/.test(code)
+}
+
+export function getReturnFeeDetails(schedule: ReturnFeeSchedule | null, code: string): ReturnFeeDetails {
+  return schedule?.details?.[code] ?? returnFeeRows.find(row => row.code === code)
+    ?? { label: code, trigger: '', applies: '' }
+}
+
 export interface DamageItemInput { code: string; quantity: number }
-export function calculateDamageFee(items: DamageItemInput[]): number {
+export function calculateDamageFee(items: DamageItemInput[], catalog = returnDamageCatalog): number {
   return Math.round(items.reduce((sum, item) => {
-    const price = returnDamageCatalog.find((entry) => entry.code === item.code)
+    const price = catalog.find((entry) => entry.code === item.code)
     return sum + (price ? price.unitPrice * Math.max(0, Number(item.quantity) || 0) : 0)
   }, 0))
 }
@@ -390,9 +460,6 @@ export function reviewReturnArrival(
 ) {
   return mutate('manager', id, 'arrival-review', { accepted, reason, staffId, appointmentAt, decision })
 }
-export function savePropertyCheck(record: ApiReturn, unitVacated: boolean, staffNotes: string, evidencePhotos: string[]) {
-  return mutate('staff', record.id, 'property-check', { unitVacated, staffNotes, evidencePhotos, clearanceRevision: record.clearanceRevision ?? 0 })
-}
 export function inspectReturn(id: string, body: InspectionInput, clearanceRevision?: number) {
   const safeBody: InspectionInput = { ...body, ...sanitizeFees(body) }
   fees(safeBody)
@@ -406,19 +473,11 @@ export function inspectReturn(id: string, body: InspectionInput, clearanceRevisi
     !['returnedKey', 'returnedCard', 'returnedLock'].every(k => typeof body[k as keyof InspectionInput] === 'boolean') ||
     (body.damageItems !== undefined && (!Array.isArray(body.damageItems) || body.damageItems.some(item => {
       const price = returnDamageCatalog.find((entry) => entry.code === item.code)
-      return !price || !Number.isFinite(item.quantity) || item.quantity <= 0
+      return (!price && (!isCustomFee(item.code) || item.code.startsWith('custom_cleaning_'))) || !Number.isFinite(item.quantity) || item.quantity <= 0
     })))) throw new Error('Kiểm tra thông tin nghiệm thu.')
   return mutate('staff', id, clearanceRevision == null ? 'inspection' : `inspection?clearanceRevision=${clearanceRevision}`, { ...safeBody, inspectionNotes: body.staffNotes })
 }
-export async function completeRefund(id: string, body: {
-  transactionReference?: string
-  notes?: string
-  receiptFileId?: string
-  paymentMethod?: 'CASH' | 'BANK_TRANSFER' | 'VNPAY'
-  originalPaymentId?: string
-  amount?: number
-  confirmed?: boolean
-} = {}) {
+export async function completeRefund(id: string, body: ReturnSettlementReceipt & { notes?: string }) {
   const business = getAuthenticatedActor()?.roles.includes('BUSINESS') === true
   const role: ReturnRole = business ? 'business' : 'staff'
   const a = actor(role, true)
@@ -426,11 +485,10 @@ export async function completeRefund(id: string, body: {
     throw new ApiClientError('Bạn chưa có quyền thực hiện hoàn tiền.', { status: 403 })
   }
   if (!isUuid(id)) throw new Error('Mã hồ sơ hoặc giao dịch gốc hoàn tiền không hợp lệ.')
+  validateReturnSettlementReceipt(body)
   const safeBody = {
-    paymentMethod: body.paymentMethod || 'BANK_TRANSFER',
-    notes: body.notes || 'Xác nhận hoàn tất nghĩa vụ tài chính và đóng hồ sơ trả kho',
-    confirmed: true,
     ...body,
+    notes: body.notes || 'Xác nhận hoàn tất nghĩa vụ tài chính và đóng hồ sơ trả kho',
     transactionReference: body.paymentMethod === 'CASH' ? undefined : body.transactionReference?.trim(),
   }
   return bound(await apiRequest(`/api/${role}/returns/${id}/complete-refund`, {
@@ -452,6 +510,9 @@ export function validateReturnSettlementReceipt(body: ReturnSettlementReceipt) {
     throw new Error('Kiểm tra phương thức, tải biên lai và xác nhận đã thực thu hoặc thực hoàn tiền. Với chuyển khoản, nhập mã giao dịch.')
 }
 export async function recordReturnSettlement(id: string, body: ReturnSettlementReceipt, key: string, role: ReturnRole = 'staff') {
+  if (role !== 'staff' && role !== 'business') {
+    throw new ApiClientError('Vai trò này không được ghi nhận thu hoặc hoàn tiền trả kho.', { status: 403 })
+  }
   const a = actor(role, true)
   if (!a.permissions.includes('payments:collect') && !a.permissions.includes('refunds:execute')) throw new ApiClientError('Bạn chưa có quyền ghi nhận thu hoặc hoàn tiền.', { status: 403 })
   if (!isUuid(id)) throw new Error('Mã hồ sơ trả kho không hợp lệ.')

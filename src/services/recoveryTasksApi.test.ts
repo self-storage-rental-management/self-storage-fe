@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { clearAuthTokens, setAccessToken } from "./apiClient"
-import { getRecoveryTask, listRecoveryTasks, isRecoveryTask } from "./recoveryTasksApi"
+import { assignRecoveryTask, getRecoveryTask, listRecoveryTasks, isRecoveryTask, type RecoveryTask } from "./recoveryTasksApi"
 import { validRenewalRisk } from "../views/rental-api/RenewalRiskNotice"
 
 const id = "00000000-0000-4000-8000-000000000001"
@@ -8,7 +8,7 @@ const rentalId = "00000000-0000-4000-8000-000000000002"
 const facilityId = "00000000-0000-4000-8000-000000000003"
 const otherId = "00000000-0000-4000-8000-000000000004"
 const receivedAt = "2026-10-18T01:00:00Z"
-const task = { id, rentalId, facilityId, caseRef: `RENTAL_TERM:${rentalId}`, status: "OPEN", reason: "AUTO_OVERDUE_DAY_8", receivedAt, customerName: "Customer", storageUnitCode: "UNIT-01" }
+const task: RecoveryTask = { id, rentalId, facilityId, caseRef: `RENTAL_TERM:${rentalId}`, status: "OPEN", reason: "AUTO_OVERDUE_DAY_8", receivedAt, customerName: "Customer", storageUnitCode: "UNIT-01" }
 function respond(value: unknown, status = 200) {
   const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json" } }))
   vi.stubGlobal("fetch", fetch)
@@ -32,6 +32,15 @@ describe("Recovery task transport and evidence", () => {
   it("rejects a detail response for a different task", async () => {
     respond({ data: { ...task, id: otherId } })
     await expect(getRecoveryTask("staff", id, facilityId)).rejects.toMatchObject({ code: "INVALID_RESPONSE" })
+  })
+  it("assigns through the manager endpoint and checks the returned assignee", async () => {
+    const assigned = { ...task, assignedStaffId: otherId, assignedStaffName: "Nhân viên A" }
+    const fetch = respond({ data: assigned })
+    await expect(assignRecoveryTask(task, otherId)).resolves.toEqual(assigned)
+    expect(fetch.mock.calls[0][0]).toContain(`/api/manager/recovery-tasks/${id}/assignment`)
+    expect(fetch.mock.calls[0][1]).toMatchObject({ method: "PUT", body: JSON.stringify({ assignedStaffId: otherId }) })
+    respond({ data: { ...assigned, assignedStaffId: facilityId } })
+    await expect(assignRecoveryTask(task, otherId)).rejects.toMatchObject({ code: "INVALID_RESPONSE" })
   })
   it("keeps connection failures distinct from an empty queue", async () => {
     respond({ message: "Unavailable" }, 503)

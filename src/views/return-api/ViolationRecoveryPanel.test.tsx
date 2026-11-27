@@ -15,6 +15,13 @@ const entry: ComponentProps<typeof RecoveryDetails>['entry'] = {
 }
 
 describe('recovery evidence and verification feedback', () => {
+  it('collects only identity and photo when recording an arrival', () => {
+    const html = renderToStaticMarkup(<RecoveryAction entry={entry} action="RECORD_PRESENT"
+      onBack={() => {}} onSaved={() => {}} />)
+    expect(html.match(/<input\b/g)).toHaveLength(2)
+    expect(html).toContain('name="document"')
+    expect(html).toContain('name="photo"')
+  })
   it('shows the correct range and total on the final customer page', () => {
     const html = renderToStaticMarkup(<RecoveryPagination pagination={{ page: 1, pageSize: 8, totalItems: 13, totalPages: 2 }} disabled={false} onChange={() => {}} />)
     expect(html).toContain('Hiển thị 9–13 trong 13 hồ sơ · Trang 2/2')

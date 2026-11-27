@@ -15,7 +15,7 @@ import { listAllRecoveryTasks, type RecoveryTask } from '../../services/recovery
 import RecoveryTaskDetail, { recoveryStatusLabels } from '../rental-api/RecoveryTaskDetail'
 import { rentalDate } from '../rental-api/presentation'
 import { managerFacilityNotice, singleManagerFacility } from './managerFacilityUi'
-import { ViolationRecoveryPanel } from '../return-api/ViolationRecoveryPanel'
+import ManagerRecoveryCards from './ManagerRecoveryCards'
 import {
   assignMaintenanceTask,
   cancelMaintenanceTask,
@@ -35,6 +35,12 @@ interface Props {
   initialUnit?: { unitId: string; unitCode: string } | null
   onInitialUnitConsumed?: () => void
   initialRecovery?: { id: string; request: number }
+  initialOverdue?: { caseRef: string }
+  onOverdueClosed?: () => void
+  canCoordinate: boolean
+  canViewOverdue: boolean
+  showOverdue: boolean
+  onSelectOverdue: (selected: boolean) => void
 }
 
 const taskStatusLabel: Record<MaintenanceTaskApi['status'], string> = {
@@ -57,9 +63,20 @@ function statusVariant(status: MaintenanceTaskApi['status']) {
   return 'warning'
 }
 
-export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onInitialUnitConsumed, initialRecovery }: Props) {
-  const [activeTab, setActiveTab] = useState<'tasks' | 'recovery'>('tasks')
-  useEffect(() => { if (initialRecovery) setActiveTab('recovery') }, [initialRecovery])
+export default function ManagerApiStaffTasksPanel({
+  showToast, initialUnit, onInitialUnitConsumed, initialRecovery, initialOverdue, onOverdueClosed,
+  canCoordinate, canViewOverdue, showOverdue, onSelectOverdue,
+}: Props) {
+  const [coordinationTab, setCoordinationTab] = useState<'tasks' | 'recovery'>(initialRecovery ? 'recovery' : 'tasks')
+  const [overdueLocked, setOverdueLocked] = useState(false)
+  const overdueSelected = canViewOverdue && showOverdue
+  const activeTab = overdueSelected ? 'recovery' : coordinationTab
+  useEffect(() => { if (initialRecovery) setCoordinationTab('recovery') }, [initialRecovery])
+  const selectCoordinationTab = (tab: 'tasks' | 'recovery') => {
+    if (overdueLocked) return
+    setCoordinationTab(tab)
+    if (showOverdue) onSelectOverdue(false)
+  }
   const actor = getAuthenticatedActor()
   const facilityId = singleManagerFacility(actor)
   const [tasks, setTasks] = useState<MaintenanceTaskApi[]>([])
@@ -94,6 +111,7 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
   const [unitStatusStaffId, setUnitStatusStaffId] = useState('')
 
   const reload = useCallback(async () => {
+    if (!canCoordinate) return
     if (!facilityId) {
       setTaskError(new Error(managerFacilityNotice(actor)))
       setLoading(false)
@@ -135,14 +153,14 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
       setStaffReadFailed(true)
     }
     setLoading(false)
-  }, [actor, facilityId])
+  }, [actor, facilityId, canCoordinate])
 
   useEffect(() => {
     void reload()
   }, [reload])
 
   useEffect(() => {
-    if (!initialUnit || loading || unitReadFailed || staffReadFailed) return
+    if (!canCoordinate || !initialUnit || loading || unitReadFailed || staffReadFailed) return
     if (units.some(unit => unit.id === initialUnit.unitId) && staff.length) {
       setStorageUnitId(initialUnit.unitId)
       setTitle(`Bảo trì ${initialUnit.unitCode}`)
@@ -151,7 +169,7 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
       showToast('Gian kho chưa đủ điều kiện tạo nhiệm vụ bảo trì hoặc chưa có nhân viên phù hợp.')
     }
     onInitialUnitConsumed?.()
-  }, [initialUnit, loading, unitReadFailed, staffReadFailed, units, staff])
+  }, [initialUnit, loading, unitReadFailed, staffReadFailed, units, staff, canCoordinate])
 
   const openTasks = useMemo(() => tasks.filter(task => !['completed', 'cancelled'].includes(task.status)), [tasks])
   const queueRows = [
@@ -255,8 +273,8 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
       <SectionHeader
         eyebrow="Điều phối ca làm việc"
         title="Nhân viên & Nhiệm vụ"
-        subtitle="Theo dõi công việc bảo trì và thu hồi kho tại cơ sở."
-        action={activeTab === 'tasks' && (
+        subtitle="Theo dõi nhiệm vụ bảo trì, hợp đồng quá hạn và thu hồi kho tại cơ sở."
+        action={canCoordinate && activeTab === 'tasks' && (
           <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
@@ -276,22 +294,30 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
       />
 
       <div className="flex flex-wrap gap-2 border-b border-stone-200" role="tablist" aria-label="Nội dung điều phối">
-        <button type="button" role="tab" id="staff-tasks-tab" aria-selected={activeTab === 'tasks'} aria-controls="staff-tasks-panel"
-          className={`border-b-2 px-4 py-3 text-sm font-semibold ${activeTab === 'tasks' ? 'border-amber-500 text-stone-900' : 'border-transparent text-stone-600 hover:text-stone-900'}`}
-          onClick={() => setActiveTab('tasks')}>Nhiệm vụ</button>
-        <button type="button" role="tab" id="staff-recovery-tab" aria-selected={activeTab === 'recovery'} aria-controls="staff-recovery-panel"
-          className={`border-b-2 px-4 py-3 text-sm font-semibold ${activeTab === 'recovery' ? 'border-amber-500 text-stone-900' : 'border-transparent text-stone-600 hover:text-stone-900'}`}
-          onClick={() => setActiveTab('recovery')}>Thu hồi kho</button>
+        {canCoordinate && <button type="button" role="tab" id="staff-tasks-tab" disabled={overdueLocked} aria-selected={activeTab === 'tasks'} aria-controls="staff-tasks-panel"
+          className={['border-b-2 px-4 py-3 text-sm font-semibold', activeTab === 'tasks' ? 'border-amber-500 text-stone-900' : 'border-transparent text-stone-600 hover:text-stone-900'].join(' ')}
+          onClick={() => selectCoordinationTab('tasks')}>Nhiệm vụ</button>}
+        {(canCoordinate || canViewOverdue) && <button type="button" role="tab" id="staff-recovery-tab" aria-selected={activeTab === 'recovery'} aria-controls="staff-recovery-panel"
+          className={['border-b-2 px-4 py-3 text-sm font-semibold', activeTab === 'recovery' ? 'border-amber-500 text-stone-900' : 'border-transparent text-stone-600 hover:text-stone-900'].join(' ')}
+          onClick={() => { if (activeTab !== 'recovery') selectCoordinationTab('recovery') }}>Thu hồi kho</button>}
       </div>
 
-      <div id="staff-recovery-panel" role="tabpanel" aria-labelledby="staff-recovery-tab" hidden={activeTab !== 'recovery'} className="space-y-5">
-        <Card className="recovery-workspace">
-          <h2 className="text-lg font-semibold text-stone-900">Thu hồi kho cần điều phối</h2>
-          <p>Theo dõi và phân công xử lý các hồ sơ thu hồi tại cơ sở.</p>
-          <ViolationRecoveryPanel activeOnly target={initialRecovery} />
-        </Card>
-      </div>
+      {(canCoordinate || canViewOverdue) && <div id="staff-recovery-panel" role="tabpanel" aria-labelledby="staff-recovery-tab" hidden={activeTab !== 'recovery'} className="space-y-5">
+        {activeTab === 'recovery' && <>
+          <ManagerRecoveryCards
+            key={JSON.stringify([actor?.id, facilityId])}
+            facilityId={facilityId}
+            canCoordinate={canCoordinate}
+            canViewOverdue={canViewOverdue}
+            initialRecovery={initialRecovery}
+            initialOverdue={initialOverdue}
+            onOverdueClosed={onOverdueClosed}
+            onLocked={setOverdueLocked}
+          />
+        </>}
+      </div>}
 
+      {canCoordinate && <>
       <div id="staff-tasks-panel" role="tabpanel" aria-labelledby="staff-tasks-tab" hidden={activeTab !== 'tasks'} className="space-y-5">
       {!loading && !taskError && !staffReadFailed && !staff.length && <ManagerActionNotice tone="info">Chưa có nhân viên được phân công để nhận nhiệm vụ tại cơ sở này.</ManagerActionNotice>}
       {!loading && !taskError && !unitReadFailed && !units.length && <ManagerActionNotice tone="info">Chưa có gian kho khả dụng để tạo nhiệm vụ bảo trì.</ManagerActionNotice>}
@@ -358,6 +384,8 @@ export default function ManagerApiStaffTasksPanel({ showToast, initialUnit, onIn
         </Table>
       </Card>
       </div>
+
+      </>}
 
       {selectedRecovery && <Modal open size="xl" title="Chi tiết nhiệm vụ thu hồi" onClose={() => { if (!recoveryCloseGuard.current()) setSelectedRecovery(null) }}>
         <RecoveryTaskDetail key={selectedRecovery.id} role="manager" id={selectedRecovery.id} facilityId={selectedRecovery.facilityId} closeGuard={recoveryCloseGuard} onChanged={() => { void reload() }} />

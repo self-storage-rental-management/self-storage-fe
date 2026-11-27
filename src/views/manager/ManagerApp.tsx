@@ -4,6 +4,7 @@ import { ManagerPresentationProvider } from './managerPresentation'
 import './managerTypography.css'
 import Layout, { getInitialPage, Icon, type LayoutNotification, type NavItem } from '../../components/Layout'
 import { Badge } from '../../components/ui'
+import ManagerSuspicionReport from './ManagerSuspicionReport'
 import { useStorageHub } from '../../store/StorageHubContext'
 import type { User } from '../../types'
 import ProfileView from '../ProfileView'
@@ -16,26 +17,28 @@ import ManagerPaymentsPanel from './ManagerPaymentsPanel'
 import ManagerFinancialApiPanel from './ManagerFinancialApiPanel'
 import ManagerRentalsPanel from './ManagerRentalsPanel'
 import ManagerRentalsApiPanel from './ManagerRentalsApiPanel'
-import ManagerOverdueApiPanel from './ManagerOverdueApiPanel'
 import ManagerReportsPanel from './ManagerReportsPanel'
 import ManagerStaffTasksPanel from './ManagerStaffTasksPanel'
 import ManagerApiStaffTasksPanel from './ManagerApiStaffTasksPanel'
 import ManagerPaymentComplaintsPanel from './ManagerPaymentComplaintsPanel'
-import ManagerComplaintsWorkspace from './ManagerComplaintsWorkspace'
+import ManagerComplaintsWorkspace, { type ManagerComplaintsTab } from './ManagerComplaintsWorkspace'
 import ManagerReturnsPanel from './ManagerReturnsPanel'
 import SupportApiWorkspace from '../support-api/SupportApiWorkspace'
 import { canApiActor, getAuthenticatedActor, isApiAuthenticated } from '../../services/authApi'
 import { isFacilityTaskOverdue, isManagerFacilityVisible } from '../../domain/managerRules'
 import { managerStatusLabel } from './managerI18n'
 import { listNotifications, markNotificationRead, notifyBell, type ApiNotification } from '../../services/notificationApi'
-import { managerNotificationPage } from './managerNotificationRouting'
+import { managerNotificationPage, managerOverdueNotificationRef } from './managerNotificationRouting'
+import { notificationRecordTarget } from '../../services/notificationRecordTarget'
 import { listManagerPaymentComplaints } from '../../services/managerPaymentComplaintApi'
 import { listReturns } from '../../services/returnApi'
+
+const overduePageAlias = { 'overdue-cases': 'staff-tasks' } as const
 
 export default function ManagerApp({ user, onLogout }: { user: User; onLogout: () => void }) {
   const hub = useStorageHub()
   const [complaintCount, setComplaintCount] = useState<number>(0)
-  const [complaintInitialTab, setComplaintInitialTab] = useState<'payment' | 'returns'>('payment')
+  const [complaintInitialTab, setComplaintInitialTab] = useState<ManagerComplaintsTab>('payment')
 
   const refreshComplaintCount = useCallback(async () => {
     if (!isApiAuthenticated()) {
@@ -76,6 +79,9 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     }
   }, [refreshComplaintCount])
 
+  const canViewOverdue = isApiAuthenticated() && canApiActor(user, 'rentals:read')
+  const canCoordinateTasks = !isApiAuthenticated() || canApiActor(user, 'staff_tasks:update')
+  const pageAliases = canViewOverdue ? overduePageAlias : undefined
   const nav: NavItem[] = [
     { id: 'dashboard', label: 'Tổng quan', icon: Icon.home, group: 'Tổng quan', permission: 'dashboard:read' },
     { id: 'inventory', label: 'Thông tin kho', icon: Icon.box, group: 'Vận hành', permission: 'inventory:update' },
@@ -83,23 +89,32 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     { id: 'rentals', label: 'Hồ sơ thuê & Gia hạn', icon: Icon.policy, group: 'Vận hành', permission: isApiAuthenticated() ? 'rentals:read' : 'rentals:update' },
     { id: 'returns', label: 'Trả kho & Quyết toán', icon: Icon.clipboard, group: 'Vận hành', permission: 'returns:read' as const },
     { id: 'payments', label: isApiAuthenticated() ? 'Lịch sử thanh toán' : 'Lịch sử thanh toán & Công nợ', icon: Icon.dollar, group: 'Tài chính', permission: isApiAuthenticated() ? 'payments:read' : 'payments:collect' },
-    ...(isApiAuthenticated() ? [{ id: 'overdue-cases', label: 'Theo dõi quá hạn', icon: Icon.alert, group: 'Tài chính', permission: 'rentals:read' as const }] : []),
     ...(isApiAuthenticated()
-      ? [{ id: 'complaints', label: 'Quản lý khiếu nại', icon: Icon.alert, group: 'Tài chính', permission: 'payments:confirm' as const, badgeCount: complaintCount }]
-      : [{ id: 'complaints', label: 'Quản lý khiếu nại', icon: Icon.alert, group: 'Tài chính', permission: 'payments:collect' as const, badgeCount: complaintCount }]),
-    { id: 'staff-tasks', label: 'Nhân viên & Nhiệm vụ', icon: Icon.users, group: 'Điều phối', permission: 'staff_tasks:update' },
+      ? [{ id: 'complaints', label: 'Khiếu nại và báo cáo', icon: Icon.alert, group: 'Tài chính', permission: 'payments:confirm' as const, badgeCount: complaintCount }]
+      : [{ id: 'complaints', label: 'Khiếu nại và báo cáo', icon: Icon.alert, group: 'Tài chính', permission: 'payments:collect' as const, badgeCount: complaintCount }]),
+    { id: 'staff-tasks', label: 'Nhân viên & Nhiệm vụ', icon: Icon.users, group: 'Điều phối', permission: canCoordinateTasks ? 'staff_tasks:update' : 'rentals:read' },
     ...(isApiAuthenticated() ? [{ id: 'support', label: 'Yêu cầu hỗ trợ', icon: Icon.support, group: 'Điều phối', permission: 'support:read' as const }] : []),
   ]
-  const [page, setPage] = useState(() => getInitialPage(nav, 'dashboard'))
+  const [page, setPage] = useState(() => getInitialPage(nav, 'dashboard', pageAliases))
   const [supportTarget, setSupportTarget] = useState<{ id: string; request: number }>()
   const [recoveryTarget, setRecoveryTarget] = useState<{ id: string; request: number }>()
+  const [overdueTarget, setOverdueTarget] = useState<{ caseRef: string }>()
+  const [paymentTarget, setPaymentTarget] = useState<{ id: string }>()
   useEffect(() => { if (page !== 'staff-tasks') setRecoveryTarget(undefined) }, [page])
+  useEffect(() => { if (page !== 'overdue-cases') setOverdueTarget(undefined) }, [page])
+  useEffect(() => { if (page !== 'payments') setPaymentTarget(undefined) }, [page])
   const notificationFeed = useBackendNotifications(user.id, isApiAuthenticated())
   const { items: backendNotifications, setItems: setBackendNotifications } = notificationFeed
 
 
   const [staffTaskDraft, setStaffTaskDraft] = useState<{ referenceId: string; title: string; notes: string } | null>(null)
   const [returnReviewTarget, setReturnReviewTarget] = useState<{ id: string; request: number }>()
+  const [suspicionReportId, setSuspicionReportId] = useState<string>()
+  const openSuspicionReport = (id: string) => {
+    setComplaintInitialTab('reports')
+    setPage('complaints')
+    setSuspicionReportId(id)
+  }
   const [inventoryRentalId, setInventoryRentalId] = useState<string | undefined>()
   const [inventoryMaintenanceDraft, setInventoryMaintenanceDraft] = useState<{ unitId: string; unitCode: string } | null>(null)
   useEffect(() => {
@@ -117,8 +132,8 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
       returns: 'Trả kho & Quyết toán',
       payments: 'Lịch sử thanh toán',
       'overdue-cases': 'Theo dõi quá hạn',
-      complaints: 'Quản lý khiếu nại',
-      'payment-complaints': 'Quản lý khiếu nại',
+      complaints: 'Khiếu nại và báo cáo',
+      'payment-complaints': 'Khiếu nại và báo cáo',
       'staff-tasks': 'Nhân viên & Nhiệm vụ',
       reports: 'Báo cáo cơ sở'
     }
@@ -178,17 +193,6 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
       return notifications
     })
   const managerNotifications = [...renewalNotifications, ...returnDisputeNotifications, ...managerTaskNotifications]
-  const managerNotificationPage = (notification: ApiNotification) => {
-    if (notification.type === 'SUPPORT') return 'support'
-    if (notification.type === 'RETURN') return 'returns'
-    if (notification.type === 'CHECKIN') {
-      return notification.title === 'Khách hàng đã cập nhật lịch nhận kho' ? 'unit-assignment' : 'dashboard'
-    }
-    if (notification.type === 'RESERVATION') return 'unit-assignment'
-    if (notification.type === 'RENEWAL') return 'rentals'
-    if (notification.type === 'PAYMENT' || notification.type === 'OVERDUE') return notification.type === 'OVERDUE' ? 'overdue-cases' : 'complaints'
-    return 'dashboard'
-  }
   const managerApiNotifications: LayoutNotification[] = backendNotifications.map(notification => ({
     id: `api-notification-${notification.id}`,
     title: notification.title,
@@ -199,12 +203,26 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     isRead: notification.isRead,
   }))
 
-  return <ManagerPresentationProvider><div className="manager-role-layout h-full font-sans text-sm"><Layout user={resolvedUser} navItems={nav} currentPage={page} onNavigate={setPage} onLogout={onLogout} notifications={[...managerApiNotifications, ...managerNotifications]} notificationError={notificationFeed.error} notificationsLoading={notificationFeed.loading} hasMoreNotifications={notificationFeed.hasMore} onLoadMoreNotifications={notificationFeed.loadMore} onRetryNotifications={notificationFeed.refresh} onNotificationClick={(notification) => {
+  return <ManagerPresentationProvider><div className="manager-role-layout h-full font-sans text-sm"><Layout user={resolvedUser} navItems={nav} currentPage={page} pageAliases={pageAliases} onNavigate={setPage} onLogout={onLogout} notifications={[...managerApiNotifications, ...managerNotifications]} notificationError={notificationFeed.error} notificationsLoading={notificationFeed.loading} hasMoreNotifications={notificationFeed.hasMore} onLoadMoreNotifications={notificationFeed.loadMore} onRetryNotifications={notificationFeed.refresh} onNotificationClick={(notification) => {
     if (notification.id.startsWith('api-notification-')) {
       const notificationId = notification.id.replace('api-notification-', '')
-      setPage(notification.page)
+      const source = backendNotifications.find(item => item.id === notificationId)
+      if (source && notification.page === 'payments') {
+        const target = notificationRecordTarget(source, 'manager')
+        setPaymentTarget(target?.kind === 'payment' ? { id: target.id } : undefined)
+      }
+      if (notification.page === 'suspicion-report' && notification.targetId) {
+        openSuspicionReport(notification.targetId)
+      } else {
+        setSuspicionReportId(undefined)
+        setPage(notification.page === 'overdue-cases' && !canViewOverdue ? 'dashboard' : notification.page)
+      }
+      if (notification.page === 'overdue-cases' && canViewOverdue && source) {
+        const caseRef = managerOverdueNotificationRef(source)
+        setOverdueTarget(caseRef ? { caseRef } : undefined)
+      }
       if (notification.page === 'staff-tasks' && notification.targetId
-        && backendNotifications.some(item => item.id === notificationId && item.relatedEntityType === 'VIOLATION_RECOVERY')) {
+        && source?.relatedEntityType === 'VIOLATION_RECOVERY') {
         setRecoveryTarget({ id: notification.targetId, request: Date.now() })
       }
       if (notification.page === 'returns' && notification.targetId && notification.title === 'Cần đối soát danh tính trả kho') {
@@ -222,12 +240,18 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
     }
     setPage(notification.page)
   }} canAccess={permission => isApiAuthenticated() ? canApiActor(user, permission) : hub.can(user, permission)} roleLabel={'Quản Lý Cơ Sở'} roleColor="bg-purple-100 text-purple-700">
+    {suspicionReportId && <ManagerSuspicionReport key={suspicionReportId} id={suspicionReportId}
+      onClose={() => setSuspicionReportId(undefined)}
+      onOpenRental={id => { setSuspicionReportId(undefined); setInventoryRentalId(id); setPage('rentals') }}
+      onOpenRecovery={canApiActor(user, 'staff_tasks:update')
+        ? id => { setSuspicionReportId(undefined); setRecoveryTarget({ id, request: Date.now() }); setPage('staff-tasks') }
+        : undefined} />}
     {page === 'dashboard' && (isApiAuthenticated() ? <ManagerDashboardApiPanel setPage={setPage} /> : <ManagerReportsPanel user={user} units={hub.units} reservations={hub.holds} rentals={hub.rentals} payments={hub.payments} activities={hub.activities} checkins={hub.checkins} returns={hub.returns} />)}
     {page === 'inventory' && (isApiAuthenticated()
       ? <ManagerInventoryApiPanel onOpenRental={rentalId => { setInventoryRentalId(rentalId); setPage('rentals') }} onOpenMaintenance={(unitId, unitCode) => { setInventoryMaintenanceDraft({ unitId, unitCode }); setPage('staff-tasks') }} />
       : <ManagerInventoryPanel user={user} units={hub.units} rentals={hub.rentals} reservations={hub.holds} checkins={hub.checkins} returns={hub.returns} activities={hub.activities} maintenanceTasks={hub.maintenanceTasks} unitTypes={hub.unitTypes} facilityId={managerFacilityId || ''} facilityName={facility?.name || user.facility || ''} createUnit={hub.createUnit} updateUnit={hub.updateUnit} deleteUnit={hub.deleteUnit} updateUnitStatus={hub.updateUnitStatus} onCreateMaintenanceWork={draft => { setStaffTaskDraft(draft); setPage('staff-tasks') }} onOpenRental={rentalId => { setInventoryRentalId(rentalId); setPage('rentals') }} onOpenMaintenance={(unitId, unitCode) => { setInventoryMaintenanceDraft({ unitId, unitCode }); setPage('staff-tasks') }} showToast={showToast} />)}
     {page === 'unit-assignment' && isApiAuthenticated() && <ManagerAssignmentWorkspace showToast={showToast} onOpenRental={rentalId => { setInventoryRentalId(rentalId); setPage('rentals') }} onOpenMaintenance={(unitId, unitCode) => { setInventoryMaintenanceDraft({ unitId, unitCode }); setPage('staff-tasks') }} />}
-    {page === 'rentals' && (isApiAuthenticated() ? <ManagerRentalsApiPanel key={`${user.id}:${JSON.stringify(getAuthenticatedActor()?.facilityScopes)}`} initialRentalId={inventoryRentalId} /> : <ManagerRentalsPanel user={user} rentals={hub.rentals} renewals={hub.renewals} reservations={hub.holds} units={hub.units} unitTypes={hub.unitTypes} assignUnitToHold={hub.assignUnitToHold} showToast={showToast} />)}
+    {page === 'rentals' && (isApiAuthenticated() ? <ManagerRentalsApiPanel key={`${user.id}:${JSON.stringify(getAuthenticatedActor()?.facilityScopes)}`} initialRentalId={inventoryRentalId} onSuspicionReportSubmitted={openSuspicionReport} /> : <ManagerRentalsPanel user={user} rentals={hub.rentals} renewals={hub.renewals} reservations={hub.holds} units={hub.units} unitTypes={hub.unitTypes} assignUnitToHold={hub.assignUnitToHold} showToast={showToast} />)}
     {page === 'returns' && (
       <ManagerReturnsPanel
         reviewTarget={returnReviewTarget}
@@ -243,18 +267,24 @@ export default function ManagerApp({ user, onLogout }: { user: User; onLogout: (
       />
     )}
 
-    {page === 'payments' && (isApiAuthenticated() ? <ManagerFinancialApiPanel /> : <ManagerPaymentsPanel user={user} rentals={hub.rentals} payments={hub.payments} config={hub.config} applyRentalLateFee={hub.applyRentalLateFee} setRentalOverlock={hub.setRentalOverlock} sendDelinquencyReminder={hub.sendDelinquencyReminder} showToast={showToast} />)}
-    {page === 'overdue-cases' && isApiAuthenticated() && <ManagerOverdueApiPanel key={user.id} />}
+    {page === 'payments' && (isApiAuthenticated() ? <ManagerFinancialApiPanel paymentTarget={paymentTarget}
+      onPaymentClosed={() => setPaymentTarget(undefined)} /> : <ManagerPaymentsPanel user={user} rentals={hub.rentals} payments={hub.payments} config={hub.config} applyRentalLateFee={hub.applyRentalLateFee} setRentalOverlock={hub.setRentalOverlock} sendDelinquencyReminder={hub.sendDelinquencyReminder} showToast={showToast} />)}
     {(page === 'complaints' || page === 'payment-complaints') && (
       <ManagerComplaintsWorkspace
         user={resolvedUser}
         showToast={showToast}
-        initialTab={complaintInitialTab}
+        activeTab={complaintInitialTab}
+        onOpenReport={setSuspicionReportId}
         onTabChange={setComplaintInitialTab}
       />
     )}
-    {page === 'staff-tasks' && (isApiAuthenticated()
-      ? <ManagerApiStaffTasksPanel showToast={showToast} initialUnit={inventoryMaintenanceDraft} onInitialUnitConsumed={() => setInventoryMaintenanceDraft(null)} initialRecovery={recoveryTarget} />
+    {(page === 'staff-tasks' || (page === 'overdue-cases' && canViewOverdue)) && (isApiAuthenticated()
+      ? <ManagerApiStaffTasksPanel showToast={showToast} initialUnit={inventoryMaintenanceDraft}
+          onInitialUnitConsumed={() => setInventoryMaintenanceDraft(null)} initialRecovery={recoveryTarget}
+          initialOverdue={overdueTarget} onOverdueClosed={() => setOverdueTarget(undefined)}
+          canCoordinate={canCoordinateTasks} canViewOverdue={canViewOverdue}
+          showOverdue={page === 'overdue-cases' || !canCoordinateTasks}
+          onSelectOverdue={selected => setPage(selected ? 'overdue-cases' : 'staff-tasks')} />
       : <ManagerStaffTasksPanel user={user} facilityId={managerFacilityId || ''} facilityName={facility?.name || user.facility || ''} tasks={hub.staffTasks} createFacilityTask={hub.createFacilityTask} updateFacilityTask={hub.updateFacilityTask} initialDraft={staffTaskDraft} onDraftConsumed={() => setStaffTaskDraft(null)} showToast={showToast} />)}
     {page === 'profile' && <ProfileView user={user} />}
     {page === 'support' && isApiAuthenticated() && <SupportApiWorkspace role="manager" openTicket={supportTarget} />}

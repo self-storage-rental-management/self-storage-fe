@@ -60,9 +60,6 @@ export async function restoreManagerUnitType(unitTypeId: string) {
   return response.data
 }
 
-/** @deprecated Use archiveManagerUnitType; the endpoint now performs a soft archive. */
-export const deleteManagerUnitType = archiveManagerUnitType
-
 export async function createManagerUnitType(facilityId: string, input: ManagerUnitTypeInput & { rackLayout: ConfirmedRackLayout }) {
   const response = await apiRequest<Envelope<CustomerUnitType>>(
     `/api/manager/facilities/${encodeURIComponent(facilityId)}/unit-types`,

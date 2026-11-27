@@ -155,7 +155,7 @@ export function OperationEventCard({
       {e.kind === "FAULT_REVIEW" && typeof d.facilityFault === "boolean" && (
         <p>{d.facilityFault ? "Xác nhận lỗi từ cơ sở" : "Không xác nhận lỗi từ cơ sở"}</p>
       )}
-      {e.kind === "REFUND_EXECUTION" && <p>{d.environment === "SANDBOX" ? "Đã ghi nhận chứng từ hoàn khoản trả trước qua VNPay thử nghiệm." : "Đã ghi nhận khoản hoàn theo chứng từ tại cơ sở."}</p>}
+      {e.kind === "REFUND_EXECUTION" && <p>{d.environment === "SANDBOX" ? "Đã ghi nhận chứng từ hoàn thử nghiệm; không xác nhận chuyển tiền thực tế." : "Đã ghi nhận khoản hoàn theo chứng từ tại cơ sở."}</p>}
       {e.kind !== 'ARRIVAL' && <p className="break-all">
         Mã sự kiện: {recordDisplayCode(e.id)}
       </p>}

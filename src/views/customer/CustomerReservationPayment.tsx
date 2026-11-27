@@ -300,7 +300,7 @@ export default function CustomerReservationPayment({ receiptSlot, user, reservat
         {receiptSection === 'deposit' && payment && <div role="tabpanel" className="w-full min-w-0"><ReservationReceipt payment={payment} reservationCode={reservation.reservationCode} /></div>}
         {receiptSection === 'remaining' && remainingPayment && <div role="tabpanel" className="w-full min-w-0"><ReservationReceipt payment={remainingPayment} reservationCode={reservation.reservationCode} /></div>}
         {selectedReceipt?.paymentStatus === 'PAID' && <div className="flex justify-end border-t border-stone-200 pt-4">
-          <Button type="button" variant="outline" onClick={() => downloadPaymentReceipt(reservationPaymentReceiptExport(selectedReceipt, reservation.reservationCode))}>Tải biên lai xuống</Button>
+          <Button type="button" variant="outline" onClick={() => downloadPaymentReceipt(reservationPaymentReceiptExport(selectedReceipt, reservation.reservationCode))}>Tải phiếu ghi nhận giao dịch</Button>
         </div>}
       </div>
     </Modal>

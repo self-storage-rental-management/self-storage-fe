@@ -9,6 +9,7 @@ import { useDisplayPunctuation } from '../presentation/useDisplayPunctuation'
 import { managerDisplayText } from '../views/manager/managerPresentation'
 import { mergeNotificationFeed } from './notificationFeed'
 import { displayRoleNames } from '../presentation/displayText'
+import { businessNotificationText } from '../services/notificationApi'
 
 export interface NavItem {
   id: string
@@ -29,11 +30,12 @@ export interface LayoutNotification {
   isRead?: boolean
 }
 
-function resolveNavPage(navItems: NavItem[], requested: string | null): string | null {
+function resolveNavPage(navItems: NavItem[], requested: string | null, pageAliases?: Readonly<Record<string, string>>): string | null {
   if (!requested) return null
   if (requested === 'profile') return 'profile'
   if (requested === 'policies' && navItems.some(item => item.id === 'policies')) return 'policies'
   if (navItems.some(item => item.id === requested)) return requested
+  if (navItems.some(item => item.id === pageAliases?.[requested])) return requested
 
   // Cross-role page alias resolution
   if (requested === 'browse-units' || requested === 'units') {
@@ -80,15 +82,16 @@ function requestedPageFromLocation() {
   return new URLSearchParams(window.location.search).get('page')
 }
 
-export function getInitialPage(navItems: NavItem[], fallback: string) {
+export function getInitialPage(navItems: NavItem[], fallback: string, pageAliases?: Readonly<Record<string, string>>) {
   const requestedPage = requestedPageFromLocation()
-  return resolveNavPage(navItems, requestedPage) ?? fallback
+  return resolveNavPage(navItems, requestedPage, pageAliases) ?? fallback
 }
 
 interface LayoutProps {
   user: User
   navItems: NavItem[]
   currentPage: string
+  pageAliases?: Readonly<Record<string, string>>
   onNavigate: (page: string) => void
   onLogout: () => void
   children: ReactNode
@@ -107,7 +110,7 @@ interface LayoutProps {
 
 
 export default function Layout({
-  user, navItems, currentPage, onNavigate, onLogout, children, roleLabel, notifications: suppliedNotifications, additionalNotifications, onNotificationClick, canAccess,
+  user, navItems, currentPage, pageAliases, onNavigate, onLogout, children, roleLabel, notifications: suppliedNotifications, additionalNotifications, onNotificationClick, canAccess,
   notificationError, notificationsLoading, hasMoreNotifications, onLoadMoreNotifications, onRetryNotifications
 }: LayoutProps) {
   useDisplayPunctuation(user.role === 'customer' || user.role === 'manager')
@@ -120,6 +123,7 @@ export default function Layout({
   }
   const taskbarColor = roleTaskbarColor[user.role] ?? '#F2BDCC'
   const visibleNavItems = canAccess ? navItems.filter(item => !item.permission || canAccess(item.permission)) : navItems
+  const activeNavPage = pageAliases?.[currentPage] ?? currentPage
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [notificationActionError, setNotificationActionError] = useState('')
@@ -189,20 +193,20 @@ export default function Layout({
   useEffect(() => {
     const restorePage = () => {
       const requestedPage = requestedPageFromLocation()
-      const target = resolveNavPage(visibleNavItems, requestedPage)
+      const target = resolveNavPage(visibleNavItems, requestedPage, pageAliases)
       if (target) {
         onNavigate(target)
       }
     }
     window.addEventListener('popstate', restorePage)
     return () => window.removeEventListener('popstate', restorePage)
-  }, [visibleNavItems, onNavigate])
+  }, [visibleNavItems, pageAliases, onNavigate])
 
   useEffect(() => {
-    if (currentPage !== 'profile' && !visibleNavItems.some(item => item.id === currentPage)) {
+    if (currentPage !== 'profile' && !visibleNavItems.some(item => item.id === activeNavPage)) {
       onNavigate(visibleNavItems[0]?.id ?? 'profile')
     }
-  }, [currentPage, visibleNavItems, onNavigate])
+  }, [currentPage, activeNavPage, visibleNavItems, onNavigate])
 
   useEffect(() => {
     const url = new URL(window.location.href)
@@ -467,8 +471,8 @@ export default function Layout({
                 )}
                 <button
                   onClick={() => { navigate(item.id); setSidebarOpen(false) }}
-                  aria-current={currentPage === item.id ? 'page' : undefined}
-                  className={`sidebar-link w-full mb-0.5 flex items-center justify-between ${currentPage === item.id ? 'active' : ''}`}
+                  aria-current={activeNavPage === item.id ? 'page' : undefined}
+                  className={`sidebar-link w-full mb-0.5 flex items-center justify-between ${activeNavPage === item.id ? 'active' : ''}`}
                 >
                   <span className="flex items-center gap-1.5 min-w-0 flex-1 text-left">
                     <span className="truncate">{getNavLabel(item)}</span>
@@ -626,7 +630,7 @@ export default function Layout({
                             : item.message)
                           : item.title === 'BO từ chối thay đổi loại kho' && !item.message.includes('Lý do:')
                             ? item.message.replace(/^([^·]+ · [^·]+) · /, '$1\nLý do: ')
-                            : item.message
+                            : user.role === 'business' ? businessNotificationText(item.message) : item.message
                         )}</span>}
                       {item.date && <span className="mt-1.5 block text-[10px] text-stone-400">{formatNotificationDate(item.date)}</span>}
                     </button>
