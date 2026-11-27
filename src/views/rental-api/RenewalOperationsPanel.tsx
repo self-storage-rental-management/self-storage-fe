@@ -1191,12 +1191,14 @@ function OperationForm({
         }
       case "arrival":
         if (!s.appointmentRef) throw new Error("Thiếu lịch ký.")
+        if (!attested || !customerIdentity.data?.identityDocumentNumber) throw new Error("Cần đối chiếu giấy tờ gốc và xác nhận đúng khách hàng.")
         return {
           action,
           body: {
             ...base,
             appointmentRef: s.appointmentRef,
             evidenceFileIds: files,
+            identityVerified: true,
           },
         }
       case "incident":
@@ -1234,6 +1236,7 @@ function OperationForm({
         }
       }
       case "completion":
+        if (!s.arrivalRef) throw new Error("Cần xác minh và ghi nhận khách đã đến trước khi hoàn tất.")
         if (!isUuid(signedDocumentFile))
           throw new Error("Vui lòng tải hợp đồng đã ký lên trước khi hoàn tất gia hạn.")
         if ((!s.arrivalRef && !s.appointmentRef) || cash.loading || cash.error || !cash.data || cash.data.amount !== 0 || !cash.data.effectiveStartDate)
@@ -1246,6 +1249,7 @@ function OperationForm({
             ...base,
             arrivalRef: s.arrivalRef || "00000000-0000-0000-0000-000000000000",
             signedDocumentFileId: signedDocumentFile,
+            identityVerified: true,
             expectedEffectiveStartDate: cash.data.effectiveStartDate,
           },
         }
@@ -1290,6 +1294,7 @@ function OperationForm({
       </header> : <h4 className="font-semibold">{copy(operationLabels[action])}</h4>}
       <fieldset disabled={locked} className="space-y-3">
         {action === 'arrival' && <section aria-label="Thông tin khách để đối chiếu CCCD" className="rounded-lg border border-stone-200 bg-stone-50 p-3">
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={attested} onChange={e => setAttested(e.target.checked)} />Tôi đã đối chiếu giấy tờ gốc, xác minh đúng khách. Thời gian xử lý sau khi nhận khách là 30 phút, tối đa đến hạn thu hồi.</label>
           <ApiReadState {...customerIdentity} retry={customerIdentity.refresh} />
           {customerIdentity.data && <>
             <dl className="grid gap-3 text-sm sm:grid-cols-2">
@@ -1562,6 +1567,7 @@ function OperationForm({
                         expectedVersion: payload.body.expectedVersion,
                         appointmentRef: s.appointmentRef,
                         evidenceFileIds: [],
+                        identityVerified: true,
                       },
                     },
                     `${key}-arrival`,
