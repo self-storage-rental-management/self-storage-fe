@@ -133,6 +133,7 @@ export type RenewalOperationCommand = {
 }
 export type RenewalOperationAction = RenewalOperationCommand["action"]
 export interface RenewalAppointmentQuery {
+  sort?: 'appointmentStart,asc' | 'createdAt,asc' | 'createdAt,desc'
   page?: number
   size?: number
   facilityId?: string

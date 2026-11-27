@@ -15,15 +15,10 @@ export default function ProcessingLeaseBoundary({ target, id, enabled = true, on
   const [pending, setPending] = useState(active)
   const [ready, setReady] = useState(false)
   const [attempt, setAttempt] = useState(0)
+  const reclaimRequested = useRef(false)
   const [, render] = useState(0)
-  const state = useRef<{ token: string; lease?: LocalProcessingLease; stopped: boolean } | null>(null)
-  const lastActivity = useRef(Date.now())
-  const [idle, setIdle] = useState(false)
+  const state = useRef<{ token: string; lease?: LocalProcessingLease; stopped: boolean; released?: boolean } | null>(null)
   const draftKey = `storagehub:processing-draft:${target}:${id}`
-  const markActivity = () => {
-    lastActivity.current = Date.now()
-    if (idle) setIdle(false)
-  }
   const acquired = useRef(onAcquired)
   acquired.current = onAcquired
   const readyRef = useRef(ready)
@@ -42,14 +37,31 @@ export default function ProcessingLeaseBoundary({ target, id, enabled = true, on
     const unwatch = watchProcessingView(target, id)
     let retries = 0
     let retryTimer: number | undefined
+    let acquiring = false
     state.current = current
     setView(null); setReady(false); setError(''); setPending(true)
+    const activate = async (result: ProcessingView) => {
+          if (current.stopped) return
+          current.lease = { target, id, token: current.token, view: result, invalid: false, inFlight: false, ready: false }
+          putProcessingLease(current.lease)
+          if (current.stopped) return
+          // Confirm the data still matches before loading the form. Loading it first meant the
+          // form read stale data and then reported a change on top of it.
+          const observed = (await apiRequest<{ data: ProcessingView }>(url, { headers: { 'X-Processing-Token': current.token } })).data
+          if (!observed.owned || observed.revision !== result.revision || observed.sourceStamp !== result.sourceStamp)
+            throw new Error('Hồ sơ vừa thay đổi trong lúc tải. Đóng và mở lại hồ sơ để lấy dữ liệu mới.')
+          await acquired.current?.()
+          if (!current.stopped) { current.lease.ready = true; notifyProcessing(); setError(''); setReady(true) }
+    }
     const acquire = async () => {
+      if (acquiring || current.stopped) return
+      acquiring = true
+      setPending(true)
       // A same-operator lease that is about to be reclaimed must not be announced as
       // "someone else is processing". Keep the pending state until the retry settles.
       let awaitingRetry = false
       try {
-        const result = (await apiRequest<{ data: ProcessingView }>(url + '/acquire', { method: 'POST', body: JSON.stringify({ token: current.token }) })).data
+        const result = (await apiRequest<{ data: ProcessingView }>(url + '/acquire', { method: 'POST', body: JSON.stringify({ token: current.token, reclaimSameOwner: reclaimRequested.current }) })).data
         if (current.stopped) {
           if (result.owned) void apiRequest(url + '/release', { method: 'POST', body: JSON.stringify({ token: current.token }) }).catch(() => {})
           return
@@ -60,34 +72,36 @@ export default function ProcessingLeaseBoundary({ target, id, enabled = true, on
           awaitingRetry = true
           retryTimer = window.setTimeout(() => { if (!current.stopped) void acquire() }, 1000)
         }
-        if (result.owned) {
-          current.lease = { target, id, token: current.token, view: result, invalid: false, inFlight: false, ready: false }
-          putProcessingLease(current.lease)
-          if (current.stopped) return
-          // Confirm the data still matches before loading the form. Loading it first meant the
-          // form read stale data and then reported a change on top of it.
-          const observed = (await apiRequest<{ data: ProcessingView }>(url, { headers: { 'X-Processing-Token': current.token } })).data
-          if (!observed.owned || observed.revision !== result.revision || observed.sourceStamp !== result.sourceStamp)
-            throw new Error('Hồ sơ vừa thay đổi trong lúc tải. Đóng và mở lại hồ sơ để lấy dữ liệu mới.')
-          await acquired.current?.()
-          if (!current.stopped) { current.lease.ready = true; notifyProcessing(); setReady(true) }
-        }
+        if (result.owned) { reclaimRequested.current = false; await activate(result) }
       } catch (failure) {
         if (!current.stopped) { setError(failure instanceof Error ? failure.message : 'Không thể nhận quyền xử lý hồ sơ.'); setReady(false); if (current.lease) invalidateProcessing(current.lease) }
-      } finally { if (!current.stopped && !awaitingRetry) setPending(false) }
+      } finally {
+        acquiring = false
+        if (!current.stopped && !awaitingRetry) setPending(false)
+      }
     }
-    const renew = async () => {
-      if (current.stopped || document.hidden || !current.lease || current.lease.invalid || !readyRef.current) return
-      if (Date.now() - lastActivity.current > 10 * 60_000) { setIdle(true); return }
+    let lastHeartbeat = Date.now()
+    let renewing = false
+    const renew = async (heartbeat = Date.now() - lastHeartbeat >= 30000) => {
+      if (renewing || current.stopped || !current.lease || current.lease.invalid || current.lease.inFlight || !readyRef.current) return
+      const heldLease = current.lease
+      renewing = true
       try {
-        const result = (await apiRequest<{ data: ProcessingView }>(url + '/heartbeat', { method: 'POST', body: JSON.stringify({ token: current.token }) })).data
-        if (current.stopped) return
-        if (current.lease.invalid || current.lease.inFlight || result.revision < current.lease.view.revision) return
+        const result = (await apiRequest<{ data: ProcessingView }>(heartbeat ? url + '/heartbeat' : url, heartbeat
+          ? { method: 'POST', body: JSON.stringify({ token: current.token }) }
+          : { headers: { 'X-Processing-Token': current.token } })).data
+        if (current.stopped || current.lease !== heldLease) return
+        if (heartbeat) lastHeartbeat = Date.now()
+        if (heldLease.invalid || heldLease.inFlight || result.revision < heldLease.view.revision) return
+        if (!result.owned) {
+          invalidateProcessing(current.lease); setReady(false); setView(result); setError(''); return
+        }
         if (result.revision !== current.lease.view.revision || result.sourceStamp !== current.lease.view.sourceStamp) {
           invalidateProcessing(current.lease); setReady(false); setError('Hồ sơ đã thay đổi. Đóng và mở lại hồ sơ để tải dữ liệu mới.'); return
         }
         current.lease.view = result; setView(result); notifyProcessing()
       } catch (failure) {
+        if (current.stopped || current.lease !== heldLease) return
         if (!current.stopped) {
           if (current.lease) invalidateProcessing(current.lease)
           setReady(false)
@@ -97,36 +111,46 @@ export default function ProcessingLeaseBoundary({ target, id, enabled = true, on
             if (!current.stopped) setView(latest)
           } catch { /* The existing view remains read-only when the server is unreachable. */ }
         }
-      }
+      } finally { renewing = false }
     }
-    const onVisibility = () => { if (!document.hidden) { markActivity(); void renew() } }
-    const onActivity = () => markActivity()
+    const onVisibility = () => { if (!document.hidden) void pollOnce() }
     document.addEventListener('visibilitychange', onVisibility)
-    document.addEventListener('pointerdown', onActivity, true)
-    document.addEventListener('keydown', onActivity, true)
-    document.addEventListener('input', onActivity, true)
+    window.addEventListener('focus', onVisibility)
     void acquire()
-    const poll = window.setInterval(async () => {
-      if (current.stopped || document.hidden || current.lease?.inFlight) return
-      if (current.lease && !current.lease.invalid && readyRef.current) {
-        void renew()
-      } else {
-        try {
-          const result = (await apiRequest<{ data: ProcessingView }>(url, { headers: { 'X-Processing-Token': current.token } })).data
-          if (!current.stopped) setView(result)
-        } catch (failure) {
-          if (!current.stopped) setError(failure instanceof Error ? failure.message : 'Mất kết nối, đã tạm khóa thao tác.')
+    let polling = false
+    const pollOnce = async () => {
+      if (polling || acquiring || current.stopped || current.lease?.inFlight) return
+      polling = true
+      try {
+        if (current.lease && !current.lease.invalid && readyRef.current) {
+          await renew()
+        } else {
+          try {
+            const result = (await apiRequest<{ data: ProcessingView }>(url, { headers: { 'X-Processing-Token': current.token } })).data
+            if (!current.stopped) {
+              setView(result)
+              if (result.owned && (!current.lease || current.lease.invalid)) await activate(result)
+              if (!result.occupied && !current.released) void acquire()
+            }
+          } catch (failure) {
+            if (!current.stopped) {
+              if (current.lease) invalidateProcessing(current.lease)
+              setReady(false)
+              setError(failure instanceof Error ? failure.message : 'Mất kết nối, đã tạm khóa thao tác.')
+            }
+          }
         }
-      }
-    }, 30000)
+      } finally { polling = false }
+    }
+    const poll = window.setInterval(() => void pollOnce(), 2000)
+    const heartbeat = window.setInterval(() => void renew(true), 30000)
     return () => {
       current.stopped = true
       window.clearInterval(poll)
+      window.clearInterval(heartbeat)
       window.clearTimeout(retryTimer)
       document.removeEventListener('visibilitychange', onVisibility)
-      document.removeEventListener('pointerdown', onActivity, true)
-      document.removeEventListener('keydown', onActivity, true)
-      document.removeEventListener('input', onActivity, true)
+      window.removeEventListener('focus', onVisibility)
       unwatch()
       forgetProcessingLease(target, id, current.token)
       // A write already in flight owns the DB lock. Release is serialized behind it.
@@ -145,6 +169,7 @@ export default function ProcessingLeaseBoundary({ target, id, enabled = true, on
       if (current.lease) invalidateProcessing(current.lease)
       forgetProcessingLease(target, id, current.token)
       current.lease = undefined
+      current.released = true
       setView(result); setError('')
     } catch (failure) { setError(failure instanceof Error ? failure.message : 'Chưa thể nhường quyền xử lý.'); if (current.lease) invalidateProcessing(current.lease) }
     finally { setPending(false) }
@@ -158,15 +183,61 @@ export default function ProcessingLeaseBoundary({ target, id, enabled = true, on
       setError(failure instanceof Error ? failure.message : 'Chưa thể gỡ khóa cưỡng chế.')
     } finally { setPending(false) }
   }
+  const requestAccess = async () => {
+    const current = state.current
+    if (!current) return
+    setPending(true); setError('')
+    try {
+      const result = (await apiRequest<{ data: ProcessingView }>(url + '/requests', {
+        method: 'POST', body: JSON.stringify({ token: current.token }),
+      })).data
+      if (!current.stopped) setView(result)
+    } catch (failure) { setError(failure instanceof Error ? failure.message : 'Không thể gửi yêu cầu giữ quyền.') }
+    finally { setPending(false) }
+  }
+  const decideRequest = async (requestId: string, approve: boolean) => {
+    const current = state.current
+    if (!current || current.lease?.inFlight) return
+    setPending(true); setError('')
+    try {
+      const result = (await apiRequest<{ data: ProcessingView }>(url + '/requests/' + requestId + '/decision', {
+        method: 'POST', body: JSON.stringify({ token: current.token, approve }),
+      })).data
+      if (current.stopped) return
+      if (approve) {
+        if (current.lease) invalidateProcessing(current.lease)
+        forgetProcessingLease(target, id, current.token)
+        current.lease = undefined
+        setReady(false)
+      }
+      setView(result)
+    } catch (failure) { setError(failure instanceof Error ? failure.message : 'Không thể xử lý yêu cầu.') }
+    finally { setPending(false) }
+  }
+  const myRequest = view?.requests?.filter(request => request.requesterId === actorId).at(-1)
   if (!active) return <>{children}</>
   return <div className="space-y-3">
     <div role="status" className={`rounded-xl border p-3 text-sm ${owned ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-300 bg-amber-50 text-amber-950'}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p>{pending ? 'Đang kiểm tra quyền xử lý hồ sơ…' : owned ? 'Bạn đang giữ quyền xử lý hồ sơ này.' : view?.occupied && view.ownerId === actorId ? 'Bạn đang mở hồ sơ này ở tab khác. Tab hiện tại chỉ được xem.' : view?.occupied ? `Hồ sơ đang được ${view.ownerName || 'nhân sự khác'} xử lý. Bạn chỉ có thể xem.` : 'Bạn đang xem hồ sơ. Nhận xử lý trước khi chỉnh sửa.'}</p>
+        <p>{pending ? 'Đang kiểm tra quyền xử lý hồ sơ…' : owned ? 'Bạn đang giữ quyền xử lý hồ sơ này.' : view?.occupied && view.ownerId === actorId ? 'Tài khoản của bạn còn giữ một phiên xử lý trước đó. Bạn có thể nhận lại quyền xử lý tại đây.' : view?.occupied ? `Hồ sơ đang được ${view.ownerName || 'nhân sự khác'} xử lý. Bạn chỉ có thể xem.` : 'Bạn đang xem hồ sơ. Nhận xử lý trước khi chỉnh sửa.'}</p>
         {owned ? <button type="button" disabled={pending || lease?.inFlight} onClick={() => void release()} className="rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50">Nhường xử lý</button>
-          : <div className="flex flex-wrap gap-2"><button type="button" disabled={pending || !!view?.occupied} onClick={() => setAttempt(n => n + 1)} className="rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50">Nhận xử lý / tải lại</button>{canForceRelease && view?.occupied && <button type="button" disabled={pending} onClick={() => void forceRelease()} className="rounded-lg border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-800 disabled:opacity-50">Gỡ khóa cưỡng chế</button>}</div>}
+          : <div className="flex flex-wrap gap-2"><button type="button" disabled={pending || !!view?.occupied && view.ownerId !== actorId} onClick={() => { reclaimRequested.current = Boolean(view?.occupied && view.ownerId === actorId); setAttempt(n => n + 1) }} className="rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50">{view?.occupied && view.ownerId === actorId ? 'Nhận lại quyền xử lý' : 'Nhận xử lý / tải lại'}</button>{canForceRelease && view?.occupied && view.ownerId !== actorId && <button type="button" disabled={pending} onClick={() => void forceRelease()} className="rounded-lg border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-800 disabled:opacity-50">Gỡ khóa cưỡng chế</button>}</div>}
       </div>
-      {view?.expiresAt && <p className="mt-1 text-xs">Quyền xử lý được gia hạn khi màn hình đang hoạt động; tự hết hạn sau 2 phút mất kết nối và tối đa 15 phút mỗi lượt. {idle && 'Đã tạm dừng gia hạn do không có thao tác trong 10 phút.'}</p>}
+      {!owned && view?.occupied && !view.owned && view.ownerId !== actorId && <div className="mt-2 space-y-1">
+        <button type="button" disabled={pending || myRequest?.status === 'PENDING'} onClick={() => void requestAccess()} className="rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50">
+          {myRequest?.status === 'PENDING' ? 'Đã gửi yêu cầu, đang chờ duyệt' : 'Yêu cầu giữ quyền xử lý'}
+        </button>
+        {myRequest?.status === 'REJECTED' && <p className="text-xs">Người giữ quyền đã từ chối yêu cầu. Bạn có thể gửi lại hoặc chờ hồ sơ được nhường.</p>}
+        {myRequest?.status === 'EXPIRED' && <p className="text-xs">Yêu cầu đã hết hiệu lực do mất kết nối hoặc người giữ quyền thay đổi. Bạn có thể gửi yêu cầu mới.</p>}
+      </div>}
+      {owned && view?.requests?.filter(request => request.status === 'PENDING').map(request => <div key={request.id} className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-white p-2">
+        <p><b>{request.requesterName}</b> yêu cầu giữ quyền xử lý hồ sơ này.</p>
+        <div className="flex gap-2">
+          <button type="button" disabled={pending || lease?.inFlight} onClick={() => void decideRequest(request.id, true)} className="rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50">Duyệt chuyển quyền</button>
+          <button type="button" disabled={pending || lease?.inFlight} onClick={() => void decideRequest(request.id, false)} className="rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50">Từ chối</button>
+        </div>
+      </div>)}
+      {view?.expiresAt && <p className="mt-1 text-xs">Quyền xử lý được giữ khi màn hình còn mở và duy trì kết nối, không giới hạn thời gian mỗi lượt. Tự hết hạn sau 2 phút không nhận được kết nối gia hạn.</p>}
       {(error || lease?.invalid) && <p className="mt-1 text-xs font-semibold">{error || 'Phiên xử lý đã thay đổi. Đóng và mở lại hồ sơ trước khi tiếp tục.'}</p>}
     </div>
     <fieldset disabled={!owned} onInputCapture={event => {
@@ -177,7 +248,7 @@ export default function ProcessingLeaseBoundary({ target, id, enabled = true, on
         })
         sessionStorage.setItem(draftKey, JSON.stringify({ savedAt: Date.now(), fields }))
       } catch {}
-      markActivity()
+
     }} className="min-w-0 border-0 p-0 disabled:opacity-75">{children}</fieldset>
   </div>
 }

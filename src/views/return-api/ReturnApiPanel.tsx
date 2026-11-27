@@ -493,9 +493,10 @@ function ReturnWorkspace({
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(timer)
   }, [mismatch])
+  const [sort, setSort] = useState<'priority' | 'createdAt,desc' | 'createdAt,asc'>('priority')
   const [page, setPage] = useState(0)
-  const read = useRentalApiResource(`${identity}:${page}`, async () => {
-    if (!rentalId) return listReturns(role, page)
+  const read = useRentalApiResource(`${identity}:${page}:${sort}`, async () => {
+    if (!rentalId) return listReturns(role, page, 20, sort)
     const first = await listReturns(role, 0, 100)
     const data = [...first.data]
     for (let next = 1; next < first.pagination.totalPages; next++) data.push(...(await listReturns(role, next, 100)).data)
@@ -905,7 +906,7 @@ function ReturnWorkspace({
             </div>
           )}
           {role !== 'customer' && listMode === 'recovery' ? (
-            <ViolationRecoveryPanel />
+            <ViolationRecoveryPanel allowDateSort={role === 'staff'} />
           ) : (
           <>
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 pb-3">
@@ -920,13 +921,14 @@ function ReturnWorkspace({
 
           {/* Search bar & Status Tabs */}
           <div className="space-y-3">
-            <div className="relative">
+            <div className="flex flex-wrap items-center gap-3">
+            <div className="relative min-w-48 flex-1">
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Tìm kiếm theo mã kho, tên khách hàng, cơ sở hoặc lý do trả kho..."
-                className="w-full rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-xs text-stone-900 focus:border-amber-500 focus:outline-none placeholder:text-stone-400"
+                className="!h-9 w-full rounded-lg border border-stone-200 bg-white !px-3 !py-1.5 !text-xs text-stone-900 focus:border-amber-500 focus:outline-none placeholder:text-stone-400"
               />
               {searchQuery && (
                 <button
@@ -937,6 +939,16 @@ function ReturnWorkspace({
                   Xóa
                 </button>
               )}
+            </div>
+          {role === 'staff' && <label className="flex shrink-0 items-center gap-2 whitespace-nowrap text-xs text-stone-500">
+            Sắp xếp
+            <select aria-label="Sắp xếp hồ sơ trả kho" className="!h-9 !w-40 !min-w-0 shrink-0 rounded-lg border border-stone-200 bg-white !px-3 !py-1.5 !text-xs text-stone-700"
+              value={sort} onChange={event => { setSort(event.target.value as typeof sort); setPage(0) }}>
+              <option value="priority">Ưu tiên xử lý</option>
+              <option value="createdAt,desc">Mới nhất</option>
+              <option value="createdAt,asc">Cũ nhất</option>
+            </select>
+          </label>}
             </div>
 
             {/* Segmented control tabs */}

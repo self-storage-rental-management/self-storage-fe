@@ -1,3 +1,4 @@
+export type StaffReservationSort = 'priority' | 'appointmentAt,asc' | 'createdAt,desc' | 'createdAt,asc'
 import { apiDownload, apiRequest } from './apiClient'
 import type { PageResponse, ReservationGoodsItem, ReservationStatus } from './customerReservationApi'
 import { checkedReservation, checkedReservationState, checkedStatusPage } from './statusContractValidation'
@@ -43,8 +44,8 @@ export interface StaffReservationProgress {
   createdAt: string
 }
 
-export async function listStaffReservationReviews(page = 0, size = 20, completed = false) {
-  return checkedStatusPage(await apiRequest<PageResponse<ReservationReview>>(`/api/staff/reservation-reviews?page=${page}&size=${size}${completed ? "&completed=true" : ""}`), checkedReservationState)
+export async function listStaffReservationReviews(page = 0, size = 20, completed = false, sort: StaffReservationSort = 'priority') {
+  return checkedStatusPage(await apiRequest<PageResponse<ReservationReview>>(`/api/staff/reservation-reviews?page=${page}&size=${size}${completed ? "&completed=true" : ""}${sort === 'priority' ? '' : `&sort=${encodeURIComponent(sort)}`}`), checkedReservationState)
 }
 
 export async function decideStaffReservationReview(reservationId: string, decision: 'APPROVE' | 'REJECT', note: string) {
@@ -56,6 +57,7 @@ export async function decideStaffReservationReview(reservationId: string, decisi
 }
 
 export async function listStaffActiveReservations(params: {
+  sort?: StaffReservationSort
   page?: number
   size?: number
   q?: string
@@ -66,6 +68,7 @@ export async function listStaffActiveReservations(params: {
   query.set('size', String(params.size ?? 10))
   if (params.q?.trim()) query.set('q', params.q.trim())
   if (params.status) query.set('status', params.status)
+  if (params.sort) query.set('sort', params.sort)
   return checkedStatusPage(await apiRequest<PageResponse<StaffReservationProgress>>(`/api/staff/reservations?${query}`), checkedReservation)
 }
 

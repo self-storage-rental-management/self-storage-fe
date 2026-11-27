@@ -479,11 +479,11 @@ export default function RentalDetail({
             <dt>Hạn chuẩn bị (Miễn phí)</dt>
             <dd className="space-y-3">
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-lg border border-stone-200 bg-stone-50 p-3"><p className="text-xs text-stone-500">Ngày nhận kho theo lịch khách chọn</p><p className="mt-1 font-semibold">{rentalDate(rental.setupStartedAt)}</p></div>
+                <div className="rounded-lg border border-stone-200 bg-stone-50 p-3"><p className="text-xs text-stone-500">Lịch hẹn nhận kho / bắt đầu chuẩn bị</p><p className="mt-1 font-semibold">{rentalDate(rental.setupStartedAt)}</p></div>
                 <div className="rounded-lg border border-stone-200 bg-stone-50 p-3"><p className="text-xs text-stone-500">Kết thúc chuẩn bị miễn phí</p><p className="mt-1 font-semibold">{rentalDate(rental.setupEndsAt)}</p></div>
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3"><span className="text-sm text-emerald-800">Bắt đầu kỳ thuê có tính tiền</span><span className="font-bold text-emerald-900">{rentalDate(rental.startDate)}</span></div>
-              <p className="border-t border-stone-100 pt-3 text-xs text-stone-500">Ngày tính tiền = ngày khách chọn nhận kho + số ngày chuẩn bị miễn phí theo gói thuê.</p>
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3"><span className="text-sm text-emerald-800">Bắt đầu tính tiền thuê (đã chốt)</span><span className="font-bold text-emerald-900">{rentalDate(rental.startDate)}</span></div>
+              <p className="border-t border-stone-100 pt-3 text-xs text-stone-500">Đối với bàn giao mới, thời gian chuẩn bị bắt đầu khi staff hoàn tất bàn giao. Kỳ thuê đã chốt được hiển thị trên hồ sơ; hoàn tất chuẩn bị hoặc kiểm kê sớm không tự động làm đổi mốc này.</p>
               {rental.moveInCompletedAt && <p className="border-t border-stone-100 pt-3 text-xs text-stone-500">Đã báo hoàn tất chuẩn bị lúc {new Date(rental.moveInCompletedAt).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' })} ngày {rentalDate(vietnamDateInput(rental.moveInCompletedAt))}</p>}
             </dd>
           </div>}
@@ -517,8 +517,8 @@ export default function RentalDetail({
               {role === 'customer' && rental.setupEndsAt && rental.status === 'setup' && <p className="mt-3 text-sm text-stone-700">Hàng đã được kiểm kê. Kỳ thuê sẽ bắt đầu theo ngày đã chốt sau khi hết thời gian chuẩn bị miễn phí.</p>}
               {role === 'customer' && rental.canConfirmRentalStart && rental.reservationId && (
                 <div className="mt-3 space-y-2">
-                  <p className="text-sm text-stone-700">Hàng đã được kiểm kê. Bạn có thể xác nhận bắt đầu kỳ thuê hôm nay.</p>
-                  <Button size="sm" onClick={openStartPreview}>Xem mốc kỳ thuê mới</Button>
+                  <p className="text-sm text-stone-700">Hàng đã được kiểm kê. Bạn có thể chủ động bắt đầu kỳ thuê có tính phí sớm từ hôm nay và kết thúc thời gian miễn phí còn lại.</p>
+                  <Button size="sm" onClick={openStartPreview}>Xem và xác nhận kỳ thuê sớm</Button>
                   {startError && !startPreview && <p role="alert" className="text-sm text-red-700">{startError}</p>}
                 </div>
               )}
@@ -748,10 +748,10 @@ export default function RentalDetail({
       </Modal>}
       {startPreview && <Modal open onClose={() => { if (!startSubmitting) setStartPreview(undefined) }} title="Xác nhận bắt đầu kỳ thuê" size="lg">
         <div className="space-y-4 text-sm">
-          <p>Thời gian miễn phí kết thúc khi bạn xác nhận. Kỳ thuê {startPreview.rentalMonths} tháng sẽ tính từ hôm nay theo báo giá đã chốt.</p>
+          <p>Chỉ khi bạn xác nhận bắt đầu kỳ thuê sớm tại đây, thời gian miễn phí còn lại mới kết thúc. Kỳ thuê {startPreview.rentalMonths} tháng sẽ tính từ hôm nay theo báo giá đã chốt.</p>
           <dl className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-4 sm:grid-cols-3">
-            <div><dt>Ngày tính tiền theo lịch cũ</dt><dd>{rentalDate(startPreview.scheduledStartDate)}</dd></div>
-            <div><dt>Bắt đầu tính tiền</dt><dd>{rentalDate(startPreview.startDate)}</dd></div>
+            <div><dt>Ngày bắt đầu tính tiền theo lịch hẹn</dt><dd>{rentalDate(startPreview.scheduledStartDate)}</dd></div>
+            <div><dt>Ngày bắt đầu tính tiền nếu xác nhận sớm</dt><dd>{rentalDate(startPreview.startDate)}</dd></div>
             <div><dt>Ngày cuối kỳ thuê</dt><dd>{rentalDate(startPreview.lastPermittedDate)}</dd></div>
           </dl>
           <label className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">

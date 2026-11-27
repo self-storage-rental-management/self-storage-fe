@@ -2970,14 +2970,55 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
     const now = new Date()
     const gatePin = reservation.generatedAccessPin || '4921#'
 
+    const checkin = state.checkins.find(c => c.holdId === reservation.id)
+    const existingRental = state.rentals.find(r => r.holdId === reservation.id)
+    const rentalId = existingRental?.id || 'RNT-' + Date.now()
+    const freeSetupDays = Math.max(0, reservation.freeSetupDays || 0)
+    const setupStartedAt = now.toISOString()
+    const setupEndsAt = new Date(now.getTime() + freeSetupDays * 86400000).toISOString()
+    const rental: RentalRecord = existingRental || {
+      id: rentalId,
+      holdId: reservation.id,
+      contractId: reservation.contractId,
+      unitId: unit.id,
+      facilityId: unit.facilityId,
+      facilityName: unit.facilityName,
+      customerId: reservation.customerId,
+      customerName: reservation.customerName,
+      customerEmail: reservation.customerEmail,
+      customerPhone: reservation.customerPhone,
+      unitType: unit.type,
+      areaM2: unit.areaM2,
+      volumeM3: unit.volumeM3,
+      startDate: reservation.startDate,
+      endDate: reservation.endDate,
+      nextDue: reservation.startDate,
+      monthlyRate: reservation.firstMonthRent || unit.price,
+      deposit: reservation.securityDepositAmount,
+      securityDeposit: reservation.securityDepositAmount,
+      freeSetupDays,
+      setupStartedAt,
+      setupEndsAt,
+      status: freeSetupDays > 0 ? 'setup' : 'active',
+      paymentStatus: 'paid',
+      autoRenew: true,
+      gateCode: reservation.generatedAccessPin || checkin?.preparedAccessPin || '4921#',
+      initialCondition: checkin?.initialCondition || reservation.goods.condition || 'Đã hoàn tất bàn giao tại cơ sở.',
+      evidencePhotos: checkin?.evidencePhotos?.length ? checkin.evidencePhotos : reservation.evidence,
+      receiptConfirmedAt: undefined,
+      receiptConfirmedBy: undefined
+    }
+
     setState(prev => ({
       ...prev,
-      units: prev.units.map(u => (u.id === unit.id ? { ...u, status: 'occupied', currentRentalId: undefined } : u)),
+      rentals: existingRental ? prev.rentals : [rental, ...prev.rentals],
+      payments: prev.payments.map(p => p.reservationId === reservation.id ? { ...p, rentalId: rental.id } : p),
+      units: prev.units.map(u => (u.id === unit.id ? { ...u, status: 'occupied', currentRentalId: rental.id } : u)),
       holds: prev.holds.map(h => (h.id === reservation.id ? { ...h, status: 'COMPLETED', checkedInAt: now.toISOString(), checkedInBy: params.staffUser.id } : h)),
       checkins: prev.checkins.map(c => c.holdId === reservation.id ? { ...c, status: 'completed' as const, completedAt: now.toISOString(), staffId: params.staffUser.id, staffName: params.staffUser.name, checklist: params.checklist, initialCondition: params.initialCondition, evidencePhotos: params.evidencePhotos, goodsHandover: params.goodsHandover, handedOverItems: params.handedOverItems } : c),
       accessCredentials: prev.accessCredentials.map(ac => {
         if (ac.reservationId === reservation.id) {
-          return { ...ac, rentalId: undefined, status: 'ACTIVE', activatedAt: now.toISOString() }
+          return { ...ac, rentalId: rental.id, status: 'ACTIVE', activatedAt: now.toISOString() }
         }
         return ac
       }),
@@ -2991,7 +3032,7 @@ export function StorageHubProvider({ children }: { children: ReactNode }) {
           facilityId: unit.facilityId,
           entityType: 'hold',
           entityId: reservation.id,
-          notes: `Nhận kho và bàn giao kho ${unit.code} đã hoàn tất. Chờ khách hàng xác nhận nhận kho để lập hồ sơ thuê.`,
+          notes: `Nhận kho và bàn giao kho ${unit.code} đã hoàn tất. Hồ sơ thuê đã được tạo và thời gian chuẩn bị đã bắt đầu.`,
           timestamp: now.toLocaleString('vi-VN')
         },
         ...prev.activities

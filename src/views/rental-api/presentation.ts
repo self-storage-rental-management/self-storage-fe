@@ -1,3 +1,4 @@
+import type { RentalIntakeProgress } from './rentalIntake'
 import { parseVietnamDate } from '../../utils/vietnamTime'
 import { ApiClientError } from "../../services/apiClient"
 import type { RenewalApiAction, RenewalApiRecord } from "../../types/renewalApi"
@@ -29,7 +30,17 @@ export const rentalLabels: Record<string, string> = {
   completed: "Hoàn tất",
 }
 
-export function rentalStatusLabel(rental: Pick<RentalApiRecord, "status" | "inventoryVerifiedAt" | "canConfirmRentalStart">) {
+// Keep return-processing stages in their own workflow, rather than offering
+// them as primary rental lifecycle filters.
+export const rentalFilterLabels: Record<string, string> = {
+  setup: 'Đang chuẩn bị',
+  active: 'Đang hoạt động',
+  completed: 'Hoàn tất',
+}
+
+export function rentalStatusLabel(rental: RentalIntakeProgress & Pick<RentalApiRecord, "status" | "canConfirmRentalStart" | "inventoryMismatchReturn">) {
+  if (['setup', 'active'].includes(rental.status) && rental.inventoryMismatchReturn)
+    return 'Chờ trả kho do kiểm kê sai lệch'
   if (rental.canConfirmRentalStart) return "Đã kiểm kê · Chờ xác nhận"
   return rental.status === "setup" && rental.inventoryVerifiedAt
     ? "Đã kiểm kê · Chờ kỳ thuê"

@@ -37,7 +37,7 @@ export function RentalRecordGroup({ id, title, subtitle, count, active, empty, c
 
 export function RentalRecordRow({ rental, role, focused, actions, unitTypeName }: {
   rental: RentalApiRecord
-  role: 'customer' | 'manager'
+  role: 'customer' | 'manager' | 'staff'
   focused?: boolean
   actions: ReactNode
   unitTypeName: string

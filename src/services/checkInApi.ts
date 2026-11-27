@@ -5,7 +5,7 @@ import { isCheckInStatus, isReservationStatus, isPaymentStatus, type CheckInStat
 import { renameEvidenceFile } from '../utils/evidenceFileName'
 
 export type CheckInStatus = WorkflowCheckInStatus | null
-export type CheckInListStatus = 'UNSCHEDULED' | 'RECOVERY_TRANSFERRED' | NonNullable<CheckInStatus>
+export type CheckInListStatus = 'HANDOVER_WAITING' | 'HANDOVER_IN_PROGRESS' | 'HANDOVER_STOPPED' | 'UNSCHEDULED' | 'RECOVERY_TRANSFERRED' | NonNullable<CheckInStatus>
 export type CheckInGroup = 'ONGOING' | 'PROCESSED'
 export type CheckInReservationStatus = ReservationStatus
 export type InventoryVisit = {
@@ -135,6 +135,7 @@ export interface CheckInCase {
   identityVerificationNote: string | null
   contractSignedAt: string | null
   contractEvidenceReference: string | null
+  contractEvidenceCode?: string | null
   paymentEvidenceReference: string | null
   paymentCollectedAt: string | null
   setupStartedAt: string | null
@@ -199,6 +200,8 @@ export interface CheckInCase {
   identityDocumentNumber: string | null
   declaredIdentityMasked?: string | null
   identityCorrected?: boolean
+  identityFailedAttempts?: number
+  identityCorrectionFailedAttempts?: number
   customerPhone: string | null
   facilityId: string
   facilityName: string
@@ -362,7 +365,10 @@ function assertPaymentEnvelope(payload: unknown): CheckInPayment {
   return payment
 }
 
+export type CheckInSort = 'priority' | 'createdAt,desc' | 'createdAt,asc'
+
 export async function listCheckIns(params: {
+  sort?: CheckInSort
   group?: CheckInGroup
   page?: number
   pageSize?: number
@@ -377,6 +383,7 @@ export async function listCheckIns(params: {
   })
   if (params.q?.trim()) query.set('q', params.q.trim())
   if (params.group) query.set('group', params.group)
+  if (params.sort) query.set('sort', params.sort)
   if (params.status) query.set('status', params.status)
   if (params.scheduledFrom) query.set('scheduledFrom', params.scheduledFrom)
   if (params.scheduledTo) query.set('scheduledTo', params.scheduledTo)
@@ -822,4 +829,12 @@ export async function resolveInventoryAtSite(checkInId: string, request: { decis
 export async function sendInventoryReturnReminder(checkInId: string) {
   return assertEnvelope(await apiRequest<unknown>(`/api/staff/check-ins/${encodeURIComponent(checkInId)}/inventory-return-reminder`,
     { method: 'POST' }))
+}
+
+export async function checkIdentityCorrection(checkInId: string, identityDocumentNumber: string) {
+  const response = await apiRequest<ApiEnvelope<{ valid: boolean; error: string | null; failedAttempts: number }>>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/identity-correction-check`,
+    { method: 'POST', body: JSON.stringify({ identityDocumentNumber }) },
+  )
+  return response.data
 }

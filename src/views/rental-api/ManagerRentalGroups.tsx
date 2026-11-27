@@ -27,6 +27,7 @@ export default function ManagerRentalGroups(props: ({ kind: 'rental'; rows: Rent
   const { kind, rows, onDetail } = props
   const { copy } = useManagerPresentation()
   const [contractId, setContractId] = useState<string | null>(null)
+  const [groupPages, setGroupPages] = useState<Record<string, number>>({})
 
   if (kind === 'rental') {
     const returningStatuses = ['return_requested', 'return_inspection', 'closing']
@@ -39,17 +40,27 @@ export default function ManagerRentalGroups(props: ({ kind: 'rental'; rows: Rent
     return <div className="space-y-5">
       {groups.sort((a, b) => Number(b.active) - Number(a.active)
         || (a.rows.length ? rows.indexOf(a.rows[0]) : Infinity) - (b.rows.length ? rows.indexOf(b.rows[0]) : Infinity))
-        .map(group => <RentalRecordGroup key={group.id} id={`manager-rental-${group.id}`} title={group.title} subtitle={group.subtitle}
+        .map(group => {
+          const pages = Math.max(1, Math.ceil(group.rows.length / 5))
+          const page = Math.min(groupPages[group.id] ?? 0, pages - 1)
+          return <RentalRecordGroup key={group.id} id={`manager-rental-${group.id}`} title={group.title} subtitle={group.subtitle}
         count={group.rows.length} active={group.active}
-        empty={!rows.length ? 'Không có dữ liệu' : group.active ? 'Không có hồ sơ đang xử lý trên trang này.' : 'Không có hồ sơ lịch sử trên trang này.'}>
-        {group.rows.map(row => <RentalRecordRow key={row.id} rental={row} role="manager" unitTypeName={copy(row.unitType.name)}
+        empty={!rows.length ? 'Không có dữ liệu' : group.active ? 'Không có hồ sơ đang xử lý.' : 'Không có hồ sơ lịch sử.'}
+        footer={<nav aria-label={`Phân trang ${group.title}`} className="flex flex-wrap items-center justify-between gap-3 p-3 text-sm">
+          <span>{group.rows.length} hồ sơ · Trang {page + 1}/{pages}</span>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" disabled={page === 0} onClick={() => setGroupPages(current => ({ ...current, [group.id]: page - 1 }))}>Trước</Button>
+            <Button size="sm" variant="outline" disabled={page + 1 >= pages} onClick={() => setGroupPages(current => ({ ...current, [group.id]: page + 1 }))}>Sau</Button>
+          </div>
+        </nav>}>
+        {group.rows.slice(page * 5, (page + 1) * 5).map(row => <RentalRecordRow key={row.id} rental={row} role="manager" unitTypeName={copy(row.unitType.name)}
           actions={<>
             <Button type="button" size="sm" variant="outline" aria-label={`Xem chi tiết ${rentalRecordLabel(row)}`} onClick={() => onDetail(row.id)}>Chi tiết hồ sơ</Button>
             <Button type="button" size="sm" variant="outline" className="!border-amber-400 !bg-amber-100 !text-amber-950 hover:!bg-amber-200"
               aria-label={`Xem trước hợp đồng ${rentalRecordLabel(row)}`} onClick={() => setContractId(row.id)}>Xem trước</Button>
           </>}
         />)}
-      </RentalRecordGroup>)}
+      </RentalRecordGroup>})}
       {contractId && <ManagerContractPreview key={`${kind}:${contractId}`} kind={kind} id={contractId} onClose={() => setContractId(null)} />}
     </div>
   }
