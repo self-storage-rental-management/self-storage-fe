@@ -582,6 +582,7 @@ export interface ReservationEmailVerificationResult {
 }
 
 export interface ReservationPaymentResult {
+  receiptFileId?: string | null
   paymentId: string
   reservationId: string
   transactionReference: string

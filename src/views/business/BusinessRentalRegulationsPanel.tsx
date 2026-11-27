@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getBusinessConfigApi, type BusinessConfigApi } from '../../services/businessConfigApi'
+import { listBusinessPackagePolicies } from '../../services/businessPolicyApi'
 import { isApiAuthenticated } from '../../services/authApi'
 import { formatVnd } from '../../i18n/currency'
 import { Card, Badge, Button } from '../../components/ui'
@@ -14,11 +15,28 @@ interface Props {
 export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
   const [copied, setCopied] = useState(false)
   const [config, setConfig] = useState<BusinessConfigApi | null>(null)
+  const [minimumRentalMonths, setMinimumRentalMonths] = useState<number | null>(null)
 
   useEffect(() => {
-    if (isApiAuthenticated()) {
-      void getBusinessConfigApi().then(setConfig).catch(() => {})
-    }
+    if (!isApiAuthenticated()) return
+
+    void getBusinessConfigApi().then(setConfig).catch(() => {})
+    void listBusinessPackagePolicies()
+      .then((policies) => {
+        const publishedRentalMonths = policies
+          .filter((policy) =>
+            policy.publicationStatus === 'PUBLISHED'
+            && policy.active
+            && policy.runtimeStatus === 'ACTIVE'
+          )
+          .map((policy) => policy.rentalMonths)
+          .filter((months) => Number.isInteger(months) && months > 0)
+
+        setMinimumRentalMonths(
+          publishedRentalMonths.length > 0 ? Math.min(...publishedRentalMonths) : null,
+        )
+      })
+      .catch(() => setMinimumRentalMonths(null))
   }, [])
 
   const handleCopyAll = () => {
@@ -140,8 +158,12 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
 
           <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
             <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Thời Hạn Thuê Tối Thiểu</span>
-            <div className="text-base font-extrabold text-slate-900 font-mono mt-1">01 Tháng</div>
-            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Kỳ thuê sử dụng trọn tháng. Chi tiết xác nhận trên báo giá hợp đồng.</p>
+            <div className="text-base font-extrabold text-slate-900 font-mono mt-1">
+              {minimumRentalMonths != null ? `${String(minimumRentalMonths).padStart(2, '0')} Tháng` : 'Chưa công bố'}
+            </div>
+            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+              Lấy theo gói thuê nhỏ nhất đang công bố và còn hiệu lực cho khách hàng.
+            </p>
           </div>
 
           <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
@@ -237,7 +259,7 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
           Hiệu lực thi hành và tính pháp lý
         </h4>
         <p className="text-xs text-slate-600 leading-relaxed">
-          1. Bản Quy định này có hiệu lực kể từ ngày StorageHub ban hành chính thức và được dẫn chiếu mặc định vào toàn bộ các Hợp đồng thuê kho, Phiếu xác nhận đặt giữ kho (Hold/Reservation) và Biên bản bàn giao kho.
+          1. Bản Quy định này có hiệu lực kể từ ngày StorageHub ban hành chính thức và được dẫn chiếu mặc định vào toàn bộ các Hợp đồng thuê kho, Phiếu xác nhận đặt giữ kho và Biên bản bàn giao kho.
         </p>
         <p className="text-xs text-slate-600 leading-relaxed">
           2. Khi có sự thay đổi, bổ sung điều khoản nhằm đáp ứng quy chuẩn kỹ thuật hoặc quy định mới của pháp luật, StorageHub sẽ thông báo công khai trước ít nhất 15 ngày trên cổng quản trị hệ thống và gửi email thông báo đến các khách hàng đang có hợp đồng hiệu lực.

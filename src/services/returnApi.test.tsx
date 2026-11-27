@@ -331,6 +331,15 @@ describe('real Return transport and unknown settlement presentation', () => {
     expect(fetch.mock.calls[0][0]).toContain(`/api/business/returns/${ids.event}/complete-refund`)
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual(proof)
   })
+  it('rejects gateway refunds and missing receipt evidence before sending a Business payout', async () => {
+    state.actor = { ...operationsActor('manager'), roles: ['BUSINESS'], permissions: ['returns:read', 'refunds:execute'], facilityScopes: { [ids.facility]: 'MANAGE' } }
+    const fetch = respond({ data: record })
+    const proof = { amount: 5700000, paymentMethod: 'BANK_TRANSFER' as const, transactionReference: 'REF-1', receiptFileId: ids.file, confirmed: true }
+    await expect(completeRefund(ids.event, { ...proof, paymentMethod: 'VNPAY' } as unknown as typeof proof)).rejects.toThrow()
+    await expect(completeRefund(ids.event, { ...proof, receiptFileId: '' })).rejects.toThrow()
+    await expect(completeRefund(ids.event, { ...proof, transactionReference: ' ' })).rejects.toThrow()
+    expect(fetch).not.toHaveBeenCalled()
+  })
   it('sends the server statement amount and saved proof when recording a Staff payout', async () => {
     state.actor = operationsActor('staff')
     state.actor.permissions.push('returns:process', 'returns:read', 'refunds:execute')
