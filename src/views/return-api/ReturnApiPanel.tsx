@@ -2,7 +2,7 @@ import ProcessingLeaseBoundary from '../../components/ProcessingLeaseBoundary'
 import ReturnAppointment from './ReturnAppointment'
 import { recordDisplayCode, receiptDisplayCode } from '../../utils/recordDisplayCode'
 import { compareReturnQueue } from '../../utils/returnQueueSort'
-import { ClearanceStatus, CustomerClearance, ReturnContract, ReturnPreparation } from './ReturnClearance'
+import { awaitsCustomerClearance, ClearanceStatus, CustomerClearance, ReturnContract, ReturnPreparation } from './ReturnClearance'
 import ReturnAttendance, { requiresReturnAttendance } from './ReturnAttendance'
 import { ViolationRecoveryEntry, ViolationRecoveryPanel } from './ViolationRecoveryPanel'
 import { listMaintenanceStaff } from '../../services/maintenanceApi'
@@ -21,6 +21,9 @@ import { rentalDate, rentalMoney } from '../rental-api/presentation'
 import { VIETNAM_TIME_ZONE, vietnamDateInput } from '../../utils/vietnamTime'
 import RecoveryReturnSettlement from './RecoveryReturnSettlement'
 import RecoveryTaskLink from '../rental-api/RecoveryTaskLink'
+import AssignedRecoveryTasks from '../staff/AssignedRecoveryTasks'
+import RecoveryTaskDetail from '../rental-api/RecoveryTaskDetail'
+import type { NotificationRecordTarget } from '../../services/notificationRecordTarget'
 import { getReturnRenewalEligibility } from '../../services/returnRenewalEligibility'
 import ReturnRenewalBlock from './ReturnRenewalBlock'
 import {
@@ -29,7 +32,6 @@ import {
   extendMismatchReturnWindow,
   feeKeys,
   inspectReturn,
-  savePropertyCheck,
   sanitizeFees,
   listReturns,
   requestReturn,
@@ -457,12 +459,14 @@ function RecoveryReturnSummary({ record, hideTerminationFee, hideHeader = false 
 export default function ReturnApiPanel({
   role,
   rentalId,
+  notificationTarget,
   rentalActive = false,
   onChanged,
   onOpenRenewal,
 }: {
   role: ReturnRole
   rentalId?: string
+  notificationTarget?: NotificationRecordTarget
   rentalActive?: boolean
   onChanged?: () => void
   onOpenRenewal?: (id: string) => void
@@ -471,9 +475,10 @@ export default function ReturnApiPanel({
   const identity = `${actor?.id}:${JSON.stringify(actor?.permissions)}:${JSON.stringify(actor?.facilityScopes)}:${role}:${rentalId ?? ''}`
   return (
     <ReturnWorkspace
-      key={identity}
+      key={`${identity}:${notificationTarget?.kind ?? ''}:${notificationTarget?.id ?? ''}`}
       role={role}
       rentalId={rentalId}
+      notificationTarget={notificationTarget}
       rentalActive={rentalActive}
       onChanged={onChanged}
       onOpenRenewal={onOpenRenewal}
@@ -485,6 +490,7 @@ export default function ReturnApiPanel({
 function ReturnWorkspace({
   role,
   rentalId,
+  notificationTarget,
   rentalActive,
   onChanged,
   onOpenRenewal,
@@ -492,6 +498,7 @@ function ReturnWorkspace({
 }: {
   role: ReturnRole
   rentalId?: string
+  notificationTarget?: NotificationRecordTarget
   rentalActive: boolean
   onChanged?: () => void
   onOpenRenewal?: (id: string) => void
@@ -511,6 +518,9 @@ function ReturnWorkspace({
     return () => window.clearInterval(timer)
   }, [mismatch])
   const [page, setPage] = useState(0)
+  const [directReturnId, setDirectReturnId] = useState(notificationTarget?.kind === 'return' ? notificationTarget.id : undefined)
+  const directReturn = useRentalApiResource(`${identity}:return-detail:${directReturnId}`,
+    async () => directReturnId ? getReturn(role, directReturnId) : null, { retainDataOnRefresh: true })
   const read = useRentalApiResource(`${identity}:${page}`, async () => {
     if (!rentalId) return listReturns(role, page)
     const first = await listReturns(role, 0, 100)
@@ -547,7 +557,12 @@ function ReturnWorkspace({
     setNotes(current => current || `Trả kho do kiểm kê sai lệch${summary ? `: ${summary}` : '.'}`)
   }, [mismatch, removal.data?.inventoryMismatchSummary, contract.data?.inventory?.mismatchSummary])
   const [editing, setEditing] = useState<string | null>(null)
-  const [listMode, setListMode] = useState<'returns' | 'recovery'>('returns')
+  const [listMode, setListMode] = useState<'returns' | 'recovery'>(
+    notificationTarget?.kind === 'recovery-task' || notificationTarget?.kind === 'violation-recovery' ? 'recovery' : 'returns')
+  const [recoveryTaskId, setRecoveryTaskId] = useState(notificationTarget?.kind === 'recovery-task' ? notificationTarget.id : undefined)
+  const [violationTarget, setViolationTarget] = useState(notificationTarget?.kind === 'violation-recovery'
+    ? { id: notificationTarget.id, request: 0 } : undefined)
+  const recoveryTaskGuard = useRef<() => boolean>(() => false)
   const today = vietnamDateInput()
 
   async function run(work: () => Promise<unknown>) {
@@ -560,11 +575,13 @@ function ReturnWorkspace({
       if (!mounted.current || getAuthenticatedActor()?.id !== actor?.id) return
       setEditing(null)
       read.refresh()
+      if (directReturnId) directReturn.refresh()
       onChanged?.()
     } catch (error) {
       if (mounted.current) {
         setFeedback(returnError(error))
         read.refresh()
+        if (directReturnId) directReturn.refresh()
       }
     } finally {
       lock.current = false
@@ -617,8 +634,9 @@ function ReturnWorkspace({
   }, [rentalId, rows, selectedRecordId])
 
   const selectedRecord = useMemo(() => {
+    if (directReturnId) return directReturn.data ?? null
     return selectedRecordId ? rows.find((r) => r.id === selectedRecordId) ?? null : null
-  }, [rows, selectedRecordId])
+  }, [rows, selectedRecordId, directReturnId, directReturn.data])
   const eligibilityRentalId = rentalId || selectedRecord?.rentalId
   const renewalGate = useRentalApiResource(`${identity}:return-renewal-eligibility:${eligibilityRentalId}`, async () =>
     role === 'customer' && eligibilityRentalId ? getReturnRenewalEligibility(eligibilityRentalId) : null)
@@ -665,6 +683,12 @@ function ReturnWorkspace({
     return <ReturnRenewalBlock gate={renewalGate.data} loading={renewalGate.loading}
       error={renewalGate.error ? returnError(renewalGate.error) : undefined}
       onRetry={renewalGate.refresh} onOpenRenewal={onOpenRenewal} />
+
+  if (directReturnId && !selectedRecord) return directReturn.error
+    ? <div className="space-y-3"><p role="alert">{returnError(directReturn.error)}</p>
+        <Button onClick={directReturn.refresh}>Thử lại</Button>
+        {role !== 'customer' && <Button variant="outline" onClick={() => setDirectReturnId(undefined)}>Về danh sách</Button>}</div>
+    : <p role="status">Đang tải hồ sơ trả kho…</p>
 
   if (role === 'customer' && rentalId && !selectedRecord) {
     if (read.loading && !read.data) return <p role="status">Đang tải thông tin trả kho…</p>
@@ -773,8 +797,8 @@ function ReturnWorkspace({
             </div>
 
             <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-            {!rentalId && (
-              <Button type="button" size="sm" variant="outline" onClick={() => setSelectedRecordId(null)} className="font-semibold text-xs border-stone-300 text-stone-700 hover:bg-stone-50">
+            {!rentalId && role !== 'customer' && (
+              <Button type="button" size="sm" variant="outline" onClick={() => { setSelectedRecordId(null); setDirectReturnId(undefined) }} className="font-semibold text-xs border-stone-300 text-stone-700 hover:bg-stone-50">
                 ← Quay lại danh sách hồ sơ
               </Button>
             )}
@@ -835,6 +859,15 @@ function ReturnWorkspace({
                   ? () => extendRemovalWindow(selectedRecord) : undefined,
               } : undefined} />
           </>}
+          {role === 'staff' && actor?.permissions.includes('returns:process') && awaitsCustomerClearance(selectedRecord) && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <p role="status" className="text-sm text-amber-900">Chờ khách xác nhận đã dọn kho để nghiệm thu.</p>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" disabled={read.loading} onClick={read.refresh}>Kiểm tra lại</Button>
+                <Button type="button" disabled>Ghi nhận kết quả nghiệm thu</Button>
+              </div>
+            </div>
+          )}
           {/* Form Actions / 2-Column Inspection */}
           {role === 'staff' && <ReturnAttendance key={selectedRecord.id} record={selectedRecord} role="staff"
             editable={!!actor?.permissions.includes('returns:process')} onChanged={read.refresh} />}
@@ -854,6 +887,7 @@ function ReturnWorkspace({
             onRecoveryChanged={() => {
               setFeedback('Đã cập nhật hồ sơ trả kho.')
               read.refresh()
+              if (directReturnId) directReturn.refresh()
               onChanged?.()
             }}
           />}
@@ -940,7 +974,15 @@ function ReturnWorkspace({
             </div>
           )}
           {role !== 'customer' && listMode === 'recovery' ? (
-            <ViolationRecoveryPanel />
+            <>
+              {role === 'staff' && <AssignedRecoveryTasks identity={identity} />}
+              <ViolationRecoveryPanel key={violationTarget?.id ?? 'list'} target={violationTarget}
+                detailOnly={!!violationTarget} onDetailClosed={() => setViolationTarget(undefined)} />
+              {role === 'staff' && recoveryTaskId && <Modal open size="xl" title="Chi tiết nhiệm vụ thu hồi"
+                onClose={() => { if (!recoveryTaskGuard.current()) setRecoveryTaskId(undefined) }}>
+                <RecoveryTaskDetail role="staff" id={recoveryTaskId} closeGuard={recoveryTaskGuard} onChanged={onChanged} />
+              </Modal>}
+            </>
           ) : (
           <>
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 pb-3">
@@ -1023,6 +1065,7 @@ function ReturnWorkspace({
             {filteredRows.map((record) => {
               const isCompleted = record.status === 'completed'
               const isPending = ['requested', 'scheduled'].includes(record.status)
+              const clearancePending = role === 'staff' && awaitsCustomerClearance(record)
               const isSettlement = ['payment_due', 'refund_pending'].includes(record.status)
               const badgeClass =
                 record.status === 'disputed'
@@ -1098,7 +1141,12 @@ function ReturnWorkspace({
                     <span className="text-[11px] text-stone-400 font-medium">
                       Hồ sơ thuê · {record.rentalDisplayCode || recordDisplayCode(record.rentalId)}
                     </span>
-                    <Button
+                    {clearancePending ? (
+                      <div className="flex flex-wrap items-center justify-end gap-2" onClick={event => event.stopPropagation()}>
+                        <Button type="button" size="sm" variant="outline" onClick={() => setSelectedRecordId(record.id)}>Xem chi tiết</Button>
+                        <Button type="button" size="sm" disabled>Tiến hành nghiệm thu</Button>
+                      </div>
+                    ) : <Button
                       type="button"
                       size="sm"
                       className={
@@ -1121,7 +1169,7 @@ function ReturnWorkspace({
                         : isCompleted
                         ? 'Xem biên bản quyết toán'
                         : 'Xem chi tiết'}
-                    </Button>
+                    </Button>}
                   </div>
                 </div>
               )
@@ -1274,6 +1322,7 @@ function LeasedReturnActions(props: Parameters<typeof ReturnActions>[0]) {
   const [fresh, setFresh] = useState(props.record)
   useEffect(() => setFresh(props.record), [props.record])
   const actionable = props.role === 'staff' ? ['requested', 'scheduled', 'payment_due', 'refund_pending'].includes(fresh.status)
+    && !awaitsCustomerClearance(fresh)
     : props.role === 'manager' && fresh.status === 'disputed'
   return <ProcessingLeaseBoundary target="RETURN" id={props.record.id} enabled={actionable && fresh.sourceType !== 'RECOVERY'} onAcquired={async () => {
     setFresh(await getReturn(props.role, props.record.id))
@@ -1393,7 +1442,7 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
     () => needsWitness ? listMaintenanceStaff(record.facilityId) : Promise.resolve([]))
   const recoveryIncomplete = noShowRecovery && (!recoveryWitness || !recoveryLocation.trim() || !note.trim())
   const assignedStaffId = handoverApproved ? attendance.handoverStaffId : attendance?.reverificationStaffId
-  const canInspect = !recovery && write && role === 'staff' && (noShowRecovery ||
+  const canInspect = !recovery && write && role === 'staff' && !awaitsCustomerClearance(record) && (noShowRecovery ||
     (['requested', 'scheduled'].includes(record.status)
       && (!assignedStaffId || assignedStaffId === actor?.id)
       && (!appointmentAt || inspectionNow >= Date.parse(appointmentAt))
@@ -1643,11 +1692,6 @@ function ReturnActions({ role, record, run, busy, recoveryLocked, onRecoveryLock
                           </label>
                           <p>Ghi danh mục hàng và tình trạng niêm phong trong ghi chú biên bản.</p>
                         </fieldset>}
-                        {!noShowRecovery && empty !== null && <Button type="button" variant="outline" disabled={busy || (goodsLeft && !note.trim())}
-                          onClick={() => void run(async () => savePropertyCheck(record, empty, note, await uploadPhotos()))}>
-                          {goodsLeft ? 'Lưu ghi chú và thông báo khách dọn kho' : 'Lưu kết quả kiểm tra kho trống'}
-                        </Button>}
-                        {!noShowRecovery && goodsLeft && !note.trim() && <p className="text-xs text-stone-600">Nhập mô tả tài sản còn lại vào ô ghi chú bên dưới để lưu.</p>}
                       </div>
 
                       {/* KHỐI 2: ĐÁNH GIÁ HIỆN TRẠNG, VỆ SINH & HƯ HẠI */}

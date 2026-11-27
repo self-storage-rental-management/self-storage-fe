@@ -22,7 +22,7 @@ export interface RecoveryOperations {
 export type RecoveryCommand =
   | { action: 'start'; body: { expectedVersion: number; note: string } }
   | { action: 'inspection'; body: { expectedVersion: number; inspection: Omit<InspectionInput, 'evidencePhotos'>; evidenceFileIds: string[] } }
-  | { action: 'settlement-receipts'; body: { expectedVersion: number; paymentMethod: 'CASH' | 'BANK_TRANSFER'; transactionReference: string; receiptFileId: string; confirmed: boolean } }
+  | { action: 'settlement-receipts'; body: { expectedVersion: number; paymentMethod: 'CASH' | 'BANK_TRANSFER'; transactionReference: string; receiptFileId: string; confirmed: boolean; documentNumber: string } }
   | { action: 'completion'; body: { expectedVersion: number; assetsCleared: boolean; unitInspected: boolean; reportFileId: string; note: string } }
   | { action: 'recalculate-settlement'; body: { expectedVersion: number } }
 
@@ -63,6 +63,8 @@ export function validateRecoveryCommand(command: RecoveryCommand) {
   }
   if (command.action === 'settlement-receipts') {
     const b = command.body
+    if (!b.documentNumber.trim() || b.documentNumber.length > 32)
+      throw new Error('Nhập số CCCD hoặc hộ chiếu để xác minh khách.')
     if (!['CASH', 'BANK_TRANSFER'].includes(b.paymentMethod) || !isUuid(b.receiptFileId) || b.confirmed !== true)
       throw new Error('Chọn phương thức, đính kèm biên lai và xác nhận đã thu hoặc hoàn tiền.')
     if (b.paymentMethod === 'BANK_TRANSFER' && !/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,63}$/.test(b.transactionReference))
@@ -80,10 +82,15 @@ export async function sendRecoveryCommand(role: RecoveryAudience, id: string, co
 }
 export function recoveryOperationError(error: unknown) {
   if (error instanceof ApiClientError) {
+    if (error.status === 400 && [
+      'Nhập số CCCD hoặc hộ chiếu đã dùng khi đặt kho.',
+      'Giấy tờ không khớp với hồ sơ đặt kho. Vui lòng đối chiếu lại.',
+    ].includes(error.message)) return error.message
     if (error.status === 403) return 'Bạn không có quyền thực hiện thao tác này tại cơ sở.'
     if (error.status === 404) return 'Không tìm thấy nhiệm vụ hoặc hồ sơ quyết toán.'
     if (error.status === 409) {
       const known: Record<string, string> = {
+        'Hồ sơ thiếu giấy tờ đối chiếu để quyết toán thu hồi.': 'Hồ sơ thiếu giấy tờ đối chiếu để quyết toán thu hồi.',
         'Recovery version changed; reload before submitting': 'Nhiệm vụ đã được cập nhật. Tải lại trước khi lưu.',
         'Recovery task has already started or closed': 'Nhiệm vụ đã được tiếp nhận hoặc đóng.',
         'Recovery inventory has already been recorded': 'Kiểm kê đã được lưu.',

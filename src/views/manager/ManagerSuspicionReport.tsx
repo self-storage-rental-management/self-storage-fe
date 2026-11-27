@@ -90,14 +90,12 @@ export default function ManagerSuspicionReport({ id, staffRentalId, onClose, onO
   async function resolveReport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!resolution || resolutionLock.current) return
-    const values = new FormData(event.currentTarget)
-    const body = resolution === 'close'
-      ? { reason: String(values.get('reason') ?? '').trim() }
-      : { conclusion: String(values.get('conclusion') ?? '').trim(), grounds: String(values.get('grounds') ?? '').trim() }
-    if (Object.values(body).some(value => !value)) {
-      setResolutionError(resolution === 'close' ? 'Vui lòng nhập lý do đóng báo cáo.' : 'Vui lòng nhập kết luận và căn cứ.')
+    const details = String(new FormData(event.currentTarget).get('details') ?? '').trim()
+    if (!details) {
+      setResolutionError(resolution === 'close' ? 'Vui lòng nhập lý do đóng báo cáo.' : 'Vui lòng nhập kết luận và căn cứ thu hồi.')
       return
     }
+    const body = resolution === 'close' ? { reason: details } : { conclusion: details }
     resolutionLock.current = true
     setSaving(true)
     setResolutionError('')
@@ -157,8 +155,10 @@ export default function ManagerSuspicionReport({ id, staffRentalId, onClose, onO
         <h3 className="font-bold">Kết luận chuyển thu hồi</h3>
         <p className="text-sm text-stone-600">{transfer.decidedBy ?? 'Chưa rõ người quyết định'} · {reportDateTime(transfer.decidedAt)}</p>
         <p className="whitespace-pre-wrap break-words text-sm">{transfer.conclusion}</p>
-        <h4 className="text-sm font-semibold">Căn cứ</h4>
-        <p className="whitespace-pre-wrap break-words text-sm">{transfer.grounds}</p>
+        {transfer.grounds && <>
+          <h4 className="text-sm font-semibold">Căn cứ</h4>
+          <p className="whitespace-pre-wrap break-words text-sm">{transfer.grounds}</p>
+        </>}
         {onOpenRecovery && <Button onClick={() => onOpenRecovery(transfer.recoveryId)}>Xem hồ sơ thu hồi</Button>}
       </section>}
       {closure && <section className="space-y-2 border-t border-stone-200 pt-4">
@@ -174,28 +174,20 @@ export default function ManagerSuspicionReport({ id, staffRentalId, onClose, onO
           <Button aria-expanded={resolution === 'close'} disabled={saving}
             onClick={() => toggleResolution('close')}>Đóng báo cáo</Button>
         </div>
-        {resolution === 'close' && <form onSubmit={resolveReport} className="space-y-3 rounded-lg bg-stone-50 p-3">
-          <p className="text-sm text-stone-600">Kết luận không phát hiện hàng cấm. Hồ sơ thuê tiếp tục như bình thường.</p>
-          <label className="block text-sm font-medium">Lý do đóng báo cáo
-            <textarea name="reason" required maxLength={2000} rows={3} disabled={saving}
+        {resolution && <form key={resolution} onSubmit={resolveReport} className="space-y-3 rounded-lg bg-stone-50 p-3">
+          <p className="text-sm text-stone-600">{resolution === 'close'
+            ? 'Kết luận không phát hiện hàng cấm. Hồ sơ thuê tiếp tục như bình thường.'
+            : 'Hệ thống sẽ mở hồ sơ thu hồi ở bước Chờ phân công và gửi thông báo theo lịch thu hồi.'}</p>
+          <label className="block text-sm font-medium">
+            {resolution === 'close' ? 'Lý do đóng báo cáo' : 'Kết luận và căn cứ chuyển thu hồi'}
+            <textarea name="details" required maxLength={2000} rows={3} disabled={saving}
               className="mt-1 block w-full rounded-lg border border-stone-300 bg-white p-2" />
           </label>
           {resolutionError && <p role="alert" className="text-sm text-red-700">{resolutionError}</p>}
-          <Button type="submit" disabled={saving}>{saving ? 'Đang đóng…' : 'Xác nhận đóng báo cáo'}</Button>
-        </form>}
-        {resolution === 'transfer' && <form onSubmit={resolveReport} className="space-y-3 rounded-lg bg-stone-50 p-3">
-          <p className="text-sm text-stone-600">Hệ thống sẽ mở hồ sơ thu hồi ở bước Chờ phân công và gửi thông báo theo lịch thu hồi.</p>
-          <label className="block text-sm font-medium">Kết luận xác minh
-            <textarea name="conclusion" required maxLength={2000} rows={3} disabled={saving}
-              className="mt-1 block w-full rounded-lg border border-stone-300 bg-white p-2" />
-          </label>
-          <label className="block text-sm font-medium">Căn cứ chuyển thu hồi
-            <textarea name="grounds" required maxLength={2000} rows={3} disabled={saving}
-              className="mt-1 block w-full rounded-lg border border-stone-300 bg-white p-2" />
-          </label>
-          {resolutionError && <p role="alert" className="text-sm text-red-700">{resolutionError}</p>}
-          <Button type="submit" variant="danger" disabled={saving}>
-            {saving ? 'Đang chuyển…' : 'Xác nhận chuyển thu hồi'}
+          <Button type="submit" variant={resolution === 'transfer' ? 'danger' : 'primary'} disabled={saving}>
+            {resolution === 'close'
+              ? (saving ? 'Đang đóng…' : 'Xác nhận đóng báo cáo')
+              : (saving ? 'Đang chuyển…' : 'Xác nhận chuyển thu hồi')}
           </Button>
         </form>}
       </section>}

@@ -603,17 +603,6 @@ export async function rejectCheckIn(
   ))
 }
 
-export async function confirmPartialInventoryRemoval(checkInId: string, request: {
-  remainderRemoved: boolean
-  evidenceReferences: string[]
-  notes: string
-}) {
-  return assertEnvelope(await apiRequest<unknown>(
-    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/inventory-partial-removal`,
-    { method: 'POST', body: JSON.stringify(request) },
-  ))
-}
-
 export async function recordInventoryArrival(checkInId: string) {
   return assertEnvelope(await apiRequest<unknown>(
     `/api/staff/check-ins/${encodeURIComponent(checkInId)}/inventory-arrival`,
@@ -812,7 +801,6 @@ export async function prepareInventoryResolution(checkInId: string, expectedRevi
     { method: 'POST', body: JSON.stringify({ expectedRevision }) }))
 }
 
-export const publishInventoryDraft = prepareInventoryResolution
 export type AtSiteInventoryDecision = 'REQUEST_TRANSFER' | 'ACCEPT_FULL' | 'CANCEL_AND_RETURN'
 export async function resolveInventoryAtSite(checkInId: string, request: { decision: AtSiteInventoryDecision; customerPresent: boolean; note?: string; scheduledDate?: string; evidenceReferences?: string[]; resultVersion?: number }) {
   return assertEnvelope(await apiRequest<unknown>(`/api/staff/check-ins/${encodeURIComponent(checkInId)}/inventory-resolution-at-site`,

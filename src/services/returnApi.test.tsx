@@ -1,5 +1,5 @@
 import ReturnAppointment from '../views/return-api/ReturnAppointment'
-import { CustomerClearance } from '../views/return-api/ReturnClearance'
+import { awaitsCustomerClearance, CustomerClearance } from '../views/return-api/ReturnClearance'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { setAccessToken, clearAuthTokens } from './apiClient'
@@ -65,6 +65,29 @@ describe('real Return transport and unknown settlement presentation', () => {
     expect(render(arrived)).not.toContain('Ảnh hiện trường chứng minh khách đã đến')
     expect(render({ ...arrived, attendance: { ...arrived.attendance, verifiedAt: arrivedAt } })).toContain('Đã xác minh danh tính')
     expect(requiresReturnAttendance({ ...pending, status: 'recovery_required' })).toBe(false)
+  })
+
+  it.each(['CANCELLED_IN_SETUP', 'RETURN_IN_SETUP', 'INVENTORY_MISMATCH', 'EARLY_RETURN', 'NORMAL'] as const)(
+    'waits for customer clearance before inspection for %s',
+    returnType => {
+      const pending = { ...record, status: 'scheduled' as const, returnType }
+      expect(awaitsCustomerClearance(pending)).toBe(true)
+      expect(awaitsCustomerClearance({ ...pending, customerClearedAt: new Date().toISOString() })).toBe(false)
+      expect(awaitsCustomerClearance({ ...pending, customerClearedAt: null })).toBe(true)
+      expect(awaitsCustomerClearance({ ...pending, status: 'recovery_required' })).toBe(false)
+      expect(awaitsCustomerClearance({ ...pending, sourceType: 'RECOVERY' })).toBe(false)
+    },
+  )
+
+  it('locks identity verification fields until the customer confirms clearance', () => {
+    const now = new Date().toISOString()
+    const pending: ApiReturn = { ...record, status: 'scheduled', returnType: 'INVENTORY_MISMATCH',
+      attendance: { arrivedAt: now, evidenceId: ids.file, expiresAt: null, attempts: 0,
+        verifiedAt: null, reviewStartsAt: null, reviewAccepted: null } }
+    const render = (item: ApiReturn) => renderToStaticMarkup(<ReturnAttendance record={item} role="staff" editable onChanged={() => {}} />)
+    expect(render(pending)).toContain('Chờ khách xác nhận đã dọn kho để xác minh danh tính.')
+    expect(render(pending)).toMatch(/<input(?=[^>]*type="password")(?=[^>]*disabled="")/)
+    expect(render({ ...pending, customerClearedAt: now })).not.toMatch(/<input(?=[^>]*type="password")(?=[^>]*disabled="")/)
   })
 
   it('separates arrival capture from identity verification and exposes manager late-review actions for mismatch returns', async () => {

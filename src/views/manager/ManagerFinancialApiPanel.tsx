@@ -17,6 +17,7 @@ import { loadManagerPaymentHistory, managerApiIdentity, requireManagerRead } fro
 import { managerDisplayError } from './managerPresentation'
 import { singleManagerFacility, managerFacilityNotice } from './managerFacilityUi'
 import { ApiClientError } from '../../services/apiClient'
+import { getManagerPaymentHistoryItem } from '../../services/managerPaymentHistoryApi'
 
 const typeLabels: Record<ManagerPaymentHistoryType, string> = {
   RESERVATION_DEPOSIT: 'Đặt cọc giữ chỗ',
@@ -211,13 +212,30 @@ function ReceiptIcon({ kind }: { kind: 'preview' | 'download' }) {
     : <svg aria-hidden="true" className="show-icon h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12m-4-4 4 4 4-4M4 19h16" /></svg>
 }
 
-export default function ManagerFinancialApiPanel() {
+export default function ManagerFinancialApiPanel({ paymentTarget, onPaymentClosed }: {
+  paymentTarget?: { id: string }; onPaymentClosed?: () => void
+} = {}) {
   let actor: ApiActor
   try { actor = requireManagerRead(getAuthenticatedActor(), 'payments:read') }
   catch (error) { return <Card className="p-5" role="alert">{managerDisplayError(error)}</Card> }
   const facilityId = singleManagerFacility(actor)
   if (!facilityId) return <Card className="p-5" role="alert">{managerFacilityNotice(actor)}</Card>
-  return <ManagerPaymentHistorySession key={managerApiIdentity(actor)} actor={actor} facilityId={facilityId} />
+  return <>
+    <ManagerPaymentHistorySession key={managerApiIdentity(actor)} actor={actor} facilityId={facilityId} />
+    {paymentTarget && <ManagerPaymentNotice key={paymentTarget.id} identity={managerApiIdentity(actor)}
+      paymentId={paymentTarget.id} onClose={() => onPaymentClosed?.()} />}
+  </>
+}
+
+function ManagerPaymentNotice({ identity, paymentId, onClose }: { identity: string; paymentId: string; onClose: () => void }) {
+  const read = useRentalApiResource(`${identity}:payment-notice:${paymentId}`, () => getManagerPaymentHistoryItem(paymentId))
+  const item = read.data
+  return <Modal open title="Chi tiết khoản thanh toán" size="2xl" onClose={onClose}>
+    <ApiReadState {...read} retry={read.refresh} />
+    {item && <PaymentReceiptCard title="Thông tin khoản thanh toán" reference={receiptReference(item)}
+      status={receiptStatus(item)} confirmed={item.status === 'PAID' || item.status === 'REFUNDED'}
+      fields={receiptFields(item)} footer={receiptFooter(item)} />}
+  </Modal>
 }
 
 function ManagerPaymentHistorySession({ actor, facilityId }: { actor: ApiActor; facilityId: string }) {

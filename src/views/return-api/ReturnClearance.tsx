@@ -65,6 +65,11 @@ export function ReturnContract({ rental, date, record, depositAmount, reservatio
   </dl>
 }
 
+export function awaitsCustomerClearance(record: ApiReturn) {
+  return record.sourceType !== 'RECOVERY' && ['requested', 'scheduled'].includes(record.status)
+    && !record.customerClearedAt
+}
+
 export function ClearanceStatus({ record }: { record: ApiReturn }) {
   return <p className="text-sm font-medium text-stone-700">{record.customerClearedAt
     ? <>Khách đã xác nhận dọn kho · <time dateTime={record.customerClearedAt}>{new Date(record.customerClearedAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</time></>
