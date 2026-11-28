@@ -56,7 +56,7 @@ export function RentalRecordRow({ rental, role, focused, actions, unitTypeName }
         <h3 className="font-bold text-stone-900">{rental.storageUnit.code}</h3>
         <p className="mt-0.5 text-stone-600">{rental.facility.name}</p>
         <p className="mt-0.5 text-stone-600">{unitTypeName}</p>
-        {role === 'manager' && rental.customer?.fullName && <p className="mt-1 text-xs text-stone-600">Khách hàng: {rental.customer.fullName}</p>}
+        {role !== 'customer' && rental.customer?.fullName && <p className="mt-1 text-xs text-stone-600">Khách hàng: {rental.customer.fullName}</p>}
       </div>
       <div className="min-w-0 wrap-anywhere text-stone-600">
         <span className="rental-record-label">Mã hồ sơ</span>

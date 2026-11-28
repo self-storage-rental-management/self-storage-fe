@@ -41,7 +41,7 @@ export default function StaffFacilityRentals({ initialRentalId }: { initialRenta
   }
 
   return <div className="fade-in space-y-5">
-    <SectionHeader title="Hồ sơ thuê của cơ sở" subtitle="Tra cứu khách thuê, gian kho, thời hạn và tài liệu bàn giao." />
+    <SectionHeader title="Hồ sơ thuê tại cơ sở" subtitle="Tra cứu khách thuê, gian kho, thời hạn và tài liệu bàn giao trong cơ sở đang làm việc." />
 
     <form onSubmit={search} className="flex flex-wrap items-end gap-3 rounded-2xl border border-stone-200 bg-white p-4">
       <label className="min-w-48 flex-1 text-sm font-medium text-stone-700">
@@ -78,7 +78,7 @@ export default function StaffFacilityRentals({ initialRentalId }: { initialRenta
         <Button variant="outline" size="sm" disabled={pagination.page + 1 >= pagination.totalPages}
           onClick={() => setQuery(current => ({ ...current, page: pagination.page + 1 }))}>Trang sau</Button>
       </nav>}>
-      {list.data.data.map(rental => <RentalRecordRow key={rental.id} rental={rental} role="manager" unitTypeName={rental.unitType.name}
+      {list.data.data.map(rental => <RentalRecordRow key={rental.id} rental={rental} role="staff" unitTypeName={rental.unitType.name}
         actions={<div className="col-span-2 flex justify-center">
           <Button variant="outline" size="md" className="min-h-11 w-40 max-w-full font-semibold" onClick={() => setSelected(rental)} aria-label={`Xem hồ sơ gian ${rental.storageUnit.code}`}>Xem hồ sơ</Button>
         </div>} />)}
