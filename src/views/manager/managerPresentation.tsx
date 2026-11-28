@@ -36,7 +36,7 @@ const phrases: [RegExp, string][] = [
   [/\bcutoff\b|\bCutoff\b/g, 'mốc thu hồi'], [/\bCASH\b/g, 'tiền mặt'],
   [/\bpolicy\b|\bPolicy\b/g, 'chính sách'], [/\bworkflow\b/g, 'quy trình xử lý'],
   [/\bmodule\b|\bModule\b/g, 'bộ phận'], [/\bbackend\b|\bBackend\b|\bBE\b/g, 'hệ thống'],
-  [/\bFE\b/g, 'giao diện'], [/\bBO\b/g, 'quản lý vận hành'],
+  [/\bFE\b/g, 'giao diện'], [/\bBO\b/g, 'chủ doanh nghiệp'],
   [/\bSLA\b/g, 'hạn xử lý'], [/\bRecovery\b/g, 'thu hồi kho'],
   [/\breceiver\b/g, 'bộ phận tiếp nhận'], [/\bcooldown\b/g, 'thời gian chờ'],
   [/Correlation ID|Correlation/g, 'Mã đối chiếu'], [/\bID\b/g, 'Mã'],
@@ -94,16 +94,23 @@ export function managerDisplayExplanation(value: string): string {
 
 export function managerDisplayError(error: unknown): string {
   if (error instanceof ApiClientError) {
-    if (error.status === 409 && error.message === 'Material already exists in this goods category')
+    if (error.status === 409 && error.diagnosticMessage === 'Material already exists in this goods category')
       return 'Vật liệu này đã có trong loại hàng hóa. Vui lòng nhập tên khác.'
     if (error.code === 'FEATURE_DISABLED') return 'Chức năng này chưa được bật trên hệ thống.'
     if (error.code === 'INVALID_RESPONSE') return 'Dữ liệu nhận được chưa đúng định dạng. Vui lòng tải lại trang.'
-    if (error.code === 'DEFERRED_SOURCE' || error.message.includes('DEFERRED_SOURCE'))
+    if (error.code === 'DEFERRED_SOURCE' || error.diagnosticMessage.includes('DEFERRED_SOURCE'))
       return 'Chưa đủ dữ liệu hoặc chính sách để thực hiện thao tác này.'
     if (error.status === 401) return 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'
     if (error.status === 403) return 'Bạn không có quyền xử lý hồ sơ này.'
     if (error.status === 404) return 'Không tìm thấy dữ liệu cần thao tác. Vui lòng tải lại trang.'
-    if (error.status === 400 || error.status === 422) return 'Thông tin chưa hợp lệ. Vui lòng kiểm tra lại các mục đã nhập.'
+    if (error.status === 400 || error.status === 422) {
+      return 'Thông tin chưa hợp lệ. Vui lòng kiểm tra lại các mục đã nhập.'
+    }
+    if (error.status === 409 && (
+      error.message.startsWith('Không thể lưu trữ loại kho')
+      || error.message.startsWith('Loại kho đã được lưu trữ')
+      || error.message.startsWith('Không thể xóa loại kho đang chờ BO duyệt')
+    )) return error.message
     if (error.status === 409) return 'Dữ liệu đã thay đổi hoặc chưa đủ điều kiện xử lý. Vui lòng tải lại trước khi tiếp tục.'
     if (error.status != null && error.status >= 500) return 'Hệ thống gặp lỗi khi tải hoặc xử lý dữ liệu. Vui lòng thử lại.'
     if (error.status === null) return 'Không kết nối được hệ thống hoặc yêu cầu đã hết thời gian chờ. Vui lòng thử lại.'

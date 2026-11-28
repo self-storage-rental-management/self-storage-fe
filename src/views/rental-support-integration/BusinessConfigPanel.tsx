@@ -20,7 +20,7 @@ export default function BusinessConfigPanel({ canWrite = true }: Props) {
   const [success, setSuccess] = useState<string | null>(null)
 
   // Form state
-  const [gracePeriodDays, setGracePeriodDays] = useState(3)
+  const [gracePeriodDays] = useState(0)
   const [lateFeeAmount, setLateFeeAmount] = useState(650000)
   const [defaultDepositRatio, setDefaultDepositRatio] = useState(0.2)
   const [holdExpiryHours, setHoldExpiryHours] = useState(2)
@@ -34,7 +34,6 @@ export default function BusinessConfigPanel({ canWrite = true }: Props) {
     try {
       const data = await getBusinessConfigApi()
       setConfig(data)
-      setGracePeriodDays(data.gracePeriodDays ?? 3)
       setLateFeeAmount(data.lateFeeAmount ?? 650000)
       setDefaultDepositRatio(data.defaultDepositRatio ?? 0.2)
       setHoldExpiryHours(data.holdExpiryHours ?? 2)
@@ -69,7 +68,7 @@ export default function BusinessConfigPanel({ canWrite = true }: Props) {
         autoProrate,
       })
       setConfig(updated)
-      setSuccess('Đã cập nhật cấu hình vận hành & phí trễ hạn thành công xuống hệ thống!')
+      setSuccess('Đã lưu cấu hình vận hành và phí trễ hạn.')
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : 'Lỗi khi lưu cấu hình vận hành.')
     } finally {
@@ -92,10 +91,10 @@ export default function BusinessConfigPanel({ canWrite = true }: Props) {
     <Card className="overflow-hidden rounded-2xl border border-stone-200 bg-white p-0 text-sm shadow-sm">
       <div className="border-b border-stone-100 bg-gradient-to-r from-amber-50 to-white px-5 py-4">
         <h3 className="text-base font-semibold text-stone-900">
-          Cấu hình vận hành & Phí phạt hệ thống (Business Operations)
+          Cấu hình vận hành và phí
         </h3>
         <p className="mt-1 text-xs text-stone-500">
-          Quản lý mức phí phạt quá hạn thực tế, thời gian ân hạn, hạn mức cọc và các tham số tài chính áp dụng cho toàn bộ StorageHub.
+          Quản lý mức phí phạt quá hạn thực tế, hạn mức cọc và các tham số tài chính áp dụng cho toàn bộ StorageHub.
         </p>
       </div>
 
@@ -116,55 +115,7 @@ export default function BusinessConfigPanel({ canWrite = true }: Props) {
         )}
 
         <div className="grid gap-5 sm:grid-cols-2">
-          {/* 1. Mức phí phạt trễ hạn */}
-          <div className="rounded-xl border border-stone-200 bg-stone-50/40 p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="font-semibold text-xs text-stone-800">
-                Phí phạt trễ hạn mỗi ngày (VND/ngày)
-              </label>
-              <span className="text-[11px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded">
-                Backend Ledger
-              </span>
-            </div>
-            <input
-              type="number"
-              min={0}
-              step={10000}
-              required
-              disabled={!canWrite || saving}
-              value={lateFeeAmount}
-              onChange={(e) => setLateFeeAmount(Number(e.target.value))}
-              className={inputClass}
-            />
-            <p className="text-[11px] text-stone-500">
-              Mức hiện tại: <b className="text-amber-700">{formatVnd(lateFeeAmount)}/ngày</b>. Áp dụng cho các hợp đồng quá hạn chưa gia hạn hoặc chưa trả kho.
-            </p>
-          </div>
-
-          {/* 2. Số ngày ân hạn (Grace Period) */}
-          <div className="rounded-xl border border-stone-200 bg-stone-50/40 p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="font-semibold text-xs text-stone-800">
-                Thời gian ân hạn thanh toán (ngày)
-              </label>
-              <span className="text-[11px] font-bold text-blue-800 bg-blue-100 px-2 py-0.5 rounded">
-                Ân hạn
-              </span>
-            </div>
-            <input
-              type="number"
-              min={0}
-              max={30}
-              required
-              disabled={!canWrite || saving}
-              value={gracePeriodDays}
-              onChange={(e) => setGracePeriodDays(Number(e.target.value))}
-              className={inputClass}
-            />
-            <p className="text-[11px] text-stone-500">
-              Số ngày cho phép khách trễ trước khi bị khóa quyền truy cập hoặc áp dụng các chế tài thu hồi.
-            </p>
-          </div>
+          <p className="text-sm">Phí quá hạn mỗi ngày = tiền thuê tháng ÷ 30 × 1,5.</p>
 
           {/* 3. Tỷ lệ cọc giữ chỗ mặc định */}
           <div className="rounded-xl border border-stone-200 bg-stone-50/40 p-4 space-y-2">
@@ -271,7 +222,7 @@ export default function BusinessConfigPanel({ canWrite = true }: Props) {
                 onChange={(e) => setAutoProrate(e.target.checked)}
                 className="rounded accent-amber-600"
               />
-              <span>Tự động tính tiền theo số ngày thực tế khi bắt đầu giữa tháng (Prorate)</span>
+              <span>Tự động tính tiền theo số ngày thực tế khi bắt đầu giữa tháng</span>
             </label>
           </div>
         </div>
@@ -279,7 +230,7 @@ export default function BusinessConfigPanel({ canWrite = true }: Props) {
         {canWrite && (
           <div className="flex justify-end pt-3 border-t border-stone-100">
             <Button type="submit" disabled={saving}>
-              {saving ? 'Đang lưu cấu hình...' : 'Lưu & Cập nhật tham số hệ thống'}
+              {saving ? 'Đang lưu cấu hình...' : 'Lưu cấu hình'}
             </Button>
           </div>
         )}

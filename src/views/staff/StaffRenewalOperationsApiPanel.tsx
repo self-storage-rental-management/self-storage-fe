@@ -2,7 +2,7 @@ import { parseVietnamDate } from '../../utils/vietnamTime'
 import LocalizedDateInput from '../../components/LocalizedDateInput'
 import { useCallback, useRef, useState } from "react"
 import { Badge, Button, Card, Modal } from "../../components/ui"
-import { getAuthenticatedActor } from "../../services/authApi"
+import { getAuthenticatedActor, staffWorkingFacilityId } from "../../services/authApi"
 import { listRenewalAppointments } from "../../services/renewalOperationsApi"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
 import type { RenewalAppointmentQuery } from "../../types/renewalOperationsApi"
@@ -11,7 +11,7 @@ import RenewalOperationsPanel, {
   operationsInputClass,
 } from "../rental-api/RenewalOperationsPanel"
 import { phaseLabels } from "../rental-api/operationsPresentation"
-import { rentalError } from "../rental-api/presentation"
+import { renewalDisplayLabel, rentalDate, rentalError } from "../rental-api/presentation"
 
 function signingDate(value: string | null, time = false) {
   if (!value || !Number.isFinite(Date.parse(value))) return "Chưa có lịch"
@@ -55,6 +55,8 @@ function StaffSession({ identity, onLocked }: { identity: string; onLocked: (val
   const [query, setQuery] = useState<RenewalAppointmentQuery>({
     page: 0,
     size: 20,
+    facilityId: staffWorkingFacilityId(actor),
+    sort: "appointmentStart,asc",
   })
   const [selected, setSelected] = useState<string>()
   const lockRef = useRef(false)
@@ -70,24 +72,14 @@ function StaffSession({ identity, onLocked }: { identity: string; onLocked: (val
   }
   return (
     <div className="space-y-4">
-      <Card className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3">
+      <Card className="grid gap-4 rounded-2xl border border-stone-200 bg-white p-5 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr]">
         <label className="block min-w-0 text-sm font-medium text-stone-700">
-          Cơ sở
-          <select
-            className={operationsInputClass}
-            value={query.facilityId || ""}
-            onChange={(e) =>
-              change({ facilityId: e.target.value || undefined })
-            }
-          >
-            <option value="">Các cơ sở được vận hành</option>
-            {Object.entries(actor.facilityScopes)
-              .filter(([, scope]) => scope === "OPERATE" || scope === "MANAGE")
-              .map(([id]) => (
-                <option key={id} value={id}>
-                  {actor.facilityNames?.[id] || id}
-                </option>
-              ))}
+          Sắp xếp
+          <select className={operationsInputClass} value={query.sort || 'appointmentStart,asc'}
+            onChange={event => change({ sort: event.target.value as RenewalAppointmentQuery['sort'] })}>
+            <option value="appointmentStart,asc">Lịch hẹn sớm nhất</option>
+            <option value="createdAt,desc">Mới nhất</option>
+            <option value="createdAt,asc">Cũ nhất</option>
           </select>
         </label>
         <label className="block min-w-0 text-sm font-medium text-stone-700">
@@ -112,7 +104,7 @@ function StaffSession({ identity, onLocked }: { identity: string; onLocked: (val
             }
           >
             <option value="">Tất cả</option>
-            {(["SIGNING", "SIGNING_EXPIRED", "COMPLETED"] as const).map((v) => (
+            {(["SIGNING", "NO_SHOW", "SIGNING_EXPIRED", "COMPLETED"] as const).map((v) => (
               <option key={v} value={v}>
                 {phaseLabels[v]}
               </option>
@@ -135,34 +127,39 @@ function StaffSession({ identity, onLocked }: { identity: string; onLocked: (val
       )}
       {read.data && <>
         {[
-          { id: 'ongoing', title: 'Đang diễn ra', empty: 'Không có lịch ký đang diễn ra.', rows: read.data.data.filter(s => !['COMPLETED', 'SIGNING_EXPIRED', 'PAYMENT_EXPIRED'].includes(s.phase)) },
-          { id: 'finished', title: 'Đã kết thúc', empty: 'Chưa có lịch ký đã kết thúc.', rows: read.data.data.filter(s => ['COMPLETED', 'SIGNING_EXPIRED', 'PAYMENT_EXPIRED'].includes(s.phase)) },
+          { id: 'ongoing', title: 'Đang diễn ra', empty: 'Không có lịch ký đang diễn ra.', rows: read.data.data.filter(s => !['COMPLETED', 'NO_SHOW', 'SIGNING_EXPIRED', 'PAYMENT_EXPIRED'].includes(s.phase)) },
+          { id: 'finished', title: 'Đã kết thúc', empty: 'Chưa có lịch ký đã kết thúc.', rows: read.data.data.filter(s => ['COMPLETED', 'NO_SHOW', 'SIGNING_EXPIRED', 'PAYMENT_EXPIRED'].includes(s.phase)) },
         ].map(group => (
-        <Card key={group.id} className="overflow-hidden">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 px-4 py-3">
-            <h2 className="text-sm font-semibold text-stone-900">{group.title}</h2>
-            <span className="text-xs text-stone-500">{group.rows.length} hồ sơ</span>
+        <Card key={group.id} className="overflow-hidden rounded-2xl border border-stone-200 bg-white">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-4">
+            <h2 className="text-base font-semibold text-stone-900">{group.title}</h2>
+            <span className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs text-stone-600">{group.rows.length} hồ sơ</span>
           </div>
           {group.rows.length > 0 ? <div className="overflow-x-auto">
-            <table className="w-full min-w-[680px] text-left text-sm">
+            <table className="w-full min-w-[1100px] table-fixed text-left text-sm">
               <caption className="sr-only">Lịch ký gia hạn - {group.title}</caption>
-              <thead className="border-b border-stone-200 bg-stone-50 text-xs text-stone-600">
+              <colgroup><col className="w-[11%]" /><col className="w-[9%]" /><col className="w-[16%]" /><col className="w-[14%]" /><col className="w-[12%]" /><col className="w-[12%]" /><col className="w-[16%]" /><col className="w-[10%]" /></colgroup>
+              <thead className="border-y border-stone-200 bg-[#f6f4f1] text-xs text-stone-600">
                 <tr>
-                  <th scope="col" className="px-4 py-3 font-semibold">Hồ sơ gia hạn</th>
-                  <th scope="col" className="px-4 py-3 font-semibold">Trạng thái</th>
+                  <th scope="col" className="px-4 py-3 font-medium">Hồ sơ thuê</th>
+                  <th scope="col" className="px-4 py-3 font-medium">Lần gia hạn</th>
+                  <th scope="col" className="px-4 py-3 font-medium">Khách hàng</th>
+                  <th scope="col" className="px-4 py-3 font-medium">Kết thúc kỳ dự kiến</th>
                   <th scope="col" className="px-4 py-3 font-semibold">Lịch hẹn</th>
                   <th scope="col" className="px-4 py-3 font-semibold">Hạn ký</th>
+                  <th scope="col" className="px-4 py-3 font-medium">Trạng thái</th>
                   <th scope="col" className="px-4 py-3 text-right font-semibold">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
                 {group.rows.map(s => <tr key={s.renewalId} className="transition-colors hover:bg-stone-50">
-                  <td className="px-4 py-4 align-middle">
-                    <span className="font-semibold text-stone-900" title={s.renewalId}>{s.displayCode || `#${s.renewalId.slice(0, 8)}`}</span>
+                  <td className="break-words px-4 py-4 align-middle"><span className="font-semibold text-stone-900" title={renewalDisplayLabel(s)}>{s.rentalDisplayCode || s.displayCode || 'Chưa cấp mã'}</span></td>
+                  <td className="px-4 py-4 align-middle"><span className="inline-block rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs text-stone-800">{s.renewalSequence ? `Lần ${s.renewalSequence}` : 'Chưa xác định'}</span></td>
+                  <td className="break-words px-4 py-4 align-middle [overflow-wrap:anywhere]">
+                    <p className="font-medium text-stone-900">{s.appointmentDetails?.customerName || 'Chưa xác định'}</p>
+                    {s.appointmentDetails?.customerEmail && <p className="mt-1 text-xs text-stone-500">{s.appointmentDetails.customerEmail}</p>}
                   </td>
-                  <td className="px-4 py-4 align-middle">
-                    <Badge variant={s.phase === "COMPLETED" ? "success" : ["SIGNING_EXPIRED", "PAYMENT_EXPIRED"].includes(s.phase) ? "error" : ["SIGNING", "AWAITING_DEPOSIT", "AWAITING_PAYMENT_INTENT"].includes(s.phase) ? "warning" : "muted"}>{phaseLabels[s.phase]}</Badge>
-                  </td>
+                  <td className="px-4 py-4 align-middle text-stone-700">{s.appointmentDetails?.proposedEndDate ? rentalDate(s.appointmentDetails.proposedEndDate) : 'Chưa xác định'}</td>
                   <td className="px-4 py-4 align-middle">
                     <p className="whitespace-nowrap font-medium text-stone-900">{signingDate(s.appointmentStart)}</p>
                     {s.appointmentStart && <p className="mt-1 whitespace-nowrap text-xs text-stone-500">
@@ -174,9 +171,12 @@ function StaffSession({ identity, onLocked }: { identity: string; onLocked: (val
                     <p className="whitespace-nowrap text-stone-700">{s.effectiveSigningDeadline ? signingDate(s.effectiveSigningDeadline) : "Chưa ghi nhận"}</p>
                     {s.effectiveSigningDeadline && <p className="mt-1 text-xs text-stone-500">{signingDate(s.effectiveSigningDeadline, true)}</p>}
                   </td>
+                  <td className="px-4 py-4 align-middle">
+                    <span className="[&_.ui-badge]:!rounded-full [&_.ui-badge]:!border-0 [&_.ui-badge]:!px-3 [&_.ui-badge]:!py-1.5"><Badge variant={s.phase === "COMPLETED" ? "success" : ["NO_SHOW", "SIGNING_EXPIRED", "PAYMENT_EXPIRED"].includes(s.phase) ? "error" : ["SIGNING", "AWAITING_DEPOSIT", "AWAITING_PAYMENT_INTENT"].includes(s.phase) ? "warning" : "muted"}>{phaseLabels[s.phase]}</Badge></span>
+                  </td>
                   <td className="px-4 py-4 text-right align-middle">
-                    <Button type="button" size="sm" variant="outline" className="whitespace-nowrap" onClick={() => { if (!lockRef.current) setSelected(s.renewalId) }}>
-                      {["COMPLETED", "SIGNING_EXPIRED", "PAYMENT_EXPIRED"].includes(s.phase) ? "Xem chi tiết" : "Xử lý"}
+                    <Button type="button" size="sm" variant={group.id === 'ongoing' ? 'primary' : 'outline'} className={group.id === 'ongoing' ? "whitespace-nowrap !bg-[#a64e00] !text-white hover:!bg-[#893f00]" : "whitespace-nowrap"} onClick={() => { if (!lockRef.current) setSelected(s.renewalId) }}>
+                      {["COMPLETED", "NO_SHOW", "SIGNING_EXPIRED", "PAYMENT_EXPIRED"].includes(s.phase) ? "Xem chi tiết" : "Xử lý"}
                     </Button>
                   </td>
                 </tr>)}
@@ -198,7 +198,7 @@ function StaffSession({ identity, onLocked }: { identity: string; onLocked: (val
         <Modal
           open
           size="xl"
-          title="Xử lý ký gia hạn - Nhân viên"
+          title="Xử lý ký gia hạn"
           onClose={() => {
             if (!lockRef.current) setSelected(undefined)
           }}

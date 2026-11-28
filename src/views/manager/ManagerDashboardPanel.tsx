@@ -464,16 +464,11 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
         )}
       </section>
 
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatCard
           title="Tổng số gian kho"
           value={facilityUnits.length}
           icon={Icon.box}
-        />
-        <StatCard
-          title="Tỷ lệ lấp đầy"
-          value={`${occupancy}%`}
-          icon={Icon.chart}
         />
         <StatCard
           title="Lượt thuê đang hoạt động"
@@ -647,7 +642,6 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
                 <Th>Còn trống</Th>
                 <Th>Đã giữ</Th>
                 <Th>Bảo trì</Th>
-                <Th>Lấp đầy</Th>
               </tr>
             </Thead>
             <Tbody>
@@ -659,12 +653,6 @@ export default function ManagerDashboardPanel({ user, setPage }: Props) {
                   <Td>{item.available}</Td>
                   <Td>{item.reserved}</Td>
                   <Td>{item.maintenance}</Td>
-                  <Td>
-                    <div className="min-w-24">
-                      <div className="mb-1 text-xs">{item.occupancy}%</div>
-                      <ProgressBar value={item.occupancy} />
-                    </div>
-                  </Td>
                 </Tr>
               ))}
             </Tbody>

@@ -144,7 +144,10 @@ describe("Customer payment history", () => {
   })
   it("combines reservation, renewal deposit, signing cash and recorded return payments", async () => {
     vi.mocked(listRenewals).mockResolvedValue(
-      page([{ id: "renewal", rentalId: "rental", storageUnit: { code: "A1" }, facility: { name: "Q1" } }]) as never,
+      page([{
+        id: "renewal", rentalId: "rental", rentalDisplayCode: "SH-184033", renewalSequence: 2,
+        storageUnit: { code: "A1" }, facility: { name: "Q1" },
+      }]) as never,
     )
     vi.mocked(listRenewalOperationEvents).mockResolvedValue(
       page([
@@ -196,6 +199,9 @@ describe("Customer payment history", () => {
       "renewal",
       "deposit",
     ])
+    expect(result.entries.filter((entry) => entry.renewalId).map((entry) => entry.reference))
+      .toEqual(["SH-184033 · Gia hạn lần 2", "SH-184033 · Gia hạn lần 2"])
+    expect(result.entries.map((entry) => entry.reference)).not.toContain("Gia hạn renewal")
     expect(result.warnings).toEqual([])
   })
   it("preserves other payment history and reports a missing renewal source", async () => {
@@ -257,14 +263,14 @@ describe("Customer payment history", () => {
     vi.mocked(listRenewals).mockResolvedValue(page([{
       id: 'renewal', rentalId: 'rental', storageUnit: { code: 'A1' }, facility: { name: 'Q1' },
       statusSummary: { checkedAt: '2026-10-26T00:00:00Z', transactions: [{
-        paymentId: 'pending-payment', reference: 'intent', purpose: 'RENEWAL', status: 'PROCESSING',
+        paymentId: 'pending-payment', reference: 'intent', receiptCode: 'PT-1234-5678-9012', purpose: 'RENEWAL', status: 'PROCESSING',
         amount: 200, refundedAmount: 0, currency: 'VND', paidAt: null, receiptAvailable: false,
       }] },
     }]) as never)
     vi.mocked(listRenewalOperationEvents).mockRejectedValue(new Error('unavailable'))
     const result = await loadCustomerPaymentHistory()
     const entry = result.entries.find(item => item.id === 'pending-payment')!
-    expect(entry).toMatchObject({ status: 'PROCESSING', method: null, timestamp: null })
+    expect(entry).toMatchObject({ status: 'PROCESSING', method: null, timestamp: null, receiptCode: 'PT-1234-5678-9012' })
     expect(canViewCustomerHistoryReceipt(entry)).toBe(false)
     expect(result.warnings).toContain('Chưa tải được đầy đủ thanh toán của đơn gia hạn renewal.')
   })

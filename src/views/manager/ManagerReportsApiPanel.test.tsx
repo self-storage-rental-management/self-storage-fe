@@ -8,7 +8,15 @@ import { Button, Modal } from '../../components/ui'
 import ManagerReportsApiPanel from './ManagerReportsApiPanel'
 
 // Controlled hook lifecycle to exercise the actual detail and close handlers.
-const h = vi.hoisted(() => ({ actor: null as ApiActor | null, slots: [] as unknown[], cursor: 0, reads: [] as string[], result: {} as Record<string, unknown> }))
+const h = vi.hoisted(() => ({
+  actor: null as ApiActor | null,
+  slots: [] as unknown[],
+  cursor: 0,
+  reads: [] as string[],
+  result: {} as Record<string, unknown>,
+  summaryResult: undefined as Record<string, unknown> | undefined,
+  revenueResult: undefined as Record<string, unknown> | undefined,
+}))
 vi.mock('react', async original => ({
   ...await original<typeof import('react')>(),
   useState: (initial: unknown) => {
@@ -20,6 +28,8 @@ vi.mock('react', async original => ({
 vi.mock('../../services/authApi', () => ({ getAuthenticatedActor: () => h.actor }))
 vi.mock('../../hooks/useRentalApiResource', () => ({ useRentalApiResource: (identity: string) => {
   h.reads.push(identity)
+  if (identity.includes(':report-summary:')) return { loading: false, refresh: vi.fn(), ...(h.summaryResult || {}) }
+  if (identity.includes(':report-revenue:')) return { loading: false, refresh: vi.fn(), ...(h.revenueResult || {}) }
   return { loading: false, refresh: vi.fn(), ...(identity.includes(':report-activities:') ? h.result : {}) }
 } }))
 
@@ -45,6 +55,8 @@ beforeEach(() => {
   h.actor = { ...manager, permissions: [...manager.permissions, 'reports:read'] }
   h.slots = []; h.cursor = 0; h.reads = []
   h.result = { data: page([activity]) }
+  h.summaryResult = undefined
+  h.revenueResult = undefined
 })
 
 describe('Manager activity journal', () => {
@@ -89,5 +101,38 @@ describe('Manager activity journal', () => {
     h.actor = { ...manager, permissions: [] }
     expect(render()).toContain('role="alert"')
     expect(h.reads).toHaveLength(0)
+  })
+  it('renders collected net revenue with deducted refunds and monthly revenue trend chart', () => {
+    h.summaryResult = {
+      data: {
+        facilityId: 'f1',
+        facilityName: 'Kho Quận 1',
+        totalUnits: 10,
+        availableUnits: 5,
+        occupiedUnits: 5,
+        maintenanceUnits: 0,
+        reservedUnits: 0,
+        occupancyRate: 50.0,
+        monthlyRecurringRevenue: 28500000,
+        collectedRevenue: 190700000,
+        totalRefunds: 14500000,
+        grossRevenue: 205200000,
+        overdueRentalsCount: 0,
+        monthCheckinsCount: 6,
+        openReturnsCount: 1,
+        openMaintenanceTasksCount: 0,
+        unitStatusBreakdown: [{ status: 'occupied', name: 'Đang thuê', count: 5, percentage: 50 }],
+        unitTypeBreakdown: [{ typeCode: 'M', typeName: 'Kho Trung', totalUnits: 10, occupiedUnits: 5, occupancyRate: 50 }],
+        monthlyRevenue: [
+          { month: '2026-10', revenue: 100000000, transactionsCount: 2 },
+          { month: '2026-11', revenue: 90700000, transactionsCount: 2 },
+        ],
+      },
+    }
+
+    const html = render()
+    expect(html).toContain('Quản lý thu và hoàn tiền')
+    expect(html).toContain('Phân bổ trạng thái gian kho')
+    expect(html).toContain('Công suất theo loại kho')
   })
 })

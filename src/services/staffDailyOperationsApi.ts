@@ -4,6 +4,7 @@ import {
   type CredentialAlert,
 } from "./checkInApi"
 import {
+  formatMaintenanceTaskTitle,
   listStaffMaintenanceTasks,
   type MaintenanceTaskApi,
 } from "./maintenanceApi"
@@ -12,12 +13,14 @@ import { listSupportTickets } from "./supportApi"
 import type { SupportTicket } from "../types/supportApi"
 import { getAuthenticatedActor } from "./authApi"
 import { listAllRecoveryTasks, type RecoveryTask } from "./recoveryTasksApi"
+import { listStaffReservationReviews, type ReservationReview } from "./staffReservationApi"
 import { ApiClientError } from "./apiClient"
 
 export type StaffDailyOperationPriority = "high" | "medium" | "low"
 export type StaffDailyOperationPage = "reservations" | "checkin" | "return" | "support" | "tasks"
 
 export interface StaffDailyOperation {
+  displayCode?: string | null
   id: string
   title: string
   customer: string
@@ -79,49 +82,61 @@ const credentialTask = (alert: CredentialAlert): StaffDailyOperation => ({
   page: alert.action === "ISSUE" ? "checkin" : "return",
 })
 
-const checkInTask = (item: CheckInCase): StaffDailyOperation => {
-  const dueAt = item.appointmentAt || item.scheduledAt || item.startDate
+export const checkInTask = (item: CheckInCase): StaffDailyOperation => {
+  const receiptWaiting = item.checkInStatus === "handover_pending_receipt"
+  const dueAt = receiptWaiting
+    ? item.receiptConfirmationDueAt || item.checkedInAt || item.appointmentAt || item.scheduledAt || item.startDate
+    : item.appointmentAt || item.scheduledAt || item.startDate
+  const overdue = Boolean(dueAt && new Date(dueAt).getTime() <= Date.now())
   return {
     id: `checkin-${item.checkInId || item.reservationId}`,
-    title: `Nhận kho & bàn giao ${item.storageUnitCode}`,
+    displayCode: item.reservationCode,
+    title: receiptWaiting ? `Chờ xác nhận nhận kho ${item.reservationCode || item.storageUnitCode}` : `Nhận kho & bàn giao ${item.reservationCode || item.storageUnitCode}`,
     customer: item.customerName,
     time: dueAt || "",
     dueAt: dueAt || new Date().toISOString(),
-    sla:
-      item.checkInStatus === "scheduled"
-        ? "Khách cần nhận kho hôm nay"
-        : "Cần tiếp nhận",
-    priority: item.checkInStatus === "scheduled" ? "medium" : "high",
+    sla: receiptWaiting
+      ? overdue ? "Đã quá hạn xác nhận nhận kho" : "Chờ Khách hàng xác nhận nhận kho"
+      : item.checkInStatus === "scheduled" ? "" : "Cần tiếp nhận",
+    priority: receiptWaiting || item.checkInStatus !== "scheduled" ? "high" : "medium",
     page: "checkin",
   }
 }
 
-const returnTask = (item: ApiReturn): StaffDailyOperation => ({
-  id: `return-${item.id}`,
-  title: `Kiểm tra trả kho ${item.unitNumber}`,
-  customer: item.customerName,
-  time: item.scheduledDate,
-  dueAt: `${item.scheduledDate}T23:59:59`,
-  sla:
-    item.status === "refund_pending"
-      ? "Cần chuyển hoàn cọc cho khách hàng"
-      : item.status === "payment_due"
-        ? "Chờ khách hàng thanh toán thêm"
-        : item.status === "disputed"
-          ? "Quản lý đang xem xét yêu cầu tính lại"
-          : "Khách cần trả kho hôm nay",
-  priority:
-    item.status === "refund_pending" || item.status === "payment_due"
-      ? "high"
-      : "medium",
-  page: "return",
-})
+const returnTask = (item: ApiReturn): StaffDailyOperation => {
+  const today = new Date().toISOString().slice(0, 10)
+  const isOverdue = item.scheduledDate ? item.scheduledDate < today : false
+  return {
+    id: `return-${item.id}`,
+    displayCode: item.displayCode,
+    title: `Trả kho ${item.unitNumber}`,
+    customer: item.customerName,
+    time: item.scheduledDate ?? "Chưa có lịch",
+    dueAt: item.inventoryRemovalDeadlineAt ?? (item.scheduledDate ? `${item.scheduledDate}T23:59:59` : new Date().toISOString()),
+    sla:
+      item.status === "refund_pending"
+        ? "Cần chuyển hoàn cọc cho khách hàng"
+        : item.status === "payment_due"
+          ? "Chờ khách hàng thanh toán thêm"
+          : item.status === "disputed"
+            ? "Quản lý đang xem xét yêu cầu tính lại"
+            : item.status === "requested"
+              ? isOverdue ? "Quá hạn hẹn - Khách đã yêu cầu trả kho" : "Khách đã yêu cầu trả kho - Cần nghiệm thu"
+              : isOverdue ? "Quá hạn trả kho - Cần nghiệm thu" : "Khách cần trả kho hôm nay",
+    priority:
+      item.status === "refund_pending" || item.status === "payment_due" || isOverdue
+        ? "high"
+        : "medium",
+    page: "return",
+  }
+}
 
 const supportTask = (item: SupportTicket): StaffDailyOperation => {
   const dueAt =
     item.sla?.nextUpdateDueAt || item.sla?.firstReplyDueAt || item.createdAt
   return {
     id: `support-${item.id}`,
+    displayCode: item.displayCode,
     title: `Xử lý hỗ trợ ${item.subject}`,
     customer: item.customerName?.trim() || "Chưa có tên khách hàng",
     time: item.assignedAt || item.createdAt,
@@ -134,13 +149,26 @@ const supportTask = (item: SupportTicket): StaffDailyOperation => {
 
 const maintenanceTask = (item: MaintenanceTaskApi): StaffDailyOperation => ({
   id: `maintenance-${item.id}`,
-  title: `${item.title} · ${item.unitCode}`,
-  customer: item.facilityName,
+    displayCode: item.displayCode,
+  title: formatMaintenanceTaskTitle(item),
+  customer: item.customerName?.trim() || "-",
   time: item.dueAt || item.createdAt,
   dueAt: item.dueAt || item.createdAt,
   sla: "Nhiệm vụ bảo trì được phân công",
   priority: item.priority,
   page: "tasks",
+})
+
+const reviewTask = (item: ReservationReview): StaffDailyOperation => ({
+  id: `review-${item.reservationId}`,
+    displayCode: item.reservationCode,
+  title: `Duyệt hàng hóa ${item.reservationCode}`,
+  customer: item.customerEmail,
+  time: item.reviewDueAt || item.startDate,
+  dueAt: item.reviewDueAt || `${item.startDate}T23:59:59`,
+  sla: "Cần nhân viên duyệt hàng hóa (Loại khác)",
+  priority: "high",
+  page: "reservations",
 })
 
 /** Load Staff operations from the real API surface and normalize them for one daily list. */
@@ -161,13 +189,14 @@ export async function loadStaffDailyOperations(
       scheduledTo: to,
     }),
     listReturns("staff", 0, 100),
-    listSupportTickets("staff", { page: 0, size: 100, sort: "updatedAt,desc" }),
+    listSupportTickets("staff", { page: 0, size: 100, sort: "priority,asc" }),
     listStaffMaintenanceTasks({
       assignedStaffId: actorId,
       page: 0,
       pageSize: 100,
     }),
     Promise.allSettled(recoveryScopes.map(id => listAllRecoveryTasks('staff',id))),
+    listStaffReservationReviews(0, 100),
   ])
 
   const failedSources: string[] = []
@@ -197,7 +226,11 @@ export async function loadStaffDailyOperations(
   const recoveryResults = read<PromiseSettledResult<RecoveryTask[]>[]>(4, "thu hồi kho") || []
   if (recoveryResults.some(result => result.status === 'rejected')) failedSources.push('thu hồi kho')
   const recoveryTasks = recoveryResults.flatMap(result => result.status === 'fulfilled' ? result.value : [])
+  const reviews = read<Awaited<ReturnType<typeof listStaffReservationReviews>>>(5, "duyệt đặt kho")
   const tasks = [
+    ...(reviews?.data || [])
+      .filter((item) => item.goodsReviewStatus === "PENDING")
+      .map(reviewTask),
     ...recoveryTasks.filter(task => task.status !== 'CLOSED').map((task): StaffDailyOperation => ({
       id: `recovery-${task.id}`,title: `Thu hồi kho - ${task.storageUnitCode}`,customer: task.customerName,
       time: task.receivedAt,dueAt: '',sla: task.status === 'IN_PROGRESS' ? 'Đang xử lý thu hồi' : 'Chờ xử lý thu hồi',
@@ -208,15 +241,14 @@ export async function loadStaffDailyOperations(
       .map(credentialTask),
     ...(checkIns?.data || [])
       .filter(isOpenCheckIn)
-      .filter(
-        (item) =>
-          dayOf(item.appointmentAt || item.scheduledAt || item.startDate) ===
-          date,
-      )
+      .filter((item) => {
+        const checkDate = dayOf(item.appointmentAt || item.scheduledAt || item.startDate)
+        return !checkDate || checkDate <= date
+      })
       .map(checkInTask),
     ...(returns?.data || [])
       .filter(isOpenReturn)
-      .filter((item) => item.scheduledDate === date)
+      .filter((item) => !item.scheduledDate || item.scheduledDate <= date)
       .map(returnTask),
     ...(support?.data || [])
       .filter(isOpenSupport)

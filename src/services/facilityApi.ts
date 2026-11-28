@@ -16,6 +16,7 @@ export interface FacilityUnitSpecInput {
 
 export interface CreateFacilityInput {
   code: string
+  autoCode?: boolean
   name: string
   address: string
   city: string
@@ -105,6 +106,28 @@ export async function priceBusinessUnitTypeApi(
   const response = await apiRequest<{ data: import('./customerReservationApi').CustomerUnitType; correlationId: string }>(
     `/api/business/unit-types/${encodeURIComponent(unitTypeId)}/pricing`,
     { method: 'PATCH', body: JSON.stringify(input) },
+  )
+  return response.data
+}
+
+export interface UnitTypeDeadlinePolicy {
+ setupDeadlineDays: number
+ setupMaxExtensionDays: number
+ mismatchReturnDays: number
+ mismatchReturnMaxExtensionDays: number
+}
+export async function unitTypeDeadlinePolicyApi(id: string, input?: UnitTypeDeadlinePolicy): Promise<UnitTypeDeadlinePolicy> {
+ const response = await apiRequest<{data: UnitTypeDeadlinePolicy}>(
+  `/api/business/unit-types/${encodeURIComponent(id)}/deadline-policy`,
+  input ? {method: 'PATCH', body: JSON.stringify(input)} : {},
+ )
+ return response.data
+}
+
+export async function saveFacilityDeadlinePolicies(facilityId: string, policies: Record<string, UnitTypeDeadlinePolicy>) {
+  const response = await apiRequest<{ data: Record<string, UnitTypeDeadlinePolicy> }>(
+    `/api/business/facilities/${encodeURIComponent(facilityId)}/deadline-policies`,
+    { method: 'PATCH', body: JSON.stringify({ policies }) },
   )
   return response.data
 }

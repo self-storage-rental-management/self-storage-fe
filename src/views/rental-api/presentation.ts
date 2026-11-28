@@ -1,8 +1,18 @@
+import { incompleteIntakeRenewalReason, isRentalIntakePending, type RentalIntakeProgress } from './rentalIntake'
 import { parseVietnamDate } from '../../utils/vietnamTime'
 import { ApiClientError } from "../../services/apiClient"
 import type { RenewalApiAction, RenewalApiRecord } from "../../types/renewalApi"
 import type { ApiActor } from "../../services/authApi"
 import type { RentalApiRecord, RentalApiRole } from "../../types/rentalApi"
+import { renewalDisplayLabel } from "../../presentation/renewalIdentity"
+
+export { renewalDisplayLabel } from "../../presentation/renewalIdentity"
+
+export function rentalRecordLabel(record: RentalApiRecord | RenewalApiRecord) {
+  return "rentalId" in record
+    ? renewalDisplayLabel(record)
+    : record.displayCode || "Chưa cấp mã"
+}
 
 export function rentalPeriodText(rental: RentalApiRecord, showTechnicalWarning = true) {
   const verified = rental.dateSemantics?.completeness === "COMPLETE"
@@ -19,6 +29,27 @@ export const rentalLabels: Record<string, string> = {
   closing: "Đang quyết toán",
   completed: "Hoàn tất",
 }
+
+// Keep return-processing stages in their own workflow, rather than offering
+// them as primary rental lifecycle filters.
+export const rentalFilterLabels: Record<string, string> = {
+  setup: 'Đang chuẩn bị',
+  active: 'Đang hoạt động',
+  completed: 'Hoàn tất',
+}
+
+export function rentalStatusLabel(rental: RentalIntakeProgress & Pick<RentalApiRecord, "status" | "canConfirmRentalStart" | "inventoryMismatchReturn">) {
+  if (['setup', 'active'].includes(rental.status) && rental.inventoryMismatchReturn)
+    return 'Chờ trả kho do kiểm kê sai lệch'
+  if (rental.canConfirmRentalStart) return "Đã kiểm kê · Chờ xác nhận"
+  if (['setup', 'active'].includes(rental.status) && isRentalIntakePending(rental))
+    return rental.inventoryVerifiedAt ? 'Chờ hoàn tất tiếp nhận hàng'
+      : rental.moveInCompletedAt ? 'Chờ kiểm kê và tiếp nhận hàng' : 'Đang chuẩn bị hàng'
+  return rental.status === "setup" && rental.inventoryVerifiedAt
+    ? "Đã kiểm kê · Chờ kỳ thuê"
+    : rentalLabels[rental.status]
+}
+
 export const renewalLabels: Record<string, string> = {
   pending: "Hệ thống đang kiểm tra điều kiện",
   accepted: "Đã xác nhận, thanh toán chưa mở",
@@ -62,6 +93,7 @@ export function rentalError(error: unknown) {
     if (error.status === 404)
       return "Không có"
     const renewalErrors: Array<[string, string]> = [
+      ["Rental inventory and intake are not completed", incompleteIntakeRenewalReason],
       ["Renewal cutoff has passed", "Đã qua hạn gia hạn. Bạn không thể gửi yêu cầu mới, vui lòng liên hệ cơ sở để được hỗ trợ."],
       ["Recovery handoff blocks renewal", "Hồ sơ đã chuyển sang xử lý thu hồi nên không thể gia hạn trực tuyến. Vui lòng liên hệ cơ sở."],
       ["Recorded Recovery handoff blocks Renewal payment", "Hồ sơ đã chuyển sang xử lý thu hồi nên không thể tiếp tục thanh toán gia hạn. Vui lòng liên hệ cơ sở."],
@@ -102,9 +134,11 @@ export function rentalError(error: unknown) {
       ["Accepted Renewal terms do not match persisted request", "Điều khoản được xác nhận không còn khớp với yêu cầu đã lưu. Hãy tải lại yêu cầu và xác nhận báo giá mới."],
       ["Shared renewal amount exceeds supported precision", "Số tiền gia hạn không hợp lệ theo quy tắc làm tròn hiện tại. Vui lòng liên hệ quản lý cơ sở."],
     ]
-    const specific = renewalErrors.find(([sourceText]) => error.message.includes(sourceText))
+    if (error.diagnosticMessage.includes("Signing calendar/deadline/Recovery cutoff unavailable"))
+      return "Chưa thể tải lịch ký. Vui lòng thử lại hoặc liên hệ cơ sở."
+    const specific = renewalErrors.find(([sourceText]) => error.diagnosticMessage.includes(sourceText))
     if (specific) return specific[1]
-    if (error.code === "DEFERRED_SOURCE" || error.message.includes("DEFERRED_SOURCE"))
+    if (error.code === "DEFERRED_SOURCE" || error.diagnosticMessage.includes("DEFERRED_SOURCE"))
       return "Một nguồn dữ liệu cần thiết cho gia hạn hiện chưa sẵn sàng. Yêu cầu chưa được xử lý, vui lòng thử lại sau hoặc liên hệ quản lý cơ sở nếu lỗi tiếp diễn."
     if (error.status === 409)
       return "Hồ sơ đã thay đổi hoặc chưa đủ điều kiện xử lý. Vui lòng mở lại hồ sơ, nếu điều khoản thay đổi hãy xác nhận báo giá mới."

@@ -6,6 +6,10 @@ import { isApiAuthenticated } from '../services/authApi'
 import { markAllNotificationsRead } from '../services/notificationApi'
 import { userFacingError } from '../presentation/userFacingError'
 import { useDisplayPunctuation } from '../presentation/useDisplayPunctuation'
+import { managerDisplayText } from '../views/manager/managerPresentation'
+import { mergeNotificationFeed } from './notificationFeed'
+import { displayRoleNames } from '../presentation/displayText'
+import { businessNotificationText } from '../services/notificationApi'
 
 export interface NavItem {
   id: string
@@ -13,6 +17,7 @@ export interface NavItem {
   icon: ReactNode
   group?: string
   permission?: PermissionKey
+  badgeCount?: number
 }
 
 export interface LayoutNotification {
@@ -25,11 +30,12 @@ export interface LayoutNotification {
   isRead?: boolean
 }
 
-function resolveNavPage(navItems: NavItem[], requested: string | null): string | null {
+function resolveNavPage(navItems: NavItem[], requested: string | null, pageAliases?: Readonly<Record<string, string>>): string | null {
   if (!requested) return null
   if (requested === 'profile') return 'profile'
   if (requested === 'policies' && navItems.some(item => item.id === 'policies')) return 'policies'
   if (navItems.some(item => item.id === requested)) return requested
+  if (navItems.some(item => item.id === pageAliases?.[requested])) return requested
 
   // Cross-role page alias resolution
   if (requested === 'browse-units' || requested === 'units') {
@@ -76,15 +82,16 @@ function requestedPageFromLocation() {
   return new URLSearchParams(window.location.search).get('page')
 }
 
-export function getInitialPage(navItems: NavItem[], fallback: string) {
+export function getInitialPage(navItems: NavItem[], fallback: string, pageAliases?: Readonly<Record<string, string>>) {
   const requestedPage = requestedPageFromLocation()
-  return resolveNavPage(navItems, requestedPage) ?? fallback
+  return resolveNavPage(navItems, requestedPage, pageAliases) ?? fallback
 }
 
 interface LayoutProps {
   user: User
   navItems: NavItem[]
   currentPage: string
+  pageAliases?: Readonly<Record<string, string>>
   onNavigate: (page: string) => void
   onLogout: () => void
   children: ReactNode
@@ -103,7 +110,7 @@ interface LayoutProps {
 
 
 export default function Layout({
-  user, navItems, currentPage, onNavigate, onLogout, children, roleLabel, notifications: suppliedNotifications, additionalNotifications, onNotificationClick, canAccess,
+  user, navItems, currentPage, pageAliases, onNavigate, onLogout, children, roleLabel, notifications: suppliedNotifications, additionalNotifications, onNotificationClick, canAccess,
   notificationError, notificationsLoading, hasMoreNotifications, onLoadMoreNotifications, onRetryNotifications
 }: LayoutProps) {
   useDisplayPunctuation(user.role === 'customer' || user.role === 'manager')
@@ -116,21 +123,12 @@ export default function Layout({
   }
   const taskbarColor = roleTaskbarColor[user.role] ?? '#F2BDCC'
   const visibleNavItems = canAccess ? navItems.filter(item => !item.permission || canAccess(item.permission)) : navItems
+  const activeNavPage = pageAliases?.[currentPage] ?? currentPage
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [notificationActionError, setNotificationActionError] = useState('')
   const notificationAreaRef = useRef<HTMLDivElement>(null)
   const contentScrollRef = useRef<HTMLElement>(null)
-  useEffect(() => {
-    const originalHtmlOverflow = document.documentElement.style.overflow
-    const originalBodyOverflow = document.body.style.overflow
-    document.documentElement.style.overflow = 'hidden'
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.documentElement.style.overflow = originalHtmlOverflow
-      document.body.style.overflow = originalBodyOverflow
-    }
-  }, [])
   useEffect(() => {
     if (!notificationsOpen) return
     const closeOutside = (event: PointerEvent) => {
@@ -195,20 +193,20 @@ export default function Layout({
   useEffect(() => {
     const restorePage = () => {
       const requestedPage = requestedPageFromLocation()
-      const target = resolveNavPage(visibleNavItems, requestedPage)
+      const target = resolveNavPage(visibleNavItems, requestedPage, pageAliases)
       if (target) {
         onNavigate(target)
       }
     }
     window.addEventListener('popstate', restorePage)
     return () => window.removeEventListener('popstate', restorePage)
-  }, [visibleNavItems, onNavigate])
+  }, [visibleNavItems, pageAliases, onNavigate])
 
   useEffect(() => {
-    if (currentPage !== 'profile' && !visibleNavItems.some(item => item.id === currentPage)) {
+    if (currentPage !== 'profile' && !visibleNavItems.some(item => item.id === activeNavPage)) {
       onNavigate(visibleNavItems[0]?.id ?? 'profile')
     }
-  }, [currentPage, visibleNavItems, onNavigate])
+  }, [currentPage, activeNavPage, visibleNavItems, onNavigate])
 
   useEffect(() => {
     const url = new URL(window.location.href)
@@ -250,7 +248,7 @@ export default function Layout({
       'support': 'Hỗ Trợ Khách Hàng',
       'tasks': 'Nhiệm Vụ Hàng Ngày',
       'checkin': 'Bàn Giao & Nhận Kho',
-      'return': 'Nghiệm Thu Trả Kho',
+      'return': 'Trả Kho & Nghiệm Thu',
       'dashboard': 'Bảng Điều Khiển',
       'reports': 'Báo Cáo Cơ Sở',
       'units': 'Quản Lý Kho',
@@ -341,15 +339,10 @@ export default function Layout({
     return roleLabel
   }
 
-  const allNotificationsMap = new Map<string, LayoutNotification>()
-  bellActionNotifications.forEach(n => allNotificationsMap.set(n.id, n))
-  ;(suppliedNotifications ?? []).forEach(n => {
-    if (!allNotificationsMap.has(n.id)) allNotificationsMap.set(n.id, n)
-  })
-  ;(additionalNotifications ?? []).forEach(n => {
-    if (!allNotificationsMap.has(n.id)) allNotificationsMap.set(n.id, n)
-  })
-  const notifications = Array.from(allNotificationsMap.values())
+  const visibleBellActions = bellActionNotifications.filter(n => !(user.role === 'manager' && n.page === 'returns' &&
+    n.message === 'Vui lòng tạo yêu cầu tại màn hình Bảo trì bằng gian kho thực tế, không tạo phiếu cục bộ cho hồ sơ từ hệ thống.'
+  ))
+  const notifications = mergeNotificationFeed(visibleBellActions, suppliedNotifications, additionalNotifications)
 
   const isNotificationRead = (item: LayoutNotification) => Boolean(item.isRead || readNotificationIds.includes(item.id))
   const unreadCount = notifications.filter(item => !item.isRead && !badgeSeenNotificationIds.includes(item.id)).length
@@ -373,6 +366,10 @@ export default function Layout({
 
   const openNotifications = () => {
     setNotificationsOpen(open => !open)
+    if (!notificationsOpen) {
+      if (onRetryNotifications) onRetryNotifications()
+      else window.dispatchEvent(new Event('storagehub:notifications-refresh'))
+    }
     if (!notificationsOpen && unreadCount > 0) {
       const nextSeenIds = Array.from(new Set([...badgeSeenNotificationIds, ...notifications.map(item => item.id)]))
       setBadgeSeenNotificationIds(nextSeenIds)
@@ -417,7 +414,7 @@ export default function Layout({
   }
 
   return (
-    <div className={`flex h-screen min-h-screen max-h-screen min-h-0 w-full min-w-0 max-w-full overflow-hidden bg-[#f3f2eb] ${user.role === 'customer' ? 'customer-role-layout' : ''}`}>
+    <div className={`flex min-h-dvh h-dvh min-h-0 w-full min-w-0 max-w-full overflow-hidden bg-[#f3f2eb] ${user.role ? `${user.role}-role-layout` : ''}`}>
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -429,7 +426,7 @@ export default function Layout({
       {/* Sidebar */}
       <aside
         style={{ borderTopColor: taskbarColor }}
-        className={`fixed lg:static inset-y-0 left-0 z-30 h-full min-h-0 w-64 shrink-0 border-t-2 bg-[#292a27] border-r border-white/10 text-white flex flex-col overflow-hidden transition-transform duration-200
+        className={`fixed lg:static inset-y-0 left-0 z-30 min-h-0 w-64 shrink-0 border-t-2 bg-[#292a27] border-r border-white/10 text-white flex flex-col overflow-hidden transition-transform duration-200
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
       >
         {/* Logo */}
@@ -461,23 +458,30 @@ export default function Layout({
         </div>
 
         {/* Nav */}
-        <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2" aria-label={user.role === 'staff' ? 'Điều hướng nhân viên' : `${roleLabel} navigation`}>
+        <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2" aria-label={user.role === 'staff' ? 'Điều hướng nhân viên' : 'Điều hướng quản lý cơ sở'}>
           {visibleNavItems.map((item, index) => {
             const groupText = getNavGroup(item.group)
             const prevGroupText = getNavGroup(visibleNavItems[index - 1]?.group)
             return (
               <Fragment key={item.id}>
                 {groupText && groupText !== prevGroupText && (
-                  <p className={`px-2 pb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-stone-500 ${index === 0 ? 'mt-1' : 'mt-5'}`}>
+                  <p className={`px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-stone-400 ${index === 0 ? 'mt-1' : 'mt-5'}`}>
                     {groupText}
                   </p>
                 )}
                 <button
                   onClick={() => { navigate(item.id); setSidebarOpen(false) }}
-                  aria-current={currentPage === item.id ? 'page' : undefined}
-                  className={`sidebar-link w-full mb-0.5 ${currentPage === item.id ? 'active' : ''}`}
+                  aria-current={activeNavPage === item.id ? 'page' : undefined}
+                  className={`sidebar-link w-full mb-0.5 flex items-center justify-between ${activeNavPage === item.id ? 'active' : ''}`}
                 >
-                  <span>{getNavLabel(item)}</span>
+                  <span className="flex items-center gap-1.5 min-w-0 flex-1 text-left">
+                    <span className="truncate">{getNavLabel(item)}</span>
+                    {typeof item.badgeCount === 'number' && item.badgeCount > 0 && (
+                      <span className="inline-flex items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-extrabold text-white leading-none shrink-0 shadow-sm">
+                        {item.badgeCount}
+                      </span>
+                    )}
+                  </span>
                 </button>
               </Fragment>
             )
@@ -493,7 +497,7 @@ export default function Layout({
                 ? 'bg-white/10'
                 : 'hover:bg-white/5'
               }`}
-            title={user.role === 'staff' ? 'Xem hồ sơ và cài đặt' : 'View Profile & Settings'}
+            title="Xem hồ sơ và cài đặt"
           >
             <Avatar name={user.name} size="sm" imageUrl={user.avatar} />
             <div className="min-w-0 flex-1">
@@ -530,13 +534,13 @@ export default function Layout({
       </aside>
 
       {/* Main */}
-      <div className={`flex-1 flex flex-col h-full min-h-0 min-w-0 overflow-hidden ${user.role === 'customer' ? 'basis-0 w-0' : ''}`}>
+      <div className={`flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden ${user.role === 'customer' ? 'basis-0 w-0' : ''}`}>
         {/* Top bar */}
         <header className="bg-white border-b border-[#deddd2] h-16 flex items-center px-4 lg:px-7 gap-3 lg:gap-4 flex-shrink-0">
           <button
             className="lg:hidden text-slate-500 hover:text-slate-700 p-1"
             onClick={() => setSidebarOpen(true)}
-            aria-label={user.role === 'staff' ? 'Mở trình đơn điều hướng' : 'Open navigation menu'}
+            aria-label="Mở trình đơn điều hướng"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -544,7 +548,7 @@ export default function Layout({
           </button>
           <BrandLogo className="lg:hidden" />
           <div className="hidden lg:block">
-            <p className="text-xs text-stone-400 font-mono uppercase tracking-wider">{getTranslatedRole()} {'· CỔNG QUẢN TRỊ'}</p>
+            <p className="text-xs text-stone-500 font-medium uppercase tracking-wide">{getTranslatedRole()} {'· CỔNG QUẢN TRỊ'}</p>
             <p className="text-sm font-semibold text-stone-800">{'Quản lý cơ sở lưu trữ thông minh StorageHub'}</p>
           </div>
           {(user.role === 'manager' || user.role === 'staff') && (
@@ -617,14 +621,18 @@ export default function Layout({
                     >
                       <span className="flex items-start gap-2">
                         {!isNotificationRead(item) && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-amber-500 ring-2 ring-amber-200" />}
-                        <span className={`block text-sm ${!isNotificationRead(item) ? 'font-semibold text-stone-900' : 'font-medium text-stone-700'}`}>{item.title}</span>
+                        <span className={`block text-sm ${!isNotificationRead(item) ? 'font-semibold text-stone-900' : 'font-medium text-stone-700'}`}>{displayRoleNames(user.role === 'manager' ? managerDisplayText(item.title) : item.title)}</span>
                       </span>
-                      {item.message && <span className="mt-1 block whitespace-pre-line text-xs text-stone-600 line-clamp-3">{
-                        item.title === 'BO từ chối thay đổi loại kho' && !item.message.includes('Lý do:')
-                          ? item.message.replace(/^([^·]+ · [^·]+) · /, '$1\nLý do: ')
-                          : item.message
-                      }</span>}
-                      {item.date && <span className="mt-1.5 block text-[10px] text-stone-400 font-mono">{formatNotificationDate(item.date)}</span>}
+                      {item.message && <span className="mt-1 block whitespace-pre-line text-xs text-stone-600 line-clamp-3">{displayRoleNames(
+                        user.role === 'manager'
+                          ? managerDisplayText(item.title === 'BO từ chối thay đổi loại kho' && !item.message.includes('Lý do:')
+                            ? item.message.replace(/^([^·]+ · [^·]+) · /, '$1\nLý do: ')
+                            : item.message)
+                          : item.title === 'BO từ chối thay đổi loại kho' && !item.message.includes('Lý do:')
+                            ? item.message.replace(/^([^·]+ · [^·]+) · /, '$1\nLý do: ')
+                            : user.role === 'business' ? businessNotificationText(item.message) : item.message
+                        )}</span>}
+                      {item.date && <span className="mt-1.5 block text-[10px] text-stone-400">{formatNotificationDate(item.date)}</span>}
                     </button>
                   )) : (
                     <div className="flex flex-col items-center justify-center px-4 py-10 text-center text-stone-400">

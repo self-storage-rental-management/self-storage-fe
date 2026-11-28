@@ -1,8 +1,12 @@
+import ReturnAppointment from '../views/return-api/ReturnAppointment'
+import { awaitsCustomerClearance, CustomerClearance } from '../views/return-api/ReturnClearance'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { setAccessToken, clearAuthTokens } from './apiClient'
-import { completeRefund, recordReturnSettlement, isApiReturn, requestReturn, listReturns, getReturn, inspectReturn, reviewDispute, confirmReturn, paySettlement, returnError, uploadReturnEvidence, type ApiReturn } from './returnApi'
-import { ReturnSummary } from '../views/return-api/ReturnApiPanel'
+import { putProcessingLease, clearProcessingLeases } from './processingLeaseState'
+import { setCustomerClearance, completeRefund, recordReturnSettlement, isApiReturn, requestReturn, listReturns, getReturn, inspectReturn, reviewDispute, confirmReturn, paySettlement, reopenReturnVerification, verifyReturnIdentity, scheduleMismatchReturnAppointment, extendMismatchReturnWindow, recordReturnArrival, reviewReturnArrival, returnError, uploadReturnEvidence, type ApiReturn } from './returnApi'
+import ReturnApiPanel, { ReturnSummary, SettlementCalculationBreakdown, mismatchRentalUsageFee } from '../views/return-api/ReturnApiPanel'
+import ReturnAttendance, { requiresReturnAttendance } from '../views/return-api/ReturnAttendance'
 import { ids, operationsActor } from '../../tests/rentalOperationsApiFixtures'
 import type { ApiActor } from './authApi'
 const state = vi.hoisted(() => ({ actor: null as ApiActor | null }))
@@ -17,12 +21,255 @@ export const record: ApiReturn = {
   proposedUnitStatus: 'maintenance',
 }
 function respond(data: unknown, status = 200) {
-  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } }))
+  const fetch = vi.fn().mockImplementation(async (url: string | URL | Request) => {
+    const urlStr = typeof url === 'string' ? url : url instanceof Request ? url.url : url.toString()
+    if (urlStr.includes('/api/processing-locks/')) {
+      return new Response(JSON.stringify({
+        data: { owned: true, token: 'mock-token', expiresAt: new Date(Date.now() + 60000).toISOString() }
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
+    return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })
+  })
   vi.stubGlobal('fetch', fetch); return fetch
 }
-beforeEach(() => { state.actor = operationsActor('customer'); setAccessToken('TEST-token') })
-afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); clearAuthTokens() })
+beforeEach(() => {
+  state.actor = operationsActor('customer')
+  setAccessToken('TEST-token')
+  putProcessingLease({
+    target: 'RETURN',
+    id: ids.event,
+    token: 'mock-token',
+    view: {
+      reservationId: ids.event,
+      ownerId: 'staff-id',
+      ownerName: 'Staff',
+      expiresAt: new Date(Date.now() + 600_000).toISOString(),
+      revision: 1,
+      sourceStamp: 'stamp',
+      owned: true,
+      occupied: true,
+    },
+    invalid: false,
+    inFlight: false,
+    ready: true,
+  })
+})
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); clearAuthTokens(); clearProcessingLeases() })
 describe('real Return transport and unknown settlement presentation', () => {
+  it('separates inventory-mismatch rental usage from inspection fees without double-counting pallets', () => {
+    expect(mismatchRentalUsageFee({ ...record, returnType: 'INVENTORY_MISMATCH', damageFee: 1000000,
+      cleaningFee: 100000, lostItemFee: 0, totalDeductions: 1600000 })).toBe(500000)
+    expect(mismatchRentalUsageFee({ ...record, returnType: 'INVENTORY_MISMATCH', damageFee: 1000000,
+      cleaningFee: 100000, lostItemFee: 300000, totalDeductions: 1900000 })).toBe(500000)
+    expect(mismatchRentalUsageFee({ ...record, returnType: 'NORMAL', totalDeductions: 1600000 })).toBe(0)
+  })
+  it('deducts inspection charges from deposit and daily usage from prepaid rent for mismatch returns', () => {
+    const item: ApiReturn = { ...record, returnType: 'INVENTORY_MISMATCH', damageFee: 1000000,
+      cleaningFee: 100000, lostItemFee: 0, totalDeductions: 1600000, depositAmount: 2000000,
+      rentalRefundCredit: 85500000, netRefundAmount: 85900000 }
+    const html = renderToStaticMarkup(<SettlementCalculationBreakdown record={item} />)
+    expect(html).toContain('1.100.000')
+    expect(html).toContain('900.000')
+    expect(html).toContain('85.000.000')
+    expect(html).toContain('85.900.000')
+    expect(html).not.toContain('khác số tính lại')
+  })
+  it('explains when an approved handover returns to manager review', () => {
+    const overdue = new Date(Date.now() - 60_000).toISOString()
+    const item: ApiReturn = {
+      ...record, status: 'scheduled', returnType: 'INVENTORY_MISMATCH',
+      attendance: {
+        arrivedAt: overdue, evidenceId: ids.file, expiresAt: overdue, attempts: 1,
+        verifiedAt: overdue, reviewStartsAt: overdue, reviewAccepted: true, handoverDueAt: overdue,
+      },
+    }
+    const html = renderToStaticMarkup(<ReturnAttendance record={item} role="staff" editable onChanged={() => {}} />)
+    expect(html).toContain('Đã quá hạn bàn giao sau đối soát')
+    expect(html).toContain('quay lại chờ Quản lý rà soát')
+    expect(html).not.toContain('Quản lý đã cho phép tiếp tục bàn giao.')
+  })
+  it('shows the arrival photo and CCCD in one verification form for normal returns', () => {
+    const attendance: NonNullable<ApiReturn['attendance']> = {
+      arrivedAt: null, evidenceId: null, expiresAt: null, attempts: 0,
+      verifiedAt: null, reviewStartsAt: null, reviewAccepted: null,
+    }
+    const pending = { ...record, status: 'scheduled' as const, returnType: 'NORMAL' as const, attendance }
+    const render = (item: ApiReturn) => renderToStaticMarkup(<ReturnAttendance record={item} role="staff" editable onChanged={() => {}} />)
+    expect(requiresReturnAttendance(pending)).toBe(true)
+    expect(render(pending)).not.toContain('Ghi nhận khách đã đến')
+    expect(render(pending)).toContain('Số CCCD trên giấy tờ gốc')
+    expect(render(pending)).toContain('Ảnh hiện trường chứng minh khách đã đến')
+    expect(render(pending)).toMatch(/<button(?=[^>]*type="submit")(?=[^>]*disabled="")[^>]*>Xác minh danh tính<\/button>/)
+
+    const arrivedAt = new Date().toISOString()
+    const arrived = { ...pending, attendance: { ...attendance, arrivedAt, evidenceId: ids.file } }
+    expect(render(arrived)).toContain('Số CCCD trên giấy tờ gốc')
+    expect(render(arrived)).not.toContain('Ảnh hiện trường chứng minh khách đã đến')
+    expect(render({ ...arrived, attendance: { ...arrived.attendance, verifiedAt: arrivedAt } })).toContain('Đã xác minh danh tính')
+    expect(requiresReturnAttendance({ ...pending, status: 'recovery_required' })).toBe(false)
+  })
+
+  it.each(['CANCELLED_IN_SETUP', 'RETURN_IN_SETUP', 'INVENTORY_MISMATCH', 'EARLY_RETURN', 'NORMAL'] as const)(
+    'waits for customer clearance before inspection for %s',
+    returnType => {
+      const pending = { ...record, status: 'scheduled' as const, returnType }
+      expect(awaitsCustomerClearance(pending)).toBe(true)
+      expect(awaitsCustomerClearance({ ...pending, customerClearedAt: new Date().toISOString() })).toBe(false)
+      expect(awaitsCustomerClearance({ ...pending, customerClearedAt: null })).toBe(true)
+      expect(awaitsCustomerClearance({ ...pending, status: 'recovery_required' })).toBe(false)
+      expect(awaitsCustomerClearance({ ...pending, sourceType: 'RECOVERY' })).toBe(false)
+    },
+  )
+
+  it('locks identity verification fields until the customer confirms clearance', () => {
+    const now = new Date().toISOString()
+    const pending: ApiReturn = { ...record, status: 'scheduled', returnType: 'INVENTORY_MISMATCH',
+      attendance: { arrivedAt: now, evidenceId: ids.file, expiresAt: null, attempts: 0,
+        verifiedAt: null, reviewStartsAt: null, reviewAccepted: null } }
+    const render = (item: ApiReturn) => renderToStaticMarkup(<ReturnAttendance record={item} role="staff" editable onChanged={() => {}} />)
+    expect(render(pending)).toContain('Chờ khách xác nhận đã dọn kho để xác minh danh tính.')
+    expect(render(pending)).toMatch(/<input(?=[^>]*type="password")(?=[^>]*disabled="")/)
+    expect(render({ ...pending, customerClearedAt: now })).not.toMatch(/<input(?=[^>]*type="password")(?=[^>]*disabled="")/)
+  })
+
+  it('separates arrival capture from identity verification and exposes manager late-review actions for mismatch returns', async () => {
+    const attendance: NonNullable<ApiReturn['attendance']> = {
+      arrivedAt: null, evidenceId: null, expiresAt: null, attempts: 0,
+      verifiedAt: null, reviewStartsAt: null, reviewAccepted: null,
+    }
+    const futureDeadline = new Date(Date.now() + 3_600_000).toISOString()
+    const pendingMismatch: ApiReturn = {
+      ...record, status: 'scheduled', returnType: 'INVENTORY_MISMATCH',
+      inventoryRemovalDeadlineAt: futureDeadline, attendance,
+    }
+    const staffBeforeArrival = renderToStaticMarkup(<ReturnAttendance record={pendingMismatch} role="staff" editable onChanged={() => {}} />)
+    expect(staffBeforeArrival).toContain('Ghi nhận khách đến')
+    expect(staffBeforeArrival).not.toContain('Số CCCD trên giấy tờ gốc')
+
+    const arrivedNow = new Date().toISOString()
+    const afterArrival: ApiReturn = {
+      ...pendingMismatch,
+      attendance: { ...attendance, arrivedAt: arrivedNow, recordedAt: arrivedNow },
+    }
+    const staffAfterArrival = renderToStaticMarkup(<ReturnAttendance record={afterArrival} role="staff" editable onChanged={() => {}} />)
+    expect(staffAfterArrival).toContain('Bước 2 · Xác minh danh tính')
+    expect(staffAfterArrival).toContain('Số CCCD trên giấy tờ gốc')
+
+    const lateReviewItem: ApiReturn = {
+      ...pendingMismatch,
+      attendance: {
+        ...attendance,
+        recordedAt: arrivedNow,
+        lateArrivalClaimedAt: new Date(Date.now() + 1_800_000).toISOString(),
+        evidenceNote: 'Sổ quầy lễ tân',
+        reviewStatus: 'PENDING',
+        reviewStartsAt: arrivedNow,
+      },
+    }
+    const managerLateHtml = renderToStaticMarkup(<ReturnAttendance record={lateReviewItem} role="manager" editable onChanged={() => {}} />)
+    expect(managerLateHtml).toContain('Chấp nhận đến đúng hạn &amp; mở xác minh')
+    expect(managerLateHtml).toContain('Sổ quầy lễ tân')
+
+    const staff = operationsActor('staff')
+    state.actor = { ...staff, permissions: [...staff.permissions, 'returns:read', 'returns:process'] }
+    const arrivalFetch = respond({ data: afterArrival })
+    await recordReturnArrival(record.id, { evidenceNote: 'Có mặt đúng hạn', expectedVersion: 1 })
+    expect(arrivalFetch.mock.calls[0][0]).toContain(`/api/staff/returns/${record.id}/arrival`)
+
+    const manager = operationsActor('manager')
+    state.actor = { ...manager, permissions: [...manager.permissions, 'returns:read', 'rentals:update'] }
+    const reviewFetch = respond({ data: afterArrival })
+    await reviewReturnArrival(record.id, true, 'Đã kiểm tra camera', ids.staff, undefined, 'FACILITY_EXCEPTION')
+    expect(JSON.parse(reviewFetch.mock.calls[0][1].body).decision).toBe('FACILITY_EXCEPTION')
+  })
+
+  it('renders unified Vietnamese mismatch return block with appointment, extension, and clearance actions', async () => {
+    const deadline = new Date(Date.now() + 3 * 86_400_000).toISOString()
+    const mismatchRecord: ApiReturn = {
+      ...record,
+      status: 'requested',
+      returnType: 'INVENTORY_MISMATCH',
+      scheduledDate: null,
+      scheduledAppointmentAt: null,
+      inventoryRemovalDeadlineAt: deadline,
+      returnExtensionDays: 2,
+      returnExtensionCount: 0,
+      maxReturnExtensions: 2,
+      canExtendReturnWindow: true,
+      returnVersion: 2,
+      customerClearedAt: null,
+    }
+    const initialHtml = renderToStaticMarkup(
+      <CustomerClearance record={mismatchRecord} busy={false} run={vi.fn()} ownerId={ids.customer} />,
+    )
+    expect(initialHtml).toContain('Hạn cuối dọn kho')
+    expect(initialHtml).toContain('Đặt lịch bàn giao')
+    expect(initialHtml).toContain('Gia hạn dọn hàng thêm 2 ngày')
+    expect(initialHtml).toContain('Xác nhận đã dọn hàng xong')
+    expect(initialHtml).toContain('Đã dùng 0/2 lần')
+    expect(initialHtml).not.toContain('INVENTORY_MISMATCH')
+    expect(initialHtml).not.toContain('PENDING')
+
+    const scheduledHtml = renderToStaticMarkup(
+      <CustomerClearance
+        record={{
+          ...mismatchRecord,
+          status: 'scheduled',
+          scheduledAppointmentAt: new Date(Date.now() + 86_400_000).toISOString(),
+          returnExtensionCount: 2,
+          canExtendReturnWindow: false,
+        }}
+        busy={false}
+        run={vi.fn()}
+        ownerId={ids.customer}
+      />,
+    )
+    expect(scheduledHtml).toContain('Đổi lịch bàn giao')
+    expect(scheduledHtml).toContain('Đã sử dụng hết 2 lượt gia hạn cho phép')
+    expect(scheduledHtml).not.toContain('Gia hạn dọn hàng thêm 2 ngày')
+
+    const appointmentFetch = respond({ data: mismatchRecord })
+    await scheduleMismatchReturnAppointment(record.id, deadline, 2, 'idem-appt-1')
+    expect(appointmentFetch.mock.calls[0][0]).toContain(`/api/customer/returns/${record.id}/appointment`)
+    const extendFetch = respond({ data: mismatchRecord })
+    await extendMismatchReturnWindow(record.id, 2, 'idem-ext-1')
+    expect(extendFetch.mock.calls[0][0]).toContain(`/api/customer/returns/${record.id}/extend-removal-window`)
+  })
+
+  it('sends initial arrival evidence directly to the identity endpoint', async () => {
+    const staff = operationsActor('staff')
+    state.actor = { ...staff, permissions: [...staff.permissions, 'returns:read', 'returns:process'] }
+    const fetch = respond({ data: record })
+    await verifyReturnIdentity(record.id, ids.event, 'TEST99999', undefined, ids.file)
+    expect(fetch.mock.calls[0][0]).toContain(`/api/staff/returns/${record.id}/identity`)
+    expect(JSON.parse(fetch.mock.calls[0][1].body).evidenceId).toBe(ids.file)
+  })
+
+  it('allows the manager to reopen a failed verification once and lets staff submit against that session', async () => {
+    const attendance: NonNullable<ApiReturn['attendance']> = {
+      arrivedAt: '2026-10-20T01:00:00Z', expiresAt: '2026-10-20T01:30:00Z', evidenceId: ids.event,
+      attempts: 2, verifiedAt: null, reviewStartsAt: new Date(Date.now() - 60_000).toISOString(), reviewAccepted: null,
+    }
+    const waiting = { ...record, status: 'scheduled' as const, attendance }
+    const manager = operationsActor('manager')
+    state.actor = { ...manager, permissions: [...manager.permissions, 'returns:read'] }
+    const managerHtml = renderToStaticMarkup(<ReturnAttendance record={waiting} role="manager" editable onChanged={() => {}} />)
+    expect(managerHtml).toContain('Mở lại phiên xác minh')
+    const session = '2026-10-20T02:00:00.123456Z'
+    const updated = { ...waiting, attendance: { ...attendance, reverificationStartedAt: session } }
+    const managerFetch = respond({ data: updated })
+    await reopenReturnVerification(record.id, ids.staff, 'Khách có giấy tờ gốc')
+    expect(managerFetch.mock.calls[0][0]).toContain(`/api/manager/returns/${record.id}/identity-reopen`)
+    expect(renderToStaticMarkup(<ReturnAttendance record={updated} role="manager" editable onChanged={() => {}} />))
+      .not.toContain('Mở lại phiên xác minh')
+
+    const staff = operationsActor('staff')
+    state.actor = { ...staff, permissions: [...staff.permissions, 'returns:read', 'returns:process'] }
+    const staffFetch = respond({ data: updated })
+    await verifyReturnIdentity(record.id, ids.event, 'TEST99999', session)
+    expect(JSON.parse(staffFetch.mock.calls[0][1].body).reverificationStartedAt).toBe(session)
+  })
+
   it('accepts and displays the backend inspected state', () => {
     const inspected: ApiReturn = { ...record, status: 'inspected' }
     expect(isApiReturn(inspected)).toBe(true)
@@ -50,6 +297,28 @@ describe('real Return transport and unknown settlement presentation', () => {
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ scheduledDate: '2026-10-25', notes: 'TEST request' })
     expect(new Headers(fetch.mock.calls[0][1].headers).get('Authorization')).toBe('Bearer TEST-token')
   })
+  it('restores the clearance time and revoke action from the owner detail response', async () => {
+    const cleared: ApiReturn = { ...record, status: 'scheduled', customerClearedAt: '2026-11-25T01:00:00Z', clearanceRevision: 2,
+      recoveryEligibleAt: '2026-11-27T17:00:00Z' }
+    const fetch = respond({ data: cleared })
+    await setCustomerClearance({ ...cleared, customerClearedAt: null }, true)
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ cleared: true, clearanceRevision: 2 })
+    respond({ data: cleared })
+    const loaded = await getReturn('customer', cleared.id)
+    const html = renderToStaticMarkup(<CustomerClearance record={loaded} busy={false} run={vi.fn()} ownerId={ids.customer} />)
+    expect(html).toContain('Thu hồi xác nhận dọn kho')
+    expect(html).toContain('2026-11-25T01:00:00Z')
+    expect(html).toContain('Hạn cuối dọn kho')
+    expect(html).toContain('28/11/2026 00:00:00')
+    const mismatch = renderToStaticMarkup(<CustomerClearance record={{ ...loaded, returnType: 'INVENTORY_MISMATCH',
+      inventoryRemovalDeadlineAt: '2026-11-30T17:00:00Z' }} busy={false} run={vi.fn()} ownerId={ids.customer} />)
+    expect(mismatch).toContain('01/12/2026 00:00:00')
+    expect(mismatch).not.toContain('28/11/2026 00:00:00')
+    const inspected = renderToStaticMarkup(<CustomerClearance record={{ ...loaded, status: 'payment_due', customerClearedAt: null }} busy={false} run={vi.fn()} ownerId={ids.customer} />)
+    expect(inspected).toContain('aria-current="step"')
+    expect(inspected).not.toContain('Hạn cuối dọn kho')
+    expect(inspected).not.toContain('<button')
+  })
   it('reads paginated ownership-bound rows and detail', async () => {
     respond({ data: [record], pagination: { page: 0, pageSize: 20, totalItems: 1, totalPages: 1, sort: 'createdAt: DESC' }, correlationId: 'test' })
     expect((await listReturns('customer')).data[0].netRefundAmount).toBeNull()
@@ -76,7 +345,9 @@ describe('real Return transport and unknown settlement presentation', () => {
   })
   it('keeps the backend rejection of a customer-declared settlement payment', async () => {
     const fetch = respond({ error: { message: 'Vui lòng thanh toán tại cơ sở.', code: 'CONFLICT' } }, 409)
-    await expect(paySettlement(ids.event, 'CASH', 'Khách tự khai đã thanh toán')).rejects.toThrow('thanh toán tại cơ sở')
+    await expect(paySettlement(ids.event, 'CASH', 'Khách tự khai đã thanh toán')).rejects.toMatchObject({
+      diagnosticMessage: expect.stringContaining('thanh toán tại cơ sở'),
+    })
     expect(fetch.mock.calls[0][0]).toContain(`/api/customer/returns/${ids.event}/pay-settlement`)
   })
   it('sends inspection with explicit deductions and returned-access items', async () => {
@@ -84,10 +355,12 @@ describe('real Return transport and unknown settlement presentation', () => {
     const fetch = respond({ data: record })
     await inspectReturn(ids.event, { damageFee: 5000, cleaningFee: 0, lostItemFee: 0, overdueFee: 0, outstandingFee: 0,
       inventoryMatch: 'match', damageClassification: 'minor_damage', staffNotes: 'TEST inspection', evidencePhotos: [],
-      unitVacated: true, returnedKey: true, returnedCard: false, returnedLock: true, proposedUnitStatus: 'maintenance' })
+      unitVacated: true, returnedKey: true, returnedCard: false, returnedLock: true,
+      lockInspectionResult: 'RETURNED_USABLE', proposedUnitStatus: 'maintenance' })
     expect(fetch.mock.calls[0][0]).toContain(`/api/staff/returns/${ids.event}/inspection`)
     expect(JSON.parse(fetch.mock.calls[0][1].body).returnedCard).toBe(false)
     expect(JSON.parse(fetch.mock.calls[0][1].body).unitVacated).toBe(true)
+    expect(JSON.parse(fetch.mock.calls[0][1].body).lockInspectionResult).toBe('RETURNED_USABLE')
   })
   it('uploads return evidence and sends the stored asset ID to the inspection endpoint', async () => {
     state.actor = operationsActor('staff'); state.actor.permissions.push('returns:process', 'returns:read')
@@ -123,6 +396,15 @@ describe('real Return transport and unknown settlement presentation', () => {
     expect(fetch.mock.calls[0][0]).toContain(`/api/business/returns/${ids.event}/complete-refund`)
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual(proof)
   })
+  it('rejects gateway refunds and missing receipt evidence before sending a Business payout', async () => {
+    state.actor = { ...operationsActor('manager'), roles: ['BUSINESS'], permissions: ['returns:read', 'refunds:execute'], facilityScopes: { [ids.facility]: 'MANAGE' } }
+    const fetch = respond({ data: record })
+    const proof = { amount: 5700000, paymentMethod: 'BANK_TRANSFER' as const, transactionReference: 'REF-1', receiptFileId: ids.file, confirmed: true }
+    await expect(completeRefund(ids.event, { ...proof, paymentMethod: 'VNPAY' } as unknown as typeof proof)).rejects.toThrow()
+    await expect(completeRefund(ids.event, { ...proof, receiptFileId: '' })).rejects.toThrow()
+    await expect(completeRefund(ids.event, { ...proof, transactionReference: ' ' })).rejects.toThrow()
+    expect(fetch).not.toHaveBeenCalled()
+  })
   it('sends the server statement amount and saved proof when recording a Staff payout', async () => {
     state.actor = operationsActor('staff')
     state.actor.permissions.push('returns:process', 'returns:read', 'refunds:execute')
@@ -131,7 +413,7 @@ describe('real Return transport and unknown settlement presentation', () => {
     await recordReturnSettlement(ids.event, proof, 'same-refund-command')
     expect(fetch.mock.calls[0][0]).toContain(`/api/staff/returns/${ids.event}/settlement-receipts`)
     expect(new Headers(fetch.mock.calls[0][1].headers).get('Idempotency-Key')).toBe('same-refund-command')
-    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual(proof)
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ ...proof, transactionReference: '' })
   })
   it('does not send a payout with missing confirmation or invalid saved evidence', async () => {
     state.actor = operationsActor('staff')
@@ -191,4 +473,21 @@ describe('real Return transport and unknown settlement presentation', () => {
     const detail = await getReturn('business', ids.event)
     expect(detail.id).toBe(record.id)
   })
+  it('omits Thu gọn and Trải ra toggle buttons when role is customer', () => {
+    state.actor = operationsActor('customer')
+    respond({ data: [record], pagination: { page: 0, pageSize: 10, totalItems: 1, totalPages: 1 } })
+    const html = renderToStaticMarkup(<ReturnApiPanel role="customer" rentalActive={true} rentalId={ids.rental} />)
+    expect(html).not.toContain('Thu gọn')
+    expect(html).not.toContain('Trải ra')
+  })
+})
+
+it('places the mismatch return date picker on the return case and hides it after inspection', () => {
+  const returning: ApiReturn = { ...record, returnType: 'INVENTORY_MISMATCH', status: 'requested',
+    inventoryRemovalDeadlineAt: '2099-12-06T00:00:00Z' }
+  const html = renderToStaticMarkup(<ReturnAppointment record={returning} busy={false} run={() => {}} />)
+  expect(html).toContain('Ngày hẹn trả kho (dd/mm/yyyy)')
+  expect(html).toContain('Đặt lịch trả kho')
+  expect(html).not.toContain('Chưa tìm thấy hồ sơ')
+  expect(renderToStaticMarkup(<ReturnAppointment record={{ ...returning, inspectedAt: '2026-11-27T00:00:00Z' }} busy={false} run={() => {}} />)).toBe('')
 })

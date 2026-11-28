@@ -1,8 +1,16 @@
 import type { RentalApiPage } from "./rentalApi"
 
 export type RenewalOperationsRole = "customer" | "manager" | "staff"
-export type RenewalOperationsPhase = "UNKNOWN" | "AWAITING_PAYMENT_INTENT" | "AWAITING_DEPOSIT" | "SIGNING" | "SIGNING_EXPIRY_PENDING" | "SIGNING_EXPIRED" | "PAYMENT_EXPIRED" | "COMPLETED" | "PREPARATION_BLOCKED"
+export type RenewalOperationsPhase = "UNKNOWN" | "AWAITING_PAYMENT_INTENT" | "AWAITING_DEPOSIT" | "SIGNING" | "SIGNING_EXPIRY_PENDING" | "NO_SHOW" | "SIGNING_EXPIRED" | "PAYMENT_EXPIRED" | "COMPLETED" | "PREPARATION_BLOCKED"
 export interface RenewalOperationState {
+  appointmentDetails?: {
+    customerName: string | null
+    customerEmail: string | null
+    proposedEndDate: string | null
+  } | null
+  rentalDisplayCode?: string | null
+  renewalSequence?: number | null
+  /** Legacy renewal alias retained for lookup and compatibility. */
   displayCode?: string | null
   renewalId: string
   expectedVersion: number | null
@@ -26,7 +34,7 @@ export interface RenewalOperationState {
 }
 export interface RenewalOperationEvent {
   id: string
-  kind: "DEPOSIT" | "FULL_RENT_PAYMENT" | "CASH" | "APPOINTMENT" | "ARRIVAL" | "INCIDENT" | "FAULT_REVIEW" | "STAFF_ASSIGNMENT" | "EXCEPTION" | "CONFIRMATION" | "REFUND" | "COMPLETION" | "EXPIRY" | "DEPOSIT_DISPOSITION" | "DEPOSIT_REVIEW_REQUIRED" | "REFUND_EXECUTION" | "PREPARATION_BLOCKED" | "PREPARATION_RESOLUTION"
+  kind: "DEPOSIT" | "FULL_RENT_PAYMENT" | "CASH" | "APPOINTMENT" | "ARRIVAL" | "NO_SHOW" | "INCIDENT" | "FAULT_REVIEW" | "STAFF_ASSIGNMENT" | "EXCEPTION" | "CONFIRMATION" | "REFUND" | "COMPLETION" | "EXPIRY" | "DEPOSIT_DISPOSITION" | "DEPOSIT_REVIEW_REQUIRED" | "REFUND_EXECUTION" | "PREPARATION_BLOCKED" | "PREPARATION_RESOLUTION"
   occurredAt: string
   actorId: string | null
   data: unknown
@@ -79,7 +87,10 @@ export type RenewalOperationCommand = {
   body: Version & { decisionRef: string }
 } | {
   action: "arrival"
-  body: Version & Evidence & { appointmentRef: string }
+  body: Version & Evidence & { appointmentRef: string; identityVerified: true }
+} | {
+  action: "noShow"
+  body: Version & { appointmentRef: string; reason: string }
 } | {
   action: "incident"
   body: Version & Evidence & {
@@ -122,10 +133,11 @@ export type RenewalOperationCommand = {
 }
 export type RenewalOperationAction = RenewalOperationCommand["action"]
 export interface RenewalAppointmentQuery {
+  sort?: 'appointmentStart,asc' | 'createdAt,asc' | 'createdAt,desc'
   page?: number
   size?: number
   facilityId?: string
   date?: string
-  status?: "SIGNING" | "SIGNING_EXPIRED" | "COMPLETED"
+  status?: "SIGNING" | "NO_SHOW" | "SIGNING_EXPIRED" | "COMPLETED"
 }
 export type RenewalOperationPage<T> = RentalApiPage<T>

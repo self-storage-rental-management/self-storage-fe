@@ -129,6 +129,7 @@ function MainContent() {
           permanentAddress: canonicalRecord.permanentAddress,
           emergencyContactName: canonicalRecord.emergencyContactName,
           emergencyContactPhone: canonicalRecord.emergencyContactPhone,
+          profileDetails: canonicalRecord.profileDetails,
           avatar: canonicalRecord.avatar,
           role: canonicalRecord.role as User['role'],
           facility: canonicalRecord.facility,
@@ -174,14 +175,11 @@ function MainContent() {
   useEffect(() => {
     const syncUpdatedActor = () => setApiActor(getAuthenticatedActor())
     const handleAuthExpired = () => {
-      const wasApiUser = Boolean(getAuthenticatedActor() || apiActor)
       clearAuthTokens()
       setApiActor(null)
-      if (wasApiUser) {
-        setSessionUserId(null)
-        setSessionId(null)
-        setGuestView(resolveGuestView())
-      }
+      setSessionUserId(null)
+      setSessionId(null)
+      setGuestView('login')
     }
     window.addEventListener('storagehub:actor-updated', syncUpdatedActor)
     window.addEventListener('storagehub:auth-expired', handleAuthExpired)
@@ -235,6 +233,9 @@ function MainContent() {
       setSessionId(null)
       setGuestView('home')
       window.history.replaceState(null, '', '/')
+      try {
+        sessionStorage.removeItem('storagehub_customer_booking_draft')
+      } catch {}
     } catch {
       setLogoutError('Chưa lưu được nội dung chat nên chưa đăng xuất. Nội dung vẫn được giữ tại đây. Vui lòng kiểm tra kết nối hoặc lỗi lưu chat rồi thử lại.')
     } finally {

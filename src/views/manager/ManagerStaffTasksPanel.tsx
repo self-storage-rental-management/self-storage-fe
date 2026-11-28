@@ -1,3 +1,4 @@
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import { managerDisplayError } from './managerPresentation'
 import { useEffect, useMemo, useState } from 'react'
 import { Avatar, Badge, Button, Card, Input, Modal, SectionHeader, Select, StatCard, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
@@ -123,26 +124,26 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
         .map(item => ({
           id: item.id,
           type: 'checkin' as const,
-          label: `${item.id}, ${item.customerName}, gian ${item.unitId}, ${managerStatusLabel(item.status, 'vi')}`,
-          summary: `Hồ sơ nhận kho ${item.id}, đặt chỗ ${item.holdId}, khách ${item.customerName}, gian ${item.unitId}.`,
-          suggestedTitle: `Xử lý hồ sơ nhận kho ${item.id}`
+          label: `${recordDisplayCode(item.id)}, ${item.customerName}, gian ${item.unitId}, ${managerStatusLabel(item.status, 'vi')}`,
+          summary: `Hồ sơ nhận kho ${recordDisplayCode(item.id)}, đặt chỗ ${item.holdId}, khách ${item.customerName}, gian ${item.unitId}.`,
+          suggestedTitle: `Xử lý hồ sơ nhận kho ${recordDisplayCode(item.id)}`
         })),
       ...returns
         .filter(item => inManagerFacility(item.facilityId, item.facilityName))
         .map(item => ({
           id: item.id,
           type: 'return' as const,
-          label: `${item.id}, ${item.customerName}, gian ${item.unitId}, ${managerStatusLabel(item.status, 'vi')}`,
-          summary: `Hồ sơ trả kho ${item.id}, hồ sơ thuê ${item.rentalId}, khách ${item.customerName}, gian ${item.unitId}.`,
-          suggestedTitle: `Xử lý hồ sơ trả kho ${item.id}`
+          label: `${recordDisplayCode(item.id)}, ${item.customerName}, gian ${item.unitId}, ${managerStatusLabel(item.status, 'vi')}`,
+          summary: `Hồ sơ trả kho ${recordDisplayCode(item.id)}, hồ sơ thuê ${item.rentalId}, khách ${item.customerName}, gian ${item.unitId}.`,
+          suggestedTitle: `Xử lý hồ sơ trả kho ${recordDisplayCode(item.id)}`
         })),
       ...maintenanceTasks
         .filter(item => inManagerFacility(item.facilityId))
         .map(item => ({
           id: item.id,
           type: 'maintenance' as const,
-          label: `${item.id}, gian ${item.unitId}, ${managerStatusLabel(item.status, 'vi')}`,
-          summary: `Hồ sơ bảo trì ${item.id}, gian ${item.unitId}. Lý do: ${item.reason}`,
+          label: `${recordDisplayCode(item.id)}, gian ${item.unitId}, ${managerStatusLabel(item.status, 'vi')}`,
+          summary: `Hồ sơ bảo trì ${recordDisplayCode(item.id)}, gian ${item.unitId}. Lý do: ${item.reason}`,
           suggestedTitle: `Xử lý bảo trì gian ${item.unitId}`
         })),
       ...tickets
@@ -153,9 +154,9 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
         .map(item => ({
           id: item.id,
           type: 'support' as const,
-          label: `${item.id}, ${item.subject}, ${managerStatusLabel(item.status, 'vi')}`,
-          summary: `Yêu cầu hỗ trợ ${item.id}, khách ${item.customer}, gian ${item.unit || 'chưa ghi nhận'}. Nội dung: ${item.subject}`,
-          suggestedTitle: `Theo dõi yêu cầu hỗ trợ ${item.id}`
+          label: `${recordDisplayCode(item.id)}, ${item.subject}, ${managerStatusLabel(item.status, 'vi')}`,
+          summary: `Yêu cầu hỗ trợ ${recordDisplayCode(item.id)}, khách ${item.customer}, gian ${item.unit || 'chưa ghi nhận'}. Nội dung: ${item.subject}`,
+          suggestedTitle: `Theo dõi yêu cầu hỗ trợ ${recordDisplayCode(item.id)}`
         }))
     ]
     return options
@@ -197,7 +198,7 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
     if (targetUnit) {
       try {
         updateUnitStatus(targetUnit.id, 'available', user, `Nghiệm thu bảo trì hoàn tất từ nhiệm vụ ${task.id} (${task.title})`)
-        showToast(`Đã nghiệm thu bảo trì thành công! Gian kho ${targetUnit.code || targetUnit.id} đã trở về trạng thái Sẵn sàng cho thuê (Available).`)
+        showToast(`Đã nghiệm thu bảo trì thành công! Gian kho ${targetUnit.code || targetUnit.id} đã trở về trạng thái sẵn sàng cho thuê.`)
       } catch (err) {
         showToast(managerDisplayError(err))
       }
@@ -238,6 +239,7 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
   }
 
   const createTask = () => {
+    if (!dueAt || dueAt < new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' })) { showToast('Hạn xử lý phải từ hôm nay trở đi.'); return }
     const selectedStaff = staff.find(item => item.id === staffId)
     if (!selectedStaff) {
       showToast('Vui lòng chọn nhân viên thuộc cơ sở trước khi tạo nhiệm vụ.')
@@ -283,7 +285,7 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
     {overdueTasks.length > 0 && <ManagerActionNotice tone="warning">Có {overdueTasks.length} nhiệm vụ quá hạn cần theo dõi hoặc giao lại.</ManagerActionNotice>}
     {hiddenTaskCount > 0 && <ManagerActionNotice tone="info"><div className="flex items-center justify-between gap-3"><span>{hiddenTaskCount} nhiệm vụ lịch sử đã được ẩn khỏi danh sách quản lý cơ sở. Dữ liệu nhiệm vụ và nhật ký vẫn giữ nguyên.</span><Button size="sm" variant="outline" onClick={() => taskHistory.restoreAll()}>Khôi phục tất cả</Button></div></ManagerActionNotice>}
 
-    <div className="grid gap-4 lg:grid-cols-3">{staff.map(member => <Card key={member.id} className="p-4"><div className="flex items-start gap-3"><Avatar name={member.name} size="lg" /><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="truncate font-bold text-stone-900">{member.name}</p><Badge variant={member.status === 'on-duty' ? 'success' : 'muted'}>{managerStatusLabel(member.status, 'vi')}</Badge></div><p className="text-xs text-stone-500">nhân viên, {'shift' in member && typeof member.shift === 'string' ? member.shift : "-"}</p><p className="mt-2 text-xs text-stone-600">{member.email}, {member.phone || 'Chưa có SĐT'}</p><p className="mt-2 font-semibold text-amber-800">{facilityTasks.filter(task => task.assignedStaffId === member.id && ['open', 'in_progress'].includes(task.status)).length} nhiệm vụ đang mở</p></div></div></Card>)}</div>
+    <div className="grid gap-4 lg:grid-cols-3">{staff.map(member => <Card key={member.id} className="p-4"><div className="flex items-start gap-3"><Avatar name={member.name} size="lg" /><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="truncate font-bold text-stone-900">{member.name}</p><Badge variant={member.status === 'on-duty' ? 'success' : 'muted'}>{managerStatusLabel(member.status, 'vi')}</Badge></div><p className="text-xs text-stone-500">nhân viên, {'shiftVi' in member && typeof member.shiftVi === 'string' ? member.shiftVi : 'Chưa có thông tin ca'}</p><p className="mt-2 text-xs text-stone-600">{member.email}, {member.phone || 'Chưa có SĐT'}</p><p className="mt-2 font-semibold text-amber-800">{facilityTasks.filter(task => task.assignedStaffId === member.id && ['open', 'in_progress'].includes(task.status)).length} nhiệm vụ đang mở</p></div></div></Card>)}</div>
 
     <div className="flex flex-wrap items-center gap-2">
       {[
@@ -328,10 +330,10 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
               <Badge variant={task.type === 'maintenance' ? 'warning' : task.type === 'return' ? 'purple' : 'muted'}>
                 {managerTaskTypeLabel(task.type, 'vi')}
               </Badge>
-              {task.referenceId && <span className="font-mono text-[11px] text-stone-500">Mã: {task.referenceId}</span>}
+              {task.referenceId && <span className="font-mono text-[11px] text-stone-500">Mã: {recordDisplayCode(task.referenceId)}</span>}
             </div>
           </Td>
-          <Td>{task.status === 'cancelled' ? <div><p className="font-medium">{displayedAssignee || "-"}</p><p className="text-xs text-red-600">Đã ngừng phân công</p></div> : <Select disabled={!canReassign} value={task.assignedStaffId || ''} onChange={event => reassignTask(task, event.target.value)}><option value="" disabled>Chọn nhân viên để giao</option>{task.assignedStaffId && !staff.some(member => member.id === task.assignedStaffId) && <option value={task.assignedStaffId}>{task.assignedStaffName || task.assignedStaffId}</option>}{staff.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}</Select>}</Td>
+          <Td>{task.status === 'cancelled' ? <div><p className="font-medium">{displayedAssignee || "-"}</p><p className="text-xs text-red-600">Đã ngừng phân công</p></div> : <Select disabled={!canReassign} value={task.assignedStaffId || ''} onChange={event => reassignTask(task, event.target.value)}><option value="" disabled>Chọn nhân viên để giao</option>{task.assignedStaffId && !staff.some(member => member.id === task.assignedStaffId) && <option value={task.assignedStaffId}>{task.assignedStaffName || "Chưa có tên nhân viên"}</option>}{staff.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}</Select>}</Td>
           <Td className="min-w-44 text-xs"><p>Giao: <b>{managerDateLabel(progress.assignedAt, 'vi', true)}</b></p><p className="mt-1">Nhận: <b>{managerDateLabel(progress.startedAt, 'vi', true)}</b></p><p className="mt-1">Hoàn thành: <b>{managerDateLabel(progress.completedAt, 'vi', true)}</b></p></Td>
           <Td><p className={isFacilityTaskOverdue(task, today) ? 'font-semibold text-red-700' : 'text-stone-700'}>{managerDateLabel(task.dueAt, 'vi')}</p><div className="mt-2"><Badge variant={task.priority === 'high' ? 'error' : task.priority === 'medium' ? 'warning' : 'info'}>{managerPriorityLabel(task.priority, 'vi')}</Badge></div></Td>
           <Td className="max-w-52 text-xs"><p className="line-clamp-2">{progress.resultReport || 'Chưa có báo cáo kết quả'}</p><p className="mt-1 text-stone-500">{progress.evidence.length ? `${progress.evidence.length} minh chứng` : 'Chưa có minh chứng'}</p>{progress.unableReason && <p className="mt-1 font-semibold text-red-700">Không thể thực hiện: {progress.unableReason}</p>}</Td>
@@ -357,9 +359,9 @@ export default function ManagerStaffTasksPanel({ user, facilityId, facilityName,
       <Input label="Tiêu đề" value={title} onChange={event => setTitle(event.target.value)} />
       <div className="grid grid-cols-2 gap-3"><Select label="Loại" value={type} onChange={event => changeTaskType(event.target.value as FacilityTask['type'])}><option value="general">Chung</option><option value="checkin">Nhận kho</option><option value="return">Trả kho</option><option value="maintenance">Bảo trì</option><option value="support">Hỗ trợ</option></Select><Select label="Ưu tiên" value={priority} onChange={event => setPriority(event.target.value as FacilityTask['priority'])}><option value="low">Thấp</option><option value="medium">Trung bình</option><option value="high">Cao</option></Select></div>
       <Select label="Hồ sơ liên quan (nếu có)" value={referenceId} onChange={event => selectReference(event.target.value)}><option value="">Không liên kết hồ sơ</option>{referenceOptions.map(option => <option key={`${option.type}-${option.id}`} value={option.id}>{option.label}</option>)}</Select>
-      {selectedReference && <ManagerActionNotice compact tone="info">Đã liên kết <b>{selectedReference.id}</b>: {selectedReference.summary}</ManagerActionNotice>}
+      {selectedReference && <ManagerActionNotice compact tone="info">Đã liên kết <b>{recordDisplayCode(selectedReference.id)}</b>: {selectedReference.summary}</ManagerActionNotice>}
       {!referenceOptions.length && type !== 'general' && <ManagerActionNotice compact tone="warning">Cơ sở hiện không có hồ sơ {managerTaskTypeLabel(type, 'vi').toLowerCase()} để liên kết.</ManagerActionNotice>}
-      <Input label="Hạn xử lý" type="date" value={dueAt} onChange={event => setDueAt(event.target.value)} />
+      <Input label="Hạn xử lý" type="date" min={new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' })} value={dueAt} onChange={event => setDueAt(event.target.value)} />
       <Select label="Người phụ trách (bắt buộc)" value={staffId} onChange={event => setStaffId(event.target.value)}><option value="">Chọn nhân viên</option>{staff.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}</Select>
       <Input label="Ghi chú" value={notes} onChange={event => setNotes(event.target.value)} />
       <ManagerActionNotice compact tone="info">Nhiệm vụ mới ở trạng thái “Chờ nhận”. Chỉ nhân viên được giao mới có thể nhận và hoàn thành.</ManagerActionNotice>

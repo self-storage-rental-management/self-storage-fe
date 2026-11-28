@@ -1,4 +1,7 @@
+import { isOptionalVietnamesePhone, VIETNAMESE_PHONE_ERROR_MESSAGE } from '../../domain/vietnamesePhone'
+import { adminUserFieldErrors } from './adminUserValidation'
 import { useEffect, useMemo, useState } from 'react'
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import {
   Avatar,
   Badge,
@@ -18,7 +21,6 @@ import {
   Thead,
   Tr,
 } from '../../components/ui'
-import { clearAuthTokens } from '../../services/apiClient'
 import type { Role, User } from '../../types'
 import {
   createAdminUser,
@@ -27,6 +29,7 @@ import {
   listAdminLoginHistory,
   listAdminSessions,
   listAdminUsers,
+  unlockAdminUser,
   updateAdminUserFacilities,
   updateAdminUserRoles,
   updateAdminUserStatus,
@@ -41,6 +44,7 @@ import {
 } from '../../services/authApi'
 import { roleColors, roleLabels, LockIcon, type AdminToast } from './adminPanelTypes'
 import { getPasswordValidationError, PASSWORD_MAX_LENGTH, PASSWORD_POLICY_HINT } from '../../utils/passwordPolicy'
+import { sanitizeFacilityStrings } from '../../store/StorageHubContext'
 
 type AccountStatus = 'active' | 'inactive' | 'suspended' | 'locked'
 type FormRole = Exclude<Role, 'customer'>
@@ -142,6 +146,7 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
   const [mode, setMode] = useState<AccountMode>('internal')
   const [form, setForm] = useState<UserForm>(emptyForm)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [formError, setFormError] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [confirmStatusModal, setConfirmStatusModal] = useState<AdminApiUser | null>(null)
   const [statusUpdating, setStatusUpdating] = useState(false)
@@ -209,8 +214,8 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
 
     Promise.all([
       listAdminUsers({
-        page,
-        size: pageSize,
+        page: audienceTab === 'Nhân sự nội bộ' && !computedRoleParam ? 0 : page,
+        size: audienceTab === 'Nhân sự nội bộ' && !computedRoleParam ? 200 : pageSize,
         search: search.trim() || undefined,
         role: computedRoleParam,
         status: statusParam,
@@ -222,15 +227,19 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
         if (cancelled) return
 
         let data = userPage.data
-        // If audienceTab is 'Nhân sự nội bộ' and no specific role is chosen, exclude CUSTOMER accounts
-        if (audienceTab === 'Nhân sự nội bộ') {
-          data = data.filter(acc => acc.roles.some(r => r !== 'CUSTOMER'))
+        // If audienceTab is 'Nhân sự nội bộ' and no specific role is chosen, exclude CUSTOMER accounts and paginate accurately
+        if (audienceTab === 'Nhân sự nội bộ' && !computedRoleParam) {
+          const internalUsers = data.filter(acc => acc.roles.some(r => r !== 'CUSTOMER'))
+          const start = page * pageSize
+          setAccounts(internalUsers.slice(start, start + pageSize))
+          setTotalItems(internalUsers.length)
+          setTotalPages(Math.max(1, Math.ceil(internalUsers.length / pageSize)))
+        } else {
+          setAccounts(data)
+          setTotalItems(userPage.pagination.totalItems)
+          setTotalPages(userPage.pagination.totalPages)
         }
-
-        setAccounts(data)
-        setTotalItems(userPage.pagination.totalItems)
-        setTotalPages(userPage.pagination.totalPages)
-        if (facilityPage) setFacilities(facilityPage.data)
+        if (facilityPage) setFacilities(facilityPage.data.map(sanitizeFacilityStrings))
       })
       .catch(reason => {
         if (!cancelled) setError(reason instanceof Error ? reason.message : 'Không thể tải danh sách tài khoản.')
@@ -275,6 +284,7 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
     setMode(nextMode)
     setForm(emptyForm)
     setFieldErrors({})
+    setFormError('')
     setModalOpen(true)
   }
 
@@ -283,7 +293,7 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
       showToast('Tài khoản quản trị viên được bảo vệ và không thể chỉnh sửa.')
       return
     }
-    listAdminFacilities().then(res => setFacilities(res.data)).catch(() => {})
+    listAdminFacilities().then(res => setFacilities(res.data.map(sanitizeFacilityStrings))).catch(() => {})
     const role = primaryRole(account.roles)
     const facilityId = Object.keys(account.facilityScopes || {})[0] || ''
     setSelected(account)
@@ -303,6 +313,7 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
       status: toUiStatus(account.status),
     })
     setFieldErrors({})
+    setFormError('')
     setModalOpen(true)
   }
 
@@ -318,6 +329,10 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
     if (!form.name.trim()) errors.name = 'Vui lòng nhập họ và tên.'
     if (!email) errors.email = 'Vui lòng nhập email.'
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = 'Email chưa đúng định dạng. Ví dụ: ten@congty.com.'
+    if (form.name.trim().length > 160) errors.name = 'Họ và tên không được quá 160 ký tự.'
+    if (email.length > 320) errors.email = 'Email không được quá 320 ký tự.'
+    if (!isOptionalVietnamesePhone(form.phone)) errors.phone = VIETNAMESE_PHONE_ERROR_MESSAGE
+    else if (form.phone.trim().length > 30) errors.phone = 'Số điện thoại không được quá 30 ký tự.'
     const passwordError = getPasswordValidationError(form.password)
     if (passwordError) errors.password = passwordError
     setFieldErrors(errors)
@@ -382,7 +397,7 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
     // 3. Kiểm tra thay đổi trạng thái
     const statusChanged = toUiStatus(selected.status) !== form.status
     if (statusChanged) {
-      currentAccount = await updateAdminUserStatus(selected.id, toApiStatus(form.status))
+      currentAccount = await updateAdminUserStatus(selected.id, toApiStatus(form.status), `Quản trị viên cập nhật trạng thái thành ${form.status}.`)
       changes.push('trạng thái')
     }
 
@@ -395,13 +410,20 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
   }
 
   const save = async () => {
-    if (!selected && !validateNewForm()) return
+    setFormError('')
+    if (!selected && !validateNewForm()) {
+      setFormError('Vui lòng kiểm tra các trường được đánh dấu bên dưới.')
+      return
+    }
     try {
       if (selected) await saveExisting()
       else await saveNew()
       setModalOpen(false)
       setRefreshKey(value => value + 1)
     } catch (reason) {
+      const errors = adminUserFieldErrors(reason)
+      setFieldErrors(errors)
+      setFormError(Object.keys(errors).length ? 'Vui lòng kiểm tra các trường được đánh dấu bên dưới.' : reason instanceof Error ? reason.message : 'Không thể lưu tài khoản.')
       showToast(reason instanceof Error ? reason.message : 'Không thể lưu tài khoản.')
     }
   }
@@ -415,8 +437,11 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
     }
     try {
       setStatusUpdating(true)
+      const isLocked = confirmStatusModal.status === 'LOCKED'
       const nextStatus = confirmStatusModal.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE'
-      const updated = await updateAdminUserStatus(confirmStatusModal.id, nextStatus)
+      const updated = isLocked
+        ? await unlockAdminUser(confirmStatusModal.id)
+        : await updateAdminUserStatus(confirmStatusModal.id, nextStatus, nextStatus === 'ACTIVE' ? 'Quản trị viên mở khóa tài khoản.' : 'Quản trị viên tạm khóa tài khoản.')
       replaceAccount(updated)
       showToast(
         nextStatus === 'ACTIVE'
@@ -515,7 +540,7 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
         <StatCard
           title="Nhân sự nội bộ"
           value={stats.internal}
-          delta="Admin, Quản lý, Staff"
+          delta="Quản trị viên, Quản lý cơ sở, Ban điều hành, Nhân viên"
           deltaPositive
           icon={
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-700 ring-1 ring-amber-200">
@@ -604,10 +629,10 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
               className="h-10"
             >
               <option value="all">Tất cả nhân sự</option>
-              <option value="staff">Chuyên viên vận hành (Staff)</option>
-              <option value="manager">Giám đốc cơ sở (Manager)</option>
-              <option value="business">Đối tác kinh doanh (Business)</option>
-              <option value="admin">Quản trị viên (Admin)</option>
+              <option value="staff">Nhân viên vận hành</option>
+              <option value="manager">Quản lý cơ sở</option>
+              <option value="business">Ban điều hành</option>
+              <option value="admin">Quản trị viên</option>
             </Select>
           ) : (
             <Select
@@ -680,10 +705,7 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
       {error && (
         <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           <span>{error}</span>
-          <Button variant="outline" size="sm" onClick={() => {
-            clearAuthTokens()
-            setRefreshKey(v => v + 1)
-          }}>
+          <Button variant="outline" size="sm" onClick={() => setRefreshKey(v => v + 1)}>
             Thử lại
           </Button>
         </div>
@@ -912,6 +934,7 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
         size="lg"
       >
         <div className="space-y-4">
+          {formError && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{formError}</p>}
           {selected && (
             <>
               <div className="flex items-center gap-3 rounded-xl bg-stone-50 p-3.5">
@@ -919,7 +942,7 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
                 <div>
                   <p className="font-semibold text-stone-800">{selected.fullName}</p>
                   <p className="text-xs text-stone-400">
-                    ID: {selected.id} · Tham gia {formatDate(selected.createdAt)}
+                    Mã hồ sơ: {recordDisplayCode(selected.id)} · Tham gia {formatDate(selected.createdAt)}
                   </p>
                 </div>
               </div>
@@ -930,17 +953,18 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
             <div>
               <Input
                 label="Họ và Tên"
+                error={fieldErrors.name}
                 value={form.name}
                 onChange={event => setField('name', event.target.value)}
                 placeholder="Nguyễn Văn A"
                 disabled={Boolean(selected)}
                 className={selected ? 'cursor-not-allowed bg-stone-50 text-stone-500' : ''}
               />
-              {fieldErrors.name && <p role="alert" className="mt-1 text-xs text-red-600">{fieldErrors.name}</p>}
             </div>
             <div>
               <Input
                 label="Email"
+                error={fieldErrors.email}
                 type="email"
                 value={form.email}
                 onChange={event => setField('email', event.target.value)}
@@ -948,7 +972,6 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
                 disabled={Boolean(selected)}
                 className={selected ? 'cursor-not-allowed bg-stone-50 text-stone-500' : ''}
               />
-              {fieldErrors.email && <p role="alert" className="mt-1 text-xs text-red-600">{fieldErrors.email}</p>}
             </div>
           </div>
 
@@ -970,16 +993,16 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
                 }}
               >
                 {selectedRole === 'customer' && <option value="customer">Khách hàng</option>}
-                <option value="staff">Chuyên viên vận hành (Staff)</option>
-                <option value="manager">Quản lý cơ sở (Manager)</option>
-                <option value="business">Giám đốc kinh doanh (Business)</option>
-                <option value="admin">Quản trị viên (Admin)</option>
+                <option value="staff">Nhân viên vận hành</option>
+                <option value="manager">Quản lý cơ sở</option>
+                <option value="business">Ban điều hành</option>
+                <option value="admin">Quản trị viên</option>
               </Select>
             ) : (
               <div className="space-y-1">
                 <span className="text-sm font-medium text-stone-700">Vai Trò</span>
                 <div className="flex h-[38px] items-center rounded-lg border border-stone-200 bg-stone-50 px-3 text-sm text-stone-600">
-                  Khách hàng thuê kho (Customer)
+                  Khách hàng thuê kho
                 </div>
               </div>
             )}
@@ -1007,6 +1030,12 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
 
           <Input
             label="Số điện thoại"
+            type="tel"
+            error={fieldErrors.phone}
+            aria-invalid={Boolean(fieldErrors.phone)}
+            onBlur={() => {
+              if (!selected) setFieldErrors(previous => ({ ...previous, phone: !isOptionalVietnamesePhone(form.phone) ? VIETNAMESE_PHONE_ERROR_MESSAGE : form.phone.trim().length > 30 ? 'Số điện thoại không được quá 30 ký tự.' : '' }))
+            }}
             value={form.phone}
             onChange={event => setField('phone', event.target.value)}
             placeholder="0901 234 567"
@@ -1021,7 +1050,7 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
                   Phân công & Phân loại quản lý cơ sở
                 </span>
                 <span className="text-[11px] text-stone-500 font-medium">
-                  {form.role === 'manager' ? 'Dành cho Quản lý cơ sở (Manager)' : 'Dành cho Chuyên viên vận hành (Staff)'}
+                  {form.role === 'manager' ? 'Dành cho Quản lý cơ sở' : 'Dành cho Nhân viên vận hành'}
                 </span>
               </div>
 
@@ -1174,7 +1203,7 @@ export default function AdminUsersApiPanel({ user, showToast }: { user: User; sh
                 <strong className="text-red-900">{confirmDeleteModal.fullName}</strong> ({confirmDeleteModal.email}).
               </p>
               <p className="mt-2 text-xs text-red-700 leading-relaxed">
-                Tài khoản, phiên đăng nhập, role, facility scope và dữ liệu xác thực sẽ bị xóa khỏi hệ thống.
+                Tài khoản, các phiên đăng nhập, vai trò, quyền truy cập cơ sở và dữ liệu xác thực sẽ bị xóa.
                 Nếu tài khoản còn hồ sơ thuê, thanh toán, bằng chứng hoặc dữ liệu nghiệp vụ, hệ thống sẽ từ chối để bảo toàn lịch sử.
               </p>
             </div>

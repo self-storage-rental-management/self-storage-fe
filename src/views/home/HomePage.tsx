@@ -1,7 +1,9 @@
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import { useState, useEffect } from 'react'
 import BrandLogo from '../../components/BrandLogo'
 import { useStorageHub } from '../../store/StorageHubContext'
 import { UNIT_SPECS } from '../../data/demoDatabase'
+import { sampleRackPallet } from '../../services/rackLayoutApi'
 import { DEMO_DATA_ENABLED } from '../../config/runtime'
 import { listPublicFacilities, listPublicUnitTypes, type PublicFacilitySummary, type PublicUnitTypeSummary } from '../../services/publicCatalogApi'
 
@@ -21,6 +23,21 @@ interface UnitCategoryCard {
   badge: string
   highlight: string
 }
+
+const unitSizeLabels = {
+  S: 'Gian kho nhỏ (S)',
+  M: 'Gian kho vừa (M)',
+  L: 'Gian kho lớn (L)',
+  XL: 'Gian kho rất lớn (XL)',
+}
+
+const legacyUnitSizeNames = new Map([
+  ['small storage', unitSizeLabels.S],
+  ['medium storage', unitSizeLabels.M],
+  ['large storage', unitSizeLabels.L],
+  ['extra large storage', unitSizeLabels.XL],
+  ['extra large', unitSizeLabels.XL],
+])
 
 function CatalogTierCard({ category, index, onOpen }: { category: UnitCategoryCard; index: number; onOpen: () => void }) {
   const accents = [
@@ -251,7 +268,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
   // backend catalog so the landing page reflects the real database.
   const facilitiesList = DEMO_DATA_ENABLED
     ? contextFacilities.map(f => {
-      const facCode = f.code || f.id.toUpperCase()
+      const facCode = f.code || recordDisplayCode(f.id.toUpperCase())
       const physicalAvailable = units.filter(unit => (unit.facilityId === f.id || (f.code && unit.facilityId === f.code)) && unit.status === 'available' && !rentals.some(rental => rental.unitId === unit.id && ['setup', 'active', 'return_requested', 'return_inspection', 'closing'].includes(rental.status))).length
       const activeCapacityHolds = holds.filter(hold => (hold.facilityId === f.id || (f.code && hold.facilityId === f.code)) && !hold.assignedUnitId && !['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(hold.status)).length
       return {
@@ -282,44 +299,44 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
   const unitCategories: UnitCategoryCard[] = [
     {
       id: 'small',
-      name: 'Gian Kho Nhỏ (Small Storage)',
-      size: '8,0 × 10,0 × 5,0 m · 80 m² · 400 m³',
-      areaLabel: '80 m²',
-      volumeLabel: '400 m³',
-      desc: 'Phù hợp lưu trữ gia đình, văn phòng. 4 khung kệ (2×4×4,5m), sức chứa ~336 thùng nhỏ / 200 thùng to.',
+      name: unitSizeLabels.S,
+      size: '12,0 × 11,6 × 5,0 m · 139,20 m² · 696 m³',
+      areaLabel: '139,20 m²',
+      volumeLabel: '696 m³',
+      desc: 'Phù hợp lưu trữ gia đình, văn phòng. 4 khung kệ, lối chính 3,0 m, sức chứa tham khảo 120 thùng nhỏ / 40 thùng lớn.',
       estRate: 'Từ 5.500.000 ₫ / tháng',
       badge: 'Cá nhân & Gia đình',
       highlight: 'Khóa mã PIN 24/7'
     },
     {
       id: 'medium',
-      name: 'Gian Kho Vừa (Medium Storage)',
-      size: '12,6 × 10,4 × 5,0 m · 131,04 m² · 655,2 m³',
-      areaLabel: '131,04 m²',
-      volumeLabel: '655,2 m³',
-      desc: 'Phù hợp tồn kho kinh doanh, nội thất. 6 khung kệ, lối xe 2,2m, sức chứa ~504 thùng nhỏ / 300 thùng to.',
+      name: unitSizeLabels.M,
+      size: '17,3 × 11,8 × 5,0 m · 204,14 m² · 1.020,7 m³',
+      areaLabel: '204,14 m²',
+      volumeLabel: '1.020,7 m³',
+      desc: 'Phù hợp tồn kho kinh doanh, nội thất. 6 khung kệ, lối chính 3,2 m, sức chứa tham khảo 240 thùng nhỏ / 80 thùng lớn.',
       estRate: 'Từ 9.500.000 ₫ / tháng',
       badge: 'Phổ biến nhất',
       highlight: 'Kiểm soát nhiệt độ 24°C'
     },
     {
       id: 'large',
-      name: 'Gian Kho Lớn (Large Storage)',
-      size: '18,3 × 10,8 × 5,0 m · 197,64 m² · 988,2 m³',
-      areaLabel: '197,64 m²',
-      volumeLabel: '988,2 m³',
-      desc: 'Phù hợp pallet, chuyển nhà quy mô lớn. 8 khung kệ, lối xe 2,6m, xe nâng pallet tay, chứa ~672 thùng nhỏ / 400 thùng to.',
+      name: unitSizeLabels.L,
+      size: '23,0 × 12,0 × 5,0 m · 276,00 m² · 1.380 m³',
+      areaLabel: '276,00 m²',
+      volumeLabel: '1.380 m³',
+      desc: 'Phù hợp pallet, chuyển nhà quy mô lớn. 8 khung kệ, lối chính 3,4 m, xe nâng tay pallet, sức chứa tham khảo 480 thùng nhỏ / 160 thùng lớn.',
       estRate: 'Từ 15.000.000 ₫ / tháng',
       badge: 'Doanh nghiệp',
       highlight: 'Xe tải bốc dỡ tận cửa'
     },
     {
       id: 'xlarge',
-      name: 'Gian Kho Rất Lớn (Extra Large)',
-      size: '25,0 × 11,2 × 5,0 m · 280 m² · 1400 m³',
-      areaLabel: '280 m²',
-      volumeLabel: '1400 m³',
-      desc: 'Kho thương mại, máy móc nặng & pallet công nghiệp. 10 khung kệ, lối xe 3,0m, xe nâng điện, chứa ~840 thùng nhỏ / 500 thùng to.',
+      name: unitSizeLabels.XL,
+      size: '29,1 × 12,2 × 5,0 m · 355,02 m² · 1.775,1 m³',
+      areaLabel: '355,02 m²',
+      volumeLabel: '1.775,1 m³',
+      desc: 'Kho thương mại, máy móc nặng và pallet công nghiệp. 10 khung kệ, lối chính 3,6 m, xe nâng điện, sức chứa tham khảo 720 thùng nhỏ / 240 thùng lớn.',
       estRate: 'Từ 22.500.000 ₫ / tháng',
       badge: 'Doanh nghiệp',
       highlight: 'Xe nâng pallet điện 24/7'
@@ -337,15 +354,18 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
   ).map(([code, types]) => {
     const cheapest = types.reduce((current, type) => type.monthlyPrice < current.monthlyPrice ? type : current)
     const availableCount = types.reduce((total, type) => total + type.availableCount, 0)
+    const size = code.trim().toUpperCase()
     return {
       id: code,
-      name: cheapest.name,
+      name: size === 'S' || size === 'M' || size === 'L' || size === 'XL'
+        ? unitSizeLabels[size]
+        : legacyUnitSizeNames.get(cheapest.name.trim().toLowerCase()) ?? cheapest.name,
       size: `${formatMetric(cheapest.lengthM)} × ${formatMetric(cheapest.widthM)} × ${formatMetric(cheapest.heightM)} m · ${formatMetric(cheapest.areaM2)} m² · ${formatMetric(cheapest.volumeM3)} m³`,
       areaLabel: `${formatMetric(cheapest.areaM2)} m²`,
       volumeLabel: `${formatMetric(cheapest.volumeM3)} m³`,
       desc: `Tải trọng tối đa ${formatMetric(cheapest.maxLoadKg)} kg, ${cheapest.rackCount} khung kệ.`,
       estRate: `Từ ${cheapest.monthlyPrice.toLocaleString('vi-VN')} ₫ / tháng`,
-      badge: `Size ${code}`,
+      badge: `Cỡ ${code}`,
       highlight: `${availableCount} gian còn trống`,
     }
   })
@@ -556,7 +576,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
               </div>
 
               <p className="text-sm sm:text-base text-stone-600 leading-relaxed max-w-2xl">
-                StorageHub cung cấp hệ thống kho tự lưu trữ (Self-Storage) đạt chuẩn an ninh quốc tế. Tìm kiếm cơ sở thuận tiện, lựa chọn quy cách kho đa dạng, đặt giữ chỗ trực tuyến và kiểm soát quyền ra vào thông minh hoàn toàn trên một nền tảng hợp nhất.
+                Tìm cơ sở, chọn loại kho và đặt kho trực tuyến. Theo dõi thông tin thuê và quyền ra vào trên StorageHub.
               </p>
 
               {/* Call to Action Buttons */}
@@ -643,7 +663,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                         <span className="text-xs sm:text-sm font-bold text-white group-hover:text-amber-300 transition-colors">
-                          Gian Nhỏ (Small)
+                          {unitSizeLabels.S}
                         </span>
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-stone-300 font-medium whitespace-nowrap">
                           80 m²
@@ -675,7 +695,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                         <span className="text-xs sm:text-sm font-bold text-white group-hover:text-sky-300 transition-colors">
-                          Gian Vừa (Medium)
+                          {unitSizeLabels.M}
                         </span>
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-stone-300 font-medium whitespace-nowrap">
                           131 m²
@@ -707,7 +727,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                         <span className="text-xs sm:text-sm font-bold text-white group-hover:text-indigo-300 transition-colors">
-                          Kho Lớn (Large)
+                          {unitSizeLabels.L}
                         </span>
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-stone-300 font-medium whitespace-nowrap">
                           197,6 m²
@@ -739,7 +759,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                         <span className="text-xs sm:text-sm font-bold text-white group-hover:text-purple-300 transition-colors">
-                          Gian Rất Lớn (XL)
+                          {unitSizeLabels.XL}
                         </span>
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-stone-300 font-medium whitespace-nowrap">
                           280 m²
@@ -929,7 +949,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                 <div className="p-4 sm:p-5">
                   <div className="flex items-center justify-between gap-2 mb-2">
                     <span className="text-[10px] font-mono font-bold bg-amber-100 text-[#9A5A05] px-2 py-0.5 rounded">
-                       MÃ: {fac.code ?? fac.id}
+                       MÃ: {fac.code || recordDisplayCode(fac.id)}
                     </span>
                     <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
                       <span className="w-2 h-2 rounded-full bg-emerald-500" />
@@ -1037,10 +1057,9 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-stone-300 mb-3 font-mono">DỊCH VỤ LƯU TRỮ</h4>
               <ul className="space-y-2 text-xs text-stone-400">
-                <li><button type="button" onClick={() => scrollToSection('unit-types')} className="hover:text-white transition cursor-pointer">Gian kho nhỏ · Small</button></li>
-                <li><button type="button" onClick={() => scrollToSection('unit-types')} className="hover:text-white transition cursor-pointer">Gian kho vừa · Medium</button></li>
-                <li><button type="button" onClick={() => scrollToSection('unit-types')} className="hover:text-white transition cursor-pointer">Gian kho lớn · Large</button></li>
-                <li><button type="button" onClick={() => scrollToSection('unit-types')} className="hover:text-white transition cursor-pointer">Gian kho rất lớn · Extra Large</button></li>
+                {Object.entries(unitSizeLabels).map(([code, label]) => (
+                  <li key={code}><button type="button" onClick={() => scrollToSection('unit-types')} className="hover:text-white transition cursor-pointer">{label}</button></li>
+                ))}
               </ul>
             </div>
 
@@ -1107,7 +1126,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
             {activeModal === 'facilities' && (
               <div className="mt-4 space-y-4 text-xs">
                 <p className="text-stone-600 text-sm">
-                  StorageHub hiện đang vận hành các cơ sở lưu trữ tại các vị trí giao thông thuận tiện, trang bị hệ thống kiểm soát an ninh và đội ngũ quản lý chuyên nghiệp:
+                  Xem địa chỉ và thông tin liên hệ của các cơ sở:
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {facilitiesList.map(f => (
@@ -1115,7 +1134,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                       <div>
                          <div className="flex items-center justify-between font-bold text-stone-900 text-sm">
                            <span>{f.name}</span>
-                           <span className="text-[10px] bg-amber-100 text-[#9A5A05] px-1.5 py-0.5 rounded font-mono font-bold">{f.code ?? f.id}</span>
+                           <span className="text-[10px] bg-amber-100 text-[#9A5A05] px-1.5 py-0.5 rounded font-mono font-bold">{f.code || recordDisplayCode(f.id)}</span>
                          </div>
                          <p className="text-xs text-stone-500 mt-1 flex items-start gap-1">
                            <MapPinIcon className="w-3.5 h-3.5 shrink-0 mt-0.5 text-stone-400" />
@@ -1190,7 +1209,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                           </div>
                         </div>
                         <div className="text-right shrink-0">
-                          <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold ${color.badge}`}>Size {color.tag}</span>
+                          <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold ${color.badge}`}>Cỡ {color.tag}</span>
                           <p className="mt-0.5 text-xs sm:text-sm font-bold text-stone-900">{spec.priceFormatted}<span className="text-[10px] font-normal text-stone-500">/tháng</span></p>
                         </div>
                       </div>
@@ -1240,14 +1259,13 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                       </div>
                       <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <div className="rounded-lg bg-white/80 border border-white p-2 sm:p-2.5">
-                          <p className="text-stone-400 font-medium text-[10px] sm:text-[11px] mb-1">Kích cỡ hàng tối đa (D×R×C)</p>
+                          <p className="text-stone-400 font-medium text-[10px] sm:text-[11px] mb-1">Mặt tấm kê mẫu (chiều dài × chiều rộng)</p>
                           <div className="flex flex-wrap items-center gap-1">
-                            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">{spec.largeBox.lengthCm} cm</span>
+                            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">{sampleRackPallet.lengthCm} cm</span>
                             <span className="text-stone-300">×</span>
-                            <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-sky-800">{spec.largeBox.widthCm} cm</span>
-                            <span className="text-stone-300">×</span>
-                            <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">{spec.largeBox.heightCm} cm</span>
+                            <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-sky-800">{sampleRackPallet.widthCm} cm</span>
                           </div>
+                          <p className="mt-1 text-[10px] text-stone-600">{spec.frameCount * 6} chỗ đặt mỗi gian · Một tấm kê mỗi khoang</p>
                         </div>
                         <div className="rounded-lg bg-white/80 border border-white p-2 sm:p-2.5">
                           <p className="text-stone-400 font-medium text-[10px] sm:text-[11px] mb-1">Xe đẩy hỗ trợ</p>
@@ -1259,12 +1277,12 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                       {/* Box capacity */}
                       <div className="mt-2 flex flex-col sm:flex-row gap-2 text-[11px]">
                         <div className="flex-1 rounded-lg bg-white/80 border border-white p-2 sm:p-2.5">
-                          <p className="text-stone-400 font-semibold mb-1 text-[10px] sm:text-[11px]">Thùng nhỏ</p>
+                          <p className="text-stone-400 font-semibold mb-1 text-[10px] sm:text-[11px]">Sức chứa thùng nhỏ mẫu</p>
                           <p className="font-bold text-stone-900 text-[10px] sm:text-[11px]">{spec.smallBox.lengthCm}×{spec.smallBox.widthCm}×{spec.smallBox.heightCm} cm · {spec.smallBox.volumeM3} m³</p>
                           <p className="mt-1 text-sm sm:text-base font-black text-stone-900">{spec.smallBox.count}<span className="text-xs font-normal text-stone-500"> thùng</span></p>
                         </div>
                         <div className="flex-1 rounded-lg bg-white/80 border border-white p-2 sm:p-2.5">
-                          <p className="text-stone-400 font-semibold mb-1 text-[10px] sm:text-[11px]">Thùng to</p>
+                          <p className="text-stone-400 font-semibold mb-1 text-[10px] sm:text-[11px]">Sức chứa thùng lớn mẫu</p>
                           <p className="font-bold text-stone-900 text-[10px] sm:text-[11px]">{spec.largeBox.lengthCm}×{spec.largeBox.widthCm}×{spec.largeBox.heightCm} cm · {spec.largeBox.volumeM3} m³</p>
                           <p className="mt-1 text-sm sm:text-base font-black text-stone-900">{spec.largeBox.count}<span className="text-xs font-normal text-stone-500"> thùng</span></p>
                         </div>
@@ -1293,7 +1311,7 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
             {activeModal === 'how_it_works' && (
               <div className="mt-4 space-y-4 text-xs">
                 <p className="text-stone-600 text-sm">
-                  Quy trình đặt giữ và thuê kho tại StorageHub được thiết kế an toàn, minh bạch qua 4 bước chuẩn nghiệp vụ:
+                  Đặt và thuê kho qua 4 bước:
                 </p>
                 <div className="space-y-3">
                   {workflowSteps.map(step => (

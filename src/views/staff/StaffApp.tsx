@@ -1,4 +1,7 @@
+import { checkInTask } from "../../services/staffDailyOperationsApi"
 import { LEGACY_RENEWAL_NOTICE, LEGACY_RENEWAL_HISTORY_NOTICE, legacyRenewalMoney } from '../../domain/legacyRenewal'
+import { VIETNAM_TIME_ZONE } from '../../utils/vietnamTime'
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import { useEffect, useRef, useState } from "react"
 
 import Layout, {
@@ -34,26 +37,31 @@ import StaffSupportPanel from "./StaffSupportPanel"
 import { SupportApiRoute } from "../support-api/SupportApiEntry"
 
 import StaffCheckInOperationsPanel from "./StaffCheckInOperationsPanel"
+import StaffCredentialReissuePanel from "./StaffCredentialReissuePanel"
 import StaffMaintenanceOperationsPanel from "./StaffMaintenanceOperationsPanel"
 import StaffRenewalOperationsApiPanel from "./StaffRenewalOperationsApiPanel"
 import StaffDailyTaskQueue from "./StaffDailyTaskQueue"
+import StaffFacilityRentals from "./StaffFacilityRentals"
 import RecoveryTaskDetail from "../rental-api/RecoveryTaskDetail"
 import ReturnApiPanel from "../return-api/ReturnApiPanel"
 import {
+  archiveCompletedCheckIn,
   listCheckIns,
   listCredentialAlerts,
   revokeAccessCredential,
   type CredentialAlert,
+  type CheckInCase,
 } from "../../services/checkInApi"
 import { listReturns, type ApiReturn } from "../../services/returnApi"
-import { listStaffActiveReservations, type StaffReservationProgress } from "../../services/staffReservationApi"
+import { notificationRecordTarget, type NotificationRecordTarget } from "../../services/notificationRecordTarget"
+import { listStaffActiveReservations, listStaffReservationReviews, type ReservationReview, type StaffReservationProgress } from "../../services/staffReservationApi"
+import StaffReservationReviews from "./StaffReservationReviews"
 import {
   loadStaffDailyOperations,
   type StaffDailyOperation,
 } from "../../services/staffDailyOperationsApi"
 
 import ProfileView from "../ProfileView"
-import StaffReservationReviews from './StaffReservationReviews'
 import ReturnSettlementModal from '../../components/ReturnSettlementModal'
 import { canApiActor, isApiAuthenticated } from '../../services/authApi'
 import { listNotifications, markNotificationRead, type ApiNotification } from '../../services/notificationApi'
@@ -75,9 +83,7 @@ import {
   RESERVATIONS,
   CHECKINS,
   RETURNS,
-  SUPPORT_TICKETS,
   MY_RENTALS,
-  type TicketItem,
 } from "../../data/demoDatabase"
 
 import StaffFileUpload from "./StaffFileUpload"
@@ -147,10 +153,6 @@ type StaffReturn = Omit<typeof RETURNS[number], "status"> & {
   requestReason: string
 }
 
-type TicketStatus = "open" | "in-progress" | "waiting-customer" | "resolved"
-
-type StaffTicket = Omit<TicketItem, "status"> & { status: TicketStatus }
-
 type StaffListSort = "deadline-asc" | "deadline-desc" | "name-asc"
 
 const formatDate = (value?: string) => {
@@ -158,7 +160,9 @@ const formatDate = (value?: string) => {
 
   const date = new Date(value)
 
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("vi-VN")
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleDateString("vi-VN", { timeZone: VIETNAM_TIME_ZONE })
 }
 
 const formatExactDateTime = (value?: string) => {
@@ -166,7 +170,9 @@ const formatExactDateTime = (value?: string) => {
 
   const date = new Date(value)
 
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("vi-VN")
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleString("vi-VN", { timeZone: VIETNAM_TIME_ZONE })
 }
 
 const formatDateTime = (value: string) => {
@@ -818,6 +824,14 @@ export default function StaffApp({
 }) {
   const hub = useStorageHub()
 
+  const [handoverCases, setHandoverCases] = useState<CheckInCase[] | null>(null)
+  const [apiOverviewCounts, setApiOverviewCounts] = useState({
+    depositWaiting: 0,
+    upcomingCheckins: 0,
+    returnsToProcess: 0,
+    pendingReviews: 0,
+  })
+
   const nav: NavItem[] = [
     {
       id: "dashboard",
@@ -844,9 +858,28 @@ export default function StaffApp({
     },
 
     {
+      id: "reservations",
+
+      label: "Đơn đặt giữ kho",
+
+      icon: Icon.calendar,
+
+      group: "Vận hành",
+
+      permission: "reservations:read",
+    },
+
+    ...(isApiAuthenticated() ? [{
+      id: "facility-rentals",
+      label: "Hồ sơ thuê",
+      icon: Icon.clipboard,
+      group: "Vận hành",
+      permission: "rentals:read" as const,
+    }] : []),
+    {
       id: "return",
 
-      label: "Nghiệm thu trả kho",
+      label: "Trả kho & thu hồi",
 
       icon: Icon.clipboard,
 
@@ -881,7 +914,12 @@ export default function StaffApp({
     const loadNotifications = async () => {
       try {
         const result = await listNotifications(0, 50)
-        if (!cancelled) setBackendNotifications(result.data)
+        if (!cancelled) {
+          setBackendNotifications(result.data)
+          if (result.data.some(notification => notification.type === 'CHECKIN')) {
+            window.dispatchEvent(new Event('storagehub:checkins-refresh'))
+          }
+        }
       } catch {
         // Staff operations remain available if notifications are temporarily unavailable.
       }
@@ -912,12 +950,6 @@ export default function StaffApp({
   const [apiDailyOperationsError, setApiDailyOperationsError] = useState<string | null>(null)
 
   const [apiDailyOperationsRefresh, setApiDailyOperationsRefresh] = useState(0)
-
-  const [apiOverviewCounts, setApiOverviewCounts] = useState({
-    depositWaiting: 0,
-    upcomingCheckins: 0,
-    returnsToProcess: 0,
-  })
 
   const [apiOverviewLoading, setApiOverviewLoading] = useState(false)
 
@@ -965,6 +997,7 @@ export default function StaffApp({
   const [selectedRecoveryTask, setSelectedRecoveryTask] = useState<{ id: string; facilityId: string } | null>(null)
   const recoveryCloseGuard = useRef<() => boolean>(() => false)
   const [selectedMaintenanceTaskId, setSelectedMaintenanceTaskId] = useState<string | null>(null)
+  const [noticeTarget, setNoticeTarget] = useState<{ record: NotificationRecordTarget; request: number }>()
 
   const [operationalTaskPriorityFilter, setOperationalTaskPriorityFilter] =
     useState("all")
@@ -1027,10 +1060,6 @@ export default function StaffApp({
 
   const [earlyCheckinConfirmed, setEarlyCheckinConfirmed] = useState(false)
 
-  const [noShowTarget, setNoShowTarget] = useState<StaffCheckin | null>(null)
-
-  const [noShowReason, setNoShowReason] = useState("")
-
   const [returnInventory, setReturnInventory] = useState("match")
 
   const [returnClassification, setReturnClassification] = useState("no-damage")
@@ -1074,45 +1103,6 @@ export default function StaffApp({
         (user.facility && user.facility !== "All facilities"),
     )
 
-  const [staffTickets, setStaffTickets] = useState<StaffTicket[]>(() =>
-    DEMO_DATA_ENABLED && hasFacilityScope
-      ? SUPPORT_TICKETS.filter((item) =>
-          isFacilityVisible(user, item.facilityId, item.facility),
-        )
-      : [],
-  )
-
-  const [selectedStaffTicket, setSelectedStaffTicket] =
-    useState<StaffTicket | null>(null)
-
-  const [assignedStaffByTicket, setAssignedStaffByTicket] =
-    useState<Record<string, string>>(() =>
-      Object.fromEntries(
-        (DEMO_DATA_ENABLED ? SUPPORT_TICKETS : []).map((ticket) => {
-          const latestStaffMessage = [...ticket.messages]
-
-            .reverse()
-
-            .find((message) => message.role === "staff")
-
-          return [ticket.id, latestStaffMessage?.sender ?? ""]
-        }),
-      ),
-    )
-
-  const [respondModal, setRespondModal] = useState(false)
-
-  const [staffReplyText, setStaffReplyText] = useState("")
-
-  const [ticketNewStatus, setTicketNewStatus] =
-    useState<TicketStatus>("in-progress")
-
-  const [ticketEvidence, setTicketEvidence] = useState("")
-
-  const [ticketEscalated, setTicketEscalated] = useState(false)
-
-  const [ticketEscalationReason, setTicketEscalationReason] = useState("")
-
   const [toast, setToast] = useState<string | null>(null)
 
   const toastTimer = useRef<number | undefined>(undefined)
@@ -1124,19 +1114,6 @@ export default function StaffApp({
 
     [],
   )
-
-  const chatEndRef = useRef<HTMLDivElement | null>(null)
-
-  const activeStaffTicket = selectedStaffTicket
-    ? (staffTickets.find((ticket) => ticket.id === selectedStaffTicket.id) ??
-      selectedStaffTicket)
-    : null
-
-  useEffect(() => {
-    if (!respondModal || !activeStaffTicket) return
-
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
-  }, [respondModal, activeStaffTicket?.messages.length])
 
   useEffect(() => {
     const sharedReservations = hub.holds
@@ -1248,7 +1225,7 @@ export default function StaffApp({
 
   useEffect(() => {
     if (!isApiAuthenticated()) {
-      setApiOverviewCounts({ depositWaiting: 0, upcomingCheckins: 0, returnsToProcess: 0 })
+      setApiOverviewCounts({ depositWaiting: 0, upcomingCheckins: 0, returnsToProcess: 0, pendingReviews: 0 })
       setApiOverviewLoading(false)
       return
     }
@@ -1261,6 +1238,7 @@ export default function StaffApp({
         listStaffActiveReservations({ page: 0, size: 100 }),
         listCheckIns({ page: 0, pageSize: 100 }),
         listReturns("staff", 0, 100),
+        listStaffReservationReviews(0, 100),
       ])
 
       if (!active) return
@@ -1274,6 +1252,9 @@ export default function StaffApp({
       const returns = results[2].status === "fulfilled"
         ? results[2].value.data as ApiReturn[]
         : []
+      const reviews = results[3].status === "fulfilled"
+        ? results[3].value.data as ReservationReview[]
+        : []
 
       const waitingStatuses = new Set([
         "CONFIRMED",
@@ -1282,10 +1263,13 @@ export default function StaffApp({
         "AWAITING_CUSTOMER_RECEIPT",
       ])
 
+      const pendingHandovers = checkIns.filter(item => !["completed", "no_show", "cancelled", "rejected"].includes(item.checkInStatus ?? ""))
+      setHandoverCases(results[1].status === "fulfilled" ? pendingHandovers : null)
       setApiOverviewCounts({
         depositWaiting: reservations.filter((item) => waitingStatuses.has(item.status)).length,
-        upcomingCheckins: checkIns.filter((item) => !["completed", "no_show", "cancelled", "rejected"].includes(item.checkInStatus ?? "")).length,
+        upcomingCheckins: pendingHandovers.length,
         returnsToProcess: returns.filter((item) => item.status !== "completed").length,
+        pendingReviews: reviews.filter((item) => item.goodsReviewStatus === "PENDING").length,
       })
       setApiOverviewLoading(false)
     }
@@ -1516,7 +1500,7 @@ export default function StaffApp({
       setCheckinModal(false)
 
       showToast(
-        "Đã kích hoạt hợp đồng thuê. Khách hàng có thể xác nhận đã nhận kho trong Đơn đặt giữ kho.",
+        "Đã hoàn tất bàn giao và bắt đầu thời gian chuẩn bị hàng.",
       )
     } catch (error) {
       setPendingCheckinCompletionId(null)
@@ -1888,7 +1872,7 @@ export default function StaffApp({
 
         priority: "high",
 
-        page: "reservations",
+        page: "checkin",
       })),
 
     ...reservations
@@ -1910,7 +1894,7 @@ export default function StaffApp({
 
         priority: "medium",
 
-        page: "reservations",
+        page: "checkin",
       })),
 
     ...eligibleCheckins
@@ -2080,6 +2064,14 @@ export default function StaffApp({
     operationalTaskSort,
   ])
 
+  const queueTasks = new Map(operationalTasks.map(task => [task.id, task]))
+  if (isApiAuthenticated()) {
+    for (const item of handoverCases ?? []) {
+      const task = checkInTask(item)
+      queueTasks.set(task.id, task)
+    }
+  }
+
   const openOperationalTask = (task: typeof operationalTasks[number]) => {
     if (isApiAuthenticated()) {
       const recovery = (task as StaffDailyOperation).recoveryTask
@@ -2190,14 +2182,21 @@ export default function StaffApp({
     page: "dashboard",
   }))
 
-  const notificationPage = (type: ApiNotification["type"]) => {
+  const notificationPage = (notification: ApiNotification) => {
+    const target = notificationRecordTarget(notification, 'staff')
+    if (target?.kind === 'rental') return 'facility-rentals'
+    if (target) return 'return'
+    if (notification.title === "Khách hàng đã cập nhật lịch nhận kho") return "reservations"
+    const type = notification.type
     if (type === "CHECKIN") return "checkin"
     if (type === "SUPPORT") return "support"
     if (type === "RETURN") return "return"
     if (type === "RENEWAL") return "renewal-signing"
     if (type === "OVERDUE") return "dashboard"
-    if (type === "PAYMENT") return "payments"
-    if (type === "RESERVATION") return "reservations"
+    if (type === "PAYMENT") return "checkin"
+    if (type === "RESERVATION") return "checkin"
+    if (type === 'SYSTEM' && notification.title === 'Đã gửi báo cáo nghi vấn hàng cấm') return 'facility-rentals'
+    if (type === "SYSTEM") return "tasks"
     return "dashboard"
   }
 
@@ -2206,7 +2205,7 @@ export default function StaffApp({
     title: notification.title,
     message: notification.content,
     date: notification.createdAt,
-    page: notificationPage(notification.type),
+    page: notificationPage(notification),
     targetId: notification.relatedEntityId ?? undefined,
     isRead: notification.isRead,
   }))
@@ -2216,7 +2215,7 @@ export default function StaffApp({
       user={user}
       navItems={nav}
       currentPage={page}
-      onNavigate={setPage}
+      onNavigate={next => { setNoticeTarget(undefined); setPage(next) }}
       onLogout={onLogout}
       notifications={[
         ...staffApiNotifications,
@@ -2239,6 +2238,9 @@ export default function StaffApp({
       onNotificationClick={(notification) => {
         if (notification.id.startsWith("api-notification-")) {
           const notificationId = notification.id.replace("api-notification-", "")
+          const source = backendNotifications.find(item => item.id === notificationId)
+          const record = source ? notificationRecordTarget(source, 'staff') : undefined
+          setNoticeTarget(previous => record ? { record, request: (previous?.request ?? 0) + 1 } : undefined)
           setPage(notification.page)
           if (notification.page === "support" && notification.targetId) {
             setSupportOpenTicket(previous => ({ id: notification.targetId!, request: (previous?.request ?? 0) + 1 }))
@@ -2252,6 +2254,9 @@ export default function StaffApp({
           }
           if (notification.page === "reservations") {
             window.setTimeout(() => window.dispatchEvent(new Event("storagehub:staff-reservations-refresh")), 0)
+          }
+          if (notification.page === "tasks" && notification.targetId) {
+            setSelectedMaintenanceTaskId(notification.targetId)
           }
           return
         }
@@ -2303,7 +2308,7 @@ export default function StaffApp({
                             {renewal.discountAmount ? ` (Ưu đãi giảm: ${formatMoney(renewal.discountAmount)})` : ""}
                           </p>
                           <p className="text-[11px] text-slate-400">
-                            Mã yêu cầu: <span className="font-mono">{renewal.id}</span> · Gửi lúc: {formatDate(renewal.requestedAt)}
+                            Mã hồ sơ: <span className="font-mono">{recordDisplayCode(renewal.id)}</span> · Gửi lúc: {formatDate(renewal.requestedAt)}
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
@@ -2319,7 +2324,7 @@ export default function StaffApp({
                               }
                             }}
                           >
-                            ✓ Duyệt gia hạn
+                            Duyệt gia hạn
                           </Button>
                           <Button
                             size="sm"
@@ -2337,7 +2342,7 @@ export default function StaffApp({
                               }
                             }}
                           >
-                            ✕ Từ chối
+                            Từ chối
                           </Button>
                         </div>
                       </div>
@@ -2402,51 +2407,81 @@ export default function StaffApp({
             subtitle={`${user.facility ?? "Chưa được gán cơ sở"} · ${new Date().toLocaleDateString("vi-VN")}`}
           />
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-            <StatCard
-              title={"Đơn đã cọc · Chờ nhận kho"}
-              value={isApiAuthenticated()
-                ? apiOverviewLoading ? "…" : apiOverviewCounts.depositWaiting
-                : reservations.filter((r) => r.status === "CONFIRMED").length}
-              icon={Icon.alert}
-              iconBg="bg-amber-50"
-            />
-            <StatCard
-              title={"Nhận kho sắp tới"}
-              value={isApiAuthenticated()
-                ? apiOverviewLoading ? "…" : apiOverviewCounts.upcomingCheckins
-                : eligibleCheckins.filter(
-                    (c) => c.status !== "completed" && c.status !== "no-show",
-                  ).length}
-              icon={Icon.truck}
-              iconBg="bg-blue-50"
-            />
-            <StatCard
-              title={"Trả kho cần xử lý"}
-              value={isApiAuthenticated()
-                ? apiOverviewLoading ? "…" : apiOverviewCounts.returnsToProcess
-                : returns.filter((r) => r.status !== "refunded").length}
-              icon={Icon.clipboard}
-              iconBg="bg-purple-50"
-            />
-            <StatCard
-              title={"Hỗ trợ đang mở"}
-              value={
-                facilityTickets.filter((ticket) => ticket.status !== "resolved")
-                  .length
-              }
-              icon={Icon.support}
-              iconBg="bg-red-50"
-            />
-            <StatCard
-              title={"Quản lý giao · Chưa xong"}
-              value={openAssignedFacilityTasks.length}
-              icon={Icon.tasks}
-              iconBg="bg-red-50"
-            />
+            <button
+              type="button"
+              onClick={() => setPage("reservations")}
+              className="text-left w-full cursor-pointer hover:opacity-90 transition-opacity focus:outline-none"
+            >
+              <StatCard
+                title={"Đơn đã cọc · Chờ nhận kho"}
+                value={isApiAuthenticated()
+                  ? apiOverviewLoading ? "…" : apiOverviewCounts.depositWaiting
+                  : reservations.filter((r) => r.status === "CONFIRMED").length}
+                icon={Icon.alert}
+                iconBg="bg-amber-50"
+              />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage("checkin")}
+              className="text-left w-full cursor-pointer hover:opacity-90 transition-opacity focus:outline-none"
+            >
+              <StatCard
+                title={"Nhận kho sắp tới"}
+                value={isApiAuthenticated()
+                  ? apiOverviewLoading ? "…" : apiOverviewCounts.upcomingCheckins
+                  : eligibleCheckins.filter(
+                      (c) => c.status !== "completed" && c.status !== "no-show",
+                    ).length}
+                icon={Icon.truck}
+                iconBg="bg-blue-50"
+              />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage("return")}
+              className="text-left w-full cursor-pointer hover:opacity-90 transition-opacity focus:outline-none"
+            >
+              <StatCard
+                title={"Trả kho cần xử lý"}
+                value={isApiAuthenticated()
+                  ? apiOverviewLoading ? "…" : apiOverviewCounts.returnsToProcess
+                  : returns.filter((r) => r.status !== "refunded").length}
+                icon={Icon.clipboard}
+                iconBg="bg-purple-50"
+              />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage("support")}
+              className="text-left w-full cursor-pointer hover:opacity-90 transition-opacity focus:outline-none"
+            >
+              <StatCard
+                title={"Hỗ trợ đang mở"}
+                value={
+                  facilityTickets.filter((ticket) => ticket.status !== "resolved")
+                    .length
+                }
+                icon={Icon.support}
+                iconBg="bg-red-50"
+              />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage("tasks")}
+              className="text-left w-full cursor-pointer hover:opacity-90 transition-opacity focus:outline-none"
+            >
+              <StatCard
+                title={"Quản lý giao · Chưa xong"}
+                value={openAssignedFacilityTasks.length}
+                icon={Icon.tasks}
+                iconBg="bg-red-50"
+              />
+            </button>
           </div>
           <StaffDailyTaskQueue
             assignedTasks={assignedFacilityTasks}
-            operationalTasks={operationalTasks}
+            operationalTasks={Array.from(queueTasks.values())}
             dateFilter={operationalTaskDateFilter}
             priorityFilter={operationalTaskPriorityFilter}
             sort={operationalTaskSort}
@@ -2575,7 +2610,7 @@ export default function StaffApp({
                   <Tr key={`${kind}-${task.id}`}>
                     <Td>
                       <b>{task.title}</b>
-                      {kind === "assigned" && task.referenceId && <p className="text-xs text-stone-500">{task.referenceId}</p>}
+                      {kind === "assigned" && task.referenceId && <p className="text-xs text-stone-500">{recordDisplayCode(task.referenceId)}</p>}
                     </Td>
                     <Td className="whitespace-nowrap text-xs">{kind === "assigned" ? staffTaskTypeLabel[task.type] : task.id.startsWith("maintenance-") ? "Bảo trì" : task.id.startsWith("support-") ? "Hỗ trợ" : task.id.startsWith("return-") ? "Trả kho" : task.id.startsWith("checkin-") ? "Nhận kho" : task.recoveryTask ? "Thu hồi" : "Vận hành"}</Td>
                     <Td>{kind === "assigned" ? task.facilityName : task.customer}</Td>
@@ -2680,8 +2715,12 @@ export default function StaffApp({
         )}
       </Modal>
 
-      {/* ── RESERVATIONS ──────────────────────────────────────── */}
-      {page === "reservations" && isApiAuthenticated() && <StaffReservationReviews canApprove={canApiActor(user, 'reservations:approve')} facilityNames={user.facilityNames} />}
+      {/* ── RESERVATIONS ─────────────────────────────────────── */}
+      {page === "reservations" && isApiAuthenticated() && (
+        <StaffReservationReviews
+          canApprove={canApiActor(user, "reservations:approve")}
+        />
+      )}
       {page === "reservations" && !isApiAuthenticated() && (
         <div className="fade-in">
           <SectionHeader
@@ -2860,6 +2899,27 @@ export default function StaffApp({
                         >
                           {"Xem"}
                         </Button>
+                        {r.status === "COMPLETED" && (
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            onClick={async () => {
+                              if (window.confirm(`Xác nhận xóa đơn ${r.id} của khách hàng ${r.customer}? Hệ thống sẽ lưu trữ hồ sơ và không xóa vật lý dữ liệu.`)) {
+                                try {
+                                  if (isApiAuthenticated()) {
+                                    await archiveCompletedCheckIn(r.id)
+                                  }
+                                  setReservations((current) => current.filter((item) => item.id !== r.id))
+                                  showToast(`Đã xóa đơn ${r.id} (đã lưu trữ và ghi nhận lịch sử).`)
+                                } catch (error) {
+                                  showToast(staffErrorMessage(error, `Không thể lưu trữ đơn ${r.id}.`))
+                                }
+                              }
+                            }}
+                          >
+                            {"Xóa đơn"}
+                          </Button>
+                        )}
                         {r.status === "AWAITING_REVIEW" && (
                           <Button
                             variant="primary"
@@ -2911,7 +2971,13 @@ export default function StaffApp({
       )}
 
       {/* ── CHECK-IN / HANDOVER ───────────────────────────────── */}
-      {page === "checkin" && <StaffCheckInOperationsPanel showToast={showToast} />}
+      {page === "checkin" && <StaffCheckInOperationsPanel showToast={showToast} onOpenReturns={() => setPage("return")} />}
+      {page === "credentials" && isApiAuthenticated() && <StaffCredentialReissuePanel showToast={showToast} />}
+
+      {page === "facility-rentals" && isApiAuthenticated() && (
+        <StaffFacilityRentals key={`${user.id}:${noticeTarget?.request ?? ''}`}
+          initialRentalId={noticeTarget?.record.kind === 'rental' ? noticeTarget.record.id : undefined} />
+      )}
 
       {/* ── RETURN INSPECTION ────────────────────────────────── */}
 
@@ -2921,10 +2987,11 @@ export default function StaffApp({
             <div className="fade-in space-y-4">
               <SectionHeader
                 eyebrow="CỔNG NHÂN VIÊN · KIỂM KÊ & BẰNG CHỨNG"
-                title="Nghiệm thu trả kho"
+                title="Trả kho & thu hồi"
                 subtitle="Đối chiếu hiện trạng, ghi nhận quyết toán và hoàn cọc trên dữ liệu máy chủ"
               />
-              <ReturnApiPanel role="staff" onChanged={refreshCredentialAlerts} />
+              <ReturnApiPanel key={noticeTarget?.request ?? 0} role="staff" notificationTarget={noticeTarget?.record}
+                onChanged={refreshCredentialAlerts} />
             </div>
           )}
 
@@ -2932,7 +2999,7 @@ export default function StaffApp({
             <div className="fade-in">
           <SectionHeader
             eyebrow={"CỔNG NHÂN VIÊN · KIỂM KÊ & BẰNG CHỨNG"}
-            title={"Nghiệm thu trả kho"}
+            title={"Trả kho & thu hồi"}
             subtitle={
               "Đối chiếu hiện trạng trước-sau, kiểm kê hàng hóa, phân loại và lưu bằng chứng"
             }
@@ -3335,7 +3402,7 @@ export default function StaffApp({
                 <b>{selectedReservation.email}</b>
                 <p className="text-xs">
                   {selectedReservation.emailVerified
-                    ? "✓ Đã xác nhận"
+                    ? "Đã xác nhận"
                     : "Chưa xác nhận"}
                 </p>
               </div>
@@ -3503,7 +3570,7 @@ export default function StaffApp({
                   key={item}
                   className="mb-1 rounded bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
                 >
-                  ✓ {item}
+                  {item}
                 </p>
               ))}
             </div>
@@ -3810,7 +3877,7 @@ export default function StaffApp({
 
               {returnMoistureOrigin === 'facility_fault' && (
                 <div className="rounded-lg border border-rose-200 bg-rose-100/80 p-2.5 text-xs text-rose-900 space-y-1">
-                  <p className="font-bold">{"✓ Trách nhiệm của cơ sở kho:"}</p>
+                  <p className="font-bold">{"Trách nhiệm của cơ sở kho:"}</p>
                   <p>{"Hệ thống tự động miễn trừ toàn bộ phí hư hại và vệ sinh đối với khách hàng. Hệ thống hoàn 100% tiền cọc và kích hoạt phiếu sửa chữa bảo trì khẩn cấp (P1) cho Đội Kỹ thuật."}</p>
                 </div>
               )}
@@ -3995,7 +4062,7 @@ export default function StaffApp({
               </div>
             ) : selectedSharedReturn?.status === "awaiting_customer_confirmation" ? (
               <div className="rounded-lg border border-amber-300 bg-amber-50 p-3.5 text-sm text-amber-900">
-                <p className="font-bold">⏳ Chờ khách hàng phản hồi duyệt quyết toán</p>
+                <p className="font-bold">Chờ khách hàng phản hồi duyệt quyết toán</p>
                 <p className="mt-1 text-xs leading-relaxed text-amber-800">
                   Biên bản nghiệm thu đã lập và đang chờ khách hàng duyệt. Nhân viên không đóng hồ sơ hoặc hoàn cọc thay khách hàng để tránh xung đột hệ thống (lỗi 409 Conflict).
                 </p>
@@ -4225,7 +4292,7 @@ export default function StaffApp({
                   {formatTime(selectedCheckin.appointmentTime)}
                 </span>
                 <span>
-                  <b>{"Hạn nhận kho"}:</b>{" "}
+                  <b>{"Hạn đến nhận kho"}:</b>{" "}
                   {formatDate(selectedCheckin.checkInDeadline)}
                 </span>
               </div>
@@ -4479,7 +4546,7 @@ export default function StaffApp({
             </div>
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
               {
-                "Nhân viên hoàn tất nhận kho để kích hoạt hợp đồng thuê. Khách hàng sẽ tự bấm “Tôi đã nhận kho”. Trước thời điểm đó, hồ sơ mang nhãn “Chờ khách hàng xác nhận bàn giao”."
+                "Nhân viên lưu biên bản và hoàn tất bàn giao để tạo hồ sơ thuê, bắt đầu thời gian chuẩn bị. Khách không cần xác nhận nhận kho thêm."
               }
             </div>
             <div className="space-y-1">
@@ -4581,404 +4648,6 @@ export default function StaffApp({
           </dl>}
           <div className="flex justify-end"><Button variant="outline" onClick={() => setSelectedRenewal(null)}>Đóng</Button></div>
         </div>
-      </Modal>
-      <Modal
-        closeLabel="Đóng hộp thoại"
-        open={Boolean(noShowTarget)}
-        onClose={() => setNoShowTarget(null)}
-        title={"Xác nhận khách hàng không đến"}
-      >
-        {noShowTarget && (
-          <div className="space-y-4">
-            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
-              <b>{noShowTarget.customer}</b> · {noShowTarget.unit}
-              <br />
-              {"Lịch nhận kho"}: {formatDate(noShowTarget.appointmentDate)} ·{" "}
-              {formatTime(noShowTarget.appointmentTime)}
-              <br />
-              {"Hạn cuối"}: {formatDate(noShowTarget.checkInDeadline)}
-            </div>
-            <Input
-              label={"Lý do khách không đến (bắt buộc)"}
-              value={noShowReason}
-              onChange={(event) => setNoShowReason(event.target.value)}
-            />
-            <p className="text-xs text-stone-500">
-              {
-                "Thao tác này hủy quy trình nhận kho và ghi nhận yêu cầu giải phóng gian kho hoặc thu hồi quyền truy cập chờ kích hoạt."
-              }
-            </p>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setNoShowTarget(null)}>
-                {"Hủy"}
-              </Button>
-              <Button
-                variant="danger"
-                disabled={!noShowReason.trim()}
-                onClick={() => {
-                  try {
-                    hub.expireReservation(noShowTarget.reservationId, "NO_SHOW")
-
-                    setCheckins((items) =>
-                      items.map((item) =>
-                        item.id === noShowTarget.id
-                          ? {
-                              ...item,
-
-                              status: "no-show",
-
-                              evidence: [
-                                ...item.evidence,
-
-                                `NO-SHOW-${Date.now()} · ${user.name}: ${noShowReason.trim()} · Hủy quy trình nhận kho, giải phóng gian kho, thu hồi quyền truy cập`,
-                              ],
-                            }
-                          : item,
-                      ),
-                    )
-
-                    setNoShowTarget(null)
-
-                    showToast(
-                      "Đã ghi nhận khách không đến. Khách hàng và kho đã được cập nhật.",
-                    )
-                  } catch (error) {
-                    showToast(staffErrorMessage(error, "Không thể ghi nhận khách không đến."))
-                  }
-                }}
-              >
-                {"Xác nhận khách không đến"}
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
-
-      {/* Staff Ticket Resolution Modal */}
-      <Modal
-        closeLabel="Đóng hộp thoại"
-        open={respondModal}
-        onClose={() => setRespondModal(false)}
-        size="xl"
-        className="!p-0 overflow-hidden bg-[#f4f1ea] border border-[#e7e2d8]"
-        contentClassName="p-5 sm:p-6 bg-[#f4f1ea] space-y-4"
-        customHeader={
-          <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-[#e7e2d8] sticky top-0 z-20">
-            <h2
-              id="modal-title"
-              className="text-[15px] font-semibold text-[#191b20]"
-              style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
-            >
-              Phiếu hỗ trợ
-            </h2>
-            <button
-              type="button"
-              aria-label="Đóng"
-              className="text-[#767268] hover:text-[#191b20] hover:bg-[#f4f1ea] p-1.5 rounded-lg transition flex items-center justify-center cursor-pointer"
-              onClick={() => setRespondModal(false)}
-            >
-              <svg className="w-5 h-5 show-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        }
-      >
-        {activeStaffTicket && (
-          <div className="space-y-4">
-            {/* Card thông tin ticket */}
-            <div className="rounded-[10px] border border-[#e7e2d8] bg-white p-5 sm:p-6 shadow-2xs">
-              <div className="flex flex-wrap items-center gap-2">
-                <span
-                  className="inline-flex items-center px-2.5 py-0.5 rounded font-mono font-bold tracking-wide text-[11.5px]"
-                  style={{ background: '#efece3', color: 'var(--ink)' }}
-                >
-                  {activeStaffTicket.id}
-                </span>
-                {activeStaffTicket.status === 'resolved' ? (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11.5px] font-bold bg-[#edf7f0] text-[#2f9e5c] border border-[#bfe7ce]">
-                    Đã giải quyết
-                  </span>
-                ) : activeStaffTicket.status === 'in-progress' ? (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11.5px] font-bold bg-[#fef3eb] text-[#e0680f] border border-[#fcd9bd]">
-                    Đang xử lý
-                  </span>
-                ) : activeStaffTicket.status === 'waiting-customer' ? (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11.5px] font-bold bg-[#efece3] text-[#767268] border border-[#deddd2]">
-                    Chờ khách hàng
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11.5px] font-bold bg-[#efece3] text-[#767268] border border-[#deddd2]">
-                    Chờ xử lý
-                  </span>
-                )}
-              </div>
-
-              <h3
-                className="mt-3 text-[19px] font-bold leading-snug text-[#191b20]"
-                style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
-              >
-                {activeStaffTicket.subject}
-              </h3>
-
-              <div className="mt-3 pt-3 border-t border-[#e7e2d8]/70 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-[13px] text-[#767268]">
-                <div>
-                  <span>{activeStaffTicket.customer}</span>
-                  <span className="mx-1.5">·</span>
-                  <span>{activeStaffTicket.email}</span>
-                </div>
-                <div className="font-medium text-[#191b20] sm:text-right">
-                  <span>{activeStaffTicket.facility}</span>
-                  <span className="mx-1.5">·</span>
-                  <span>
-                    Gian kho{" "}
-                    <b className="font-bold text-[#191b20]">
-                      {activeStaffTicket.unit}
-                    </b>
-                  </span>
-                </div>
-              </div>
-              <h3 className="font-bold text-base mt-1 text-stone-100">
-                {activeStaffTicket.subject}
-              </h3>
-              <p className="text-xs text-stone-300 mt-1">
-                {"Khách thuê: "}
-                {activeStaffTicket.customer} ({activeStaffTicket.email}) · Gian
-                kho {activeStaffTicket.unit}
-              </p>
-            </div>
-
-            {/* Chatbox */}
-            <div className="max-h-72 overflow-y-auto rounded-[10px] border border-[#e7e2d8] bg-[#faf8f4] p-4 space-y-3.5">
-              {activeStaffTicket.messages?.map((msg) => {
-                const isStaff = msg.role === "staff"
-
-                const isCustomer = msg.role === "customer"
-
-                return (
-                  <div
-                    key={msg.id}
-                    className={`flex flex-col ${
-                      isStaff ? "items-end" : "items-start"
-                    }`}
-                  >
-                    <div className="mb-1 px-1 flex items-center gap-1.5 text-[11px] text-[#767268]">
-                      <span className="font-semibold text-[#191b20]">
-                        {msg.sender}
-                      </span>
-                      <span>·</span>
-                      <span>
-                        {isStaff
-                          ? "Nhân viên hỗ trợ"
-                          : isCustomer
-                            ? "Khách hàng"
-                            : "Hệ thống"}
-                      </span>
-                      <span>·</span>
-                      <span>{formatDateTime(msg.time)}</span>
-                    </div>
-                    <div
-                      className={`max-w-[75%] rounded-[10px] px-3.5 py-2.5 text-xs leading-relaxed shadow-2xs ${
-                        isStaff
-                          ? "bg-[#fdece0] text-[#191b20] rounded-br-[3px] border border-[#fcd9bd]/60"
-                          : "bg-white text-[#191b20] border border-[#e7e2d8] rounded-bl-[3px]"
-                      }`}
-                    >
-                      <p className="whitespace-pre-wrap text-[13px] leading-relaxed break-words">
-                        {msg.text}
-                      </p>
-                    </div>
-                  </div>
-                )
-              })}
-              <div ref={chatEndRef} />
-            </div>
-
-            {/* Status Changer */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-stone-700 block mb-1">
-                  {"Cập nhật trạng thái"}
-                </label>
-                <select
-                  value={ticketNewStatus}
-                  onChange={(e) =>
-                    setTicketNewStatus(e.target.value as TicketStatus)
-                  }
-                  className="rounded-[6px] border border-[#e7e2d8] bg-white px-3 py-1.5 text-xs text-[#191b20] font-medium focus:outline-none focus:ring-2 focus:ring-[#e0680f] cursor-pointer"
-                >
-                  <option value="in-progress">Đang xử lý</option>
-                  <option value="waiting-customer">
-                    Chờ khách hàng phản hồi
-                  </option>
-                  <option value="resolved">Đã giải quyết xong</option>
-                  <option value="open">Mở mới / Chờ xử lý</option>
-                </select>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-[#191b20] whitespace-nowrap">
-                  Phụ trách:
-                </span>
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-[#e0680f] text-white text-[11px] font-bold flex items-center justify-center shadow-xs">
-                    {(
-                      activeStaffTicket.assignedStaff ||
-                      assignedStaffByTicket[activeStaffTicket.id] ||
-                      user.name ||
-                      "DS"
-                    )
-
-                      .slice(0, 2)
-
-                      .toUpperCase()}
-                  </div>
-                  <span className="text-xs font-bold text-[#191b20]">
-                    {activeStaffTicket.assignedStaff ||
-                      assignedStaffByTicket[activeStaffTicket.id] ||
-                      user.name ||
-                      "Chưa gán"}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Staff Reply */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-stone-700">
-                {"Nội dung phản hồi chính thức tới khách hàng"}
-              </label>
-              <textarea
-                rows={3}
-                placeholder={
-                  "Nhập hướng dẫn khắc phục sự cố, cấp lại mã truy cập hoặc thông báo cho khách hàng..."
-                }
-                value={staffReplyText}
-                onChange={(e) => setStaffReplyText(e.target.value)}
-                className="w-full rounded-[6px] border border-[#e7e2d8] bg-white px-3 py-2 text-xs text-[#191b20] placeholder:text-[#767268]/60 focus:outline-none focus:ring-2 focus:ring-[#e0680f] focus:border-[#e0680f] transition resize-none leading-relaxed"
-              />
-            </div>
-
-            <Input
-              label={"Bằng chứng đính kèm (mã tệp/đường dẫn)"}
-              value={ticketEvidence}
-              onChange={(event) => setTicketEvidence(event.target.value)}
-            />
-            <div className="rounded-[8px] border border-amber-200 bg-amber-50/70 p-3 space-y-2">
-              <label className="text-xs font-semibold text-amber-900 flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={ticketEscalated}
-                  onChange={(event) => {
-                    setTicketEscalated(event.target.checked)
-
-                    if (event.target.checked) setTicketNewStatus("in-progress")
-                  }}
-                />
-                <span>Chuyển cấp cho quản lý/đội kỹ thuật</span>
-              </label>
-              {ticketEscalated && (
-                <Input
-                  label={"Lý do chuyển cấp"}
-                  value={ticketEscalationReason}
-                  onChange={(event) =>
-                    setTicketEscalationReason(event.target.value)
-                  }
-                />
-              )}
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#e7e2d8]">
-              <button
-                type="button"
-                onClick={() => setRespondModal(false)}
-                className="rounded-[6px] border border-[#e7e2d8] bg-white px-4 py-2 text-xs font-semibold text-[#191b20] hover:bg-[#faf8f4] transition cursor-pointer"
-              >
-                Đóng
-              </button>
-              <button
-                type="button"
-                disabled={
-                  !staffReplyText.trim() ||
-                  (ticketEscalated && !ticketEscalationReason.trim())
-                }
-                onClick={() => {
-                  const newMsg = staffReplyText.trim()
-                    ? {
-                        id: `msg-${Date.now()}`,
-
-                        sender: user.name,
-
-                        role: "staff" as const,
-
-                        time: "Vừa xong",
-
-                        text: `${staffReplyText.trim()}${
-                          ticketEvidence.trim()
-                            ? `\n[Bằng chứng: ${ticketEvidence.trim()}]`
-                            : ""
-                        }${
-                          ticketEscalated
-                            ? `\n[Chuyển cấp: ${ticketEscalationReason.trim()}]`
-                            : ""
-                        }`,
-                      }
-                    : null
-
-                  setStaffTickets((prev) =>
-                    prev.map((ticket) => {
-                      if (ticket.id !== activeStaffTicket.id) return ticket
-
-                      return {
-                        ...ticket,
-
-                        status: ticketEscalated
-                          ? "in-progress" as const
-                          : ticketNewStatus,
-
-                        messages: newMsg
-                          ? [...(ticket.messages || []), newMsg]
-                          : ticket.messages,
-                      }
-                    }),
-                  )
-
-                  setAssignedStaffByTicket((previous) => ({
-                    ...previous,
-
-                    [activeStaffTicket.id]:
-                      previous[activeStaffTicket.id] ||
-                      activeStaffTicket.assignedStaff ||
-                      user.name,
-                  }))
-
-                  setStaffReplyText("")
-
-                  setTicketEvidence("")
-
-                  setTicketEscalated(false)
-
-                  setTicketEscalationReason("")
-
-                  setRespondModal(false)
-
-                  showToast(
-                    `${user.name} đã gửi phản hồi cho ${activeStaffTicket.id}.`,
-                  )
-                }}
-                className={`rounded-[6px] px-4 py-2 text-xs font-bold transition flex items-center gap-1.5 ${
-                  !staffReplyText.trim() ||
-                  (ticketEscalated && !ticketEscalationReason.trim())
-                    ? "bg-[#d8d4c9] text-[#767268] cursor-not-allowed border-none"
-                    : "bg-[#e0680f] text-white hover:bg-[#b8540c] shadow-sm cursor-pointer border-none"
-                }`}
-              >
-                {"Lưu và gửi phản hồi"}
-              </button>
-            </div>
-          </div>
-        )}
       </Modal>
 
       <ReturnSettlementModal

@@ -7,14 +7,15 @@ import type { SupportCreate } from '../../types/supportApi'
 import { canReadSupport } from '../../views/support-api/presentation'
 import CustomerSupportAssistant from './CustomerSupportAssistant'
 import SupportChannelInfo from './SupportChannelInfo'
-import SupportStaffHandoff from './SupportStaffHandoff'
+import SupportStaffHandoff, { type SupportRecordTarget } from './SupportStaffHandoff'
 import { loadCustomerChatSession, type CustomerChatSession } from '../../services/customerChatSessionApi'
 import { useCustomerChatPersistence } from '../../hooks/useCustomerChatPersistence'
 import { ApiClientError } from '../../services/apiClient'
 import { getSupportTicket } from '../../services/supportApi'
 import { useSupportUnread } from '../../hooks/useSupportMessageReads'
+import { useMovableChatLauncher } from '../../hooks/useMovableChatLauncher'
 
-type ChatOpenRequest = { request: number; ticketId?: string }
+export type ChatOpenRequest = { request: number; ticketId?: string; target?: SupportRecordTarget }
 
 function ChatIcon({ className = 'h-5 w-5' }: { className?: string }) {
   return <svg aria-hidden="true" className={`show-icon ${className}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
@@ -41,7 +42,7 @@ function ChatSessionBoundary({ actorId, openRequest }: { actorId: string; openRe
 function WidgetSession({ actorId, initialSession, onReload, openRequest }: { actorId: string; initialSession: CustomerChatSession; onReload: () => void; openRequest?: ChatOpenRequest }) {
   const [open, setOpen] = useState(false)
   const [started, setStarted] = useState(false)
-  const [handoff, setHandoff] = useState<{ question: string; history: NonNullable<SupportCreate['handoffMessages']> }>()
+  const [handoff, setHandoff] = useState<{ question: string; history: NonNullable<SupportCreate['handoffMessages']>; target?: SupportRecordTarget }>()
   const [liveStatus, setLiveStatus] = useState('Đang chờ nhân viên')
   const [handoffTicketId, setHandoffTicketId] = useState<string | undefined>(initialSession.snapshot.ticketId ?? undefined)
   const [handedOff, setHandedOff] = useState(!!initialSession.snapshot.ticketId && initialSession.snapshot.autoReturn)
@@ -57,13 +58,91 @@ function WidgetSession({ actorId, initialSession, onReload, openRequest }: { act
   const panelId = useId()
   const titleId = useId()
   const launcher = useRef<HTMLButtonElement>(null)
+  const launcherProps = useMovableChatLauncher(() => { setStarted(true); setOpen(true) })
   const closeButton = useRef<HTMLButtonElement>(null)
   const consumedRequest = useRef<number | undefined>(undefined)
   const [openError, setOpenError] = useState<string>()
+  const [btnPos, setBtnPos] = useState<{ x: number; y: number } | null>(() => {
+    if (typeof window === 'undefined') return null
+    try {
+      const saved = localStorage.getItem('storagehub_chat_btn_pos') || sessionStorage.getItem('storagehub_chat_btn_pos')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (typeof parsed?.x === 'number' && typeof parsed?.y === 'number') {
+          return {
+            x: Math.max(12, Math.min((window.innerWidth || 1024) - 60, parsed.x)),
+            y: Math.max(12, Math.min((window.innerHeight || 768) - 60, parsed.y)),
+          }
+        }
+      }
+    } catch {}
+    return null
+  })
+  const dragRef = useRef<{ startX: number; startY: number; initialX: number; initialY: number } | null>(null)
+  const isDraggingRef = useRef(false)
+  const [isDragging, setIsDragging] = useState(false)
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.button !== 0 && e.pointerType === 'mouse') return
+    const rect = launcher.current?.getBoundingClientRect()
+    if (!rect) return
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      initialX: rect.left,
+      initialY: rect.top,
+    }
+    isDraggingRef.current = false
+
+    const onPointerMove = (ev: PointerEvent) => {
+      if (!dragRef.current) return
+      const dx = ev.clientX - dragRef.current.startX
+      const dy = ev.clientY - dragRef.current.startY
+      if (!isDraggingRef.current && Math.hypot(dx, dy) > 4) {
+        isDraggingRef.current = true
+        setIsDragging(true)
+      }
+      if (isDraggingRef.current) {
+        const nextX = Math.max(12, Math.min((window.innerWidth || 1024) - 60, dragRef.current.initialX + dx))
+        const nextY = Math.max(12, Math.min((window.innerHeight || 768) - 60, dragRef.current.initialY + dy))
+        setBtnPos({ x: nextX, y: nextY })
+      }
+    }
+
+    const onPointerUp = () => {
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('pointercancel', onPointerUp)
+      dragRef.current = null
+      if (isDraggingRef.current) {
+        setIsDragging(false)
+        setBtnPos(current => {
+          if (current) {
+            try {
+              localStorage.setItem('storagehub_chat_btn_pos', JSON.stringify(current))
+              sessionStorage.setItem('storagehub_chat_btn_pos', JSON.stringify(current))
+            } catch {}
+          }
+          return current
+        })
+        setTimeout(() => { isDraggingRef.current = false }, 80)
+      }
+    }
+
+    window.addEventListener('pointermove', onPointerMove, { passive: true })
+    window.addEventListener('pointerup', onPointerUp)
+    window.addEventListener('pointercancel', onPointerUp)
+  }
+
   useEffect(() => {
     if (!openRequest || consumedRequest.current === openRequest.request || staffLocked) return
     consumedRequest.current = openRequest.request
     setOpen(true); setStarted(true); setOpenError(undefined)
+    if (openRequest.target) {
+      setResolutionNotice(false)
+      setHandoff({ question: '', history: [], target: openRequest.target })
+      return
+    }
     if (!openRequest.ticketId || !isUuid(openRequest.ticketId)) return
     let current = true
     void getSupportTicket('customer', openRequest.ticketId).then(ticket => {
@@ -80,11 +159,10 @@ function WidgetSession({ actorId, initialSession, onReload, openRequest }: { act
   const hide = () => { setOpen(false) }
 
   return createPortal(<>
-    <button ref={launcher} type="button" aria-label="Mở chat hỗ trợ" title="Chat hỗ trợ"
+    <button {...launcherProps} ref={launcher} type="button" aria-label="Mở chat hỗ trợ" title="Nhấn để mở chat · Kéo để di chuyển vị trí tự do"
       aria-expanded={open} aria-controls={started ? panelId : undefined} aria-haspopup="dialog"
       hidden={open} data-expanded={open} aria-hidden={open} inert={open}
-      onClick={() => { setStarted(true); setOpen(true) }}
-      className="support-chat-launcher fixed bottom-5 right-5 z-40 flex h-12 w-12 items-center justify-center rounded-full border border-[#a8d1b8] bg-[#c2e2cf] text-[#335b44] shadow-lg shadow-stone-900/10 hover:bg-[#aed7bf] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#659c7c] sm:bottom-6 sm:right-6">
+      className={`support-chat-launcher fixed ${btnPos ? '' : 'bottom-5 right-5 sm:bottom-6 sm:right-6'} z-40 flex h-12 w-12 touch-none select-none items-center justify-center rounded-full border border-[#a8d1b8] bg-[#c2e2cf] text-[#335b44] shadow-lg shadow-stone-900/10 transition-transform duration-75 hover:bg-[#aed7bf] ${isDragging ? 'cursor-grabbing scale-105 shadow-2xl ring-2 ring-[#659c7c]/50' : 'cursor-grab hover:scale-105'} focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#659c7c]`}>
       <ChatIcon className="h-6 w-6" />
       {unreadCount > 0 && <span aria-label={`${unreadCount} tin chưa đọc`} className="absolute -right-1 -top-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-[#335b44] px-1 text-[10px] font-semibold text-white">{Math.min(unreadCount, 99)}</span>}
     </button>
@@ -118,11 +196,11 @@ function WidgetSession({ actorId, initialSession, onReload, openRequest }: { act
       </div>}
       <div className="flex min-h-0 flex-1 flex-col bg-stone-50/70">
         {resolutionNotice && !handedOff && <p role="status" className="border-b border-stone-100 bg-orange-50 px-4 py-2.5 text-xs leading-5 text-stone-700">Nhân viên đã xử lý yêu cầu. Bạn có thể tiếp tục với trợ lý hoặc nhấn Gặp nhân viên để yêu cầu hỗ trợ lại.</p>}
-        <CustomerSupportAssistant key={assistantSession} actorId={actorId} initialMessages={aiMessages} onMessagesChange={setAiMessages} active={open} staffActive={handedOff} staffTicketId={handoffTicketId} onStaffStatus={setLiveStatus} onStaffLocked={setStaffLocked}
-          onStaffResolved={autoReturn ? () => { setHandedOff(false); setHandoff(undefined); setAutoReturn(false); setStaffLocked(false); setResolutionNotice(true); setAiMessages([]); setAssistantSession(value => value + 1) } : undefined}
-          onStaffRequestAgain={() => { setHandedOff(false); setAutoReturn(false); setResolutionNotice(false); setHandoff({ question: '', history: [] }) }}
+        <CustomerSupportAssistant key={assistantSession} actorId={actorId} initialMessages={aiMessages} onMessagesChange={setAiMessages} active={open} staffActive={handedOff && !handoff?.target} staffTicketId={handoffTicketId} onStaffStatus={setLiveStatus} onStaffLocked={setStaffLocked}
+          onStaffResolved={autoReturn && !handoff?.target ? () => { setHandedOff(false); setHandoff(undefined); setAutoReturn(false); setStaffLocked(false); setResolutionNotice(true); setAiMessages([]); setAssistantSession(value => value + 1) } : undefined}
+          onStaffRequestAgain={handoff?.target ? undefined : () => { setHandedOff(false); setAutoReturn(false); setResolutionNotice(false); setHandoff({ question: '', history: [] }) }}
           onMeetStaff={handedOff ? undefined : (question, history) => { setResolutionNotice(false); setHandoff({ question, history }) }}
-          staffRequest={handoff && <SupportStaffHandoff actorId={actorId} question={handoff.question} history={handoff.history} onLocked={setStaffLocked} onCancel={() => setHandoff(undefined)} onCreated={id => {
+          staffRequest={handoff && <SupportStaffHandoff key={handoff.target?.linkedRecord.id} actorId={actorId} question={handoff.question} history={handoff.history} target={handoff.target} onLocked={setStaffLocked} onCancel={() => setHandoff(undefined)} onCreated={id => {
             setHandoffTicketId(id); setHandedOff(true); setHandoff(undefined); setAutoReturn(true); setResolutionNotice(false); setAiMessages([]); setAssistantSession(value => value + 1)
           }} />} />
       </div>

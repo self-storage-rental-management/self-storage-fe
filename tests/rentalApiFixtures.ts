@@ -25,7 +25,7 @@ export const rental: RentalApiDetail = {
     nextDueDate: null,
     reason: "Source missing",
   },
-  access: { completeness: "UNKNOWN", status: null, reason: "Source missing" },
+  access: { completeness: "UNKNOWN", status: null, reference: null, reason: "Source missing" },
 }
 export const renewal: RenewalApiRecord = {
   id: "n1",

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getBusinessConfigApi, type BusinessConfigApi } from '../../services/businessConfigApi'
+import { listBusinessPackagePolicies } from '../../services/businessPolicyApi'
 import { isApiAuthenticated } from '../../services/authApi'
 import { formatVnd } from '../../i18n/currency'
 import { Card, Badge, Button } from '../../components/ui'
@@ -14,11 +15,28 @@ interface Props {
 export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
   const [copied, setCopied] = useState(false)
   const [config, setConfig] = useState<BusinessConfigApi | null>(null)
+  const [minimumRentalMonths, setMinimumRentalMonths] = useState<number | null>(null)
 
   useEffect(() => {
-    if (isApiAuthenticated()) {
-      void getBusinessConfigApi().then(setConfig).catch(() => {})
-    }
+    if (!isApiAuthenticated()) return
+
+    void getBusinessConfigApi().then(setConfig).catch(() => {})
+    void listBusinessPackagePolicies()
+      .then((policies) => {
+        const publishedRentalMonths = policies
+          .filter((policy) =>
+            policy.publicationStatus === 'PUBLISHED'
+            && policy.active
+            && policy.runtimeStatus === 'ACTIVE'
+          )
+          .map((policy) => policy.rentalMonths)
+          .filter((months) => Number.isInteger(months) && months > 0)
+
+        setMinimumRentalMonths(
+          publishedRentalMonths.length > 0 ? Math.min(...publishedRentalMonths) : null,
+        )
+      })
+      .catch(() => setMinimumRentalMonths(null))
   }, [])
 
   const handleCopyAll = () => {
@@ -62,7 +80,7 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
               className="bg-white/10 hover:bg-white/20 text-white border-white/20 text-xs px-3.5 py-2 cursor-pointer"
               onClick={handleCopyAll}
             >
-              {copied ? '✓ Đã sao chép toàn văn' : 'Sao chép toàn văn'}
+              {copied ? 'Đã sao chép toàn văn' : 'Sao chép toàn văn'}
             </Button>
             <Button
               type="button"
@@ -86,7 +104,7 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
                 {lang === "vi" ? "Quy định pháp lý & Vận hành chuẩn hóa" : "Legal & Operations"}
               </span>
               <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
-                {lang === "vi" ? "Hiển thị bên Customer" : "Hiển thị bên Customer"}
+                {lang === "vi" ? "Hiển thị bên Khách hàng" : "Hiển thị bên Khách hàng"}
               </span>
             </div>
             <h3 className="font-bold text-slate-900 text-base">
@@ -94,7 +112,7 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
             </h3>
             <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
               {lang === "vi"
-                ? "Các thông số này được công bố trực tiếp cho khách hàng khi xem chi tiết loại kho, đặt giữ chỗ và thanh lý hợp đồng trên Customer Portal."
+                ? "Các thông số này được công bố trực tiếp cho khách hàng khi xem chi tiết loại kho, đặt giữ chỗ và thanh lý hợp đồng trên cổng khách hàng."
                 : "These parameters are published directly to customers when viewing units, reserving, and settling agreements on the Customer Portal."}
             </p>
           </div>
@@ -118,14 +136,18 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 pt-4">
           <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
             <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Phí Quá Hạn</span>
-            <div className="text-base font-extrabold text-amber-700 font-mono mt-1">{config ? `${formatVnd(config.lateFeeAmount)}/ngày` : '50% / ngày'}</div>
+            <div className="text-base font-extrabold text-amber-700 font-mono mt-1">Tiền thuê tháng ÷ 30 × 1,5 / ngày</div>
             <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Phí mỗi ngày = 50% × (đơn giá thuê tháng ÷ 30). Tự động tính theo số ngày trễ.</p>
           </div>
 
           <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
-<span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Phí Giữ Chỗ (20%)</span>
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
+              Phí Giữ Chỗ ({config ? `${Math.round(config.defaultDepositRatio * 100)}%` : '20%'})
+            </span>
             <div className="text-base font-extrabold text-amber-600 font-mono mt-1">{config ? `${Math.round(config.defaultDepositRatio * 100)}%` : '10% - 30%'}</div>
-            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Cấu hình theo từng gói thuê (mặc định 20%). Trừ trực tiếp vào tiền thuê khi nhận kho.</p>
+            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+              Cấu hình theo từng gói thuê (mặc định {config ? `${Math.round(config.defaultDepositRatio * 100)}%` : '20%'}). Trừ trực tiếp vào tiền thuê khi nhận kho.
+            </p>
           </div>
 
           <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
@@ -136,14 +158,20 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
 
           <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
             <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Thời Hạn Thuê Tối Thiểu</span>
-            <div className="text-base font-extrabold text-slate-900 font-mono mt-1">01 Tháng</div>
-            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Kỳ thuê sử dụng trọn tháng. Chi tiết xác nhận trên báo giá hợp đồng.</p>
+            <div className="text-base font-extrabold text-slate-900 font-mono mt-1">
+              {minimumRentalMonths != null ? `${String(minimumRentalMonths).padStart(2, '0')} Tháng` : 'Chưa công bố'}
+            </div>
+            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+              Lấy theo gói thuê nhỏ nhất đang công bố và còn hiệu lực cho khách hàng.
+            </p>
           </div>
 
           <div className="p-4 rounded-xl border border-stone-200 bg-white shadow-2xs">
             <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Gia Hạn Quá Hạn</span>
-            <div className="text-base font-extrabold text-blue-700 font-mono mt-1">{config ? `Ân hạn ${config.gracePeriodDays} ngày` : 'Tối Đa 7 Ngày'}</div>
-            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">Khách có tối đa 7 ngày để hoàn tất gia hạn. Đến ngày thứ 8 chuyển thu hồi kho.</p>
+            <div className="text-base font-extrabold text-blue-700 font-mono mt-1">Tối đa 7 ngày</div>
+            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+              Khách có tối đa 7 ngày để hoàn tất gia hạn. Đến ngày thứ 8 chuyển thu hồi kho.
+            </p>
           </div>
         </div>
 
@@ -152,7 +180,7 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
           <div className="flex items-center justify-between">
             <h4 className="font-bold text-rose-900 text-sm">Quy định trả kho và gia hạn (Công bố khách hàng)</h4>
             <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-200">
-              Hiển thị tại Customer Portal
+              Hiển thị tại cổng khách hàng
             </span>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 text-xs">
@@ -231,7 +259,7 @@ export default function BusinessRentalRegulationsPanel({ lang = 'vi' }: Props) {
           Hiệu lực thi hành và tính pháp lý
         </h4>
         <p className="text-xs text-slate-600 leading-relaxed">
-          1. Bản Quy định này có hiệu lực kể từ ngày StorageHub ban hành chính thức và được dẫn chiếu mặc định vào toàn bộ các Hợp đồng thuê kho, Phiếu xác nhận đặt giữ kho (Hold/Reservation) và Biên bản bàn giao kho.
+          1. Bản Quy định này có hiệu lực kể từ ngày StorageHub ban hành chính thức và được dẫn chiếu mặc định vào toàn bộ các Hợp đồng thuê kho, Phiếu xác nhận đặt giữ kho và Biên bản bàn giao kho.
         </p>
         <p className="text-xs text-slate-600 leading-relaxed">
           2. Khi có sự thay đổi, bổ sung điều khoản nhằm đáp ứng quy chuẩn kỹ thuật hoặc quy định mới của pháp luật, StorageHub sẽ thông báo công khai trước ít nhất 15 ngày trên cổng quản trị hệ thống và gửi email thông báo đến các khách hàng đang có hợp đồng hiệu lực.

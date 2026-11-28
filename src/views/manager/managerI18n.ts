@@ -1,3 +1,5 @@
+import { VIETNAM_TIME_ZONE } from '../../utils/vietnamTime'
+
 export type Language = 'en' | 'vi'
 
 type BilingualLabel = { en: string; vi: string }
@@ -12,7 +14,7 @@ const statusLabels: Record<string, BilingualLabel> = {
   held: labels('Held', 'Đang giữ'),
   assigned: labels('Assigned', 'Đã phân công'),
   active: labels('Active', 'Đang hiệu lực'),
-  setup: labels('Preparation period', 'Đang trong thời gian chuẩn bị miễn phí'),
+  setup: labels('Free setup', 'Đang thiết lập miễn phí'),
   paid: labels('Paid', 'Đã thanh toán'),
   refunded: labels('Refunded', 'Đã hoàn tiền'),
   overdue: labels('Overdue', 'Quá hạn'),
@@ -29,7 +31,7 @@ const statusLabels: Record<string, BilingualLabel> = {
   awaiting_deposit: labels('Awaiting deposit', 'Chờ thanh toán tiền cọc'),
   contract_signed: labels('Contract signed', 'Đã ký hợp đồng'),
   fully_paid: labels('Fully paid', 'Đã thanh toán đủ'),
-  unit_assigned: labels('Storage assigned', 'Đã phân kho'),
+  unit_assigned: labels('Unit assigned', 'Đã phân gian kho'),
   review_required: labels('Review required', 'Cần duyệt hồ sơ'),
   confirmed: labels('Confirmed', 'Đã xác nhận'),
   expired: labels('Expired', 'Đã hết hạn'),
@@ -40,7 +42,8 @@ const statusLabels: Record<string, BilingualLabel> = {
   closing: labels('Closing', 'Đang tất toán'),
   requested: labels('Requested', 'Đã yêu cầu'),
   inspected: labels('Inspected', 'Đã nghiệm thu'),
-  disputed: labels('Disputed - Needs BO Resolution', 'Đang khiếu nại - Cần BO giải quyết'),
+  awaiting_business_review: labels('Awaiting settlement approval', 'Chờ Quản lý duyệt quyết toán'),
+  disputed: labels('Disputed - Needs BO Resolution', 'Đang khiếu nại - Cần bộ phận vận hành giải quyết'),
   refund_pending: labels('Refund pending', 'Chờ hoàn tiền'),
   payment_due: labels('Payment due', 'Chờ thanh toán'),
   awaiting_customer_confirmation: labels('Awaiting customer confirmation', 'Chờ khách xác nhận'),
@@ -82,7 +85,7 @@ const unitTypes: Record<string, BilingualLabel> = {
 }
 
 const paymentTypes: Record<string, BilingualLabel> = {
-  RESERVATION_DEPOSIT: labels('Reservation deposit', 'Đặt cọc giữ chỗ'),
+  RESERVATION_DEPOSIT: labels('Reservation deposit', 'Phí giữ chỗ'),
   INITIAL_RENT: labels('Initial rent', 'Tiền thuê ban đầu'),
   RENT: labels('Rent', 'Tiền thuê định kỳ'),
   RENTAL_PAYMENT: labels('Rental payment', 'Thanh toán tiền thuê'),
@@ -95,7 +98,10 @@ const paymentTypes: Record<string, BilingualLabel> = {
 const methods: Record<string, BilingualLabel> = {
   BANK_TRANSFER: labels('Bank transfer', 'Chuyển khoản'),
   CASH: labels('Cash', 'Tiền mặt'),
-  ONLINE_GATEWAY: labels('Online gateway', 'Cổng thanh toán trực tuyến')
+  ONLINE_GATEWAY: labels('Online gateway', 'VNPay'),
+  VNPAY: labels('VNPay', 'VNPay'),
+  VNPAY_SANDBOX: labels('VNPay', 'VNPay'),
+  NCB: labels('VNPay', 'VNPay'),
 }
 
 const taskTypes: Record<string, BilingualLabel> = {
@@ -148,10 +154,10 @@ const activities: Record<string, BilingualLabel> = {
   FACILITY_TASK_CREATED: labels('Facility task created', 'Đã tạo nhiệm vụ cơ sở'),
   FACILITY_TASK_UPDATED: labels('Facility task updated', 'Đã cập nhật nhiệm vụ cơ sở'),
   FACILITY_TASK_REASSIGNED: labels('Facility task reassigned', 'Đã giao lại nhiệm vụ'),
-  FACILITY_TASK_ACCEPTED: labels('Facility task accepted', 'Staff đã nhận nhiệm vụ'),
-  FACILITY_TASK_COMPLETED: labels('Facility task completed', 'Staff đã hoàn thành nhiệm vụ'),
-  FACILITY_TASK_UNABLE_REPORTED: labels('Facility task blocked', 'Staff báo không thể thực hiện'),
-  FACILITY_TASK_CANCELLED: labels('Facility task cancelled', 'Manager đã hủy nhiệm vụ'),
+  FACILITY_TASK_ACCEPTED: labels('Facility task accepted', 'Nhân viên đã nhận nhiệm vụ'),
+  FACILITY_TASK_COMPLETED: labels('Facility task completed', 'Nhân viên đã hoàn thành nhiệm vụ'),
+  FACILITY_TASK_UNABLE_REPORTED: labels('Facility task blocked', 'Nhân viên báo không thể thực hiện'),
+  FACILITY_TASK_CANCELLED: labels('Facility task cancelled', 'Quản lý cơ sở đã hủy nhiệm vụ'),
   MAINTENANCE_COMPLETED: labels('Maintenance completed', 'Đã hoàn tất bảo trì'),
   POLICY_UPDATE: labels('Policy updated', 'Đã cập nhật chính sách'),
   GOODS_REVIEW_REJECTED: labels('Goods review rejected', 'Đã từ chối hồ sơ hàng hóa'),
@@ -182,7 +188,7 @@ const entities: Record<string, BilingualLabel> = {
 
 function labelFrom(map: Record<string, BilingualLabel>, value: string, lang: Language) {
   if (!value) return lang === 'vi' ? 'Chưa ghi nhận' : 'Not recorded'
-  return map[value]?.[lang] || (lang === 'vi' ? 'Chưa phân loại' : value.replace(/_/g, ' '))
+  return (map[value] ?? map[value.toLowerCase()] ?? map[value.toUpperCase()])?.[lang] || (lang === 'vi' ? 'Chưa phân loại' : value.replace(/_/g, ' '))
 }
 
 export const managerStatusLabel = (value: string, lang: Language) => labelFrom(statusLabels, value, lang)
@@ -198,7 +204,20 @@ export const managerUnitTypeLabel = (value: string, lang: Language) => {
 }
 
 export const managerPaymentTypeLabel = (value: string, lang: Language) => labelFrom(paymentTypes, value, lang)
-export const managerPaymentMethodLabel = (value: string, lang: Language) => labelFrom(methods, value, lang)
+export const managerPaymentMethodLabel = (value: string, lang: Language) => {
+  if (!value) return '-'
+  const upper = value.trim().toUpperCase()
+  if (upper === 'CASH' || upper === 'TIEN_MAT' || upper.startsWith('TIỀN MẶT')) {
+    return lang === 'en' ? 'Cash' : 'Tiền mặt'
+  }
+  if (upper === 'BANK_TRANSFER' || upper === 'CHUYEN_KHOAN' || upper.startsWith('CHUYỂN KHOẢN')) {
+    return lang === 'en' ? 'Bank transfer' : 'Chuyển khoản'
+  }
+  if (upper === 'ONLINE_GATEWAY' || upper === 'VNPAY' || upper === 'VNPAY_SANDBOX' || upper === 'NCB') {
+    return 'VNPay'
+  }
+  return labelFrom(methods, value, lang)
+}
 export const managerTaskTypeLabel = (value: string, lang: Language) => labelFrom(taskTypes, value, lang)
 export const managerPriorityLabel = (value: string, lang: Language) => labelFrom(priorities, value, lang)
 export const managerActivityLabel = (value: string, lang: Language) => labelFrom(activities, value, lang)
@@ -212,9 +231,11 @@ export const managerDateLabel = (value: string | undefined, lang: Language, incl
     ? parsed.toLocaleString(lang === 'vi' ? 'vi-VN' : 'en-GB', {
       day: '2-digit', month: '2-digit', year: 'numeric',
       hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+      timeZone: VIETNAM_TIME_ZONE,
     })
     : parsed.toLocaleDateString(lang === 'vi' ? 'vi-VN' : 'en-GB', {
       day: '2-digit', month: '2-digit', year: 'numeric',
+      timeZone: VIETNAM_TIME_ZONE,
     })
 }
 

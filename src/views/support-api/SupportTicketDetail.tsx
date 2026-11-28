@@ -1,4 +1,5 @@
 import { parseVietnamDate } from '../../utils/vietnamTime'
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react"
 import { createPortal } from 'react-dom'
@@ -57,11 +58,11 @@ export function SupportTicketSummary({ ticket: t, role = "customer" }: { ticket:
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-200 pb-3">
         <div className="min-w-0 flex-1 space-y-1">
           <h3 className="break-words text-lg font-semibold text-stone-900">{t.subject}</h3>
-          <span className="inline-flex items-center gap-1 text-xs text-stone-500" title={t.id}>Mã yêu cầu: <span className="font-mono">{t.displayCode || `#${t.id.slice(0, 8)}`}</span>
-            <button type="button" className="rounded p-0.5 hover:bg-stone-100 hover:text-stone-900" title={copied ? "Đã sao chép" : "Sao chép mã yêu cầu"} aria-label="Sao chép mã yêu cầu" onClick={async () => {
-              try { await navigator.clipboard.writeText(t.displayCode || t.id); setCopied(true) }
+          <span className="inline-flex items-center gap-1 text-xs text-stone-500" title={t.displayCode || recordDisplayCode(t.id)}>Mã hồ sơ: <span className="font-mono">{t.displayCode || recordDisplayCode(t.id)}</span>
+            <button type="button" className="rounded px-1 text-[11px] font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-900" title={copied ? "Đã sao chép" : "Sao chép mã yêu cầu"} aria-label="Sao chép mã yêu cầu" onClick={async () => {
+              try { await navigator.clipboard.writeText(t.displayCode || recordDisplayCode(t.id)); setCopied(true) }
               catch { setCopied(false) }
-            }}>{copied ? "✓" : "⧉"}</button>
+            }}>{copied ? "Đã chép" : "Sao chép"}</button>
           </span>
         </div>
         <span className={`inline-flex shrink-0 whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold ${t.status === "open" ? "bg-slate-100 text-slate-700" : t.status === "in_progress" ? "bg-blue-50 text-blue-700" : t.status === "resolved" || t.status === "closed" ? "bg-green-100 text-green-700" : "bg-amber-50 text-amber-800"}`}>{copy(supportStatusLabels[t.status])}</span>
@@ -298,7 +299,7 @@ function SupportTimeline({
             key={t}
             type="button"
             aria-pressed={tab === t}
-            className={`-mb-px whitespace-nowrap rounded-t-md border-b-2 px-4 py-2.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500 disabled:cursor-not-allowed disabled:opacity-50 ${tab === t ? "border-amber-500 font-semibold text-stone-900" : "border-transparent text-stone-500 hover:bg-stone-50 hover:text-stone-900"}`}
+            className={`-mb-px whitespace-nowrap border-b-2 px-4 py-2.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500 disabled:cursor-not-allowed disabled:opacity-50 ${tab === t ? "border-amber-500 font-semibold text-stone-900" : "border-transparent text-stone-500 hover:bg-stone-50 hover:text-stone-900"}`}
             disabled={locked}
             onClick={() => {
               setTab(t)
@@ -331,7 +332,7 @@ function SupportTimeline({
               <MessageRow message={message} hideBody={repeatedOpeningMessage} />
             </div>
           )})}
-          {chatLayout && waitingForStaff && <p role="status" className="mr-auto max-w-[90%] rounded-2xl rounded-bl-md bg-[#f2f0ee] px-3.5 py-2.5 text-sm leading-6 text-stone-700">Yêu cầu đã được gửi đến cơ sở. Bạn vui lòng chờ nhân viên phản hồi, có thể nhắn thêm thông tin ngay bên dưới.</p>}
+          {chatLayout && waitingForStaff && <p role="status" className="mr-auto max-w-[90%] rounded-2xl rounded-bl-md bg-[#f2f0ee] px-3.5 py-2.5 text-sm leading-6 text-stone-700">Yêu cầu đã được gửi đến cơ sở. Trong khi chờ nhân viên phản hồi, bạn có thể nhắn thêm thông tin.</p>}
           {!chatLayout && (read.data.data.length === 0 || (tab === "messages" && read.data.data.length === 1 &&
             isRepeatedOpeningMessage(read.data.data[0] as SupportMessage, 0) &&
             !(read.data.data[0] as SupportMessage).evidenceFileIds?.length &&

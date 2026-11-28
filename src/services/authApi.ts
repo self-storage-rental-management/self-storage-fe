@@ -1,4 +1,4 @@
-import { PERMISSION_KEYS, type PermissionKey, type Role, type User } from '../types'
+import { PERMISSION_KEYS, type PermissionKey, type Role, type User, type CustomerProfileDetails } from '../types'
 import { ApiClientError, apiRequest, clearAuthTokens, getAccessToken, getRefreshToken, hasAccessToken, setAccessToken, setRefreshToken } from './apiClient'
 import { waitForChatSessionSaves } from './chatSessionSaveQueue'
 
@@ -7,6 +7,7 @@ export type ApiUserStatus = 'ACTIVE' | 'SUSPENDED' | 'INACTIVE' | 'LOCKED' | 'DI
 export type ApiFacilityScopeLevel = 'READ' | 'OPERATE' | 'MANAGE'
 
 export interface ApiActor {
+  profileDetails?: CustomerProfileDetails
   id: string
   email: string
   fullName: string
@@ -125,8 +126,19 @@ export function primaryRole(roles: readonly ApiRoleCode[]): Role {
   return role.toLowerCase() as Role
 }
 
+const facilityScopeRank: Record<ApiFacilityScopeLevel, number> = { READ: 0, OPERATE: 1, MANAGE: 2 }
+
+export function staffWorkingFacilityId(actor: ApiActor): string | undefined {
+  return Object.keys(actor.facilityScopes).sort((a, b) =>
+    facilityScopeRank[actor.facilityScopes[b]] - facilityScopeRank[actor.facilityScopes[a]]
+      || (a < b ? -1 : a > b ? 1 : 0),
+  )[0]
+}
+
 export function actorToUser(actor: ApiActor): User {
+  const role = primaryRole(actor.roles)
   const assignedFacilityIds = Object.keys(actor.facilityScopes)
+  const facilityId = role === 'staff' ? staffWorkingFacilityId(actor) : assignedFacilityIds[0]
   const assignedFacilityNames = assignedFacilityIds
     .map(id => actor.facilityNames?.[id])
     .filter((name): name is string => Boolean(name))
@@ -138,10 +150,11 @@ export function actorToUser(actor: ApiActor): User {
     permanentAddress: actor.permanentAddress || undefined,
     emergencyContactName: actor.emergencyContactName || undefined,
     emergencyContactPhone: actor.emergencyContactPhone || undefined,
+    profileDetails: actor.profileDetails,
     avatar: actor.avatarUrl || undefined,
-    role: primaryRole(actor.roles),
-    facility: assignedFacilityNames.join(', ') || undefined,
-    facilityId: assignedFacilityIds[0],
+    role,
+    facility: role === 'staff' ? (facilityId ? actor.facilityNames?.[facilityId] : undefined) : assignedFacilityNames.join(', ') || undefined,
+    facilityId,
     facilityScopes: actor.facilityScopes,
     facilityNames: actor.facilityNames,
     mustChangePassword: actor.mustChangePassword,
@@ -156,7 +169,9 @@ function completeApiLogin(response: ApiEnvelope<ApiAuthResponse>, invalidMessage
   }
   setAccessToken(response.data.accessToken)
   setRefreshToken(response.data.refreshToken)
-  return persistActor(normalizeApiActor(response.data.actor))!
+  const actor = persistActor(normalizeApiActor(response.data.actor))!
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('storagehub:actor-updated'))
+  return actor
 }
 
 export async function loginWithApi(email: string, password: string): Promise<ApiActor> {
@@ -169,7 +184,7 @@ export async function loginWithApi(email: string, password: string): Promise<Api
     skipAuth: true,
     timeoutMs: 10_000,
   })
-  return completeApiLogin(response, 'Backend trả về dữ liệu đăng nhập không hợp lệ.')
+  return completeApiLogin(response, 'Chưa tải được thông tin. Vui lòng thử lại.')
 }
 
 export async function loginWithGoogleApi(idToken: string, captcha?: { captchaId: string; captchaAnswer: string } | null): Promise<ApiActor> {
@@ -182,7 +197,7 @@ export async function loginWithGoogleApi(idToken: string, captcha?: { captchaId:
     skipAuth: true,
     timeoutMs: 10_000,
   })
-  return completeApiLogin(response, 'Backend trả về dữ liệu đăng nhập Google không hợp lệ.')
+  return completeApiLogin(response, 'Chưa tải được thông tin. Vui lòng thử lại.')
 }
 
 export async function changePasswordWithApi(currentPassword: string, newPassword: string): Promise<ApiActor> {
@@ -191,7 +206,7 @@ export async function changePasswordWithApi(currentPassword: string, newPassword
     body: JSON.stringify({ currentPassword, newPassword }),
   })
   if (!response?.data?.accessToken || !response.data.refreshToken || !response.data.actor) {
-    throw new Error('Backend trả về dữ liệu đổi mật khẩu không hợp lệ.')
+    throw new Error('Chưa tải được thông tin. Vui lòng thử lại.')
   }
   setAccessToken(response.data.accessToken)
   setRefreshToken(response.data.refreshToken)
@@ -214,7 +229,7 @@ export async function registerWithApi(input: {
     body: JSON.stringify(input),
     skipAuth: true,
   })
-  if (!response?.data?.actor) throw new Error('Backend trả về dữ liệu đăng ký không hợp lệ.')
+  if (!response?.data?.actor) throw new Error('Chưa tải được thông tin. Vui lòng thử lại.')
   return response.data
 }
 
@@ -236,20 +251,29 @@ export async function updateCurrentProfileWithApi(input: {
   emergencyContactName?: string
   emergencyContactPhone?: string
   avatarUrl?: string
+  profileDetails?: CustomerProfileDetails
 }): Promise<ApiActor> {
   const response = await apiRequest<ApiEnvelope<ApiActor>>('/api/auth/me', {
     method: 'PUT',
     body: JSON.stringify(input),
   })
-  if (!response?.data) throw new Error('Backend trả về dữ liệu hồ sơ không hợp lệ.')
+  if (!response?.data) throw new Error('Chưa tải được thông tin. Vui lòng thử lại.')
   persistActor(normalizeApiActor(response.data))
-  window.dispatchEvent(new Event('storagehub:actor-updated'))
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('storagehub:actor-updated'))
+  return currentActor!
+}
+
+export async function refreshCurrentProfileWithApi(): Promise<ApiActor> {
+  const response = await apiRequest<ApiEnvelope<ApiActor>>('/api/auth/me')
+  if (!response?.data) throw new Error('Chưa tải được thông tin. Vui lòng thử lại.')
+  persistActor(normalizeApiActor(response.data))
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('storagehub:actor-updated'))
   return currentActor!
 }
 
 export async function listMySessions(): Promise<ApiSession[]> {
   const response = await apiRequest<ApiEnvelope<ApiSession[]>>('/api/auth/sessions')
-  if (!response?.data) throw new Error('Backend trả về dữ liệu phiên đăng nhập không hợp lệ.')
+  if (!response?.data) throw new Error('Chưa tải được thông tin. Vui lòng thử lại.')
   return response.data
 }
 
@@ -259,8 +283,14 @@ export async function verifyEmailWithApi(email: string | undefined, codeOrToken:
     body: JSON.stringify({ ...(email ? { email } : {}), codeOrToken }),
     skipAuth: true,
   })
-  if (!response?.data) throw new Error('Backend trả về dữ liệu xác minh không hợp lệ.')
+  if (!response?.data) throw new Error('Chưa tải được thông tin. Vui lòng thử lại.')
   return response.data
+}
+
+export async function resendEmailVerificationWithApi(email: string) {
+  return apiRequest<ApiEnvelope<ApiChallengeResponse>>('/api/auth/verify-email/resend', {
+    method: 'POST', body: JSON.stringify({ email }), skipAuth: true,
+  })
 }
 
 export async function requestPasswordResetWithApi(email: string) {
@@ -316,7 +346,7 @@ export async function refreshApiSession(): Promise<ApiActor> {
     skipAuth: true,
   })
   if (!response?.data?.accessToken || !response.data.refreshToken || !response.data.actor) {
-    throw new Error('Backend trả về dữ liệu refresh không hợp lệ.')
+    throw new Error('Chưa tải được thông tin. Vui lòng thử lại.')
   }
   setAccessToken(response.data.accessToken)
   setRefreshToken(response.data.refreshToken)
@@ -350,7 +380,7 @@ export async function updateProfileWithApi(input: { fullName: string; phone: str
     body: JSON.stringify({ ...input, avatarUrl: currentActor?.avatarUrl ?? null }),
   })
   if (!response?.data?.id || response.data.id !== currentActor?.id) {
-    throw new Error('Backend trả về dữ liệu hồ sơ không hợp lệ.')
+    throw new Error('Chưa tải được thông tin. Vui lòng thử lại.')
   }
   persistActor(response.data)
   return currentActor!

@@ -4,7 +4,7 @@ import { isInvoiceStatus, isInvoiceRefundStatus, isPaymentTransactionStatus, isR
 export const renewalWorkflowLabels = {
   UNDER_REVIEW: 'Đang kiểm tra', AWAITING_PAYMENT: 'Chờ thanh toán',
   AWAITING_RECONCILIATION: 'Chờ đối soát', AWAITING_SIGNING: 'Chờ ký gia hạn',
-  SIGNING_IN_PROGRESS: 'Đang hoàn tất ký', SIGNING_EXPIRED: 'Hết hạn ký',
+  SIGNING_IN_PROGRESS: 'Đang hoàn tất ký', NO_SHOW: 'Khách không đến, chờ đối soát', SIGNING_EXPIRED: 'Hết hạn ký',
   PAYMENT_WINDOW_EXPIRED: 'Hết hạn thanh toán', ON_HOLD: 'Tạm dừng xử lý',
   COMPLETED: 'Gia hạn hoàn tất', CANCELLED: 'Đã hủy', REJECTED: 'Đã đóng',
 } as const satisfies Record<RenewalWorkflowStatus, string>
@@ -27,6 +27,7 @@ export interface RenewalTransaction {
   paymentId: string; reference: string | null; purpose: string; status: RenewalTransactionStatus
   amount: number; refundedAmount: number; currency: string; paymentDeadline: string | null
   deadlineExpired: boolean; receiptAvailable: boolean; paidAt: string | null
+  receiptCode?: string | null
 }
 export interface RenewalStatusSummary {
   workflowStatus: RenewalWorkflowStatus
@@ -65,6 +66,7 @@ export function isRenewalStatusSummary(v: unknown): v is RenewalStatusSummary {
     if (!object(t) || typeof t.paymentId !== 'string' || !t.paymentId || ids.has(t.paymentId) || !isRenewalTransactionStatus(t.status) ||
       !money(t.amount) || !money(t.refundedAmount) || t.refundedAmount > t.amount || t.currency !== 'VND' ||
       !(t.reference === null || typeof t.reference === 'string') || !['RENEWAL', 'RENTAL_BALANCE'].includes(String(t.purpose)) ||
+      !(t.receiptCode == null || typeof t.receiptCode === 'string') ||
       typeof t.deadlineExpired !== 'boolean' || typeof t.receiptAvailable !== 'boolean' ||
       !(t.paymentDeadline === null || date(t.paymentDeadline)) || !(t.paidAt === null || date(t.paidAt))) return false
     if (t.receiptAvailable && !['SUCCEEDED', 'PARTIALLY_REFUNDED', 'REFUNDED'].includes(t.status)) return false

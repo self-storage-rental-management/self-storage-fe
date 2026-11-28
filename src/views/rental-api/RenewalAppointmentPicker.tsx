@@ -71,17 +71,22 @@ export default function RenewalAppointmentPicker({
         <div className="relative">
           <Input id={`${inputId}-date`} aria-label="Ngày ký" type="date" required disabled={disabled} value={date}
             min={earliest?.slice(0, 10) ?? today} max={latest?.slice(0, 10)}
-            className="!h-14 !rounded-full !border-stone-300 !px-4 !text-base"
+            className="!h-14 !rounded-lg !border-stone-300 !px-4 !text-base"
             onChange={e => {
               setDate(e.target.value); setTime(""); onChange(""); onReadyChange(false)
             }} />
         </div>
+        {earliest && latest && (
+          <p className="text-[11px] text-stone-500 leading-tight">
+            Khung hẹn khả dụng: <b>{earliest.slice(0, 10).split("-").reverse().join("/")}</b> đến <b>{latest.slice(0, 10).split("-").reverse().join("/")}</b> (tối đa 5 ngày theo thời hạn giữ chỗ gia hạn).
+          </p>
+        )}
       </div>
       <div className="space-y-1.5">
         <label htmlFor={`${inputId}-time`} className="block text-sm font-semibold text-stone-600">Khung giờ</label>
         <div className="relative">
           <select id={`${inputId}-time`} aria-label="Khung giờ" required disabled={disabled || read.loading || !date || availableTimes.length === 0}
-            value={time} className="h-14 w-full rounded-2xl border border-stone-300 bg-white px-4 pr-11 text-base text-stone-800 transition focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-200 disabled:cursor-not-allowed disabled:bg-stone-50 disabled:text-stone-400"
+            value={time} className="h-14 w-full !rounded-lg border border-stone-300 bg-white px-4 pr-11 text-base text-stone-800 transition focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-200 disabled:cursor-not-allowed disabled:bg-stone-50 disabled:text-stone-400"
             onChange={e => {
               setTime(e.target.value)
               onChange(e.target.value ? `${date}T${e.target.value}` : "")
@@ -106,9 +111,9 @@ export default function RenewalAppointmentPicker({
       <div><p className="font-semibold">Không có lịch trống ngày {displayDate}</p><p className="mt-1 text-sm text-stone-500">Hãy chọn ngày khác hoặc liên hệ cơ sở để được hỗ trợ.</p></div>
     </div>}
     {currentVersion && !!time && !!window.slots.length && !available && <p role="alert" className="text-sm text-red-700">Khung giờ đã chọn không còn khả dụng, vui lòng chọn lại.</p>}
-    <p className="flex items-start gap-2 text-sm text-stone-500">
-      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="show-icon mt-0.5 h-4 w-4 shrink-0"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01" strokeLinecap="round"/></svg>
-      Bạn cần lưu lịch ký hợp lệ trước khi tiếp tục thanh toán khoản trả trước.
+    <p className="flex items-start gap-2 text-xs text-stone-500">
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="show-icon mt-0.5 h-4 w-4 shrink-0 text-amber-600"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01" strokeLinecap="round"/></svg>
+      Vui lòng chọn ngày, khung giờ và bấm <b>"Lưu lịch ký"</b> trước khi thực hiện thanh toán khoản trả trước 20%.
     </p>
   </section>
 }

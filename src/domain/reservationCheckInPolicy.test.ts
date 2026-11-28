@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { firstBookableCheckInMinute, firstCheckInMinute, submissionCheckInWindow, isCheckInAppointmentAllowed, plannedCheckInWindow, policyDateInput, policyTimeInput } from './reservationCheckInPolicy'
+import { staffCheckInActions, firstBookableCheckInMinute, firstBookableCheckInSlot, firstCheckInMinute, firstCheckInSlot, submissionCheckInWindow, isCheckInAppointmentAllowed, isCheckInHandoverExpired, plannedCheckInWindow, policyDateInput, policyTimeInput } from './reservationCheckInPolicy'
+
+it('expires handover at midnight in Vietnam on the eighth calendar day', () => {
+  const appointment = '2026-11-21T15:00:00+07:00'
+  expect(isCheckInHandoverExpired(appointment, Date.parse('2026-11-27T16:59:59.999Z'))).toBe(false)
+  expect(isCheckInHandoverExpired(appointment, Date.parse('2026-11-27T17:30:00Z'))).toBe(false)
+  expect(isCheckInHandoverExpired(appointment, Date.parse('2026-11-27T17:30:00.001Z'))).toBe(true)
+  expect(isCheckInHandoverExpired(null)).toBe(false)
+})
 
 describe('reservation check in policy', () => {
   it.each([false, true])('rechecks an appointment after time spent filling the form, review=%s', reviewRequired => {
@@ -64,4 +72,56 @@ describe('reservation check in policy', () => {
     expect(isCheckInAppointmentAllowed(new Date('2026-10-19T16:15:00+07:00'), window)).toBe(true)
     expect(isCheckInAppointmentAllowed(new Date('2026-10-19T16:16:00+07:00'), window)).toBe(false)
   })
+})
+
+describe('staff intake actions', () => {
+  const appointmentAt = '2026-11-22T10:00:00+07:00'
+  const at = Date.parse(appointmentAt)
+  const scheduled = { intakeAction: 'START', checkInStatus: 'scheduled', checkInId: 'id', appointmentAt,
+    scheduledAt: '2026-11-21T10:00:00+07:00' } as const
+
+  it('allows opening intake and only enables rejection after arrival is recorded', () => {
+    expect(staffCheckInActions(scheduled, at - 1)).toEqual({
+      label: 'Bắt đầu nhận kho', canOpen: true, canReject: false,
+    })
+    expect(staffCheckInActions(scheduled, at).canReject).toBe(false)
+    const arrived = { ...scheduled, attendance: { deadline: null, arrivedAt: appointmentAt } }
+    const comparing = { ...arrived, attendance: { ...arrived.attendance, completionDeadline: new Date(at + 72 * 3600000).toISOString() } }
+    expect(staffCheckInActions(comparing, at + 72 * 3600000).canOpen).toBe(true)
+    expect(staffCheckInActions(comparing, at + 72 * 3600000 + 1).canOpen).toBe(false)
+    expect(staffCheckInActions(arrived, at + 8 * 86400_000)).toMatchObject({ canOpen: true, canReject: true })
+  })
+
+  it('blocks actions for missing appointments, elapsed deadlines and API-ineligible cases', () => {
+    for (const actions of [
+      staffCheckInActions({ ...scheduled, appointmentAt: null, scheduledAt: null }, at),
+      staffCheckInActions(scheduled, at + 7 * 86400_000),
+      staffCheckInActions({ ...scheduled, intakeAction: 'NONE' }, at),
+    ]) expect(actions).toMatchObject({ canOpen: false, canReject: false })
+  })
+
+  it('offers only the primary action before scheduling or after identity verification', () => {
+    expect(staffCheckInActions({ ...scheduled, checkInStatus: null, checkInId: null }, at))
+      .toMatchObject({ label: 'Bắt đầu nhận kho', canOpen: true, canReject: false })
+    expect(staffCheckInActions({ ...scheduled, checkInStatus: 'identity_verified', intakeAction: 'CONTINUE' }, at))
+      .toEqual({ label: 'Tiếp tục nhận kho', canOpen: true, canReject: false })
+  })
+
+  it('keeps post-handover follow-up available past the intake deadline', () => {
+    expect(staffCheckInActions({ ...scheduled, checkInStatus: 'setup_completed', intakeAction: 'CONTINUE' },
+      at + 10 * 86400_000)).toMatchObject({ canOpen: true, canReject: false })
+  })
+})
+
+it('rounds check-in slot up to the next 30-minute boundary', () => {
+  const window = plannedCheckInWindow('2026-10-30T14:00:00+07:00', false) // availableAt = 20:15
+  const slot = firstCheckInSlot(window.availableAt)
+  expect(policyTimeInput(slot)).toBe('20:30')
+  expect(isCheckInAppointmentAllowed(slot, window)).toBe(true)
+
+  const exact = new Date('2026-10-30T20:00:00+07:00')
+  expect(policyTimeInput(firstCheckInSlot(exact))).toBe('20:00')
+
+  const subWindow = submissionCheckInWindow(Date.parse('2026-10-30T14:00:00+07:00'), false)
+  expect(policyTimeInput(firstBookableCheckInSlot(subWindow)!)).toBe('20:30')
 })

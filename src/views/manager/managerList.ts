@@ -1,4 +1,5 @@
 import { formatVnd } from '../../i18n/currency'
+import { VIETNAM_TIME_ZONE } from '../../utils/vietnamTime'
 
 export const MANAGER_PAGE_SIZE_OPTIONS = [10, 20, 50] as const
 
@@ -31,7 +32,12 @@ export function managerDateValue(value?: string): number {
 export function formatManagerDate(value?: string): string {
   const timestamp = managerDateValue(value)
   return timestamp
-    ? new Date(timestamp).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    ? new Date(timestamp).toLocaleDateString('vi-VN', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        timeZone: VIETNAM_TIME_ZONE
+      })
     : 'Chưa xác định'
 }
 
@@ -43,7 +49,8 @@ export function formatManagerDateTime(value?: string): string {
         month: '2-digit',
         year: 'numeric',
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
+        timeZone: VIETNAM_TIME_ZONE
       })
     : 'Chưa xác định'
 }

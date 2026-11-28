@@ -1,4 +1,5 @@
 import { managerDisplayError } from './managerPresentation'
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import { useEffect, useMemo, useState } from 'react'
 import { Badge, Button, Card, Input, Modal, SectionHeader, Select, StatCard, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import { Icon } from '../../components/Layout'
@@ -15,7 +16,6 @@ import { isApiAuthenticated } from '../../services/authApi'
 import ManagerFacilityCatalog from './ManagerFacilityCatalog'
 import { facilityCatalogTypeName } from './managerFacilityCatalogApi'
 import ManagerInventoryApiPanel from './ManagerInventoryApiPanel'
-import { inventoryLocation } from './managerInventoryDetailsApi'
 
 interface Props {
   user: User
@@ -138,7 +138,6 @@ function DemoManagerInventoryPanel({
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
-  const [floorFilter, setFloorFilter] = useState('all')
   const [zoneFilter, setZoneFilter] = useState('all')
   const [sortBy, setSortBy] = useState('attention')
   const [unitPage, setUnitPage] = useState(1)
@@ -230,7 +229,6 @@ function DemoManagerInventoryPanel({
   }
 
   const types = useMemo(() => Array.from(new Set(facilityUnits.map(unit => unit.type))).sort(), [facilityUnits])
-  const floors = useMemo(() => Array.from(new Set(facilityUnits.map(unit => unit.floor))).sort((a, b) => a - b), [facilityUnits])
   const zones = useMemo(() => Array.from(new Set(facilityUnits.map(unit => unit.zone))).sort(), [facilityUnits])
 
   const visibleUnits = useMemo(() => {
@@ -241,7 +239,6 @@ function DemoManagerInventoryPanel({
         unit.code,
         managerUnitTypeLabel(unit.type, 'vi'),
         unit.zone,
-        `Tầng ${unit.floor}`,
         rental?.customerName,
         rental?.id,
         reservation?.customerName,
@@ -250,7 +247,6 @@ function DemoManagerInventoryPanel({
       return (
         (statusFilter === 'all' || (statusFilter === 'allocated' ? ['reserved', 'assigned'].includes(unit.status) : unit.status === statusFilter)) &&
         (typeFilter === 'all' || unit.type === typeFilter) &&
-        (floorFilter === 'all' || String(unit.floor) === floorFilter) &&
         (zoneFilter === 'all' || unit.zone === zoneFilter) &&
         matchesManagerSearch(query, searchValues)
       )
@@ -270,7 +266,7 @@ function DemoManagerInventoryPanel({
       }
       return left.code.localeCompare(right.code)
     })
-  }, [facilityUnits, facilityRentals, facilityReservations, facilityMaintenance, facilityReturns, query, statusFilter, typeFilter, floorFilter, zoneFilter, sortBy])
+  }, [facilityUnits, facilityRentals, facilityReservations, facilityMaintenance, facilityReturns, query, statusFilter, typeFilter, zoneFilter, sortBy])
   const unitPagination = paginateManagerItems(visibleUnits, unitPage, unitPageSize)
 
   const availableCount = facilityUnits.filter(unit => unit.status === 'available').length
@@ -287,7 +283,6 @@ function DemoManagerInventoryPanel({
       const zoneUnits = facilityUnits.filter(unit => unit.zone === zone)
       return {
         zone,
-        floors: Array.from(new Set(zoneUnits.map(unit => unit.floor))).sort((a, b) => a - b).join(', '),
         total: zoneUnits.length,
         available: zoneUnits.filter(unit => unit.status === 'available').length,
         reserved: zoneUnits.filter(unit => ['reserved', 'assigned'].includes(unit.status)).length,
@@ -353,14 +348,13 @@ function DemoManagerInventoryPanel({
     setQuery('')
     setStatusFilter('all')
     setTypeFilter('all')
-    setFloorFilter('all')
     setZoneFilter('all')
     setSortBy('attention')
   }
 
   useEffect(() => {
     setUnitPage(1)
-  }, [query, statusFilter, typeFilter, floorFilter, zoneFilter, sortBy, unitPageSize])
+  }, [query, statusFilter, typeFilter, zoneFilter, sortBy, unitPageSize])
 
   return (
     <div className="fade-in min-w-0 max-w-full space-y-6">
@@ -401,10 +395,6 @@ function DemoManagerInventoryPanel({
           <Select label="Loại gian kho" value={typeFilter} onChange={event => setTypeFilter(event.target.value)}>
             <option value="all">Tất cả loại gian kho</option>
             {types.map(type => <option key={type} value={type}>{managerUnitTypeLabel(type, 'vi')}</option>)}
-          </Select>
-          <Select label="Tầng" value={floorFilter} onChange={event => setFloorFilter(event.target.value)}>
-            <option value="all">Tất cả tầng</option>
-            {floors.map(floor => <option key={floor} value={floor}>Tầng {floor}</option>)}
           </Select>
           <Select label="Khu vực" value={zoneFilter} onChange={event => setZoneFilter(event.target.value)}>
             <option value="all">Tất cả khu vực</option>
@@ -461,7 +451,7 @@ function DemoManagerInventoryPanel({
                     <p className="font-semibold leading-5 text-stone-900">{managerUnitTypeLabel(unit.type, 'vi')}</p>
                   </Td>
                   <Td className="align-middle">
-                    <p className="font-medium text-stone-800">{inventoryLocation(unit.floor, unit.zone)}</p>
+                    <p className="font-medium text-stone-800">{unit.zone || 'Chưa có khu vực'}</p>
                     <p className="mt-1 text-xs leading-4 text-stone-500">{unit.climate ? 'Có kiểm soát nhiệt độ' : 'Không kiểm soát nhiệt độ'}</p>
                   </Td>
                   <Td className="align-middle">
@@ -498,7 +488,6 @@ function DemoManagerInventoryPanel({
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="font-semibold text-stone-900">{item.zone}</p>
-                    <p className="mt-1 text-xs text-stone-500">Tầng {item.floors || 'Chưa xác định'}</p>
                   </div>
                   <Badge variant="muted">{item.total} gian</Badge>
                 </div>
@@ -562,7 +551,7 @@ function DemoManagerInventoryPanel({
           const hiddenActivityCount = allUnitActivities.length - allUnitActivities.filter(item => !activityHistory.isHidden(item.id)).length
           const hasOperationalLock = managerUnitHasOperationalLock(selectedUnit.id, facilityReservations, facilityRentals)
           return <div className="space-y-5 text-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-stone-50 p-4"><div><p className="font-mono text-lg font-bold text-stone-900">{selectedUnit.code}</p><p className="mt-1 text-stone-500">{selectedUnit.facilityName}, {inventoryLocation(selectedUnit.floor, selectedUnit.zone)}</p></div><Badge variant={statusVariants[selectedUnit.status] || 'muted'}>{unitStatusLabel(selectedUnit.status)}</Badge></div>
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-stone-50 p-4"><div><p className="font-mono text-lg font-bold text-stone-900">{selectedUnit.code}</p><p className="mt-1 text-stone-500">{selectedUnit.facilityName}, {selectedUnit.zone || 'Chưa có khu vực'}</p></div><Badge variant={statusVariants[selectedUnit.status] || 'muted'}>{unitStatusLabel(selectedUnit.status)}</Badge></div>
 
             <div>
               <h3 className="mb-3 font-bold text-stone-900">Thông số vật lý</h3>
@@ -578,7 +567,7 @@ function DemoManagerInventoryPanel({
 
             <div className="grid gap-4 lg:grid-cols-2">
               <Card className="p-4"><h3 className="mb-3 font-bold text-stone-900">Chi phí và khả dụng</h3><div className="space-y-2"><p className="flex justify-between gap-3"><span className="text-stone-500">Giá áp dụng hiện tại</span><b>{formatManagerMoney(selectedUnit.price)}</b></p><p className="flex justify-between gap-3"><span className="text-stone-500">Tiền cọc đảm bảo thuê theo chính sách hiện hành</span><b>{formatManagerMoney(selectedUnit.deposit)}</b></p><div className="flex justify-between gap-3"><span className="text-stone-500">Khả dụng thực tế</span><div className="text-right"><b>{availability.label}</b>{availability.detail && <p className="mt-1 text-xs font-normal text-stone-500">{availability.detail}</p>}</div></div>{selectedUnit.heldUntil && <p className="flex justify-between gap-3"><span className="text-stone-500">Thời hạn giữ tạm</span><b>{formatDateTime(selectedUnit.heldUntil)}</b></p>}</div></Card>
-              <Card className="p-4"><h3 className="mb-3 font-bold text-stone-900">Tình trạng khai thác</h3>{rental ? <div className="space-y-2"><p>Khách hàng: <b>{rental.customerName}</b></p><p>Mã hồ sơ thuê: <b className="font-mono">{rental.id}</b></p><p>Thời hạn: <b>{parseDisplayDate(rental.startDate) && parseDisplayDate(rental.endDate) ? `${formatDate(rental.startDate)} - ${formatDate(rental.endDate)}` : 'Chưa đủ dữ liệu kỳ thuê'}</b></p><p>Trạng thái hồ sơ: <Badge variant="info">{managerStatusLabel(rental.status, 'vi')}</Badge></p><p>Kỳ thanh toán tiếp theo: <b>{formatDate(rental.nextDue)}</b></p><p>Thanh toán: <Badge variant={isManagerRentalOverdue(rental) ? 'error' : rental.paymentStatus === 'paid' ? 'success' : 'warning'}>{managerStatusLabel(isManagerRentalOverdue(rental) ? 'overdue' : rental.paymentStatus, 'vi')}</Badge></p></div> : reservation ? <div className="space-y-2"><p>Khách hàng: <b>{reservation.customerName}</b></p><p>Mã đơn đặt chỗ: <b className="font-mono">{reservation.id}</b></p><p>Thời gian dự kiến: <b>{parseDisplayDate(reservation.startDate) && parseDisplayDate(reservation.endDate) ? `${formatDate(reservation.startDate)} - ${formatDate(reservation.endDate)}` : 'Chưa đủ dữ liệu kỳ thuê'}</b></p><p>Trạng thái: <Badge variant="warning">{managerStatusLabel(reservation.status, 'vi')}</Badge></p></div> : selectedUnit.status === 'occupied' ? <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-red-800"><b>Dữ liệu trạng thái chưa nhất quán</b><p className="mt-1 text-xs">Gian được đánh dấu đang sử dụng nhưng không tìm thấy hồ sơ thuê vận hành tương ứng.</p></div> : <p className="text-stone-500">Gian kho chưa có hồ sơ thuê hoặc đơn đặt chỗ hiệu lực.</p>}</Card>
+              <Card className="p-4"><h3 className="mb-3 font-bold text-stone-900">Tình trạng khai thác</h3>{rental ? <div className="space-y-2"><p>Khách hàng: <b>{rental.customerName}</b></p><p>Mã hồ sơ: <b className="font-mono">{recordDisplayCode(rental.id)}</b></p><p>Thời hạn: <b>{parseDisplayDate(rental.startDate) && parseDisplayDate(rental.endDate) ? `${formatDate(rental.startDate)} - ${formatDate(rental.endDate)}` : 'Chưa đủ dữ liệu kỳ thuê'}</b></p><p>Trạng thái hồ sơ: <Badge variant="info">{managerStatusLabel(rental.status, 'vi')}</Badge></p><p>Kỳ thanh toán tiếp theo: <b>{formatDate(rental.nextDue)}</b></p><p>Thanh toán: <Badge variant={isManagerRentalOverdue(rental) ? 'error' : rental.paymentStatus === 'paid' ? 'success' : 'warning'}>{managerStatusLabel(isManagerRentalOverdue(rental) ? 'overdue' : rental.paymentStatus, 'vi')}</Badge></p></div> : reservation ? <div className="space-y-2"><p>Khách hàng: <b>{reservation.customerName}</b></p><p>Mã hồ sơ: <b className="font-mono">{recordDisplayCode(reservation.id)}</b></p><p>Thời gian dự kiến: <b>{parseDisplayDate(reservation.startDate) && parseDisplayDate(reservation.endDate) ? `${formatDate(reservation.startDate)} - ${formatDate(reservation.endDate)}` : 'Chưa đủ dữ liệu kỳ thuê'}</b></p><p>Trạng thái: <Badge variant="warning">{managerStatusLabel(reservation.status, 'vi')}</Badge></p></div> : selectedUnit.status === 'occupied' ? <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-red-800"><b>Dữ liệu trạng thái chưa nhất quán</b><p className="mt-1 text-xs">Gian được đánh dấu đang sử dụng nhưng không tìm thấy hồ sơ thuê vận hành tương ứng.</p></div> : <p className="text-stone-500">Gian kho chưa có hồ sơ thuê hoặc đơn đặt chỗ hiệu lực.</p>}</Card>
             </div>
 
             {selectedUnit.reservedPeriods?.length ? <div><h3 className="mb-3 font-bold text-stone-900">Các kỳ sử dụng / đặt trước</h3><div className="grid gap-2 sm:grid-cols-2">{selectedUnit.reservedPeriods.map(period => {

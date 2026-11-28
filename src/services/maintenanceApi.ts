@@ -7,12 +7,15 @@ export type MaintenanceTaskType = 'maintenance' | 'inventory_check'
 export type StorageUnitStatus = 'available' | 'reserved' | 'occupied' | 'maintenance' | 'held' | 'assigned'
 
 export interface MaintenanceTaskApi {
+  unitReadinessCheck?: boolean
+  displayCode?: string | null
   id: string
   facilityId: string
   facilityName: string
   storageUnitId: string
   unitCode: string
   rentalId?: string | null
+  customerName?: string | null
   returnCaseId: string | null
   title: string
   taskType?: MaintenanceTaskType
@@ -24,13 +27,25 @@ export interface MaintenanceTaskApi {
   assignedStaffId: string | null
   assignedStaffName: string | null
   status: MaintenanceTaskStatus
+  recoveryRequired?: boolean
+  recoveryType?: 'NONE' | 'RETURN_NO_SHOW' | 'INVENTORY_OVERDUE' | 'SETUP_OVERDUE' | 'MISMATCH_REMOVAL' | 'EXCESS_ITEMS' | 'VIOLATION' | 'VIOLATION_UNIT_READINESS'
   dueAt: string | null
+  deadlineAt?: string | null
+  recoveryHandoverLocation?: string | null
+  recoveryWitnessStaffId?: string | null
+  recoveryWitnessStaffName?: string | null
   startedAt: string | null
   completedAt: string | null
   resultReport: string | null
   evidencePhotos: string[]
   createdAt: string
   updatedAt: string
+}
+
+export function formatMaintenanceTaskTitle({ title, unitCode }: Pick<MaintenanceTaskApi, 'title' | 'unitCode'>) {
+  const name = title.trim()
+  const code = unitCode.trim()
+  return name === code || name.endsWith(` · ${code}`) ? name : `${name} · ${code}`
 }
 
 export interface MaintenanceStaffOption {
@@ -59,13 +74,19 @@ function isMaintenanceTask(value: unknown): value is MaintenanceTaskApi {
   return isUuidLike(value.id) && isUuidLike(value.facilityId) && isText(value.facilityName) &&
     isUuidLike(value.storageUnitId) && isText(value.unitCode) && isText(value.title) && isText(value.reason) &&
     (value.rentalId === undefined || value.rentalId === null || isUuidLike(value.rentalId)) &&
+    (value.customerName === undefined || isNullableText(value.customerName)) &&
     (value.taskType === undefined || value.taskType === 'maintenance' || value.taskType === 'inventory_check') &&
     ['low', 'medium', 'high'].includes(String(value.priority)) &&
     ['open', 'in_progress', 'completed', 'cancelled'].includes(String(value.status)) &&
+    (value.recoveryType === undefined || ['NONE', 'RETURN_NO_SHOW', 'INVENTORY_OVERDUE', 'SETUP_OVERDUE', 'MISMATCH_REMOVAL', 'EXCESS_ITEMS', 'VIOLATION', 'VIOLATION_UNIT_READINESS'].includes(String(value.recoveryType))) &&
     isNullableText(value.returnCaseId) && isNullableText(value.damageClassification) &&
     isNullableText(value.reportedById) && isNullableText(value.reportedByName) &&
     isNullableText(value.assignedStaffId) && isNullableText(value.assignedStaffName) &&
     (value.dueAt === null || typeof value.dueAt === 'string') &&
+    (value.deadlineAt === undefined || value.deadlineAt === null || isInstant(value.deadlineAt)) &&
+    (value.recoveryHandoverLocation === undefined || isNullableText(value.recoveryHandoverLocation)) &&
+    (value.recoveryWitnessStaffId === undefined || value.recoveryWitnessStaffId === null || isUuidLike(value.recoveryWitnessStaffId)) &&
+    (value.recoveryWitnessStaffName === undefined || isNullableText(value.recoveryWitnessStaffName)) &&
     (value.startedAt === null || isInstant(value.startedAt)) &&
     (value.completedAt === null || isInstant(value.completedAt)) &&
     isNullableText(value.resultReport) && Array.isArray(value.evidencePhotos) && value.evidencePhotos.every(isText) &&
@@ -170,6 +191,9 @@ export interface CompleteMaintenanceTaskRequest {
   resultReport: string
   evidencePhotos: string[]
   makeUnitAvailable: boolean
+  unitVacated?: boolean
+  recoveryHandoverLocation?: string
+  recoveryWitnessStaffId?: string
 }
 
 export interface MaintenanceEvidenceAsset {
@@ -183,7 +207,7 @@ function readMaintenanceEvidenceAsset(value: unknown): MaintenanceEvidenceAsset 
   if (!isRecord(value) || !isRecord(value.data) || !isUuidLike(value.data.id) ||
     !isText(value.data.originalName) || !isText(value.data.contentType) ||
     typeof value.data.sizeBytes !== 'number' || !Number.isFinite(value.data.sizeBytes)) {
-    throw new Error('Backend trả về tệp bằng chứng bảo trì không hợp lệ.')
+    throw new Error('Chưa tải được thông tin. Vui lòng thử lại.')
   }
   return {
     id: value.data.id,
@@ -209,6 +233,36 @@ export async function completeMaintenanceTask(taskId: string, request: CompleteM
     await apiRequest(`/api/staff/maintenance-tasks/${encodeURIComponent(taskId)}/complete`, {
       method: 'POST',
       body: JSON.stringify(request),
+    }),
+    isMaintenanceTask,
+  )
+}
+
+export interface UpdateStorageUnitStatusRequest {
+  status: 'available' | 'maintenance'
+  reason?: string
+  createMaintenanceTask?: boolean
+  assignedStaffId?: string
+  priority?: MaintenanceTaskPriority
+  dueAt?: string
+}
+
+export async function updateStorageUnitStatus(unitId: string, body: UpdateStorageUnitStatusRequest) {
+  const response = await apiRequest<{ data: MaintenanceTaskApi | null }>(
+    `/api/manager/storage-units/${encodeURIComponent(unitId)}/status`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    },
+  )
+  return response?.data ? (isMaintenanceTask(response.data) ? response.data : null) : null
+}
+
+export async function cancelMaintenanceTask(taskId: string, reason?: string) {
+  return readRentalEnvelope<MaintenanceTaskApi>(
+    await apiRequest(`/api/manager/maintenance-tasks/${encodeURIComponent(taskId)}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify(reason?.trim() ? { reason: reason.trim() } : {}),
     }),
     isMaintenanceTask,
   )

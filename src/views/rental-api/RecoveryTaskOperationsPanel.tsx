@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState, type MutableRefObject, type ReactNode } from 'react'
 import { Button } from '../../components/ui'
+import LockInspectionSelect from '../../components/LockInspectionSelect'
 import { useRentalApiResource } from '../../hooks/useRentalApiResource'
 import { useRenewalCommand } from '../../hooks/useRenewalCommand'
 import { getAuthenticatedActor } from '../../services/authApi'
-import { getReturn, type InspectionInput } from '../../services/returnApi'
+import { getReturn, type InspectionInput, type LockInspectionResult } from '../../services/returnApi'
 import { recoveryOperationError, sendRecoveryCommand, validateRecoveryCommand, type RecoveryCommand, type RecoveryOperations } from '../../services/recoveryTaskOperationsApi'
 import type { RecoveryAudience, RecoveryTask } from '../../services/recoveryTasksApi'
 import { EvidenceDownload, EvidenceUpload } from '../rental-support-integration/EvidenceControls'
 import { rentalDate } from './presentation'
+import { recordDisplayCode, receiptDisplayCode } from '../../utils/recordDisplayCode'
 
 export type RecoveryCloseGuard = MutableRefObject<() => boolean>
 export function recoveryAction(view: RecoveryOperations): RecoveryCommand['action'] | null {
@@ -34,9 +36,10 @@ export default function RecoveryTaskOperationsPanel({ role, task, view, identity
   refresh: () => void; closeGuard?: RecoveryCloseGuard; onSuccess: (message: string) => void
 }) {
   const actor = getAuthenticatedActor()
+  const assignedToAnother = !!task.assignedStaffId && task.assignedStaffId !== actor?.id
   const canProcess = actor?.status === 'ACTIVE' && actor.roles.includes(role === 'staff' ? 'STAFF' : 'MANAGER')
     && actor.permissions.includes('rentals:read') && actor.permissions.includes('returns:process')
-    && ['OPERATE', 'MANAGE'].includes(actor.facilityScopes[task.facilityId])
+    && ['OPERATE', 'MANAGE'].includes(actor.facilityScopes[task.facilityId]) && !assignedToAnother
   const refundSettlement = view.settlementStatus === 'refund_pending'
   const staffCashOnly = role === 'staff' && !refundSettlement
   const canCollect = !!canProcess
@@ -84,17 +87,22 @@ export default function RecoveryTaskOperationsPanel({ role, task, view, identity
       if (operation === 'recalculate-settlement') request = { action: operation, body: { expectedVersion } }
       if (operation === 'start') request = { action: operation, body: { expectedVersion, note: 'Bắt đầu xử lý nhiệm vụ thu hồi.' } }
       if (operation === 'inspection') {
+        const lockInspectionResult = text('lockInspectionResult') as LockInspectionResult
         const inspection: Omit<InspectionInput, 'evidencePhotos'> = {
           inventoryMatch: text('inventoryMatch') as InspectionInput['inventoryMatch'],
           damageClassification: text('damageClassification') as InspectionInput['damageClassification'],
           damageFee: Number(text('damageFee')), cleaningFee: Number(text('cleaningFee')), lostItemFee: Number(text('lostItemFee')),
           overdueFee: 0, outstandingFee: 0,
-          staffNotes: text('staffNotes'), returnedKey: checked('returnedKey'), returnedCard: checked('returnedCard'), returnedLock: checked('returnedLock'),
+          staffNotes: text('staffNotes'),
+          returnedKey: lockInspectionResult === 'RETURNED_USABLE',
+          returnedCard: checked('returnedCard'),
+          returnedLock: lockInspectionResult === 'RETURNED_USABLE' || lockInspectionResult === 'DAMAGED',
+          lockInspectionResult,
           proposedUnitStatus: text('proposedUnitStatus') as InspectionInput['proposedUnitStatus'],
         }
         request = { action: operation, body: { expectedVersion, inspection, evidenceFileIds: [...files] } }
       }
-      if (operation === 'settlement-receipts') request = { action: operation, body: { expectedVersion, paymentMethod, transactionReference: paymentMethod === 'CASH' ? '' : text('transactionReference'), receiptFileId: files[0], confirmed: checked('confirmed') } }
+      if (operation === 'settlement-receipts') request = { action: operation, body: { expectedVersion, paymentMethod, transactionReference: paymentMethod === 'CASH' ? '' : text('transactionReference'), receiptFileId: files[0], confirmed: checked('confirmed'), documentNumber: text('documentNumber') } }
       if (operation === 'completion') request = { action: operation, body: { expectedVersion, assetsCleared: checked('assetsCleared'), unitInspected: checked('unitInspected'), reportFileId: files[0], note: 'Hoàn tất thu hồi và giải phóng kho.' } }
       if (!request) return
       try { validateRecoveryCommand(request) } catch (error) { setValidation(recoveryOperationError(error)); return }
@@ -104,6 +112,7 @@ export default function RecoveryTaskOperationsPanel({ role, task, view, identity
     setValidation('')
     const snapshot = request
     void command.run(JSON.stringify(snapshot), key => sendRecoveryCommand(role, task.id, snapshot, key), () => {
+      pending.current = null
       onSuccess(`${actionLabels[snapshot.action]} thành công.`)
     })
   }
@@ -112,7 +121,7 @@ export default function RecoveryTaskOperationsPanel({ role, task, view, identity
       {['Tiếp nhận', 'Kiểm kê', 'Quyết toán', 'Hoàn tất thu hồi'].map((label, index) => <li key={label}
         aria-current={stage === index ? 'step' : undefined}
         className={`rounded-lg border p-3 text-sm ${index < stage ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : index === stage ? 'border-amber-400 bg-amber-50 font-semibold' : 'border-stone-200 text-stone-500'}`}>
-        <span className="mr-2 font-bold">{index < stage ? '✓' : index + 1}</span>{label}
+        <span className="mr-2 font-bold">{index + 1}</span>{label}
       </li>)}
     </ol>
     {view.returnCaseId && <details className="rounded-lg border border-stone-200 p-4" open={action === 'settlement-receipts'}>
@@ -126,10 +135,10 @@ export default function RecoveryTaskOperationsPanel({ role, task, view, identity
           {!needsReconciliation && record.overdueSettlement && <div><dt className="text-stone-500">Phí quá hạn trong quyết toán</dt><dd className="font-semibold">{money(record.overdueSettlement.settlementAmount ?? 0)}</dd></div>}
         </dl>}
         {view.settlementStatus === 'awaiting_customer_confirmation' && <p>Đang chờ khách hàng xác nhận quyết toán tại hồ sơ trả kho.</p>}
-        {view.settlementStatus === 'disputed' && <p>Khách hàng đã khiếu nại quyết toán. Manager xử lý tại hồ sơ trả kho.</p>}
+        {view.settlementStatus === 'disputed' && <p>Khách hàng đã khiếu nại quyết toán. Quản lý cơ sở xử lý tại hồ sơ trả kho.</p>}
         {view.settlementStatus === 'completed' && <p>Quyết toán đã hoàn tất.</p>}
-        {view.transactionReference && <p className="break-all">Mã biên nhận hoặc giao dịch: <span className="font-mono font-semibold">{view.transactionReference}</span></p>}
-        <p className="break-all text-stone-500">Mã hồ sơ trả kho: {view.returnCaseId}</p>
+        {view.transactionReference && <p className="break-all">Mã biên nhận hoặc giao dịch: <span className="font-mono font-semibold">{receiptDisplayCode(record?.settlementReceipt?.receiptCode, view.transactionReference)}</span></p>}
+        <p className="break-all text-stone-500">Mã hồ sơ trả kho: {record?.displayCode || recordDisplayCode(view.returnCaseId)}</p>
       </div>
     </details>}
     {needsReconciliation && <section role="alert" className="space-y-3 rounded-lg border border-orange-200 bg-orange-50 p-4 text-sm text-orange-900">
@@ -141,8 +150,8 @@ export default function RecoveryTaskOperationsPanel({ role, task, view, identity
     </section>}
     {action && !(needsReconciliation && action === 'settlement-receipts') && <form onSubmit={e => { e.preventDefault(); submit(e.currentTarget) }} className="space-y-4 rounded-lg border border-stone-200 p-4">
       <h3 className="font-semibold">{actionLabels[action]}</h3>
-      {!canProcess && <p className="text-sm">Cần quyền xử lý trả kho và quyền thao tác tại cơ sở để xử lý nhiệm vụ.</p>}
-      {action === 'settlement-receipts' && canProcess && !canCollect && <p className="text-sm">{refundSettlement ? 'Cần quyền duyệt hoàn tiền, Staff không được thực hiện hoàn tiền.' : 'Cần quyền quản lý thanh toán để ghi nhận quyết toán.'}</p>}
+      {!canProcess && <p className="text-sm">{role === 'staff' && assignedToAnother ? 'Nhiệm vụ đã được giao cho nhân viên khác.' : 'Cần quyền xử lý trả kho và quyền thao tác tại cơ sở để xử lý nhiệm vụ.'}</p>}
+      {action === 'settlement-receipts' && canProcess && !canCollect && <p className="text-sm">{refundSettlement ? 'Cần quyền duyệt hoàn tiền, nhân viên không được thực hiện hoàn tiền.' : 'Cần quyền quản lý thanh toán để ghi nhận quyết toán.'}</p>}
       <fieldset disabled={frozen || !allowed || command.conflict} className="space-y-4 disabled:opacity-70">
         {action === 'inspection' && <>
           <p className="text-sm text-stone-600">Phí quá hạn và công nợ được hệ thống tính khi lưu kiểm kê. Số tiền sẽ hiển thị trong quyết toán để khách hàng xác nhận.</p>
@@ -152,10 +161,15 @@ export default function RecoveryTaskOperationsPanel({ role, task, view, identity
             {Object.entries(feeLabels).map(([name, label]) => <Field key={name} label={`${label} (VND)`}><input name={name} type="number" min={0} max={999999999999} step={1} defaultValue={0} required className={inputClass} /></Field>)}
             <Field label="Trạng thái kho sau thu hồi"><select name="proposedUnitStatus" className={inputClass}><option value="available">Sẵn sàng cho thuê</option><option value="maintenance">Cần bảo trì</option></select></Field>
           </div>
-          <div className="flex flex-wrap gap-4"><Check name="returnedKey">Đã trả chìa khóa</Check><Check name="returnedCard">Đã trả thẻ</Check><Check name="returnedLock">Đã trả khóa</Check></div>
+          <Field label="Kết quả kiểm tra ổ khóa và chìa khóa"><LockInspectionSelect className={inputClass} /></Field>
+          <p className="text-sm text-stone-600">Hệ thống chỉ cho cấp lại mã khi đã nhận đủ ổ và chìa còn dùng được.</p>
+          <Check name="returnedCard">Đã trả thẻ</Check>
           <Field label="Ghi chú kiểm kê"><textarea name="staffNotes" rows={3} maxLength={4000} className={inputClass} /></Field>
         </>}
         {action === 'settlement-receipts' && <>
+          <Field label="Số CCCD hoặc hộ chiếu của khách"><input name="documentNumber" type="password" autoComplete="off"
+            required maxLength={32} className={inputClass} /></Field>
+          <p className="text-sm text-stone-600">Đối chiếu giấy tờ gốc với số đã dùng khi đặt kho trước khi ghi nhận quyết toán.</p>
           {record && <p className="rounded-lg bg-stone-50 p-3 font-semibold">{record.status === 'payment_due' ? 'Thực thu' : 'Thực hoàn'}: {money((record.status === 'payment_due' ? record.amountDueFromCustomer : record.netRefundAmount) ?? 0)}</p>}
           <Field label="Phương thức"><select name="paymentMethod" className={inputClass} value={paymentMethod} onChange={event => setPaymentMethod(event.target.value as 'CASH' | 'BANK_TRANSFER')}><option value="CASH">Tiền mặt</option>{!staffCashOnly && <option value="BANK_TRANSFER">Chuyển khoản</option>}</select></Field>
           {paymentMethod === 'BANK_TRANSFER'
@@ -171,6 +185,7 @@ export default function RecoveryTaskOperationsPanel({ role, task, view, identity
       {action !== 'start' && <EvidenceUpload entityType={`DUONG_RECOVERY_${action === 'inspection' ? 'INSPECTION' : action === 'completion' ? 'COMPLETION' : 'SETTLEMENT'}`} entityId={task.id}
         value={files} onChange={setFiles} limit={action === 'inspection' ? 10 : 1}
         label={action === 'inspection' ? 'Biên bản và minh chứng kiểm kê' : action === 'completion' ? 'Biên bản hoàn tất thu hồi' : 'Biên lai thu hoặc hoàn tiền'}
+        fileNamePurpose={action === 'inspection' ? 'bien-ban-kiem-ke-thu-hoi' : action === 'completion' ? 'bien-ban-hoan-tat-thu-hoi' : 'bien-lai-thu-hoan-thu-hoi'}
         disabled={frozen || !allowed || command.conflict} onBusy={busy => { uploading.current = busy; setUploadBusy(busy) }} />}
       <Button type="submit" disabled={!allowed || command.busy || uploadBusy || command.conflict}>{command.busy ? 'Đang lưu...' : command.uncertain ? 'Gửi lại cùng yêu cầu' : actionLabels[action]}</Button>
     </form>}

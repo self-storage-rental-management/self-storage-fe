@@ -11,7 +11,7 @@ export type ApiPaymentStatus = 'PENDING' | 'PROCESSING' | 'PAID' | 'NOT_RECEIVED
 export type ApiInvoiceStatus = 'DRAFT' | 'PAID' | 'VOID' | 'REFUNDED'
 export type ApiRentalStatus = 'setup' | 'active' | 'return_requested' | 'return_inspection' | 'closing' | 'completed'
 export type ApiRenewalStatus = 'pending' | 'accepted' | 'deposit_paid' | 'full_rent_paid' | 'approved' | 'appointment_scheduled' | 'payment_processing' | 'payment_failed' | 'payment_expired' | 'rejected' | 'cancelled' | 'completed'
-export type ApiReturnStatus = 'requested' | 'scheduled' | 'inspected' | 'awaiting_business_review' | 'awaiting_customer_confirmation' | 'disputed' | 'payment_due' | 'refund_pending' | 'completed'
+export type ApiReturnStatus = 'requested' | 'scheduled' | 'inspected' | 'awaiting_business_review' | 'awaiting_customer_confirmation' | 'disputed' | 'payment_due' | 'refund_pending' | 'recovery_required' | 'completed' | 'withdrawn_for_recovery'
 
 export const invoiceStatusValues = ['NOT_ISSUED', 'UNPAID', 'PARTIALLY_PAID', 'PAID', 'CANCELLED', 'UNKNOWN'] as const
 export type InvoiceStatus = (typeof invoiceStatusValues)[number]
@@ -27,7 +27,7 @@ export type PaymentTransactionStatus = (typeof paymentTransactionStatusValues)[n
 
 export const renewalWorkflowStatusValues = [
   'UNDER_REVIEW', 'AWAITING_PAYMENT', 'AWAITING_RECONCILIATION', 'AWAITING_SIGNING',
-  'SIGNING_IN_PROGRESS', 'SIGNING_EXPIRED', 'PAYMENT_WINDOW_EXPIRED', 'ON_HOLD',
+  'SIGNING_IN_PROGRESS', 'NO_SHOW', 'SIGNING_EXPIRED', 'PAYMENT_WINDOW_EXPIRED', 'ON_HOLD',
   'COMPLETED', 'CANCELLED', 'REJECTED',
 ] as const
 export type RenewalWorkflowStatus = (typeof renewalWorkflowStatusValues)[number]

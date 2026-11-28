@@ -1,10 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { displayText, displayProps } from './displayText'
+import { displayRoleNames, displayText, displayProps } from './displayText'
 import { userFacingError } from './userFacingError'
 import { ApiClientError } from '../services/apiClient'
 
 describe('câu hiển thị', () => {
+  it('hiển thị tên vai trò bằng tiếng Việt trong thông báo và lịch sử cũ', () => {
+    expect(displayRoleNames('BO tiếp tục xử lý khi Manager quá hạn.'))
+      .toBe('Chủ doanh nghiệp tiếp tục xử lý khi quản lý cơ sở quá hạn.')
+    expect(displayRoleNames('Manager đã báo BO.')).toBe('Quản lý cơ sở đã báo chủ doanh nghiệp.')
+  })
+
+  it('giữ nguyên địa chỉ liên hệ, đường dẫn, mã hệ thống và từ bo trong tiếng Việt', () => {
+    const source = 'manager@storagehub.demo · BO@example.com · https://example.com/manager/BO · BO_REVIEW_OVERDUE · bo tròn'
+    expect(displayRoleNames(source)).toBe(source)
+  })
+
   it('giải mã các ký tự HTML thành nội dung hiển thị đúng', () => {
     const html = renderToStaticMarkup(<p>Sách &amp; hồ sơ &gt; &quot;Gỗ&quot;</p>)
     expect(html).toContain('Sách &amp; hồ sơ &gt; &quot;Gỗ&quot;')
@@ -52,6 +63,21 @@ describe('câu hiển thị', () => {
     expect(option.children).toBe('category, material')
     expect(link.href).toBe(`/details/${source}`)
     expect(link.children).toBe('category, material')
+  })
+
+  it('hiển thị nhãn trạng thái bo tròn và giữ nguyên giá trị lựa chọn', () => {
+    const source = '[published]'
+    const html = renderToStaticMarkup(<p>{source} · [PRESERVED] · [RESERVED]</p>)
+    expect(html).toContain('rounded-full')
+    expect(html).toContain('bg-emerald-100 text-emerald-900">Đã công bố</span>')
+    expect(html).toContain('bg-blue-100 text-blue-900">Đã bảo lưu</span>')
+    expect(html).toContain('bg-amber-100 text-amber-900">Đã giữ chỗ</span>')
+    expect(html).not.toContain('border')
+    expect(html).not.toContain('[Đã')
+    const option = displayProps('option', { value: source, children: source }) as Record<string, string>
+    expect(option.value).toBe(source)
+    expect(option.children).toBe('[Đã công bố]')
+    expect(displayText('PUBLISHED')).toBe('PUBLISHED')
   })
 
   it('không đưa chi tiết kỹ thuật hoặc lỗi tiếng Anh lên giao diện', () => {

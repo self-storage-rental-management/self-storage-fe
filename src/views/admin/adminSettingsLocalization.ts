@@ -54,7 +54,7 @@ export const ITEM_DESCRIPTIONS: Record<string, string> = {
   contactEmail: 'Địa chỉ email tiếp nhận phản hồi, khiếu nại và hiển thị ở phần chân trang hệ thống.',
   hotline: 'Số điện thoại đường dây nóng hỗ trợ khẩn cấp 24/7 và giải đáp thắc mắc dịch vụ.',
   currency: 'Đơn vị tiền tệ chuẩn sử dụng cho biểu phí niêm yết, tính cước thuê và biên lai giao dịch.',
-  timezone: 'Múi giờ chuẩn để tính toán thời điểm ra vào kho, ghi nhận audit log và đối soát thanh toán.',
+  timezone: 'Múi giờ chuẩn để tính toán thời điểm ra vào kho, ghi nhận nhật ký hoạt động và đối soát thanh toán.',
   gracePeriod: 'Số ngày cho phép quá hạn trước khi hệ thống bắt đầu phạt phí trễ hoặc đình chỉ mã PIN mở cổng.',
   lateFeeAmount: 'Khoản phí phạt phát sinh tự động khi khách hàng chưa thanh toán tiền thuê sau khi hết hạn ân hạn.',
   autoInvoiceDays: 'Hệ thống sẽ tự động phát hành hóa đơn kỳ tiếp theo trước ngày hết hạn của hợp đồng thuê kho.',
@@ -66,7 +66,7 @@ export const ITEM_DESCRIPTIONS: Record<string, string> = {
   emailAlerts: 'Tự động gửi email thông báo nhắc nợ định kỳ khi hóa đơn thuê kho chưa được thanh toán.',
   smsGateAlerts: 'Gửi tin nhắn SMS tức thì tới số điện thoại của quản lý cơ sở khi phát hiện có lượt mở cổng ngoài giờ quy định.',
   slackWebhook: 'Đường dẫn Webhook để gửi cảnh báo an ninh khẩn cấp và sự cố vận hành vào kênh Slack nội bộ.',
-  dailyDigest: 'Gửi email tổng hợp các chỉ số vận hành (tỉ lệ lấp đầy, doanh thu, đơn đặt mới) cho ban quản lý mỗi sáng.',
+  dailyDigest: 'Gửi email tổng hợp các chỉ số vận hành (công suất kho, doanh thu, đơn đặt mới) cho ban quản lý mỗi sáng.',
   maintenanceMode: 'Tạm khóa chức năng đặt kho mới và thanh toán trực tuyến để đội ngũ kỹ thuật nâng cấp hệ thống.',
   bannerNotice: 'Dòng thông báo nổi bật xuất hiện trên thanh đầu trang của trang chủ và cổng đặt kho công khai.',
 }

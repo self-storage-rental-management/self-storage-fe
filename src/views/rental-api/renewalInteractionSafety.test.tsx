@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { ReactElement } from "react"
 import RenewalOperationsPanel from "./RenewalOperationsPanel"
 import RenewalDepositSettlementPanel from "./RenewalDepositSettlementPanel"
@@ -17,7 +17,7 @@ import { apiPage, ids, operationEvent, operationsActor, signingState } from "../
 const h = vi.hoisted(() => ({
   slots: [] as any[], cursor: 0, effects: [] as (() => void)[],
   actor: undefined as any, state: undefined as any, proposal: undefined as any,
-  operationLoading: false, detail: undefined as any, staffPage: undefined as any, settlement: undefined as any,
+  operationLoading: false, detail: undefined as any, staffPage: undefined as any, settlement: undefined as any, hasIncident: true,
   refresh: vi.fn(), send: vi.fn(), upload: vi.fn(), download: vi.fn(),
 }))
 vi.mock("react", async original => ({
@@ -39,13 +39,15 @@ vi.mock("react", async original => ({
   },
 }))
 vi.mock("../manager/managerPresentation", () => ({ useManagerPresentation: () => ({ manager: false, copy: (s: string) => s, errorText: () => "Lỗi thử nghiệm" }) }))
-vi.mock("../../services/authApi", () => ({ getAuthenticatedActor: () => h.actor }))
+vi.mock("../../services/authApi", async original => ({ ...await original<typeof import("../../services/authApi")>(), getAuthenticatedActor: () => h.actor }))
 vi.mock("../../hooks/useRentalApiResource", () => ({ useRentalApiResource: (key: string) => {
+  if (key.includes(":customer-identity")) return { data: { identityDocumentNumber: "001099000001", fullName: "Nguyen Van A" }, loading: false, refresh: h.refresh }
   if (key.endsWith(':payment-events')) return { data: apiPage([]), loading: false, refresh: h.refresh }
+  if (key.includes(':incident-availability:')) return { data: h.hasIncident, loading: false, refresh: h.refresh }
   if (key.includes(":deposit-settlement:")) return { data: h.settlement, loading: false, refresh: h.refresh }
   if (key.endsWith(":proposal")) return { ...h.proposal, refresh: h.refresh }
   if (key.includes(":renewal:")) return { data: h.detail, loading: false, refresh: h.refresh }
-  if (key.includes(':"size":20') || key.includes('{"page":0,"size":20}')) return { data: h.staffPage, loading: false, refresh: h.refresh }
+  if (key.includes('"size":20')) return { data: h.staffPage, loading: false, refresh: h.refresh }
   if (key.includes(":coordination:")) return { data: apiPage([{ ...operationEvent, kind: "INCIDENT" }]), loading: false, refresh: h.refresh }
   if (/:(statement|incidents:|assignment:|counts|rental:)/.test(key)) return { loading: false, refresh: h.refresh }
   return { data: h.operationLoading ? undefined : h.state, loading: h.operationLoading, refresh: h.refresh }
@@ -80,8 +82,17 @@ beforeEach(() => {
   h.actor = operationsActor("customer")
   h.state = { ...signingState, pendingExceptionRef: ids.file }
   h.proposal = { loading: false, error: new ApiClientError("proposal unavailable", { status: 503 }) }
-  h.operationLoading = false; h.detail = undefined; h.staffPage = undefined; h.settlement = undefined
+  h.operationLoading = false; h.detail = undefined; h.staffPage = undefined; h.settlement = undefined; h.hasIncident = true
   h.refresh.mockReset(); h.send.mockReset(); h.upload.mockReset(); h.download.mockReset()
+})
+
+it("hides incident actions when no incident is recorded", () => {
+  h.actor = operationsActor("manager")
+  h.hasIncident = false
+  const tree = render(() => RenewalOperationsPanel({ id: ids.renewal, role: "manager", facilityId: ids.facility }))
+  expect(find(tree, RenewalCoordinationPanel)).toBeUndefined()
+  expect(nodes(tree).some(n => n.type === Button && ["Xem xét ngoại lệ", "Xem xét hoàn tiền"].includes(n.props.children))).toBe(false)
+  expect(JSON.stringify(tree)).toContain("Chưa có sự cố cần xử lý")
 })
 
 describe("Deposit refund command safety", () => {
@@ -166,6 +177,7 @@ describe("D3 form identity and original retry request", () => {
     let fields = invoke(selected, formSlots)
     expect(JSON.stringify(fields)).not.toContain('Mã biên lai được hệ thống tự động tạo khi ghi nhận thu tiền.')
     expect(JSON.stringify(fields)).not.toContain('Tải biên nhận thu tiền mặt đã lập cho giao dịch này.')
+    expect(JSON.stringify(fields)).toContain('Tải ảnh chụp biên nhận thu tiền mặt làm minh chứng.')
     expect(find(fields, EvidenceUpload)).toBeDefined()
     expect(nodes(fields).some(n => n.type === 'input' && n.props.type === 'checkbox')).toBe(true)
     find(fields, 'select').props.onChange({ target: { value: 'BANK_TRANSFER' } })
@@ -248,6 +260,9 @@ describe("D3 form identity and original retry request", () => {
       selects[1].props.onChange({ target: { value: "true" } })
       find(fields, "textarea").props.onChange({ target: { value: "Đã xác minh sự cố" } })
       fields = invoke(selected, slots)
+    } else {
+      find(fields, "input").props.onChange({ target: { checked: true } })
+      fields = invoke(selected, slots)
     }
     h.send.mockRejectedValue(new ApiClientError("known rejection", { status: 400 }))
     if (kind === "coordination") find(fields, "form").props.onSubmit({ preventDefault: vi.fn() })
@@ -269,6 +284,8 @@ function detailElement(role: "customer" | "manager") {
 }
 
 describe("D3 upload synchronously protects its owning modal", () => {
+  beforeEach(() => vi.stubGlobal("document", { body: { style: { overflow: "" } } }))
+  afterEach(() => vi.unstubAllGlobals())
   it.each(["customer", "manager", "staff"] as const)("%s operation/upload lock blocks stale modal callbacks; confirmed file is retained when uploaded", async role => {
     h.actor = operationsActor(role)
     let ownerSlots: any[] = [], owner: () => ReactElement<any>, panelElement: ReactElement<any>

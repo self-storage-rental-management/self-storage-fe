@@ -1,4 +1,5 @@
 import { userFacingError } from '../presentation/userFacingError'
+import { recordDisplayCode } from '../utils/recordDisplayCode'
 import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react'
 import type { User } from '../types'
 
@@ -21,7 +22,7 @@ function getInitials(name: string) {
 
 function MailIcon() {
   return (
-    <svg aria-hidden="true" className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <svg aria-hidden="true" className="show-icon h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 6.75A1.75 1.75 0 014.75 5h14.5A1.75 1.75 0 0121 6.75v10.5A1.75 1.75 0 0119.25 19H4.75A1.75 1.75 0 013 17.25V6.75z" />
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 7l7.03 5.02a1.7 1.7 0 001.94 0L20 7" />
     </svg>
@@ -30,7 +31,7 @@ function MailIcon() {
 
 function CameraIcon() {
   return (
-    <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <svg aria-hidden="true" className="show-icon h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 8.5A1.5 1.5 0 015.5 7h2.08a1.5 1.5 0 001.34-.83l.34-.67A1.5 1.5 0 0110.6 5h2.8a1.5 1.5 0 011.34.83l.34.67a1.5 1.5 0 001.34.83h2.08A1.5 1.5 0 0120 8.5v9A1.5 1.5 0 0118.5 19h-13A1.5 1.5 0 014 17.5v-9z" />
       <circle cx="12" cy="13" r="3.25" strokeWidth={1.8} />
     </svg>
@@ -39,11 +40,11 @@ function CameraIcon() {
 
 function CopyIcon({ checked }: { checked: boolean }) {
   return checked ? (
-    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <svg aria-hidden="true" className="show-icon h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12.5l4 4L19 7" />
     </svg>
   ) : (
-    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <svg aria-hidden="true" className="show-icon h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <rect width="10" height="10" x="9" y="9" rx="1.5" strokeWidth={1.8} />
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M6 15H5.75A1.75 1.75 0 014 13.25v-7.5A1.75 1.75 0 015.75 4h7.5A1.75 1.75 0 0115 5.75V6" />
     </svg>
@@ -64,7 +65,7 @@ export default function ProfileHeaderCard({
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState<string | null>(null)
   const avatarUrl = user.avatarUrl || ''
-  const displayUserId = user.id.slice(0, 12).toUpperCase()
+  const displayUserId = user.id.length > 16 ? `${user.id.slice(0, 8).toUpperCase()}…${user.id.slice(-4).toUpperCase()}` : user.id.toUpperCase()
 
   useEffect(() => {
     if (!successMessage) return
@@ -117,7 +118,7 @@ export default function ProfileHeaderCard({
     setCopyError(null)
     try {
       if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable')
-      await navigator.clipboard.writeText(displayUserId)
+      await navigator.clipboard.writeText(user.id)
       setCopied(true)
     } catch {
       setCopyError('Không thể sao chép mã người dùng.')
@@ -179,14 +180,6 @@ export default function ProfileHeaderCard({
               <MailIcon />
               <span className="truncate">{user.email}</span>
             </p>
-            <button
-              type="button"
-              disabled={!canChangeAvatar || avatarUploading}
-              onClick={openFilePicker}
-              className="mt-4 inline-flex min-h-11 items-center justify-center rounded-lg border border-stone-400 bg-transparent px-4 py-2 text-sm font-medium text-stone-100 transition hover:border-stone-200 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e9a12c] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {avatarUploading ? 'Đang tải lên…' : 'Đổi ảnh đại diện'}
-            </button>
             {uploadError && <p className="mt-2 text-sm text-red-300" role="status" aria-live="polite">{uploadError}</p>}
             {successMessage && <p className="mt-2 text-sm text-emerald-300" role="status" aria-live="polite">{successMessage}</p>}
             <p className="mt-2 text-xs text-stone-300">JPG, PNG hoặc WEBP · tối đa 5 MB</p>
@@ -194,9 +187,9 @@ export default function ProfileHeaderCard({
         </div>
 
         <div className="flex min-w-0 w-full flex-col justify-center border-t-[0.5px] border-stone-600 pt-5 max-[559px]:text-center min-[560px]:w-72 min-[560px]:min-w-72 min-[560px]:shrink-0 min-[560px]:border-l-[0.5px] min-[560px]:border-t-0 min-[560px]:pl-6 min-[560px]:pt-0 min-[560px]:text-left">
-          <p className="text-xs font-medium tracking-wide text-stone-300">Mã người dùng</p>
+          <p className="text-xs font-medium tracking-wide text-stone-300">Mã hồ sơ</p>
           <div className="mt-2 flex min-w-0 max-w-full items-center gap-2 max-[559px]:justify-center">
-            <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-md border border-stone-600 bg-stone-800 px-3 py-2 font-mono text-sm text-stone-100">{displayUserId}</code>
+            <code title={user.id} className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-md border border-stone-600 bg-stone-800 px-3 py-2 font-mono text-sm text-stone-100">{displayUserId}</code>
             <button
               type="button"
               aria-label="Sao chép mã người dùng"

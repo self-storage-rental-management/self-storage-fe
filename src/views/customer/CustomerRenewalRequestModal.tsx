@@ -1,17 +1,16 @@
 import { useEffect, useState, type ReactNode } from "react"
 import { Button, Modal } from "../../components/ui"
 import {
-  createRenewalVnpayPaymentIntent,
   getRenewalOptions,
   listRenewals,
   quoteRenewal,
-  renewalPaymentRedirectUrl,
   reviseRenewal,
   submitRenewal,
 } from "../../services/renewalApi"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
-import { newRenewalIdempotencyKey, useRenewalCommand } from "../../hooks/useRenewalCommand"
-import type { RenewalApiQuote, RenewalApiRecord } from "../../types/renewalApi"
+import { useRenewalCommand } from "../../hooks/useRenewalCommand"
+import { ApiClientError } from "../../services/apiClient"
+import type { RenewalApiOption, RenewalApiQuote, RenewalApiRecord } from "../../types/renewalApi"
 import ApiReadState from "../rental-api/ApiReadState"
 import RenewalRiskNotice from "../rental-api/RenewalRiskNotice"
 import {
@@ -19,6 +18,19 @@ import {
   rentalError,
   rentalMoney,
 } from "../rental-api/presentation"
+
+const discountPercent = new Intl.NumberFormat("vi-VN", { style: "percent", maximumFractionDigits: 2 })
+
+export function renewalOptionLabel(option: RenewalApiOption) {
+  let name = option.pricingPackageName?.trim().replace(/^gói\s+thuê(?=\s|\p{P}|$)/iu, "Gói gia hạn")
+    || `Gói gia hạn ${option.rentalMonths} tháng`
+  if (option.rentalMonths && !/tháng|năm/i.test(name) && /^gói/i.test(name)) {
+    name = `${name} (${option.rentalMonths} tháng)`
+  }
+  return option.discountRate == null
+    ? name
+    : `${name}, giảm ${discountPercent.format(option.discountRate)}`
+}
 
 function isOpenRenewalConflict(error: unknown): boolean {
   if (!error) return false
@@ -39,6 +51,7 @@ export default function CustomerRenewalRequestModal({
   onClose,
   onSuccess,
   onNavigateToRenewals,
+  onBrowseUnits,
 }: {
   actorId: string
   rentalId: string
@@ -46,6 +59,7 @@ export default function CustomerRenewalRequestModal({
   onClose: () => void
   onSuccess: (record?: RenewalApiRecord) => void
   onNavigateToRenewals?: (renewalId?: string) => void
+  onBrowseUnits?: () => void
 }) {
   const options = useRentalApiResource(`${actorId}:${rentalId}:options`, () =>
     getRenewalOptions(rentalId),
@@ -53,10 +67,11 @@ export default function CustomerRenewalRequestModal({
   const [code, setCode] = useState("")
   const note = ""
   const [quote, setQuote] = useState<RenewalApiQuote>()
+  const [quoteRequest, setQuoteRequest] = useState(0)
+  const [expiredQuoteId, setExpiredQuoteId] = useState<string>()
   const [quoteError, setQuoteError] = useState<unknown>()
   const [quoteBusy, setQuoteBusy] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
-  const [startInfoOpen, setStartInfoOpen] = useState(false)
   const command = useRenewalCommand()
   const isConflictOpenRenewal = isOpenRenewalConflict(command.error)
   const [existingRenewalId, setExistingRenewalId] = useState<string>()
@@ -112,8 +127,28 @@ export default function CustomerRenewalRequestModal({
     return () => {
       current = false
     }
-  }, [code, rentalId])
+  }, [code, rentalId, quoteRequest])
+
+  useEffect(() => {
+    if (!quote?.expiresAt) return
+    const delay = Math.max(0, Date.parse(quote.expiresAt) - Date.now())
+    const timer = window.setTimeout(() => setExpiredQuoteId(quote.id), delay)
+    return () => window.clearTimeout(timer)
+  }, [quote])
+
   const locked = command.busy || command.uncertain || quoteBusy
+  const errorDetails = command.error instanceof ApiClientError ? command.error.details : null
+  const expiredOnServer = command.conflict && errorDetails !== null && typeof errorDetails === "object"
+    && "reason" in errorDetails && errorDetails.reason === "RENEWAL_QUOTE_EXPIRED"
+  const quoteExpired = !!quote && (expiredOnServer || expiredQuoteId === quote.id
+    || (!!quote.expiresAt && Date.parse(quote.expiresAt) <= Date.now()))
+  const bookingError = quoteError ?? command.error
+  const bookingDetails = bookingError instanceof ApiClientError ? bookingError.details : null
+  const bookingConflict = bookingDetails !== null && typeof bookingDetails === "object"
+    && "reason" in bookingDetails && bookingDetails.reason === "RENEWAL_BOOKING_CONFLICT"
+  const shorterCodes = bookingConflict && "shorterPackageCodes" in bookingDetails
+    && Array.isArray(bookingDetails.shorterPackageCodes) ? bookingDetails.shorterPackageCodes : []
+  const shorterOptions = options.data?.filter((option) => shorterCodes.includes(option.pricingPackageCode)) ?? []
   return (
     <Modal
       open
@@ -138,6 +173,7 @@ export default function CustomerRenewalRequestModal({
                 value={code}
                 disabled={locked}
                 onChange={(e) => {
+                  if (expiredOnServer || bookingConflict) command.clear()
                   setCode(e.target.value)
                   setQuote(undefined)
                   setConfirmed(false)
@@ -146,59 +182,21 @@ export default function CustomerRenewalRequestModal({
                 <option value="">Chọn gói gia hạn</option>
                 {options.data.map((o) => (
                   <option key={o.pricingPackageCode} value={o.pricingPackageCode}>
-                    {o.pricingPackageName?.trim() || `Gói thuê ${o.rentalMonths} tháng`}
+                    {renewalOptionLabel(o)}
                   </option>
                 ))}
               </select>
             </label>
 
-            <div>
-              <div className="flex h-7 items-center gap-1">
-                <label htmlFor="renewal-start-date" className="text-[15px] font-semibold text-stone-900">Ngày bắt đầu</label>
-                <div className="relative" onMouseEnter={() => setStartInfoOpen(true)} onMouseLeave={() => setStartInfoOpen(false)} onKeyDown={(event) => {
-                  if (event.key === "Escape" && startInfoOpen) {
-                    event.stopPropagation()
-                    setStartInfoOpen(false)
-                  }
-                }}>
-                  <button
-                    type="button"
-                    aria-label="Giải thích ngày bắt đầu gia hạn"
-                    aria-describedby={startInfoOpen ? "renewal-start-policy" : undefined}
-                    onFocus={() => setStartInfoOpen(true)}
-                    onBlur={() => setStartInfoOpen(false)}
-                    className="flex h-7 w-7 items-center justify-center rounded-full text-stone-500 hover:bg-stone-100 hover:text-stone-800 focus-visible:outline-2 focus-visible:outline-amber-600"
-                  >
-                    <svg className="show-icon h-4 w-4" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                      <circle cx="12" cy="12" r="9" />
-                      <path d="M12 11v5M12 8h.01" />
-                    </svg>
-                  </button>
-                  <div hidden={!startInfoOpen} className="absolute right-0 top-full z-20 w-64 max-w-[calc(100vw-4rem)] pt-1">
-                  <p id="renewal-start-policy" role="tooltip" className="rounded-lg border border-stone-200 bg-white p-3 text-sm leading-relaxed text-stone-600 shadow-md">
-                    Ngày do hệ thống xác định. Chưa quá hạn: nối tiếp kỳ cũ. Đã quá hạn: bắt đầu từ ngày hoàn tất ký, ngày trong báo giá là dự kiến.
-                  </p>
-                  </div>
-                </div>
-              </div>
-              <input
-                id="renewal-start-date"
-                type="text"
-                className="mt-1 h-11 w-full min-w-0 rounded-lg border border-stone-300 bg-white px-3 py-2 text-[15px]"
-                value={quote ? rentalDate(quote.extensionStartDate) : ""}
-                placeholder="dd/mm/yyyy"
-                readOnly
-                aria-describedby="renewal-start-policy"
-              />
-            </div>
           </div>
           {quote && <div className="mt-3 px-2"><QuoteLine label="Thời gian gia hạn" value={<>{rentalDate(quote.extensionStartDate)} - {rentalDate(quote.newEndDate)}</>} /></div>}
+          <p className="mt-2 text-xs text-stone-600">Ngày bắt đầu kỳ mới nối tiếp ngày kết thúc kỳ thuê hiện tại.</p>
           </section>
         )}
         {options.data?.length === 0 && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-950 space-y-2">
             <p className="font-semibold text-sm text-amber-900">
-              Cơ sở hiện chưa có gói thuê còn hiệu lực để gia hạn.
+              Cơ sở hiện chưa có gói gia hạn còn hiệu lực.
             </p>
             <p className="text-xs text-amber-800 leading-relaxed">
               Kho này hiện chưa có gói ưu đãi gia hạn trực tuyến nào còn hiệu lực. Vui lòng liên hệ hotline cơ sở hoặc nhắn tin qua mục <b>Hỗ trợ</b> để được gán gói gia hạn phù hợp.
@@ -207,17 +205,47 @@ export default function CustomerRenewalRequestModal({
         )}
 
         {quoteBusy ? <p role="status">Đang lấy báo giá…</p> : null}
-        {quoteError ? <p role="alert">{rentalError(quoteError)}</p> : null}
+        {quoteError && !bookingConflict ? <p role="alert">{rentalError(quoteError)}</p> : null}
+        {bookingConflict && !command.uncertain && (
+          <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+            <p role="alert">Ô kho đã có lịch đặt trùng với kỳ gia hạn đã chọn.</p>
+            {shorterOptions.length > 0 ? (
+              <>
+                <p className="text-sm">Bạn có thể chọn gói ngắn hơn:</p>
+                {shorterOptions.map((option) => (
+                  <Button key={option.pricingPackageCode} variant="outline" disabled={locked} onClick={() => {
+                    command.clear()
+                    setQuote(undefined)
+                    setCode(option.pricingPackageCode)
+                  }}>
+                    {renewalOptionLabel(option)}
+                  </Button>
+                ))}
+              </>
+            ) : (
+              <>
+                <p className="text-sm">Các gói ngắn hơn hiện có cũng không phù hợp. Bạn có thể tìm ô kho khác.</p>
+                {onBrowseUnits && <Button variant="outline" disabled={locked} onClick={onBrowseUnits}>Tìm ô kho khác</Button>}
+              </>
+            )}
+          </div>
+        )}
+        {quoteExpired && !command.uncertain && (
+          <p role="status" className="text-sm text-amber-800">
+            Báo giá gia hạn đã hết hạn. Vui lòng lấy báo giá mới để tiếp tục.
+          </p>
+        )}
         {quote && (
           <>
           <section aria-label="Chi tiết báo giá gia hạn" className="border-t border-stone-200 pt-4">
             <h3 className="mb-3 text-xs font-medium uppercase text-stone-500">Chi tiết chi phí</h3>
             <div className="space-y-3">
+                {quote.expiresAt && <QuoteLine label="Báo giá có hiệu lực đến" value={rentalDate(quote.expiresAt)} />}
                 <QuoteLine label="Đơn giá / tháng" value={rentalMoney(quote.monthlyPrice, quote.currency)} />
                 <QuoteLine label={`Tạm tính (${quote.rentalMonths} tháng)`} value={rentalMoney(quote.subtotal, quote.currency)} />
                 {quote.discountAmount > 0 && (
                   <QuoteLine
-                    label={`Ưu đãi gói (${Math.round(quote.discountRate * 100)}%)`}
+                    label={`Ưu đãi gói (${discountPercent.format(quote.discountRate)})`}
                     value={`- ${rentalMoney(quote.discountAmount, quote.currency)}`}
                     valueClassName="!text-emerald-700"
                   />
@@ -228,14 +256,14 @@ export default function CustomerRenewalRequestModal({
             </div>
           </section>
           <section aria-label="Phương thức gia hạn" className="border-t border-stone-200 pt-4">
-            <h3 className="mb-2 text-xs font-medium uppercase text-stone-500">Quy trình gia hạn trực tuyến</h3>
+            <h3 className="mb-2 text-xs font-medium uppercase text-stone-500">Quy trình gia hạn</h3>
             <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-4 text-emerald-950 space-y-2">
               <div className="flex items-center gap-2">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-white text-xs font-bold">✓</span>
-                <p className="font-semibold text-sm text-emerald-900">Gia hạn tự động qua thanh toán trực tuyến</p>
+                <span className="h-2 w-2 rounded-full bg-emerald-600 shrink-0" />
+                <p className="font-semibold text-sm text-emerald-900">Thanh toán trực tuyến và ký tại cơ sở</p>
               </div>
               <p className="text-xs text-emerald-800 leading-relaxed">
-                Quy trình gia hạn được thực hiện 100% online. Bạn không cần đến cơ sở hay ký lại hợp đồng giấy. Ngay sau khi thanh toán thành công qua VNPay, hệ thống sẽ tự động cập nhật thời hạn thuê mới đến ngày <b>{rentalDate(quote.newEndDate)}</b>.
+                Sau khi gửi yêu cầu, hãy lưu lịch ký rồi trả trước 20% qua VNPay. Bạn thanh toán phần còn lại tại cơ sở khi ký phụ lục gia hạn.
               </p>
             </div>
             <details className="mt-3 text-sm text-stone-500">
@@ -243,7 +271,7 @@ export default function CustomerRenewalRequestModal({
               <div className="mt-2 space-y-2 leading-5 text-xs text-stone-600 rounded-lg border border-stone-200 bg-stone-50 p-3">
                 <p>• Tiền gia hạn được tính theo biểu giá ưu đãi đã niêm yết của cơ sở.</p>
                 <p>• Tiền cọc bảo đảm kho hiện tại được giữ nguyên để bảo đảm cho kỳ thuê mới mà không cần thu lại.</p>
-                <p>• Kỳ thuê mới có hiệu lực liên tục tiếp nối kỳ thuê hiện tại sau khi xác nhận thanh toán.</p>
+                <p>• Kỳ mới nối tiếp kỳ hiện tại và chỉ được cập nhật sau khi đã thu đủ tiền và xác nhận bản ký.</p>
 
               </div>
             </details>
@@ -253,7 +281,7 @@ export default function CustomerRenewalRequestModal({
                 type="checkbox"
                 className="mt-0.5 h-4 w-4 accent-amber-600"
                 checked={confirmed}
-                disabled={locked}
+                disabled={locked || quoteExpired}
                 onChange={(e) => setConfirmed(e.target.checked)}
               />
               Tôi đã đọc và đồng ý với giá thuê cùng điều khoản gia hạn.
@@ -262,31 +290,18 @@ export default function CustomerRenewalRequestModal({
         )}
         {/* Khi có yêu cầu gia hạn đang mở: Hiển thị Thẻ thông báo trực quan, bỏ các nút thừa */}
         {isConflictOpenRenewal ? (
-          <div className="rounded-2xl border border-amber-300 bg-amber-50/90 p-5 text-stone-900 shadow-sm" role="alert">
-            <div className="flex items-start gap-3.5">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-800">
-                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="12" y1="8" x2="12" y2="12" />
-                  <line x1="12" y1="16" x2="12.01" y2="16" />
-                </svg>
-              </div>
-              <div className="flex-1 space-y-1.5">
-                <h4 className="text-base font-semibold text-amber-950">
-                  Gian kho này đã có yêu cầu gia hạn đang mở
-                </h4>
-                <p className="text-sm leading-relaxed text-amber-900">
-                  Hợp đồng thuê này đã được tạo một yêu cầu gia hạn trước đó và hiện đang chờ hoàn tất thanh toán. Để tránh phát sinh chi phí trùng lặp, hệ thống không cho phép tạo thêm yêu cầu mới.
-                </p>
-                <p className="text-xs font-medium text-amber-800">
-                  💡 Bạn có thể đi đến yêu cầu gia hạn đã có để thanh toán online ngay hoặc kiểm tra thông tin.
-                </p>
-              </div>
-            </div>
+          <div className="rounded-xl bg-amber-50/90 p-4 text-stone-900" role="alert">
+            <h4 className="text-sm font-semibold text-amber-950">
+              Gian kho này đã có yêu cầu gia hạn đang mở
+            </h4>
+            <p className="mt-1 text-sm leading-5 text-amber-900">
+              Vui lòng xem hoặc thanh toán yêu cầu hiện có trước khi tạo yêu cầu mới.
+            </p>
 
-            <div className="mt-4 flex flex-wrap items-center justify-end gap-2.5 border-t border-amber-200/80 pt-3.5">
+            <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
               <Button
                 variant="outline"
+                size="sm"
                 className="bg-white hover:bg-stone-50"
                 onClick={onClose}
               >
@@ -295,6 +310,7 @@ export default function CustomerRenewalRequestModal({
               {onNavigateToRenewals && (
                 <Button
                   variant="primary"
+                  size="sm"
                   className="!border-amber-600 !bg-amber-600 !text-white hover:!bg-amber-700 shadow-sm font-medium"
                   onClick={() => onNavigateToRenewals(existingRenewalId)}
                 >
@@ -305,7 +321,7 @@ export default function CustomerRenewalRequestModal({
           </div>
         ) : (
           <>
-            {command.error ? (
+            {command.error && !expiredOnServer && !bookingConflict ? (
               <div className="rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm text-red-900 flex items-start gap-2.5" role="alert">
                 <svg className="h-5 w-5 text-red-600 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="12" cy="12" r="10" />
@@ -335,7 +351,15 @@ export default function CustomerRenewalRequestModal({
               <Button variant="outline" disabled={locked} onClick={onClose}>
                 Hủy
               </Button>
-              {command.conflict ? (
+              {bookingConflict && !command.uncertain ? null : !command.uncertain && (!command.conflict || expiredOnServer) && (quoteExpired || (code && quoteError)) ? (
+                <Button variant="primary" disabled={locked} onClick={() => {
+                  command.clear()
+                  setQuote(undefined)
+                  setQuoteRequest((request) => request + 1)
+                }}>
+                  Lấy báo giá mới
+                </Button>
+              ) : command.conflict ? (
                 <Button variant="primary" onClick={() => onSuccess()}>
                   Tải lại hồ sơ
                 </Button>
@@ -348,9 +372,13 @@ export default function CustomerRenewalRequestModal({
                     !confirmed ||
                     (revision !== undefined && revision.version === null)
                   }
-                  className="disabled:bg-stone-200 disabled:text-stone-500 disabled:opacity-100 sm:min-w-44"
+                  className="renewal-confirm-button sm:min-w-44"
                   onClick={() => {
                     if (!quote) return
+                    if (!command.uncertain && quote.expiresAt && Date.parse(quote.expiresAt) <= Date.now()) {
+                      setExpiredQuoteId(quote.id)
+                      return
+                    }
                     const snapshot = {
                       rentalId,
                       quoteId: quote.id,
@@ -370,27 +398,7 @@ export default function CustomerRenewalRequestModal({
                               key,
                             )
                           : submitRenewal(rentalId, quote.id, note, key),
-                      async (created) => {
-                        const renewalRecord = created as RenewalApiRecord
-                        if (renewalRecord?.id) {
-                          try {
-                            const paymentIntent = await createRenewalVnpayPaymentIntent(
-                              renewalRecord.id,
-                              newRenewalIdempotencyKey(),
-                            )
-                            if (paymentIntent?.paymentUrl) {
-                              const redirectUrl = renewalPaymentRedirectUrl(paymentIntent)
-                              if (typeof window !== "undefined" && window.location) {
-                                window.location.assign(redirectUrl)
-                                return
-                              }
-                            }
-                          } catch (payErr) {
-                            console.warn("Could not initiate instant VNPay payment:", payErr)
-                          }
-                        }
-                        onSuccess(renewalRecord)
-                      },
+                      (created) => onSuccess(created as RenewalApiRecord),
                     )
                   }}
                 >
@@ -398,7 +406,7 @@ export default function CustomerRenewalRequestModal({
                     ? "Đang gửi…"
                     : command.uncertain
                       ? "Thử lại cùng yêu cầu"
-                      : "Xác nhận & Đi đến thanh toán"}
+                      : "Xác nhận và xem yêu cầu"}
                 </Button>
               )}
             </div>

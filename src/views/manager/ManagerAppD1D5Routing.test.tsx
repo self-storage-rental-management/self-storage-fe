@@ -5,7 +5,7 @@ import type { User } from '../../types'
 import ManagerApp from './ManagerApp'
 
 const state = vi.hoisted(() => ({ api: true, page: 'dashboard', nav: [] as { id: string; permission: string; label: string }[] }))
-vi.mock('../../services/authApi', async () => ({ ...await vi.importActual('../../services/authApi'), isApiAuthenticated: () => state.api, getAuthenticatedActor: () => ({ id: 'manager', facilityScopes: {} }), canApiActor: () => true }))
+vi.mock('../../services/authApi', async () => ({ ...await vi.importActual('../../services/authApi'), isApiAuthenticated: () => state.api, getAuthenticatedActor: () => ({ id: 'manager', facilityScopes: { facility: 'MANAGE' } }), canApiActor: () => true }))
 vi.mock('../../store/StorageHubContext', () => ({ useStorageHub: () => ({ facilities: [], rentals: [], renewals: [], returns: [], staffTasks: [], can: () => true }) }))
 vi.mock('../../components/Layout', async () => ({
   ...await vi.importActual('../../components/Layout'),
@@ -36,6 +36,15 @@ describe('Manager D1-D5 routing isolation', () => {
     expect(state.nav.find(item => item.id === 'payments')).toMatchObject({ label: 'Lịch sử thanh toán', permission: 'payments:read' })
     state.api = false; render()
     expect(state.nav.find(item => item.id === 'payments')).toMatchObject({ permission: 'payments:collect' })
+  })
+  it('opens overdue tracking inside the Recovery tab from the existing overdue route', () => {
+    state.page = 'overdue-cases'
+    const html = render()
+    expect(state.nav.some(item => item.id === 'overdue-cases')).toBe(false)
+    expect(html).toContain('Nhân viên &amp; Nhiệm vụ')
+    expect(html).toContain('Thu hồi kho &amp; Theo dõi quá hạn')
+    expect(html).not.toContain('id="staff-overdue-tab"')
+    expect(html).toMatch(/id="staff-recovery-tab" aria-selected="true"/)
   })
   it('does not expose check-in and handover operations to managers', () => {
     render()

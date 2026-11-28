@@ -1,3 +1,4 @@
+import { recordDisplayCode, receiptDisplayCode } from '../../utils/recordDisplayCode'
 import { useEffect, useRef, useState } from "react"
 import { Button } from "../../components/ui"
 import { useRentalApiResource } from "../../hooks/useRentalApiResource"
@@ -57,7 +58,7 @@ async function loadChoices(
         .filter((r) => !parent || r.facilityId === parent.facilityId)
         .map((r) => ({
           id: r.id,
-          label: `${r.reservationCode}, ${r.id}`,
+          label: r.reservationCode || recordDisplayCode(r.id),
           facilityId: r.facilityId,
         })),
       pagination: {
@@ -76,7 +77,7 @@ async function loadChoices(
       .filter((r) => !parent || r.facility.id === parent.facilityId)
       .map((r) => ({
         id: source === "unit" ? r.storageUnit.id : r.id,
-        label: `${r.storageUnit.code}, ${r.id}`,
+        label: `${r.storageUnit.code}, ${r.displayCode || recordDisplayCode(r.id)}`,
         facilityId: r.facility.id,
       })),
   }
@@ -289,7 +290,7 @@ function PaymentChoice({
       {read.data && (
         <>
           <p>Giao dịch được ghi nhận cho đặt chỗ này:</p>
-          <p className="break-all">{read.data.paymentId}</p>
+          <p className="break-all">{receiptDisplayCode(read.data.receiptCode, read.data.transactionReference, read.data.paymentId)}</p>
           <p>Trạng thái: {({ PENDING: "Chờ thanh toán", PROCESSING: "Đang xử lý thanh toán", PAID: "Đã thanh toán", NOT_RECEIVED: "Chưa nhận được tiền", FAILED: "Thanh toán thất bại", CANCELLED: "Đã hủy" } as Record<string, string>)[read.data.paymentStatus] ?? "Chưa rõ trạng thái"}</p>
         </>
       )}

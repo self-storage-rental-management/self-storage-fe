@@ -1,3 +1,4 @@
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import { useEffect, useMemo, useState, useCallback } from "react"
 import {
   Area,
@@ -89,8 +90,9 @@ export default function BusinessDashboardPanel({
     setLoading(true)
     setError(null)
     try {
+      const scopedFacilityId = selectedFacilityId !== "all" ? selectedFacilityId : undefined
       const [rev, perf] = await Promise.all([
-        getBusinessRevenueReportApi(timeRangeMonths),
+        getBusinessRevenueReportApi(timeRangeMonths, scopedFacilityId),
         getBusinessPerformanceReportApi(),
       ])
       setRevenueReport(rev)
@@ -103,7 +105,7 @@ export default function BusinessDashboardPanel({
     } finally {
       setLoading(false)
     }
-  }, [timeRangeMonths])
+  }, [timeRangeMonths, selectedFacilityId])
 
   useEffect(() => {
     void loadData()
@@ -155,34 +157,21 @@ export default function BusinessDashboardPanel({
 
     // 2. Revenue calculations
     let totalRevenue = 0
-    let currentMonthRevenue = 0
-    let securityDepositsHeld = 0
+    let currentMonthRevenue: number | null = null
+    let securityDepositsHeld: number | null = null
 
     if (revenueReport) {
-      if (selectedFacilityId === "all") {
-        totalRevenue = Number(revenueReport.netRevenue ?? revenueReport.totalRevenueCollected ?? 0)
+      totalRevenue = Number(revenueReport.netRevenue ?? revenueReport.totalRevenueCollected ?? 0)
 
-        // Find current month revenue from breakdown (last item)
-        const lastMonth = revenueReport.monthlyBreakdown[revenueReport.monthlyBreakdown.length - 1]
-        currentMonthRevenue = lastMonth ? Number(lastMonth.revenue) : 0
+      // Find current month revenue from breakdown (last item)
+      const lastMonth = revenueReport.monthlyBreakdown[revenueReport.monthlyBreakdown.length - 1]
+      currentMonthRevenue = lastMonth ? Number(lastMonth.revenue) : 0
 
-        // Find security deposits from purpose breakdown
-        const depItem = revenueReport.paymentPurposeBreakdown.find(
-          (p) => p.purpose === "RESERVATION_DEPOSIT" || p.purpose === "SECURITY_DEPOSIT"
-        )
-        securityDepositsHeld = depItem ? Number(depItem.amount) : 0
-      } else {
-        // Find specific facility revenue in breakdown
-        const facRev = revenueReport.facilityBreakdown.find((f) => f.facilityId === selectedFacilityId)
-        if (facRev) {
-          totalRevenue = Number(facRev.revenue)
-        } else {
-          const code = (currentFacility?.code || "").toUpperCase()
-          totalRevenue = backendFacilityStats[code]?.revenue || 0
-        }
-        currentMonthRevenue = Math.round(totalRevenue * 0.15)
-        securityDepositsHeld = Math.round(totalRevenue * 0.2)
-      }
+      // Find security deposits from purpose breakdown
+      const depItem = revenueReport.paymentPurposeBreakdown.find(
+        (p) => p.purpose === "RESERVATION_DEPOSIT" || p.purpose === "SECURITY_DEPOSIT"
+      )
+      securityDepositsHeld = depItem ? Number(depItem.amount) : 0
     } else {
       // Fallback from backendFacilityStats or hub
       if (selectedFacilityId === "all") {
@@ -198,8 +187,6 @@ export default function BusinessDashboardPanel({
         const code = (currentFacility?.code || "").toUpperCase()
         totalRevenue = backendFacilityStats[code]?.revenue || 0
       }
-      currentMonthRevenue = Math.round(totalRevenue * 0.15)
-      securityDepositsHeld = Math.round(totalRevenue * 0.2)
     }
 
     return {
@@ -246,7 +233,7 @@ export default function BusinessDashboardPanel({
       result.push({
         month: mStr,
         fullMonth: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
-        revenue: i === 0 ? metrics.currentMonthRevenue : Math.max(0, Math.round(metrics.totalRevenue / timeRangeMonths)),
+        revenue: i === 0 ? (metrics.currentMonthRevenue ?? Math.max(0, Math.round(metrics.totalRevenue / timeRangeMonths))) : Math.max(0, Math.round(metrics.totalRevenue / timeRangeMonths)),
         transactions: 1,
       })
     }
@@ -268,12 +255,8 @@ export default function BusinessDashboardPanel({
       })
     }
 
-    return [
-      { name: "Tiền thuê kho định kỳ", value: metrics.totalRevenue * 0.7, count: 4, color: "#2563eb" },
-      { name: "Tiền cọc giữ chỗ", value: metrics.totalRevenue * 0.2, count: 2, color: "#10b981" },
-      { name: "Gia hạn hợp đồng", value: metrics.totalRevenue * 0.1, count: 1, color: "#8b5cf6" },
-    ]
-  }, [revenueReport, metrics.totalRevenue])
+    return []
+  }, [revenueReport])
 
   // Facilities table data
   const facilitiesSummaryTable = useMemo(() => {
@@ -295,9 +278,9 @@ export default function BusinessDashboardPanel({
 
       return {
         id: fac.id,
-        code: fac.code || fac.id,
+        code: fac.code || recordDisplayCode(fac.id),
         name: fac.name,
-        city: fac.city || "—",
+        city: fac.city || "-",
         address: fac.address,
         totalUnits,
         occupiedUnits,
@@ -316,7 +299,7 @@ export default function BusinessDashboardPanel({
       const exportedData = chartMonthlyData.map((d) => ({
         month: d.month,
         revenue: d.revenue,
-        growth: "—",
+        growth: "-",
         growthNumber: 0,
         contracts: d.transactions,
         occupancyRate: `${metrics.occupancyRate}%`,
@@ -340,10 +323,10 @@ export default function BusinessDashboardPanel({
       {/* ── TOP HEADER & CONTROLS ── */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <SectionHeader
-          title={isVi ? "Bảng Điều Khiển & Doanh Thu" : "Business Dashboard & Revenue"}
+          title={isVi ? "Doanh Thu & Báo Cáo" : "Business Revenue & Reporting"}
           subtitle={
             isVi
-              ? "Tổng quan doanh thu thực thu, tiền cọc, tỷ lệ lấp đầy kho và hiệu suất toàn bộ chi nhánh"
+              ? "Tổng quan doanh thu thực thu, tiền cọc và hiệu suất toàn bộ chi nhánh"
               : "Financial metrics, security deposits, occupancy and multi-facility performance"
           }
         />
@@ -355,10 +338,10 @@ export default function BusinessDashboardPanel({
               onChange={(e) => setSelectedFacilityId(e.target.value)}
               aria-label="Lọc theo cơ sở"
             >
-              <option value="all">{isVi ? "🏢 Toàn bộ chi nhánh" : "🏢 All Facilities"}</option>
+              <option value="all">{isVi ? "Toàn bộ chi nhánh" : "All Facilities"}</option>
               {facilitiesList.map((f) => (
                 <option key={f.id} value={f.id}>
-                  {f.name} ({f.code || f.id})
+                  {f.name} ({f.code || recordDisplayCode(f.id)})
                 </option>
               ))}
             </Select>
@@ -417,7 +400,7 @@ export default function BusinessDashboardPanel({
       {/* Error alert if any */}
       {error && (
         <div className="p-4 bg-amber-50 border border-amber-200 text-amber-900 text-sm rounded-xl flex items-center justify-between">
-          <span>⚠️ {error}</span>
+          <span>{error}</span>
           <Button variant="outline" size="sm" onClick={() => void loadData()}>
             Thử lại
           </Button>
@@ -462,13 +445,13 @@ export default function BusinessDashboardPanel({
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-extrabold text-blue-950 font-mono tracking-tight">
-              {formatVndAmount(metrics.currentMonthRevenue)}
+              {metrics.currentMonthRevenue === null ? "Toàn hệ thống" : formatVndAmount(metrics.currentMonthRevenue)}
             </span>
-            <span className="text-xs text-blue-700 font-medium">đ</span>
+            {metrics.currentMonthRevenue !== null && <span className="text-xs text-blue-700 font-medium">đ</span>}
           </div>
           <p className="mt-2 text-[11px] text-stone-500 flex items-center justify-between">
-            <span>Thu định kỳ & gia hạn</span>
-            <Badge variant="info">Ổn định</Badge>
+            <span>{metrics.currentMonthRevenue === null ? "BE chỉ thống kê toàn hệ thống" : "Thu định kỳ & gia hạn"}</span>
+            <Badge variant="info">{metrics.currentMonthRevenue === null ? "Toàn HT" : "Ổn định"}</Badge>
           </p>
         </Card>
 
@@ -484,9 +467,9 @@ export default function BusinessDashboardPanel({
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-extrabold text-purple-950 font-mono tracking-tight">
-              {formatVndAmount(metrics.securityDepositsHeld)}
+              {metrics.securityDepositsHeld === null ? "Toàn hệ thống" : formatVndAmount(metrics.securityDepositsHeld)}
             </span>
-            <span className="text-xs text-purple-700 font-medium">đ</span>
+            {metrics.securityDepositsHeld !== null && <span className="text-xs text-purple-700 font-medium">đ</span>}
           </div>
           <p className="mt-2 text-[11px] text-stone-500 flex items-center justify-between">
             <span>Cọc giữ chỗ & đảm bảo kho</span>
@@ -498,7 +481,7 @@ export default function BusinessDashboardPanel({
         <Card className="p-4 bg-linear-to-br from-white to-amber-50/50 border-amber-100 shadow-xs relative overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-stone-500">
-              {isVi ? "Tỷ Lệ Lấp Đầy Kho" : "System Occupancy Rate"}
+              {isVi ? "Công Suất Sử Dụng Kho" : "System Utilization Rate"}
             </span>
             <span className="p-2 rounded-lg bg-amber-100 text-amber-800 font-bold text-xs">
               {metrics.occupancyRate}%
@@ -602,30 +585,36 @@ export default function BusinessDashboardPanel({
 
             {/* List of items */}
             <div className="mt-5 space-y-3.5">
-              {purposeChartData.map((item) => {
-                const total = metrics.totalRevenue || 1
-                const pct = Math.round((item.value / total) * 100)
-                return (
-                  <div key={item.name} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="w-2.5 h-2.5 rounded-full"
-                          style={{ backgroundColor: item.color }}
-                        />
-                        <span className="font-medium text-stone-800">{item.name}</span>
+              {purposeChartData.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-stone-200 bg-stone-50/70 p-4 text-center text-xs text-stone-500">
+                  {isVi ? "Chưa có dữ liệu giao dịch thanh toán theo mục đích trong kỳ này." : "No payment purpose data recorded in this period."}
+                </div>
+              ) : (
+                purposeChartData.map((item) => {
+                  const total = metrics.totalRevenue || 1
+                  const pct = Math.round((item.value / total) * 100)
+                  return (
+                    <div key={item.name} className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="w-2.5 h-2.5 rounded-full"
+                            style={{ backgroundColor: item.color }}
+                          />
+                          <span className="font-medium text-stone-800">{item.name}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-bold font-mono text-stone-900">
+                            {formatVndAmount(item.value)} đ
+                          </span>
+                          <span className="text-stone-400 text-[10px] ml-1">({pct}%)</span>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <span className="font-bold font-mono text-stone-900">
-                          {formatVndAmount(item.value)} đ
-                        </span>
-                        <span className="text-stone-400 text-[10px] ml-1">({pct}%)</span>
-                      </div>
+                      <ProgressBar value={pct} max={100} />
                     </div>
-                    <ProgressBar value={pct} max={100} />
-                  </div>
-                )
-              })}
+                  )
+                })
+              )}
             </div>
           </div>
 
@@ -647,7 +636,7 @@ export default function BusinessDashboardPanel({
             </h3>
             <p className="text-xs text-stone-500 mt-0.5">
               {isVi
-                ? "Theo dõi doanh thu, tỷ lệ lấp đầy gian kho và các vụ việc đang giải quyết tại mỗi cơ sở"
+                ? "Theo dõi doanh thu, hiệu suất gian kho và các vụ việc đang giải quyết tại mỗi cơ sở"
                 : "Compare revenues, occupancy, active leases and open operational tickets"}
             </p>
           </div>
@@ -661,7 +650,7 @@ export default function BusinessDashboardPanel({
             <tr>
               <Th>Mã / Tên Cơ Sở</Th>
               <Th>Khu Vực</Th>
-              <Th>Tỷ Lệ Lấp Đầy</Th>
+              <Th>{isVi ? "Công Suất Kho" : "Utilization"}</Th>
               <Th>Gian Kho (Đang thuê / Tổng)</Th>
               <Th>Doanh Thu Thực Thu</Th>
               <Th>HĐ Thuê Hiệu Lực</Th>

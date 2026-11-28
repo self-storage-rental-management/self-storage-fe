@@ -24,7 +24,6 @@ import {
 import { listBusinessPackagePolicies } from "../../services/businessPolicyApi"
 import { isUuid } from "../../services/renewalOperationsApi"
 import { policyPendingKey, readPendingPolicy, retainPendingPolicy, clearPendingPolicy } from "./pendingPolicyPublication"
-import LedgerPanel from "./LedgerPanel"
 import BusinessConfigPanel from "./BusinessConfigPanel"
 
 type Draft = Record<string, string>
@@ -42,8 +41,8 @@ const labels: Record<string, string> = {
   warningThroughDay: "Số ngày kết thúc mức Cảnh báo 1",
   seriousThroughDay: "Số ngày kết thúc mức Cảnh báo nghiêm trọng",
   urgentThroughDay: "Hạn chót gia hạn (số ngày sau hết hạn)",
-  recoveryCutoffTime: "Giờ chốt gia hạn ngày cuối (ví dụ 17:00:00)",
-  recoveryStartTime: "Giờ chuyển sang xử lý thu hồi (ví dụ 08:00:00)",
+  recoveryCutoffTime: "Giờ chốt gia hạn ngày cuối (ví dụ 23:59:59)",
+  recoveryStartTime: "Giờ chuyển sang xử lý thu hồi (ví dụ 00:00:00)",
   reminderCooldownMinutes:
     "Khoảng cách tối thiểu giữa hai lần nhắc (phút, không bắt buộc)",
   supportReviewDays: "Thời gian khách hàng xem xét kết quả hỗ trợ (ngày)",
@@ -123,8 +122,8 @@ export function buildPolicyInput(kind: PolicyKind, d: Draft): PolicyInput {
             seriousThroughDay: Number(d.seriousThroughDay || 6),
             urgentThroughDay: Number(d.urgentThroughDay || 7),
             recoveryFromDay: Number(d.urgentThroughDay || 7) + 1,
-            recoveryCutoffTime: d.recoveryCutoffTime || '17:00:00',
-            recoveryStartTime: d.recoveryStartTime || '08:00:00',
+            recoveryCutoffTime: d.recoveryCutoffTime || '23:59:59',
+            recoveryStartTime: d.recoveryStartTime || '00:00:00',
           } : undefined,
         }
       : {
@@ -224,8 +223,8 @@ function PolicyEditor({
         seriousThroughDay: 6,
         urgentThroughDay: 7,
         recoveryFromDay: 8,
-        recoveryCutoffTime: '17:00:00',
-        recoveryStartTime: '08:00:00',
+        recoveryCutoffTime: '23:59:59',
+        recoveryStartTime: '00:00:00',
       }
   const packageRead = useRentalApiResource(
     `${actor.id}:all-renewal-packages`,
@@ -602,8 +601,8 @@ function PolicyEditor({
                     seriousThroughDay: Number(draft.seriousThroughDay || 6),
                     urgentThroughDay: Number(draft.urgentThroughDay || 7),
                     recoveryFromDay: Number(draft.urgentThroughDay || 7) + 1,
-                    recoveryCutoffTime: draft.recoveryCutoffTime || '17:00:00',
-                    recoveryStartTime: draft.recoveryStartTime || '08:00:00',
+                    recoveryCutoffTime: draft.recoveryCutoffTime || '23:59:59',
+                    recoveryStartTime: draft.recoveryStartTime || '00:00:00',
                   } : undefined,
                 }
 
@@ -621,18 +620,43 @@ function PolicyEditor({
               )
               read.refresh()
             } else {
-              const actual = await publishIntegrationPolicy(kind, facility, baseInput)
-              if (!policyMatches(actual, baseInput, actor.id))
-                throw new ApiClientError("Chưa đối chiếu được chính sách.", {
-                  code: "INVALID_RESPONSE",
-                })
-              pending.current = undefined
-              clearPendingPolicy(pendingKey)
-              isDirty.current = false
-              setUncertain(false)
-              setDraft(policyDraft(actual))
-              setMessage("Đã lưu chính sách.")
-              read.refresh()
+              if (applyAllFacilities) {
+                const targetFacilities = facilitiesList && facilitiesList.length > 0
+                  ? facilitiesList
+                  : [{ id: facility, name: "Toàn hệ thống" } as CustomerFacility]
+
+                for (const targetFac of targetFacilities) {
+                  let facRev = 0
+                  try {
+                    const existing = await getStoredIntegrationPolicy(kind, targetFac.id)
+                    facRev = existing.revision
+                  } catch {
+                    facRev = 0
+                  }
+                  const facInput = { ...baseInput, expectedRevision: facRev }
+                  await publishIntegrationPolicy(kind, targetFac.id, facInput)
+                }
+
+                pending.current = undefined
+                clearPendingPolicy(pendingKey)
+                isDirty.current = false
+                setUncertain(false)
+                setMessage(`Đã lưu và đồng bộ chính sách thông báo cho toàn bộ ${targetFacilities.length} cơ sở trong hệ thống!`)
+                read.refresh()
+              } else {
+                const actual = await publishIntegrationPolicy(kind, facility, baseInput)
+                if (!policyMatches(actual, baseInput, actor.id))
+                  throw new ApiClientError("Chưa đối chiếu được chính sách.", {
+                    code: "INVALID_RESPONSE",
+                  })
+                pending.current = undefined
+                clearPendingPolicy(pendingKey)
+                isDirty.current = false
+                setUncertain(false)
+                setDraft(policyDraft(actual))
+                setMessage("Đã lưu chính sách.")
+                read.refresh()
+              }
             }
           } catch (err) {
             const unknown =
@@ -856,11 +880,9 @@ function PolicyEditor({
                                   {selectedCount}/{pkgs.length} gói đã chọn
                                 </span>
                                 <span
-                                  className={`text-xs transition-transform duration-200 inline-block transform ${
-                                    isOpen ? "rotate-180" : ""
-                                  } ${isOrange ? "text-amber-700 font-bold" : "text-stone-400"}`}
+                                  className={`text-xs inline-block ${isOrange ? "text-amber-700 font-bold" : "text-stone-500 font-semibold"}`}
                                 >
-                                  ▼
+                                  {isOpen ? "Thu gọn" : "Chi tiết"}
                                 </span>
                               </div>
                             </button>
@@ -935,10 +957,10 @@ function PolicyEditor({
               {overdueTerm && (
                 <section className="rounded-xl border border-stone-200 p-4 space-y-3">
                   <div className="flex items-center gap-2">
-                    <span className="p-1.5 bg-orange-100 text-orange-800 rounded-lg text-sm">⏳</span>
+                    
                     <div>
                       <h4 className="font-semibold text-stone-900">Quy trình xử lý quá hạn & Thu hồi kho</h4>
-                      <p className="text-xs text-stone-500">Tiến trình chuẩn tự động áp dụng khi khách hàng chậm gia hạn hợp đồng.</p>
+                      <p className="text-xs text-stone-500">Các bước xử lý áp dụng khi hợp đồng quá hạn.</p>
                     </div>
                   </div>
 
@@ -964,7 +986,7 @@ function PolicyEditor({
                         <span className="text-xs text-orange-800 font-bold">{overdueTerm.recoveryCutoffTime.slice(0, 5)} ngày {overdueTerm.urgentThroughDay}</span>
                       </div>
                       <div className="font-bold text-xs text-stone-900 flex items-center gap-1.5 pt-1">
-                        <span>⏰</span> Hết thời gian hoàn tất gia hạn
+                        Hết thời gian hoàn tất gia hạn
                       </div>
                       <p className="text-[11px] text-stone-600 leading-relaxed">
                         Chính thức hết thời gian gia hạn tự phục vụ. Chốt danh sách hợp đồng chưa hoàn tất thanh toán.
@@ -981,7 +1003,7 @@ function PolicyEditor({
                         Chuyển hồ sơ sang xử lý thu hồi khi đủ điều kiện
                       </div>
                       <p className="text-[11px] text-stone-600 leading-relaxed">
-                        Chuyển hồ sơ sang quy trình xử lý thu hồi, niêm phong tài sản và thanh lý kho theo quy định.
+                        Chuyển hồ sơ để cơ sở xem xét và xử lý thu hồi theo quy định.
                       </p>
                     </div>
                   </div>
@@ -1032,7 +1054,7 @@ function PolicyEditor({
                         <input
                           className={inputClass}
                           type="time"
-                          value={(draft.recoveryCutoffTime || "17:00:00").slice(0, 5)}
+                          value={(draft.recoveryCutoffTime || "23:59:59").slice(0, 5)}
                           onChange={(e) => {
                             isDirty.current = true
                             setDraft((d) => ({ ...d, recoveryCutoffTime: e.target.value.length === 5 ? `${e.target.value}:00` : e.target.value }))
@@ -1174,12 +1196,10 @@ export default function DuongPolicyWorkspace({
     actor.status === "ACTIVE" &&
     actor.roles.includes("BUSINESS") &&
     actor.permissions.includes("policies:read")
-  const [facility, setFacility] = useState(""),
-    [rentalInput, setRentalInput] = useState("")
-  const [rental, setRental] = useState("")
+  const [facility, setFacility] = useState("")
   const [locked, setLocked] = useState(false)
   const [applyAllFacilities, setApplyAllFacilities] = useState(false)
-  const [activeMainTab, setActiveMainTab] = useState<"renewal" | "communication" | "business-config" | "ledger">("renewal")
+  const [activeMainTab, setActiveMainTab] = useState<"renewal" | "communication" | "business-config">("renewal")
 
   useEffect(() => {
     onLocked?.(locked)
@@ -1259,17 +1279,6 @@ export default function DuongPolicyWorkspace({
             }`}
           >
             Cấu hình vận hành
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveMainTab("ledger")}
-            className={`px-3 py-1.5 rounded-lg text-xs md:text-sm font-semibold transition cursor-pointer ${
-              activeMainTab === "ledger"
-                ? "bg-white text-stone-900 shadow-xs border border-stone-200"
-                : "text-stone-500 hover:text-stone-900"
-            }`}
-          >
-            Tra cứu tài chính
           </button>
         </div>
       </header>
@@ -1380,51 +1389,8 @@ export default function DuongPolicyWorkspace({
           )}
         </>
       )}
-
       {activeMainTab === "business-config" && (
         <BusinessConfigPanel canWrite={allowed} />
-      )}
-
-      {activeMainTab === "ledger" && (
-        <Card className="space-y-4 rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
-          <div>
-            <div className="flex items-center gap-2">
-              
-              <div>
-                <h3 className="font-semibold text-stone-900 text-base">
-                  Tra cứu các khoản tài chính của hồ sơ thuê
-                </h3>
-                <p className="mt-0.5 text-xs text-stone-500">Tra cứu chi tiết các bút toán ghi nợ, lịch sử thanh toán gia hạn và tiền gửi bằng mã hồ sơ thuê.</p>
-              </div>
-            </div>
-          </div>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault()
-              if (isUuid(rentalInput.trim())) setRental(rentalInput.trim())
-            }}
-          >
-            <label className="block text-sm font-medium text-stone-700">
-              Mã hồ sơ thuê (UUID)
-              <input
-                className="mt-2 block w-full rounded-xl border border-stone-300 px-3.5 py-2.5 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
-                placeholder="Ví dụ: e4b2d3c1-..."
-                value={rentalInput}
-                onChange={(e) => setRentalInput(e.target.value)}
-              />
-            </label>
-            <Button className="mt-3.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold" type="submit" disabled={!isUuid(rentalInput.trim())}>
-              Tra cứu hồ sơ
-            </Button>
-          </form>
-          {rental && (
-            <LedgerPanel
-              key={`${actor!.id}:${rental}`}
-              role="business"
-              id={rental}
-            />
-          )}
-        </Card>
       )}
     </div>
   )

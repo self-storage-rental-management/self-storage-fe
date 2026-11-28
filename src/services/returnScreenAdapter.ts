@@ -5,11 +5,12 @@ import type { ApiReturn } from './returnApi'
 export function returnScreenRecord(record: ApiReturn): ReturnCase {
   const vnd = (value: number | null) => value == null ? Number.NaN : value
   return {
+    displayCode: record.displayCode, rentalDisplayCode: record.rentalDisplayCode,
     id: record.id, rentalId: record.rentalId, unitId: record.unitNumber,
     facilityId: record.facilityId, facilityName: record.facilityName,
     customerId: record.customerId, customerName: record.customerName,
     customerEmail: record.customerEmail ?? '', customerPhone: record.customerPhone ?? '',
-    requestedAt: record.requestedAt ?? '', scheduledDate: record.scheduledDate, status: record.status,
+    requestedAt: record.requestedAt ?? '', scheduledDate: record.scheduledDate ?? '', returnType: record.returnType, status: record.status,
     initialConditionSnapshot: 'Chưa có thông tin bàn giao trong phản hồi trả kho',
     packageCount: Number.NaN, initialWeightKg: Number.NaN,
     inventoryMatch: record.inventoryMatch ?? undefined, damageClassification: record.damageClassification ?? undefined,
@@ -20,6 +21,8 @@ export function returnScreenRecord(record: ApiReturn): ReturnCase {
     staffNotes: record.inspectionNotes ?? undefined, evidence: record.evidencePhotos ?? [],
     customerConfirmed: record.customerConfirmed, customerDecisionNote: record.customerDecisionNote ?? undefined,
     proposedUnitStatus: record.proposedUnitStatus ?? undefined, inspectedAt: record.inspectedAt ?? undefined,
+    managerApprovalRequired: record.managerApprovalRequired,
+    managerReviewDueAt: record.managerReviewDueAt,
     completedAt: record.completedAt ?? undefined, settlementPaymentId: record.settlementPaymentId ?? undefined,
     settlementPaidAt: record.settlementPaidAt ?? undefined,
     returnedItems: { key: record.returnedKey === true, card: record.returnedCard === true, lock: record.returnedLock === true },

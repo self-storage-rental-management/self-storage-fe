@@ -1,9 +1,30 @@
+import type { InventoryDecision } from './inventoryDecision'
 import { ApiClientError, apiDownload, apiRequest } from './apiClient'
+import type { GoodsItemInput, GoodsCategory } from './customerReservationApi'
 import { isCheckInStatus, isReservationStatus, isPaymentStatus, type CheckInStatus as WorkflowCheckInStatus, type ReservationStatus, type PaymentStatus } from '../types/statusContracts'
+import { renameEvidenceFile } from '../utils/evidenceFileName'
 
 export type CheckInStatus = WorkflowCheckInStatus | null
-export type CheckInListStatus = 'UNSCHEDULED' | Exclude<CheckInStatus, null | 'rejected' | 'cancelled'>
+export type CheckInListStatus = 'HANDOVER_WAITING' | 'HANDOVER_IN_PROGRESS' | 'HANDOVER_STOPPED' | 'UNSCHEDULED' | 'RECOVERY_TRANSFERRED' | NonNullable<CheckInStatus>
+export type CheckInGroup = 'ONGOING' | 'PROCESSED'
 export type CheckInReservationStatus = ReservationStatus
+export type InventoryVisit = {
+  access?: { completionDeadlineAt: string | null; writable: boolean; blockedReason: string | null; recoveryTransferred?: boolean } | null
+  appointmentAt: string | null
+  arrivedAt: string | null
+  identityVerifiedAt: string | null
+  verifiedByName: string | null
+  photoId: string | null
+}
+export type InventoryResolutionStatus =
+  | 'NOT_STARTED'
+  | 'PENDING_CUSTOMER'
+  | 'PENDING_STAFF_RESOLUTION'
+  | 'ACCEPTED'
+  | 'PARTIAL_ACCEPTED'
+  | 'TRANSFER_REQUESTED'
+  | 'RETURN_REQUESTED'
+  | 'RECOVERY_REQUIRED'
 
 export interface CheckInChecklist {
   identityVerified: boolean
@@ -16,7 +37,24 @@ export interface CheckInChecklist {
   accessHandedOver: boolean
 }
 
+export interface CheckInInventoryLine {
+  actualGoods?: GoodsItemInput | null
+  actualCategoryId?: string | null
+  actualMaterialId?: string | null
+  goodsItemId: string
+  actualQuantity: number
+  condition: 'INTACT' | 'DAMAGED' | 'NOT_PRESENT'
+  note: string | null
+  measurements?: {
+    lengthCm: number
+    widthCm: number
+    heightCm: number
+    weightKg: number
+  } | null
+}
+
 export interface CompleteCheckInRequest {
+  inventoryLines?: CheckInInventoryLine[] | null
   checklist: CheckInChecklist
   identityDocumentNumber: string
   identityVerificationNote: string | null
@@ -33,13 +71,57 @@ export interface CompleteCheckInRequest {
   goodsCondition: string
   packageCount: number
   goodsCategory: string
+  goodsMaterial: string
+  actualPackagingMethod?: string | null
+  packagingCondition?: 'INTACT' | 'MINOR_DAMAGE' | 'MAJOR_DAMAGE' | 'UNPACKAGED' | null
   evidenceReferences: string[]
   handedOverItems: string[]
   notes: string
   lockReference: string
 }
 
+export interface HandoverRecord {
+  facilityName: string
+  facilityAddress: string
+  handedOverBy: string
+  handedOverByName: string
+  handedOverAt: string
+  items: { name: string; quantity: number }[]
+  signedRecordReference: string | null
+  note: string | null
+  rackCount?: number | null
+  palletCount?: number | null
+}
+
 export interface CheckInCase {
+  handoverRecord?: HandoverRecord | null
+  customerReceiptConfirmedAt?: string | null
+  facilityAddress?: string | null
+  inventoryReturnWindowDays?: number | null
+  inventoryRemovalPublishedAt?: string | null
+  inventoryRemovalDeadlineAt?: string | null
+  inventoryReturnLastReminderAt?: string | null
+  equipment?: { rackCount: number; frameCount: number; palletCount: number | null }
+  intakeAction: 'START' | 'CONTINUE' | 'NONE'
+  declaredGoodsLines?: {
+    id: string
+    code: string | null
+    name: string | null
+    categoryName?: string | null
+    materialName?: string | null
+    catalogCategoryId?: string | null
+    catalogMaterialId?: string | null
+    category?: GoodsCategory | null
+    fragile?: boolean
+    stackable?: boolean
+    allowHorizontalPlacement?: boolean
+    maxStackLayers?: number
+    quantity: number
+    lengthCm: number | null
+    widthCm: number | null
+    heightCm: number | null
+    weightPerPackageKg?: number | null
+  }[]
   setupEarlyExitPolicyVersion?: string | null
   setupEarlyExitFee?: number | null
   checkInId: string | null
@@ -48,10 +130,13 @@ export interface CheckInCase {
   appointmentAt: string | null
   checkedInAt: string | null
   identityVerifiedAt: string | null
+  inventoryVisit?: InventoryVisit | null
   verifiedIdentityDocument: string | null
   identityVerificationNote: string | null
   contractSignedAt: string | null
   contractEvidenceReference: string | null
+  contractEvidenceCode?: string | null
+  paymentEvidenceReference: string | null
   paymentCollectedAt: string | null
   setupStartedAt: string | null
   setupDueAt: string | null
@@ -60,8 +145,45 @@ export interface CheckInCase {
   setupCompletedAt: string | null
   inventoryVerifiedAt: string | null
   inventoryDueAt: string | null
+  inventoryFinalDeadlineAt?: string | null
   inventoryPending: boolean
+  inventoryDecision?: InventoryDecision | null
+  inventoryResolutionStatus?: InventoryResolutionStatus | null
+  inventoryRefusalStatus?: 'PENDING' | 'APPROVED' | 'REJECTED' | null
+  inventoryFullFit?: boolean
+  inventoryPartialFitAvailable?: boolean
+  inventorySuggestedPackageCount?: number | null
+  inventoryMismatchSummary?: string | null
+  inventoryAcceptedQuantitiesJson?: string | null
+  inventoryRemainderDeadlineAt?: string | null
+  inventoryRemainderRemovedAt?: string | null
+  inventoryRemainderRemovalNote?: string | null
+  inventoryActualJson?: string | null
+  inventoryMismatchJson?: string | null
+  inventorySuggestedQuantitiesJson?: string | null
+  /** Version of the published inspection record; an at-site confirmation is bound to it. */
+  inventoryResultVersion?: number
+  /** Who recorded the at-site arrangement with the verified customer. */
+  inventoryAtSiteConfirmedBy?: string | null
+  inventoryAtSiteConfirmedByName?: string | null
+  inventoryDecisionAt?: string | null
+  /** True only when this case still waits for an online customer confirmation. */
+  inventoryAwaitingOnlineConfirmation?: boolean
+  receiptConfirmationDueAt: string | null
+  receiptConfirmationOverdue: boolean
+  receiptConfirmationReleaseAt?: string | null
+  receiptReleaseEligible?: boolean
+  declaredPackagingMethod?: string | null
+  storageCapacity?: {
+    volumeM3: number | null
+    maxLoadKg: number | null
+    maxCargoLengthCm?: number | null
+    maxCargoWidthCm?: number | null
+    maxCargoHeightCm?: number | null
+    maxCargoWeightKg?: number | null
+  } | null
   lockReference: string | null
+  attendance?: import('../domain/reservationCheckInPolicy').HandoverAttendance | null
   readinessNote: string | null
   rejectionReason: string | null
   rejectionDisposition: 'AVAILABLE' | 'MAINTENANCE' | null
@@ -76,6 +198,10 @@ export interface CheckInCase {
   customerName: string
   customerEmail: string
   identityDocumentNumber: string | null
+  declaredIdentityMasked?: string | null
+  identityCorrected?: boolean
+  identityFailedAttempts?: number
+  identityCorrectionFailedAttempts?: number
   customerPhone: string | null
   facilityId: string
   facilityName: string
@@ -94,6 +220,14 @@ export interface CheckInCase {
   declaredGoodsHeightCm: number | null
   dueAtCheckIn: number | null
   handover: CompleteCheckInRequest | null
+  checkInDeadline?: string | null
+}
+
+export interface ReceiptReminderResponse {
+  sent: boolean
+  sentAt: string | null
+  receiptConfirmationDueAt: string | null
+  receiptConfirmationOverdue: boolean
 }
 
 export interface CheckInPage {
@@ -115,12 +249,21 @@ interface ApiEnvelope<T> {
 
 export interface CheckInEvidenceAsset {
   id: string
+  createdAt?: string
   originalName: string
   contentType: string
   sizeBytes: number
   entityType: 'CHECK_IN'
   entityId: string
   status: string
+}
+
+export const isCheckInEvidenceAssetId = (value: unknown): value is string =>
+  typeof value === 'string'
+  && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+
+export function checkInEvidenceAssetIds(references: readonly unknown[]) {
+  return Array.from(new Set(references.filter(isCheckInEvidenceAssetId)))
 }
 
 export type AccessCredentialType = 'PIN' | 'CARD' | 'KEY' | 'LOCK'
@@ -193,7 +336,7 @@ function assertPage(payload: unknown): CheckInPage {
     || typeof value.pagination.page !== 'number'
     || typeof value.pagination.totalItems !== 'number'
     || typeof value.pagination.totalPages !== 'number') {
-    throw new ApiClientError('Backend trả về danh sách check-in không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+    throw new ApiClientError('Chưa tải được thông tin. Vui lòng thử lại.', { code: 'INVALID_API_RESPONSE' })
   }
   value.data.forEach(assertCaseStatus)
   return value as CheckInPage
@@ -201,28 +344,32 @@ function assertPage(payload: unknown): CheckInPage {
 
 function assertCaseStatus(value: CheckInCase): CheckInCase {
   if (!value || !isReservationStatus(value.reservationStatus) || (value.checkInStatus !== null && !isCheckInStatus(value.checkInStatus))) {
-    throw new ApiClientError('Trạng thái check-in hoặc reservation không đúng contract.', { code: 'INVALID_API_RESPONSE' })
+    throw new ApiClientError('Trạng thái nhận kho hoặc đặt kho không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
   }
   return value
 }
 
 function assertEnvelope(payload: unknown): CheckInCase {
   if (!payload || typeof payload !== 'object' || !('data' in payload)) {
-    throw new ApiClientError('Backend trả về hồ sơ check-in không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+    throw new ApiClientError('Chưa tải được thông tin. Vui lòng thử lại.', { code: 'INVALID_API_RESPONSE' })
   }
   return assertCaseStatus((payload as ApiEnvelope<CheckInCase>).data)
 }
 
 function assertPaymentEnvelope(payload: unknown): CheckInPayment {
   if (!payload || typeof payload !== 'object' || !('data' in payload)) {
-    throw new ApiClientError('Backend trả về biên lai thanh toán không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+    throw new ApiClientError('Chưa tải được thông tin. Vui lòng thử lại.', { code: 'INVALID_API_RESPONSE' })
   }
   const payment = (payload as ApiEnvelope<CheckInPayment>).data
-  if (!payment || !isPaymentStatus(payment.status)) throw new ApiClientError('Trạng thái payment không đúng contract.', { code: 'INVALID_API_RESPONSE' })
+  if (!payment || !isPaymentStatus(payment.status)) throw new ApiClientError('Trạng thái thanh toán không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
   return payment
 }
 
+export type CheckInSort = 'priority' | 'createdAt,desc' | 'createdAt,asc'
+
 export async function listCheckIns(params: {
+  sort?: CheckInSort
+  group?: CheckInGroup
   page?: number
   pageSize?: number
   q?: string
@@ -235,10 +382,30 @@ export async function listCheckIns(params: {
     pageSize: String(params.pageSize ?? 20),
   })
   if (params.q?.trim()) query.set('q', params.q.trim())
+  if (params.group) query.set('group', params.group)
+  if (params.sort) query.set('sort', params.sort)
   if (params.status) query.set('status', params.status)
   if (params.scheduledFrom) query.set('scheduledFrom', params.scheduledFrom)
   if (params.scheduledTo) query.set('scheduledTo', params.scheduledTo)
   return assertPage(await apiRequest<unknown>(`/api/staff/check-ins?${query}`))
+}
+
+export async function sendCustomerReceiptReminder(checkInId: string): Promise<ReceiptReminderResponse> {
+  const payload = await apiRequest<ApiEnvelope<ReceiptReminderResponse>>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/receipt-reminder`,
+    { method: 'POST' },
+  )
+  if (!payload?.data || typeof payload.data.sent !== 'boolean' || typeof payload.data.receiptConfirmationOverdue !== 'boolean') {
+    throw new ApiClientError('Không thể gửi nhắc xác nhận nhận kho.', { code: 'INVALID_API_RESPONSE' })
+  }
+  return payload.data
+}
+
+export async function releaseCustomerReceiptTimeout(checkInId: string): Promise<CheckInCase> {
+  return assertEnvelope(await apiRequest<unknown>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/receipt-release`,
+    { method: 'POST' },
+  ))
 }
 
 export async function scheduleCheckIn(
@@ -264,14 +431,37 @@ export async function completeCheckIn(checkInId: string, request: CompleteCheckI
   ))
 }
 
+export type IdentityComparison = 'MATCH' | 'CORRECTABLE' | 'REJECT'
+
+export async function compareCheckInIdentity(checkInId: string, identityDocumentNumber: string, bookingOwnerConfirmed: boolean): Promise<IdentityComparison> {
+  const response = await apiRequest<ApiEnvelope<IdentityComparison>>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/identity-comparison`,
+    { method: 'POST', body: JSON.stringify({ identityDocumentNumber, bookingOwnerConfirmed }) },
+  )
+  const result = response?.data
+  if (result !== 'MATCH' && result !== 'CORRECTABLE' && result !== 'REJECT') {
+    throw new ApiClientError('Không thể đối chiếu CCCD.', { code: 'INVALID_API_RESPONSE' })
+  }
+  return result
+}
+
 export async function verifyCheckInIdentity(checkInId: string, request: {
   identityDocumentNumber: string
   note?: string
+  bookingOwnerConfirmed?: boolean
+  adulthoodConfirmed?: boolean
+  correctionConfirmed?: boolean
 }) {
   return assertEnvelope(await apiRequest<unknown>(
     `/api/staff/check-ins/${encodeURIComponent(checkInId)}/identity-verification`,
     { method: 'POST', body: JSON.stringify(request) },
   ))
+}
+
+export async function correctCheckInIdentity(checkInId: string, request: { identityDocumentNumber: string; note: string; bookingOwnerConfirmed?: boolean; adulthoodConfirmed?: boolean }) {
+  return assertEnvelope(await apiRequest<unknown>(`/api/staff/check-ins/${encodeURIComponent(checkInId)}/identity-correction`, {
+    method: 'POST', body: JSON.stringify(request),
+  }))
 }
 
 export async function signCheckInContract(checkInId: string, contractEvidenceFileId: string, confirmedSetupEarlyExitPolicyVersion?: string | null) {
@@ -293,6 +483,10 @@ export async function startCheckInSetup(checkInId: string, request: {
   note?: string
   initialUnitCondition?: string
   evidenceReferences?: string[]
+  handedOverItems?: { name: string; quantity: number }[]
+  signedRecordReference?: string
+  rackCount?: number
+  palletCount?: number
 }) {
   return assertEnvelope(await apiRequest<unknown>(
     `/api/staff/check-ins/${encodeURIComponent(checkInId)}/setup/start`,
@@ -307,6 +501,13 @@ export async function completeCheckInSetup(checkInId: string, note?: string) {
   ))
 }
 
+export async function archiveCompletedCheckIn(checkInId: string) {
+  return assertEnvelope(await apiRequest<unknown>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}`,
+    { method: 'DELETE' },
+  ))
+}
+
 export interface CheckInPayment {
   paymentId: string
   reservationId: string
@@ -315,18 +516,21 @@ export interface CheckInPayment {
   purpose: 'RENTAL_BALANCE'
   status: PaymentStatus
   transactionReference: string
-  paymentMethod: string
+  paymentMethod: CheckInPaymentMethod
   paidAt: string | null
   processedAt: string | null
   initiatedByName: string
+  receiptCode?: string | null
   invoiceNumber: string | null
   invoiceStatus: 'DRAFT' | 'PAID' | 'VOID' | 'REFUNDED'
   invoiceIssuedAt: string | null
 }
 
+export type CheckInPaymentMethod = 'CASH' | 'BANK_TRANSFER'
+
 export async function recordCheckInRemainingPayment(checkInId: string, request: {
   amount: number
-  paymentMethod: string
+  paymentMethod: CheckInPaymentMethod
   paymentEvidenceFileId: string
   transactionReference?: string
   note?: string
@@ -337,10 +541,57 @@ export async function recordCheckInRemainingPayment(checkInId: string, request: 
   ))
 }
 
-export async function markCheckInNoShow(checkInId: string, reason: string) {
+export interface PendingArrival { checkInId: string; reservationCode: string; actualArrivedAt: string; evidence: string }
+
+export interface RefusalWitness { id: string; name: string }
+export interface InventoryRefusalInput {
+  customerPresent: boolean
+  witnessId: string
+  evidenceId: string
+  grounds: string
+  discussion: string
+  customerReason?: string
+  resultVersion: number
+}
+export interface InventoryRefusalReview {
+  checkInId: string
+  reservationCode: string
+  facilityName: string
+  submittedAt: string
+  report: InventoryRefusalInput & { staffName: string; witness: RefusalWitness }
+}
+export async function listRefusalWitnesses(id: string) {
+  return (await apiRequest<ApiEnvelope<RefusalWitness[]>>(`/api/staff/check-ins/${encodeURIComponent(id)}/refusal-witnesses`)).data
+}
+export async function submitInventoryRefusal(id: string, request: InventoryRefusalInput) {
+  return assertEnvelope(await apiRequest<unknown>(`/api/staff/check-ins/${encodeURIComponent(id)}/signature-refusal`, {
+    method: 'POST', body: JSON.stringify(request),
+  }))
+}
+export async function listInventoryRefusals() {
+  return (await apiRequest<ApiEnvelope<InventoryRefusalReview[]>>('/api/staff/check-ins/signature-refusal-reviews')).data
+}
+export async function reviewInventoryRefusal(id: string, submittedAt: string, approved: boolean, reason: string) {
+  return assertEnvelope(await apiRequest<unknown>(`/api/staff/check-ins/${encodeURIComponent(id)}/signature-refusal-review`, {
+    method: 'POST', body: JSON.stringify({ submittedAt, approved, reason }),
+  }))
+}
+
+export async function listArrivalReviews() {
+  const result = await apiRequest<ApiEnvelope<PendingArrival[]>>('/api/staff/check-ins/arrival-reviews')
+  return result.data
+}
+
+export async function resolveArrivalReview(id: string, accepted: boolean, reason: string) {
+  return assertEnvelope(await apiRequest<unknown>(`/api/staff/check-ins/${encodeURIComponent(id)}/arrival-review`, {
+    method: 'POST', body: JSON.stringify({ accepted, reason }),
+  }))
+}
+
+export async function recordCheckInArrival(checkInId: string, review?: { actualArrivedAt: string; evidence: string; disputed?: boolean }) {
   return assertEnvelope(await apiRequest<unknown>(
-    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/no-show`,
-    { method: 'POST', body: JSON.stringify({ reason }) },
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/arrival`,
+    { method: 'POST', ...(review && { body: JSON.stringify(review) }) },
   ))
 }
 
@@ -350,6 +601,7 @@ export async function rejectCheckIn(
     reason: string
     disposition: 'AVAILABLE' | 'MAINTENANCE'
     evidenceReferences: string[]
+    mismatchedIdentityDocument?: string
   },
 ) {
   return assertEnvelope(await apiRequest<unknown>(
@@ -358,7 +610,31 @@ export async function rejectCheckIn(
   ))
 }
 
-export async function uploadCheckInEvidence(checkInId: string, file: File) {
+export async function recordInventoryArrival(checkInId: string) {
+  return assertEnvelope(await apiRequest<unknown>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/inventory-arrival`,
+    { method: 'POST' },
+  ))
+}
+
+export async function verifyInventoryIdentity(checkInId: string, request: {
+  identityDocumentNumber: string
+  photoId: string
+  bookingCustomerPresent: boolean
+}) {
+  return assertEnvelope(await apiRequest<unknown>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/inventory-identity`,
+    { method: 'POST', body: JSON.stringify(request) },
+  ))
+}
+
+export async function uploadCheckInEvidence(
+  checkInId: string,
+  file: File,
+  purpose: 'CHECK_IN' | 'CHECK_IN_IDENTITY' = 'CHECK_IN',
+  fileNamePurpose?: string,
+  fileNameContext?: string,
+) {
   if (file.size > 25 * 1024 * 1024) {
     throw new ApiClientError(
       "Tệp vượt quá dung lượng tối đa 25MB. Vui lòng chọn tệp nhỏ hơn.",
@@ -366,12 +642,15 @@ export async function uploadCheckInEvidence(checkInId: string, file: File) {
     )
   }
   const form = new FormData()
-  form.set('file', file)
-  form.set('entityType', 'CHECK_IN')
+  const namedFile = fileNamePurpose
+    ? renameEvidenceFile(file, fileNamePurpose, fileNameContext)
+    : file
+  form.set('file', namedFile)
+  form.set('entityType', purpose)
   form.set('entityId', checkInId)
   const payload = await apiRequest<unknown>('/api/files', { method: 'POST', body: form })
   if (!payload || typeof payload !== 'object' || !('data' in payload)) {
-    throw new ApiClientError('Backend trả về bằng chứng check-in không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+    throw new ApiClientError('Chưa tải được thông tin. Vui lòng thử lại.', { code: 'INVALID_API_RESPONSE' })
   }
   return (payload as ApiEnvelope<CheckInEvidenceAsset>).data
 }
@@ -382,14 +661,14 @@ export async function downloadCheckInEvidence(assetId: string) {
 
 function assertCredentialEnvelope(payload: unknown): AccessCredential {
   if (!payload || typeof payload !== 'object' || !('data' in payload)) {
-    throw new ApiClientError('Backend trả về quyền truy cập không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+    throw new ApiClientError('Chưa tải được thông tin. Vui lòng thử lại.', { code: 'INVALID_API_RESPONSE' })
   }
   return (payload as ApiEnvelope<AccessCredential>).data
 }
 
 function assertCredentialAccessEventEnvelope(payload: unknown): CredentialAccessEvent {
   if (!payload || typeof payload !== 'object' || !('data' in payload)) {
-    throw new ApiClientError('Backend trả về log truy cập không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+    throw new ApiClientError('Chưa tải được thông tin. Vui lòng thử lại.', { code: 'INVALID_API_RESPONSE' })
   }
   return (payload as ApiEnvelope<CredentialAccessEvent>).data
 }
@@ -426,7 +705,7 @@ export async function recordCredentialAccess(credentialId: string, request: {
   )
   if (!payload || typeof payload !== 'object' || !('data' in payload) ||
     !payload.data || typeof payload.data !== 'object') {
-    throw new ApiClientError('Backend trả về kết quả truy cập credential không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+    throw new ApiClientError('Chưa tải được thông tin. Vui lòng thử lại.', { code: 'INVALID_API_RESPONSE' })
   }
   return (payload as ApiEnvelope<CredentialAccessResponse>).data
 }
@@ -459,7 +738,7 @@ export async function listCredentialAlerts(facilityId?: string) {
   const query = facilityId ? `?facilityId=${encodeURIComponent(facilityId)}` : ''
   const payload = await apiRequest<unknown>(`/api/staff/credential-alerts${query}`)
   if (!Array.isArray(payload)) {
-    throw new ApiClientError('Backend trả về cảnh báo quyền truy cập không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+    throw new ApiClientError('Chưa tải được thông tin. Vui lòng thử lại.', { code: 'INVALID_API_RESPONSE' })
   }
   return payload as CredentialAlert[]
 }
@@ -477,7 +756,7 @@ async function listAccessCredentialsAt(path: string, params: {
   if (params.status) query.set('status', params.status)
   const payload = await apiRequest<unknown>(`${path}?${query}`)
   if (!payload || typeof payload !== 'object' || !Array.isArray((payload as { data?: unknown }).data)) {
-    throw new ApiClientError('Backend trả về lịch sử quyền truy cập không hợp lệ.', { code: 'INVALID_API_RESPONSE' })
+    throw new ApiClientError('Chưa tải được thông tin. Vui lòng thử lại.', { code: 'INVALID_API_RESPONSE' })
   }
   return payload as {
     data: AccessCredential[]
@@ -510,4 +789,46 @@ export function listStaffAccessCredentials(params: {
   pageSize?: number
 } = {}) {
   return listAccessCredentialsAt('/api/staff/access-credentials', params)
+}
+
+export interface SavedInventoryDraft {
+  request: CompleteCheckInRequest | null
+  revision: number
+  savedAt: string | null
+}
+export async function getInventoryDraft(checkInId: string) {
+  return (await apiRequest<{ data: SavedInventoryDraft }>(`/api/staff/check-ins/${encodeURIComponent(checkInId)}/inventory-draft`)).data
+}
+export async function saveInventoryDraft(checkInId: string, request: CompleteCheckInRequest, expectedRevision: number) {
+  return (await apiRequest<{ data: SavedInventoryDraft }>(`/api/staff/check-ins/${encodeURIComponent(checkInId)}/inventory-draft`,
+    { method: 'POST', body: JSON.stringify({ request, expectedRevision }) })).data
+}
+export async function prepareInventoryResolution(checkInId: string, expectedRevision: number) {
+  return assertEnvelope(await apiRequest<unknown>(`/api/staff/check-ins/${encodeURIComponent(checkInId)}/inventory-draft/resolve`,
+    { method: 'POST', body: JSON.stringify({ expectedRevision }) }))
+}
+
+export async function transferProhibitedGoods(checkInId: string, description: string, evidenceIds: string[]) {
+  return (await apiRequest<{ data: string }>(`/api/staff/check-ins/${encodeURIComponent(checkInId)}/prohibited-goods-recovery`,
+    { method: 'POST', body: JSON.stringify({ description, evidenceIds }) })).data
+}
+
+export const publishInventoryDraft = prepareInventoryResolution
+export type AtSiteInventoryDecision = 'REQUEST_TRANSFER' | 'ACCEPT_FULL' | 'CANCEL_AND_RETURN'
+export async function resolveInventoryAtSite(checkInId: string, request: { decision: AtSiteInventoryDecision; customerPresent: boolean; note?: string; scheduledDate?: string; evidenceReferences?: string[]; resultVersion?: number }) {
+  return assertEnvelope(await apiRequest<unknown>(`/api/staff/check-ins/${encodeURIComponent(checkInId)}/inventory-resolution-at-site`,
+    { method: 'POST', body: JSON.stringify(request) }))
+}
+
+export async function sendInventoryReturnReminder(checkInId: string) {
+  return assertEnvelope(await apiRequest<unknown>(`/api/staff/check-ins/${encodeURIComponent(checkInId)}/inventory-return-reminder`,
+    { method: 'POST' }))
+}
+
+export async function checkIdentityCorrection(checkInId: string, identityDocumentNumber: string) {
+  const response = await apiRequest<ApiEnvelope<{ valid: boolean; error: string | null; failedAttempts: number }>>(
+    `/api/staff/check-ins/${encodeURIComponent(checkInId)}/identity-correction-check`,
+    { method: 'POST', body: JSON.stringify({ identityDocumentNumber }) },
+  )
+  return response.data
 }

@@ -7,6 +7,7 @@ import {
   rentalDate,
   rentalError,
   rentalMoney,
+  renewalDisplayLabel,
   unknown,
 } from "./presentation"
 import { RenewalAttempt, newRenewalIdempotencyKey } from "../../hooks/useRenewalCommand"
@@ -14,10 +15,20 @@ import { ApiClientError } from "../../services/apiClient"
 import { manager, rental, renewal, quote } from "../../../tests/rentalApiFixtures"
 
 describe("Rental/Renewal business presentation", () => {
-  it.each(["active", "ACTIVE"])("translates access status %s without changing its value or exposing credentials", status => {
-    const detail = { ...rental, access: { completeness: "COMPLETE", status, reason: "PRIVATE_SOURCE_REASON" } }
+  it.each([
+    [{ rentalDisplayCode: "SH-184033", renewalSequence: 2 }, "SH-184033 · Gia hạn lần 2"],
+    [{ rentalDisplayCode: "SH-184033" }, "SH-184033 · Gia hạn"],
+    [{ renewalSequence: 2 }, "Hồ sơ thuê · Gia hạn lần 2"],
+    [{}, "Yêu cầu gia hạn"],
+  ])("uses the rental dossier as the public renewal identity", (identity, label) => {
+    expect(renewalDisplayLabel(identity)).toBe(label)
+  })
+
+  it.each(["active", "ACTIVE"])("translates access status %s without changing its value or exposing source diagnostics", status => {
+    const detail = { ...rental, access: { completeness: "COMPLETE", status, reference: "LOCK-018", reason: "PRIVATE_SOURCE_REASON" } }
     const html = renderToStaticMarkup(<RentalDetail rental={detail} />)
     expect(html).toContain("Đang hoạt động")
+    expect(html).toContain("LOCK-018")
     expect(html).not.toContain("PRIVATE_SOURCE_REASON")
     expect(detail.access.status).toBe(status)
   })

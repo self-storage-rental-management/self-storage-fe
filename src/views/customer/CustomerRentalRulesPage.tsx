@@ -1,5 +1,7 @@
 import { Badge, Card, SectionHeader } from '../../components/ui'
+import ReturnPolicyNotice from '../../components/ReturnPolicyNotice'
 import CustomerRentalRegulations from './CustomerRentalRegulations'
+import CustomerReturnFeeSchedule from './CustomerReturnFeeSchedule'
 
 const returnRules = [
   {
@@ -41,6 +43,8 @@ export default function CustomerRentalRulesPage() {
 
     <section aria-labelledby="rental-return-rules" className="space-y-3">
       <h2 id="rental-return-rules" className="text-xl font-bold text-stone-900 sm:text-2xl">2. Quy định trả kho và gia hạn</h2>
+      <ReturnPolicyNotice />
+      <CustomerReturnFeeSchedule />
       <div className="space-y-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-xs">
         <header className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-amber-900 via-stone-800 to-amber-950 p-5 text-white shadow-sm sm:p-6">
           <div className="pointer-events-none absolute inset-y-0 right-0 w-1/3 bg-radial from-amber-500/10 to-transparent" />

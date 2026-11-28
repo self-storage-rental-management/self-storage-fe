@@ -3,7 +3,7 @@ import { formatVndAmount } from '../../i18n/currency'
 import type { CustomerUnitType, ReservationRentalPackage } from '../../services/customerReservationApi'
 import { customerFacilityName, customerFacilityAddress } from '../../i18n/customerLabels'
 import { isApiAuthenticated } from '../../services/authApi'
-import ReferenceBoxCapacity from './ReferenceBoxCapacity'
+import CustomerRackLayout from './CustomerRackLayout'
 import CustomerFacilityPackages from './CustomerFacilityPackages'
 
 export interface CustomerUnitDetailsProps {
@@ -41,6 +41,7 @@ export default function CustomerUnitDetails({
 }: CustomerUnitDetailsProps) {
   const size = t.code.match(/(?:^|[-_])(XL|S|M|L)(?:$|[-_])/i)?.[1]?.toUpperCase() || t.name.match(/\b(XL|S|M|L)\b/i)?.[1]?.toUpperCase()
     || ({ small: 'S', medium: 'M', large: 'L', 'extra large': 'XL' } as Record<string, string>)[t.name.toLowerCase()]
+  const securityDepositAmount = Number(t.monthlyPrice) > 0 ? t.monthlyPrice : t.securityDepositAmount
   if (!isApiAuthenticated()) {
     facilityName = customerFacilityName(facilityCode || '', facilityName)
     address = customerFacilityAddress(facilityCode || '', facilityName, address || '')
@@ -140,28 +141,27 @@ export default function CustomerUnitDetails({
     <h4 className="text-lg font-bold">1. Thông tin kho chi tiết</h4>
     <ul className="divide-y divide-stone-200 overflow-hidden rounded-xl border border-stone-200 text-sm">{[
       ['Diện tích', `${t.areaM2} m²`], ['Kích thước kho (D × R × C)', `${t.lengthM} × ${t.widthM} × ${t.heightM} m`],
-      ['Thể tích kho', `${t.volumeM3} m³`], ['Số khung kệ', `${t.rackCount} khung`],
-      ['Kích thước khung (D × R × C)', `${t.rackLengthM} × ${t.rackWidthM} × ${t.rackHeightM} m`],
-      ['Diện tích khung kệ', `${Number((t.rackLengthM * t.rackWidthM).toFixed(2))} m²/khung (Tổng ${Number((t.rackLengthM * t.rackWidthM * t.rackCount).toFixed(2))} m²)`],
-      ['Thể tích khung kệ', `${Number((t.rackLengthM * t.rackWidthM * t.rackHeightM).toFixed(2))} m³/khung (Tổng ${Number((t.rackLengthM * t.rackWidthM * t.rackHeightM * t.rackCount).toFixed(2))} m³)`],
+      ['Thể tích kho', `${t.volumeM3} m³`],
       ['Chiều rộng lối đi', t.aisleWidthM ? `${t.aisleWidthM} m` : 'Chưa cập nhật'],
       ['Xe đẩy hỗ trợ', t.trolleyType || 'Chưa cập nhật'],
       ['Tải trọng tối đa', `${t.maxLoadKg.toLocaleString('vi-VN')} kg`],
       ['Giá thuê mỗi tháng', formatVndAmount(t.monthlyPrice)],
-      ['Tiền cọc đảm bảo thuê', formatVndAmount(t.securityDepositAmount)],
+      ['Tiền cọc đảm bảo kho', formatVndAmount(securityDepositAmount)],
     ].map(([label, value]) => <li key={label} className="grid gap-1 px-4 py-3 sm:grid-cols-[220px_1fr]"><span className="text-stone-500">{label}</span><b>{value}</b></li>)}</ul>
-    <ReferenceBoxCapacity unitType={t} />
-    <section className="rounded-xl border border-stone-200 p-5"><h4 className="font-bold">Kỳ thuê và chi phí</h4><p className="mt-2 text-sm">Chọn thời gian thuê và khai báo hàng hóa ở bước đặt kho. Báo giá sẽ hiển thị tiền thuê, ưu đãi, đặt cọc giữ chỗ, tiền cọc đảm bảo thuê và số tiền còn lại. Không áp dụng ưu đãi minh họa để tính tiền.</p><h4 className="mt-4 font-bold">Hàng hóa cần xét duyệt</h4><p className="mt-2 text-sm">Hàng thuộc nhóm “Khác” cần nhập tên, chất liệu, mô tả, kích thước và cân nặng. Nhân viên tại cơ sở sẽ xét duyệt sau khi xác minh email.</p></section>
+    <CustomerRackLayout key={t.id} facilityId={t.facilityId} unitTypeId={t.id} />
+    <section className="rounded-xl border border-stone-200 p-5"><h4 className="font-bold">Kỳ thuê và chi phí</h4><p className="mt-2 text-sm">Chọn thời gian thuê và khai báo hàng hóa ở bước đặt kho. Báo giá sẽ hiển thị tiền thuê, ưu đãi, khoản trả trước 20% (giữ chỗ), tiền cọc đảm bảo kho và số tiền còn lại. Không áp dụng ưu đãi minh họa để tính tiền.</p><h4 className="mt-4 font-bold">Hàng hóa cần xét duyệt</h4><p className="mt-2 text-sm">Hàng thuộc nhóm “Khác” cần nhập tên, chất liệu, mô tả, kích thước và cân nặng. Nhân viên tại cơ sở sẽ xét duyệt sau khi xác minh email.</p></section>
     <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
       <h4 className="font-bold text-emerald-900">2. Ưu đãi và báo giá theo kỳ thuê</h4>
-      <p className="mt-2 text-sm leading-6 text-stone-700">Chọn kỳ thuê ở bước đặt kho để nhận báo giá chính thức, đặt cọc giữ chỗ, tiền thuê còn lại và tiền cọc đảm bảo thuê.</p>
+      <p className="mt-2 text-sm leading-6 text-stone-700">Chọn kỳ thuê ở bước đặt kho để nhận báo giá chính thức, khoản trả trước 20% (giữ chỗ), tiền thuê còn lại và tiền cọc đảm bảo kho.</p>
       {rentalPackages.length > 0 ? (
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="mt-2.5 grid gap-2 sm:grid-cols-2">
           {rentalPackages.map(item => (
-            <article key={item.code} className="rounded-xl border border-emerald-200 bg-white p-4 text-sm">
+            <article key={item.code} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-white p-2.5 text-xs text-stone-800 shadow-xs">
               <b>{item.name || `Thuê ${item.rentalMonths} tháng`}</b>
-              <p className="mt-1 font-semibold text-emerald-700">Giảm {Math.round(item.discountRate * 100)}% tiền thuê</p>
-              <p className="mt-1 text-xs text-stone-600">Tặng {item.freeSetupDays ?? 0} ngày chuẩn bị miễn phí khi nhận kho</p>
+              <div className="ml-auto flex items-center gap-1.5">
+                {item.discountRate > 0 ? <span className="font-bold text-emerald-700">Giảm {Math.round(item.discountRate * 100)}% tiền thuê</span> : <span className="text-stone-500">Giá gốc</span>}
+                {(item.freeSetupDays ?? 0) > 0 && <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-900">+{item.freeSetupDays} ngày miễn phí</span>}
+              </div>
             </article>
           ))}
         </div>
@@ -176,7 +176,7 @@ export default function CustomerUnitDetails({
         ['Chọn kho', 'Chọn loại kho phù hợp và kỳ thuê.'],
         ['Xác nhận hồ sơ', 'Khai báo hàng, nhận báo giá và xác minh email.'],
         ['Thanh toán cọc', 'Duyệt hồ sơ nếu cần. Thanh toán cọc theo báo giá.'],
-        ['Nhận kho', 'Quản lý cơ sở phân kho. Khách hàng nhận kho và ký hồ sơ.'],
+        ['Nhận kho', 'Quản lý cơ sở phân gian kho. Khách hàng nhận kho và ký hồ sơ.'],
       ].map(([title, description], i) => <li key={title} className="rounded-xl border border-amber-100 bg-white p-4 shadow-sm">
         <span className="mb-3 flex h-8 w-8 items-center justify-center rounded-full bg-amber-500 text-sm font-bold text-white">{i + 1}</span>
         <h5 className="text-sm font-bold text-stone-900">{title}</h5><p className="mt-2 text-xs leading-5 text-stone-600">{description}</p>

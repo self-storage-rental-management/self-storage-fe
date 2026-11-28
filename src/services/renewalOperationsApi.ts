@@ -59,6 +59,13 @@ export function isOperationState(
   const r = value as RenewalOperationState | null
   return (
     !!r &&
+    (r.appointmentDetails == null || (
+      typeof r.appointmentDetails === "object" &&
+      [r.appointmentDetails.customerName, r.appointmentDetails.customerEmail].every(v => v == null || typeof v === "string") &&
+      (r.appointmentDetails.proposedEndDate == null || /^\d{4}-\d{2}-\d{2}$/.test(r.appointmentDetails.proposedEndDate))
+    )) &&
+    (r.rentalDisplayCode == null || (typeof r.rentalDisplayCode === "string" && /^SH-\d{6}$/.test(r.rentalDisplayCode))) &&
+    (r.renewalSequence == null || (Number.isSafeInteger(r.renewalSequence) && r.renewalSequence > 0)) &&
     (r.displayCode == null || (typeof r.displayCode === "string" && /^(?:SH-\d{6}|GH-\d{4}-\d{6})$/.test(r.displayCode))) &&
     isUuid(r.renewalId) &&
     nullable(r.expectedVersion, isVersion) &&
@@ -69,6 +76,7 @@ export function isOperationState(
       "AWAITING_DEPOSIT",
       "SIGNING",
       "SIGNING_EXPIRY_PENDING",
+      "NO_SHOW",
       "SIGNING_EXPIRED",
       "PAYMENT_EXPIRED",
       "COMPLETED",
@@ -102,6 +110,7 @@ export function isOperationState(
     (![
       "SIGNING",
       "SIGNING_EXPIRY_PENDING",
+      "NO_SHOW",
       "SIGNING_EXPIRED",
       "COMPLETED",
     ].includes(r.phase) ||
@@ -114,7 +123,8 @@ export function isOperationState(
     (r.phase !== "COMPLETED" ||
       (isUuid(r.completedBy) &&
         isInstant(r.completedAt) &&
-        isUuid(r.arrivalRef)))
+        isUuid(r.arrivalRef))) &&
+    (r.phase !== "NO_SHOW" || (isUuid(r.appointmentRef) && r.arrivalRef === null))
   )
 }
 export function isOperationEvent(
@@ -133,6 +143,7 @@ export function isOperationEvent(
         "CASH",
         "APPOINTMENT",
         "ARRIVAL",
+        "NO_SHOW",
         "INCIDENT",
         "FAULT_REVIEW",
         "STAFF_ASSIGNMENT",
@@ -161,6 +172,9 @@ export function isOperationEvent(
     && typeof d.reason === 'string' && d.reason.trim().length > 0
     && Array.isArray(d.evidenceFileIds) && d.evidenceFileIds.length > 0 && d.evidenceFileIds.every(isUuid)
   if (e.kind === "DEPOSIT_REVIEW_REQUIRED") return ["AWAITING_FAULT_REVIEW", "FACILITY_FAULT"].includes(String(d.status))
+  if (e.kind === "NO_SHOW") return isUuid(d.appointmentRef) && typeof d.reason === "string"
+    && d.reason.trim().length > 0 && d.reason.length <= 1000 && d.disposition === "REVIEW_REQUIRED"
+    && d.occupiedUnitReleased === false
   if (e.kind === "FAULT_REVIEW")
     return isUuid(d.incidentId) && typeof d.facilityFault === "boolean" &&
       typeof d.reason === "string" && d.reason.trim().length > 0 &&
@@ -246,10 +260,26 @@ export interface RenewalCustomerIdentity {
   customerId: string
   fullName: string | null
   identityDocumentNumber: string | null
+  dateOfBirth?: string | null
+  phone?: string | null
+  unitCode?: string | null
+  rentalMonths?: number | null
 }
 export async function getRenewalCustomerIdentity(id: string) {
   return readRentalEnvelope<RenewalCustomerIdentity>(
     await apiRequest(`${path('staff', id)}/customer-identity`),
+    value => {
+      const identity = value as RenewalCustomerIdentity | null
+      return !!identity && identity.renewalId === id && isUuid(identity.customerId)
+        && (identity.fullName === null || typeof identity.fullName === 'string')
+        && (identity.identityDocumentNumber === null || typeof identity.identityDocumentNumber === 'string')
+        && (identity.dateOfBirth === undefined || identity.dateOfBirth === null || typeof identity.dateOfBirth === 'string')
+    },
+  )
+}
+export async function revealRenewalCustomerIdentity(id: string) {
+  return readRentalEnvelope<RenewalCustomerIdentity>(
+    await apiRequest(`${path('staff', id)}/customer-identity/reveal`, { method: 'POST' }),
     value => {
       const identity = value as RenewalCustomerIdentity | null
       return !!identity && identity.renewalId === id && isUuid(identity.customerId)
@@ -263,7 +293,7 @@ export async function listRenewalAppointments(
 ) {
   if (
     query.status &&
-    !["SIGNING", "SIGNING_EXPIRED", "COMPLETED"].includes(query.status)
+    !["SIGNING", "NO_SHOW", "SIGNING_EXPIRED", "COMPLETED"].includes(query.status)
   )
     throw new Error("Trạng thái lịch ký không hợp lệ.")
   if (query.date && !/^\d{4}-\d{2}-\d{2}$/.test(query.date))
@@ -272,8 +302,8 @@ export async function listRenewalAppointments(
     throw new Error("Mã cơ sở không hợp lệ.")
   const suffix = rentalQuery(
     query,
-    ["page", "size", "facilityId", "date", "status"],
-    [],
+    ["page", "size", "facilityId", "date", "status", "sort"],
+    ["appointmentStart", "createdAt"],
   )
   return readRentalPage<RenewalOperationState>(
     await apiRequest(`/api/staff/renewal-appointments${suffix}`),
@@ -295,12 +325,12 @@ export async function listRenewalOperationEvents(
   const suffix = rentalQuery({ page, size }, ["page", "size"], [])
   const allowed =
     category === "payments"
-      ? ["DEPOSIT", "FULL_RENT_PAYMENT", "CASH"]
+      ? ["DEPOSIT", "FULL_RENT_PAYMENT", "CASH", "INSTALLMENT_PAYMENT"]
       : category === "documents"
-        ? ["ARRIVAL", "COMPLETION"]
+        ? ["ARRIVAL", "NO_SHOW", "COMPLETION"]
         : category === "refunds"
-        ? ["REFUND", "DEPOSIT_DISPOSITION", "REFUND_EXECUTION"]
-        : ["INCIDENT", "FAULT_REVIEW", "EXCEPTION"]
+        ? ["REFUND", "DEPOSIT_DISPOSITION", "REFUND_EXECUTION", "DEPOSIT_REVIEW_REQUIRED"]
+        : ["INCIDENT", "FAULT_REVIEW", "EXCEPTION", "PREPARATION_BLOCKED", "PREPARATION_RESOLUTION"]
   return readRentalPage<RenewalOperationEvent>(
     await apiRequest(`${path(role, id)}/${category}${suffix}`),
     (v) =>
@@ -315,6 +345,21 @@ export async function listAllRenewalPaymentEvents(role: RenewalOperationsRole, i
     throw new Error("Số trang lịch sử thanh toán không hợp lệ.")
   for (let page = 1; page < totalPages; page++) {
     const next = await listRenewalOperationEvents(role, id, "payments", page, 100)
+    events.push(...next.data)
+  }
+  return { ...first, data: events }
+}
+export async function hasRenewalIncident(id: string) {
+  const events = await listAllRenewalFacilityIncidentEvents(id)
+  return events.data.some(event => event.kind === "INCIDENT")
+}
+export async function listAllRenewalFacilityIncidentEvents(id: string) {
+  const first = await listRenewalOperationEvents("manager", id, "facility-incidents", 0, 100)
+  const events = [...first.data]
+  const totalPages = first.pagination.totalPages
+  if (!Number.isInteger(totalPages) || totalPages > 1000) throw new Error("Số trang lịch sử sự cố không hợp lệ.")
+  for (let page = 1; page < totalPages; page++) {
+    const next = await listRenewalOperationEvents("manager", id, "facility-incidents", page, 100)
     events.push(...next.data)
   }
   return { ...first, data: events }
@@ -416,6 +461,7 @@ const routes = {
   reschedule: ["customer", "PATCH", "appointment"],
   confirmation: ["customer", "POST", "exception-confirmations"],
   arrival: ["staff", "POST", "arrival"],
+  noShow: ["staff", "POST", "no-show"],
   incident: ["staff", "POST", "facility-incidents"],
   cash: ["staff", "POST", "cash-receipts"],
   completion: ["staff", "POST", "completion"],
@@ -427,6 +473,7 @@ const eventKinds = {
   reschedule: "APPOINTMENT",
   confirmation: "CONFIRMATION",
   arrival: "ARRIVAL",
+  noShow: "NO_SHOW",
   incident: "INCIDENT",
   cash: "CASH",
   completion: "COMPLETION",
@@ -438,9 +485,10 @@ const commandFields: Record<RenewalOperationCommand["action"], readonly string[]
   appointment: ["appointmentAt", "reason", "expectedVersion"],
   reschedule: ["appointmentAt", "reason", "expectedVersion"],
   confirmation: ["decisionRef", "expectedVersion"],
-  arrival: ["appointmentRef", "evidenceFileIds", "expectedVersion"],
+  arrival: ["appointmentRef", "evidenceFileIds", "expectedVersion", "identityVerified"],
+  noShow: ["appointmentRef", "reason", "expectedVersion"],
   incident: ["appointmentRef", "reason", "evidenceFileIds", "expectedVersion"],
-  cash: ["payableStatementRef", "receiptFileId", "paymentMethod", "received", "expectedVersion"],
+  cash: ["payableStatementRef", "receiptReference", "receiptFileId", "paymentMethod", "received", "expectedVersion"],
   completion: ["identityVerified", "arrivalRef", "signedDocumentFileId", "completionNote", "expectedVersion", "expectedEffectiveStartDate"],
   exception: ["incidentId", "action", "appointmentAt", "revisedDeadline", "reason", "evidenceFileIds", "expectedVersion"],
   refund: ["incidentId", "decision", "reason", "evidenceFileIds", "expectedVersion"],

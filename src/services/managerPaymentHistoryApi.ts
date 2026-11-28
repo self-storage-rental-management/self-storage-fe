@@ -28,6 +28,7 @@ function isPaymentHistoryItem(value: unknown): value is ManagerPaymentHistoryIte
   const row = value as Record<string, unknown>
   return typeof row.id === "string" && row.id.length > 0
     && typeof row.transactionReference === "string" && row.transactionReference.length > 0
+    && (row.receiptCode == null || typeof row.receiptCode === "string")
     && typeof row.customerName === "string" && row.customerName.length > 0
     && typeof row.type === "string" && types.includes(row.type as ManagerPaymentHistoryType)
     && typeof row.status === "string" && statuses.includes(row.status as ManagerPaymentHistoryStatus)
@@ -41,6 +42,15 @@ function isPaymentHistoryItem(value: unknown): value is ManagerPaymentHistoryIte
     && (row.invoiceNumber == null || typeof row.invoiceNumber === "string")
     && (row.invoiceStatus == null || ["DRAFT", "PAID", "VOID", "REFUNDED"].includes(row.invoiceStatus as string))
     && (row.invoiceIssuedAt == null || (typeof row.invoiceIssuedAt === "string" && Number.isFinite(Date.parse(row.invoiceIssuedAt))))
+    && (row.reservationCode == null || typeof row.reservationCode === "string")
+    && (row.gatewayTransactionNo == null || typeof row.gatewayTransactionNo === "string")
+}
+
+export async function getManagerPaymentHistoryItem(id: string): Promise<ManagerPaymentHistoryItem> {
+  if (!isUuid(id)) return invalidResponse()
+  const response = await apiRequest<{ data: unknown }>(`/api/manager/payment-history/${id}`)
+  if (!isPaymentHistoryItem(response?.data) || response.data.id !== id) return invalidResponse()
+  return response.data
 }
 
 export async function listManagerPaymentHistory(

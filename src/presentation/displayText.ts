@@ -1,11 +1,59 @@
-/** Apply presentation punctuation only. Stored values and request payloads stay unchanged. */
-export function displayText(value: string): string {
-  return value.replace(/\s*\u003b\s*/g, ', ').replace(/,\s*([.!?])/g, '$1')
+import { displayStatusLabel } from './statusLabels'
+import { createElement } from 'react'
+
+const bracketedStatusLabels = {
+  preserved: 'Đã bảo lưu',
+  reserved: 'Đã giữ chỗ',
+  published: 'Đã công bố',
+} as const
+
+const bracketedStatusColors: Record<string, string> = {
+  'Đã bảo lưu': 'bg-blue-100 text-blue-900',
+  'Đã giữ chỗ': 'bg-amber-100 text-amber-900',
+  'Đã công bố': 'bg-emerald-100 text-emerald-900',
 }
 
-function childrenText(value: unknown): unknown {
-  if (typeof value === 'string') return displayText(value)
-  if (Array.isArray(value)) return value.map(childrenText)
+const statusLabelPattern = /(\[(?:Đã bảo lưu|Đã giữ chỗ|Đã công bố)\])/
+const statusLabelContainers = new Set(['div', 'span', 'p', 'li', 'td', 'th', 'dd', 'dt', 'strong', 'small'])
+
+/** Localize role words in system messages, including notices saved by older versions. */
+export function displayRoleNames(value: string): string {
+  return value.replace(/https?:\/\/\S+|\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b|\b(?:BO|Manager)\b/gi, (word, offset: number) => {
+    if (word.includes('@') || /^https?:\/\//i.test(word)) return word
+    if (word.toLowerCase() === 'bo' && word !== 'BO') return word
+    const role = word.toLowerCase() === 'bo' ? 'chủ doanh nghiệp' : 'quản lý cơ sở'
+    return offset === 0 ? role.charAt(0).toUpperCase() + role.slice(1) : role
+  })
+}
+
+/** Normalize display text without changing stored values or request payloads. */
+export function displayText(value: string): string {
+  return value
+    .replace(/\b(PAYMENT_PAID|EMAIL_VERIFIED|UNIT_RESERVED|EXPIRED|APPROVED|REJECTED|CANCELLED|CONTRACT_SIGNED|READY_FOR_CHECKIN)\s*·/g, (_, code: string) => {
+      const special: Record<string, string> = { PAYMENT_PAID: 'Đã thanh toán', EMAIL_VERIFIED: 'Đã xác minh thư điện tử' }
+      return `${special[code] ?? displayStatusLabel(code)} ·`
+    })
+    .replace(/\s*\u003b\s*/g, ', ')
+    .replace(/,\s*([.!?])/g, '$1')
+    .replace(/\[(preserved|reserved|published)\]/gi, (_, status: string) =>
+      `[${bracketedStatusLabels[status.toLowerCase() as keyof typeof bracketedStatusLabels]}]`)
+}
+
+function childrenText(value: unknown, highlightStatus: boolean): unknown {
+  if (typeof value === 'string') {
+    const text = displayText(value)
+    if (!highlightStatus || !statusLabelPattern.test(text)) return text
+
+    return text.split(statusLabelPattern).map((part, index) => {
+      if (index % 2 === 0) return part
+      const label = part.slice(1, -1)
+      return createElement('span', {
+        key: index,
+        className: `inline-flex rounded-full px-2.5 py-0.5 align-middle text-xs font-semibold ${bracketedStatusColors[label]}`,
+      }, label)
+    })
+  }
+  if (Array.isArray(value)) return value.map(child => childrenText(child, highlightStatus))
   return value
 }
 
@@ -13,7 +61,7 @@ export function displayProps(type: unknown, props: unknown): unknown {
   if ((typeof type !== 'string' && type !== Symbol.for('react.fragment')) || !props || typeof props !== 'object') return props
   const source = props as Record<string, unknown>
   const result = { ...source }
-  result.children = childrenText(source.children)
+  result.children = childrenText(source.children, typeof type === 'string' && statusLabelContainers.has(type))
   for (const key of ['title', 'placeholder', 'alt', 'aria-label', 'aria-description', 'aria-valuetext', 'aria-roledescription']) {
     if (typeof source[key] === 'string') result[key] = displayText(source[key])
   }

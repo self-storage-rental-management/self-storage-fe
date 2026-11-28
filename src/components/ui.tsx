@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent, type MouseEvent, type ReactNode, type HTMLAttributes, type InputHTMLAttributes, type TdHTMLAttributes } from 'react'
+import { useState, type ChangeEvent, type ReactNode, type HTMLAttributes, type ButtonHTMLAttributes, type InputHTMLAttributes, type TdHTMLAttributes } from 'react'
 import LocalizedDateInput from './LocalizedDateInput'
 
 // ─── Badge ───────────────────────────────────────────────────────────────────
@@ -39,37 +39,18 @@ const btnSizes: Record<BtnSize, string> = {
   lg: 'text-sm px-5 py-2.5',
 }
 
-interface ButtonProps extends Omit<HTMLAttributes<HTMLButtonElement>, 'onClick'> {
-  onClick?: (event: MouseEvent<HTMLButtonElement>) => unknown
+interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: BtnVariant
   size?: BtnSize
   disabled?: boolean
   type?: 'button' | 'submit' | 'reset'
 }
 
-export function Button({ variant = 'primary', size = 'md', className = '', children, disabled, onClick, ...rest }: ButtonProps) {
-  const clickLock = useRef(false)
-  const [pending, setPending] = useState(false)
-  const handleClick = async (event: MouseEvent<HTMLButtonElement>) => {
-    if (disabled || clickLock.current) { event.preventDefault(); return }
-    clickLock.current = true
-    try {
-      const result = onClick?.(event)
-      if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
-        setPending(true)
-        await result
-      }
-    } finally {
-      clickLock.current = false
-      setPending(false)
-    }
-  }
+export function Button({ variant = 'primary', size = 'md', className = '', children, disabled, ...rest }: ButtonProps) {
   return (
     <button
-      className={`${btnBase} ${btnVariants[variant]} ${btnSizes[size]} ${disabled || pending ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
-      disabled={disabled || pending}
-      aria-busy={pending || undefined}
-      onClick={handleClick}
+      className={`${btnBase} ${btnVariants[variant]} ${btnSizes[size]} ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
+      disabled={disabled}
       {...rest}
     >
       {children}
@@ -143,7 +124,7 @@ export function Tbody({ children }: { children: ReactNode }) {
 }
 
 export function Th({ children, className = '' }: { children?: ReactNode; className?: string }) {
-  return <th className={`px-4 py-3 font-mono text-[11px] font-semibold text-stone-500 uppercase tracking-[.06em] ${className}`}>{children}</th>
+  return <th className={`px-4 py-3 text-[11px] font-semibold text-stone-500 uppercase tracking-wider ${className}`}>{children}</th>
 }
 
 export function Td({ children, className = '', ...rest }: TdHTMLAttributes<HTMLTableCellElement>) {
@@ -183,17 +164,19 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   value?: string
   placeholder?: string
   disabled?: boolean
+  error?: string | null
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void
 }
 
-export function Input({ label, className = '', ...props }: InputProps) {
+export function Input({ label, error, className = '', ...props }: InputProps) {
   return (
     <div className="space-y-1">
       {label && <label className="block text-sm font-medium text-stone-700 leading-tight">{label}</label>}
       <LocalizedDateInput
-        className={`w-full border border-stone-300 rounded-lg px-3 py-2 text-sm text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition ${className}`}
+        className={`w-full border ${error ? 'border-red-500 focus:ring-red-500 bg-red-50/20' : 'border-stone-300 focus:ring-amber-500'} rounded-lg px-3 py-2 text-sm text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:border-transparent transition ${className}`}
         {...props}
       />
+      {error && <p className="text-xs text-red-600 mt-1 font-medium">{error}</p>}
     </div>
   )
 }
@@ -258,18 +241,20 @@ function PasswordVisibilityIcon({ visible }: { visible: boolean }) {
   )
 }
 
-export function Select({ label, children, className = '', value, onChange, disabled = false }: {
+export function Select({ label, children, className = '', value, onChange, disabled = false, 'aria-label': accessibleLabel }: {
   label?: string
   children?: ReactNode
   className?: string
   value?: string
   onChange?: (e: React.ChangeEvent<HTMLSelectElement>) => void
   disabled?: boolean
+  'aria-label'?: string
 }) {
   return (
     <div className="space-y-1">
       {label && <label className="block text-sm font-medium text-stone-700 leading-tight">{label}</label>}
       <select
+        aria-label={accessibleLabel}
         className={`w-full border border-stone-300 rounded-lg px-3 py-2 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition bg-white ${className}`}
         value={value}
         onChange={onChange}
@@ -316,6 +301,7 @@ export function Modal({
   open,
   onClose,
   title,
+  titleAdornment,
   children,
   size = 'md',
   closeLabel = 'Close dialog',
@@ -327,6 +313,7 @@ export function Modal({
   open: boolean
   onClose: () => void
   title?: string
+  titleAdornment?: ReactNode
   children: ReactNode
   size?: 'md' | 'lg' | 'xl' | '2xl' | '3xl' | 'full'
   closeLabel?: string
@@ -369,7 +356,14 @@ export function Modal({
           <>
             {title && (
               <div className="flex items-center justify-between mb-4 sm:mb-5 gap-2">
-                <h2 id="modal-title" className="text-base sm:text-lg font-bold text-stone-900 truncate">{title}</h2>
+                {titleAdornment ? (
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
+                    <h2 id="modal-title" className="text-base sm:text-lg font-bold text-stone-900">{title}</h2>
+                    {titleAdornment}
+                  </div>
+                ) : (
+                  <h2 id="modal-title" className="text-base sm:text-lg font-bold text-stone-900 truncate">{title}</h2>
+                )}
                 <button
                   aria-label={closeLabel}
                   className="text-stone-400 hover:text-stone-700 hover:bg-stone-100 p-1.5 rounded-lg transition flex items-center justify-center cursor-pointer shrink-0"

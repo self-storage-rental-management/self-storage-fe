@@ -1,3 +1,4 @@
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import { useManagerPresentation } from "../manager/managerPresentation"
 import { useRef, useState } from "react"
 import { Button } from "../../components/ui"
@@ -302,13 +303,13 @@ function EscalationPicker({
         >
           <option value="">Chọn yêu cầu đang chờ xử lý</option>
           {value && !read.data?.data.some((e) => e.id === value) && (
-            <option value={value}>{value}</option>
+            <option value={value}>{recordDisplayCode(value)}</option>
           )}
           {read.data?.data
             .filter((e) => e.status === "REQUESTED")
             .map((e) => (
               <option key={e.id} value={e.id}>
-                {copy(supportModuleLabels[e.targetModule])}, {e.id}
+                {copy(supportModuleLabels[e.targetModule])}, {new Date(e.requestedAt).toLocaleString('vi-VN')}, {recordDisplayCode(e.id)}
               </option>
             ))}
         </select>

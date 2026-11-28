@@ -1,3 +1,4 @@
+import type { InventoryDecision } from './inventoryDecision'
 import { apiDownload, apiRequest } from './apiClient'
 import type { ApiInvoiceStatus, ApiPaymentStatus, ApiReservationStatus } from '../types/statusContracts'
 import { checkedPayment, checkedReservation, checkedReservationDetail, checkedReservationState, checkedStatusPage } from './statusContractValidation'
@@ -5,9 +6,24 @@ import { checkedPayment, checkedReservation, checkedReservationDetail, checkedRe
 export type FacilityStatus = 'setup' | 'active' | 'maintenance' | 'inactive'
 export type UnitTypeStatus = 'active' | 'inactive' | 'archived'
 export type CompatibilityResult = 'PENDING' | 'COMPATIBLE' | 'INCOMPATIBLE' | 'REVIEW_REQUIRED'
+export type ReservationRecommendationStatus =
+  | 'FIT'
+  | 'ALTERNATIVE_AVAILABLE'
+  | 'NO_COMPATIBLE_WAREHOUSE'
+  | 'NO_VACANT_WAREHOUSE'
+  | 'REVIEW_REQUIRED'
 export type PaymentStatus = ApiPaymentStatus
 export type InvoiceStatus = ApiInvoiceStatus
 export type ReservationStatus = ApiReservationStatus
+export type InventoryResolutionStatus =
+  | 'NOT_STARTED'
+  | 'PENDING_CUSTOMER'
+  | 'PENDING_STAFF_RESOLUTION'
+  | 'ACCEPTED'
+  | 'PARTIAL_ACCEPTED'
+  | 'TRANSFER_REQUESTED'
+  | 'RETURN_REQUESTED'
+  | 'RECOVERY_REQUIRED'
 
 export interface Pagination {
   page: number
@@ -67,11 +83,17 @@ export interface CustomerUnitType {
   securityDepositAmount: number
   imageUrl: string | null
   maxLoadKg: number
+  maxStoredLoadKg?: number | null
   rackCount: number
   rackLengthM: number
   rackWidthM: number
   rackHeightM: number
   aisleWidthM?: number | null
+  storageAisleWidthM?: number | null
+  gateWidthM?: number | null
+  gateHeightM?: number | null
+  lowestObstructionHeightM?: number | null
+  overheadClearanceM?: number | null
   trolleyType?: string | null
   smallBoxCapacity?: number | null
   largeBoxCapacity?: number | null
@@ -118,6 +140,11 @@ export interface GoodsItemInput {
   widthCm: number
   heightCm: number
   weightPerItemKg: number
+  stackable?: boolean
+  /** Kept for old quotes and old clients. New orders use stackable. */
+  maxStackLayers?: number
+  /** When true, the backend may rotate the package in 3D and lay it flat. */
+  allowHorizontalPlacement?: boolean
   fragile: boolean
 }
 
@@ -171,17 +198,94 @@ export interface CompatibilityCheckResult {
   startDate: string
   endDate: string
   result: CompatibilityResult
+  physicalFitStatus?: 'FIT' | 'INCOMPATIBLE' | 'REVIEW_REQUIRED' | string
+  availabilityStatus?: 'AVAILABLE' | 'NO_VACANT_WAREHOUSE' | 'NOT_EVALUATED' | string
   totalGoodsVolumeM3: number
   totalGoodsWeightKg: number
   unitVolumeM3: number
   unitMaxLoadKg: number
-  rackUtilizationRate: number
-  usableVolumePerRackM3: number
+  maxCargoLengthCm?: number | null
+  maxCargoWidthCm?: number | null
+  maxCargoHeightCm?: number | null
+  maxCargoWeightKg?: number | null
+  rackUtilizationRate?: number | null
+  usableVolumePerRackM3?: number | null
   requiredRackCount: number
   unitRackCount: number
   availableUnitCount: number
+  requiredPallets?: number | null
+  availablePalletSlots?: number | null
   staffReviewRequired: boolean
   issues: string[]
+  palletPlan?: PalletPlan | null
+  palletLayoutMissing?: boolean
+}
+
+export interface PalletPlan {
+  palletLengthCm: number
+  palletWidthCm: number
+  palletHeightCm: number
+  emptyPalletKg: number
+  palletMaxPayloadKg?: number | null
+  requiredPallets: number
+  availableSlots: number
+  totalLoadedWeightKg: number
+  items: {
+    itemNumber: number
+    quantity: number
+    requiredPallets: number
+    maxPiecesOnOnePallet: number
+    allowedStackLayers: number
+    weightPerItemKg?: number
+    allocations?: PalletAllocation[]
+  }[]
+  racks: {
+    code: string; usedSlots: number; totalSlots: number; loadedWeightKg: number; maxLoadKg: number
+    slotMaxLoadKg: number; compartments: number; bayLengthCm: number; bayWidthCm: number; maxCargoHeightCm: number
+    levels: { number: number; supportTopCm: number; clearHeightCm: number }[]
+  }[]
+  /** Các tấm kê thực tế, dùng để hiển thị phương án xếp chung nhiều dòng hàng. */
+  pallets?: {
+    palletNumber: number
+    rackCode: string
+    compartmentNumber: number
+    compartmentCargoLimitKg: number
+    cargoWeightKg: number
+    loadedWeightKg: number
+    items: { itemNumber: number; quantity: number; layers: number; cargoWeightKg: number }[]
+    placements: {
+      itemNumber: number
+      boxNumber: number
+      layer: number
+      xCm: number
+      yCm: number
+      zCm: number
+      lengthCm: number
+      widthCm: number
+      heightCm: number
+    }[]
+  }[]
+}
+
+interface PalletAllocation {
+  rackCode: string
+  compartmentNumber?: number
+  palletCount: number
+  compartmentCargoLimitKg?: number
+  piecesPerPallet: number
+  loadedWeightKg: number
+  capacity: {
+    maxLoadedKg: number
+    cargoWeightLimitKg: number
+    piecesPerLayer: number
+    usableLayers: number
+    maxPiecesByDimensions: number
+    maxPiecesByWeight: number
+    maxPieces: number
+    placementLengthCm?: number
+    placementWidthCm?: number
+    placementHeightCm?: number
+  }
 }
 
 export interface ReservationRecommendation {
@@ -197,6 +301,26 @@ export interface ReservationRecommendation {
   evaluatedUnitTypeIds: string[]
   incompatibleUnitTypeIds: string[]
   issues: string[]
+  checksByUnitType?: Record<string, CompatibilityCheckResult>
+  pricingByUnitType?: Record<string, ReservationPackagePricing>
+  noAlternativeReason?: string | null
+  status?: ReservationRecommendationStatus
+  physicallyFitButUnavailableUnitTypeIds?: string[]
+  maxSupportedStorageLimits?: ReservationStorageLimits | null
+}
+
+export interface ReservationStorageLimits {
+  maxCargoLengthCm: number
+  maxCargoWidthCm: number
+  maxCargoHeightCm: number
+  maxCargoWeightKg?: number | null
+}
+
+export interface ReservationPackagePricing {
+  discountRate: number
+  rentAfterPackageDiscount: number
+  securityDepositAmount: number
+  reservationDepositAmount: number
 }
 
 export interface ReservationQuoteInput extends ReservationSelectionInput {
@@ -257,6 +381,7 @@ export interface ReservationQuote {
 }
 
 export interface CreateReservationInput {
+  acceptedHandoverTermsVersion?: string
   acceptedSetupEarlyExitPolicyVersion?: string | null
   quoteId: string
   identityDocumentNumber: string
@@ -265,7 +390,7 @@ export interface CreateReservationInput {
   goodsCondition?: string | null
   notes?: string | null
   goodsItems: GoodsItemInput[]
-  appointmentAt?: string | null
+  appointmentAt: string
   acceptedTerms: boolean
 }
 
@@ -274,15 +399,33 @@ export interface CustomerReservation {
   setupEarlyExitPolicyVersion?: string | null
   setupEarlyExitFee?: number | null
   setupReturnRentalId?: string | null
+  violationRecovery?: boolean
   setupReturnCaseId?: string | null
+  setupReturnScheduledDate?: string | null
   pricingPolicyVersion?: string | null
   pricingSnapshotStatus?: 'COMPLETE' | 'INCOMPLETE' | null
   pricingQuotedAt?: string | null
   pricingExpiresAt?: string | null
   snapshotWarnings?: string[]
+  facilitySnapshot?: {
+    snapshotVersion?: string | null; capturedAt?: string | null; code?: string | null; name: string
+    address?: string | null; city?: string | null; phone?: string | null; accessHours?: string | null
+    climateControlled?: boolean | null; securityDescription?: string | null
+  } | null
   unitTypeSnapshot?: {
     name: string; lengthM: number; widthM: number; heightM: number; areaM2: number; volumeM3: number
     maxLoadKg: number; rackCount: number; rackLengthM: number; rackWidthM: number; rackHeightM: number
+  } | null
+  storageConfigurationSnapshot?: {
+    snapshotVersion?: string | null; capturedAt?: string | null; maxStoredLoadKg?: number | null
+    aisleWidthM?: number | null; storageAisleWidthM?: number | null; gateWidthM?: number | null
+    gateHeightM?: number | null; lowestObstructionHeightM?: number | null; overheadClearanceM?: number | null
+    rackLayoutJson?: string | null; palletRatingCatalogJson?: string | null
+  } | null
+  assignedUnitSnapshot?: {
+    id?: string | null; code?: string | null; floor?: string | null; zone?: string | null
+    status?: string | null; rackLayoutJson?: string | null; unitTypeCode?: string | null
+    unitTypeName?: string | null; snapshotVersion?: string | null; capturedAt?: string | null
   } | null
   id: string
   reservationCode: string
@@ -341,6 +484,7 @@ export interface CheckInDocument {
   entityId: string
   status: string
   createdAt: string
+  kind?: 'SIGNED_CONTRACT' | 'SIGNED_HANDOVER_RECORD' | 'PAYMENT_RECEIPT' | 'HANDOVER_EVIDENCE' | 'INVENTORY_EVIDENCE' | 'INVENTORY_DECISION_EVIDENCE' | 'IDENTITY_VERIFICATION_PHOTO' | 'OTHER'
 }
 
 export interface ReservationGoodsItem extends GoodsItemInput {
@@ -363,19 +507,69 @@ export interface ReservationGoodsItem extends GoodsItemInput {
 }
 
 export interface CustomerReservationDetail {
+  attendance?: import('../domain/reservationCheckInPolicy').HandoverAttendance | null
+  currentFacility?: Pick<NonNullable<CustomerReservation['facilitySnapshot']>, 'name' | 'address' | 'city' | 'phone' | 'accessHours'> | null
+  currentUnitType?: { name: string } & {
+    [Field in Exclude<keyof NonNullable<CustomerReservation['unitTypeSnapshot']>, 'name' | 'areaM2'>]: number | null
+  } | null
   reservation: CustomerReservation
   goodsCondition: string | null
   notes: string | null
+  paymentStartedAt: string | null
   paymentExpiresAt: string | null
   complaintExpiresAt: string | null
   archivedAt: string | null
   confirmedAt: string | null
   cancelledAt: string | null
   cancelReason: string | null
+  cancellationType?: string | null
+  cancellationRefundAmount?: number | null
+  cancellationChargeAmount?: number | null
   goodsItems: ReservationGoodsItem[]
   payments: ReservationPaymentResult[]
   checkInStatus?: string | null
+  identityCorrectedAtHandover?: boolean
+  handoverCompletedAt?: string | null
+  lockReference?: string | null
+  receiptConfirmationDueAt?: string | null
+  receiptConfirmationOverdue?: boolean
+  receiptConfirmationReleaseAt?: string | null
+  receiptReleaseEligible?: boolean
+  setupStartedAt?: string | null
+  setupDueAt?: string | null
+  freeSetupDays?: number | null
+  paidRentalStartsOn?: string | null
   rentalStatus?: string | null
+  inventoryDueAt?: string | null
+  inventoryFinalDeadlineAt?: string | null
+  inventoryResultPublishedAt?: string | null
+  inventoryRemainderDeadlineAt?: string | null
+  inventoryRemovalPublishedAt?: string | null
+  inventoryRemovalDeadlineAt?: string | null
+  inventoryReturnWindowDays?: number | null
+  inventoryReturnExtensionDays?: number | null
+  inventoryReturnExtensionCount?: number | null
+  inventoryReturnCanExtend?: boolean | null
+  inventoryReturnPolicyVersion?: string | null
+  inventoryEscalatedAt?: string | null
+  setupCompletedAt?: string | null
+  inventoryAppointmentAt?: string | null
+  inventoryArrivedAt?: string | null
+  inventoryIdentityVerifiedAt?: string | null
+  inventoryDecision?: InventoryDecision | null
+  inventoryResolutionStatus?: InventoryResolutionStatus | null
+  inventoryFullFit?: boolean
+  inventoryPartialFitAvailable?: boolean
+  inventorySuggestedPackageCount?: number | null
+  inventoryMismatchSummary?: string | null
+  inventoryAcceptedQuantitiesJson?: string | null
+  inventoryActualJson?: string | null
+  inventoryMismatchJson?: string | null
+  inventorySuggestedQuantitiesJson?: string | null
+  /** Version of the inspection record that the at-site confirmation approved. */
+  inventoryResultVersion?: number
+  inventoryAtSiteConfirmedByName?: string | null
+  inventoryDecisionAt?: string | null
 }
 
 export interface ReservationEmailVerificationResult {
@@ -388,6 +582,7 @@ export interface ReservationEmailVerificationResult {
 }
 
 export interface ReservationPaymentResult {
+  receiptFileId?: string | null
   paymentId: string
   reservationId: string
   transactionReference: string
@@ -409,9 +604,15 @@ export interface ReservationPaymentResult {
   initiatedByName?: string | null
   createdAt?: string | null
   reservationCode?: string
+  receiptCode?: string | null
   invoiceNumber?: string | null
   invoiceStatus?: InvoiceStatus
   invoiceIssuedAt?: string | null
+  facilityCode?: string | null
+  facilityName?: string | null
+  facilityAddress?: string | null
+  unitTypeName?: string | null
+  assignedUnitCode?: string | null
 }
 
 export interface VnpayPaymentUrlResult {
@@ -442,6 +643,16 @@ export interface PaymentComplaint {
   reviewedAt: string | null
   withdrawnAt: string | null
   decisionReason: string | null
+  paymentId?: string | null
+  gatewayIntentId?: string | null
+  paymentInitiatedAt?: string | null
+  gatewayQueryCheckedAt?: string | null
+  gatewayQueryResponseCode?: string | null
+  gatewayQueryTransactionStatus?: string | null
+  gatewayQueryTransactionNo?: string | null
+  gatewayQueryPayDate?: string | null
+  gatewayQueryConclusion?: string | null
+  gatewayQueryMessage?: string | null
 }
 
 export interface BookingDocument {
@@ -512,10 +723,14 @@ export async function withdrawPaymentComplaint(complaintId: string) {
   return response.data
 }
 
-export async function createVnpayPaymentUrl(reservationId: string, idempotencyKey: string) {
+export async function createVnpayPaymentUrl(reservationId: string, idempotencyKey: string, acceptedHandoverTermsVersion?: string) {
   const response = await apiRequest<ApiEnvelope<VnpayPaymentUrlResult>>(
     `/api/customer/reservations/${reservationId}/vnpay/payment-url`,
-    { method: 'POST', headers: { 'Idempotency-Key': idempotencyKey } },
+    {
+      method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey },
+      ...(acceptedHandoverTermsVersion ? { body: JSON.stringify({ acceptedHandoverTermsVersion }) } : {}),
+    },
   )
   return response.data
 }
@@ -650,6 +865,28 @@ export async function confirmCustomerReceipt(reservationId: string) {
   return checkedReservationDetail(response.data)
 }
 
+export interface RentalStartConfirmation {
+  scheduledStartDate: string
+  startDate: string
+  lastPermittedDate: string
+  rentalMonths: number
+}
+
+export async function previewCustomerRentalStart(reservationId: string) {
+  const response = await apiRequest<ApiEnvelope<RentalStartConfirmation>>(
+    `/api/customer/reservations/${encodeURIComponent(reservationId)}/rental-start-confirmation`,
+  )
+  return response.data
+}
+
+export async function confirmCustomerRentalStart(reservationId: string, preview: RentalStartConfirmation) {
+  const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
+    `/api/customer/reservations/${encodeURIComponent(reservationId)}/rental-start-confirmation`,
+    { method: 'POST', body: JSON.stringify({ startDate: preview.startDate, lastPermittedDate: preview.lastPermittedDate }) },
+  )
+  return checkedReservationDetail(response.data)
+}
+
 export async function updateSetupGoods(
   reservationId: string,
   input: { goodsItems: GoodsItemInput[]; goodsCondition?: string | null },
@@ -657,6 +894,38 @@ export async function updateSetupGoods(
   const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
     `/api/customer/reservations/${encodeURIComponent(reservationId)}/setup-goods`,
     { method: 'POST', body: JSON.stringify(input) },
+  )
+  return checkedReservationDetail(response.data)
+}
+
+export async function setCustomerInventoryAppointment(reservationId: string, appointmentAt: string, reason?: string) {
+  const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
+    `/api/customer/reservations/${encodeURIComponent(reservationId)}/inventory-appointment`,
+    { method: 'POST', body: JSON.stringify({ appointmentAt, reason }) },
+  )
+  return response.data
+}
+
+export async function resolveCustomerInventory(
+  reservationId: string,
+  decision: 'ACCEPT_FULL' | 'CANCEL_AND_RETURN',
+  note?: string,
+  scheduledDate?: string,
+) {
+  const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
+    `/api/customer/reservations/${encodeURIComponent(reservationId)}/inventory-resolution`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ decision, note: note?.trim() || null, scheduledDate: scheduledDate || null }),
+    },
+  )
+  return checkedReservationDetail(response.data)
+}
+
+export async function extendCustomerInventoryReturnWindow(reservationId: string) {
+  const response = await apiRequest<ApiEnvelope<CustomerReservationDetail>>(
+    `/api/customer/reservations/${encodeURIComponent(reservationId)}/inventory-return-extension`,
+    { method: 'POST' },
   )
   return checkedReservationDetail(response.data)
 }

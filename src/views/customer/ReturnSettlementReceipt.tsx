@@ -1,7 +1,9 @@
+import { receiptDisplayCode } from '../../utils/recordDisplayCode'
 import { formatCustomerDateTime } from '../../i18n/customerDate'
 import type { HistoryEntry } from '../../services/customerPaymentHistory'
 import { formatVndAmount } from '../../i18n/currency'
 import { EvidenceDownload } from '../rental-support-integration/EvidenceControls'
+import { formatHistoryPaymentMethod } from './paymentLabels'
 
 const amount = (value: number | null) => value === null ? 'Chưa có thông tin' : formatVndAmount(value)
 
@@ -35,7 +37,7 @@ export default function ReturnSettlementReceipt({ entry }: { entry: HistoryEntry
     <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-xl border border-amber-200/70 bg-amber-50/70 px-4 py-4">
       <div><p className="text-xs font-medium text-stone-600">{offset ? settlement.setupEarlyExit ? 'Đã đối trừ quyết toán' : 'Đã khấu trừ cọc' : refund ? 'Đã hoàn khách hàng' : 'Đã thu bổ sung'}</p>
         <p className="mt-1 break-words text-2xl font-bold leading-8 tracking-tight text-stone-900 tabular-nums">{amount(entry.amount)}</p></div>
-      <div><p className="text-[11px] text-stone-500">Phương thức</p><p className="mt-1 text-xs font-medium text-stone-700">{entry.method || 'Chưa có thông tin phương thức'}</p></div>
+      <div><p className="text-[11px] text-stone-500">Phương thức</p><p className="mt-1 text-xs font-medium text-stone-700">{formatHistoryPaymentMethod(entry.method)}</p></div>
     </div>
     <div className="grid items-start gap-5 sm:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
       <section className="min-w-0" aria-label="Chi tiết quyết toán">
@@ -55,7 +57,8 @@ export default function ReturnSettlementReceipt({ entry }: { entry: HistoryEntry
       <section className="min-w-0" aria-label="Thông tin biên nhận">
         <h4 className="mb-3 text-xs font-semibold text-stone-900">Thông tin biên nhận</h4>
         <dl className="space-y-4 rounded-xl border border-stone-200 bg-stone-50/50 p-3">
-          <div><dt className="text-[11px] leading-5 text-stone-500">Mã biên nhận hoặc giao dịch</dt><dd className="mt-1 break-all text-xs font-medium leading-5 text-stone-700">{entry.id}</dd></div>
+          <div><dt className="text-[11px] leading-5 text-stone-500">{offset ? 'Hồ sơ đối trừ' : 'Mã biên nhận hoặc giao dịch'}</dt><dd className="mt-1 break-all text-xs font-medium leading-5 text-stone-700">{receiptDisplayCode(settlement.receiptCode || (offset ? settlement.displayCode : null), entry.id)}</dd></div>
+          {entry.method === 'Chuyển khoản' && entry.id !== settlement.receiptCode && <div><dt className="text-xs text-stone-500">Mã giao dịch ngân hàng</dt><dd className="break-all">{entry.id}</dd></div>}
           <div className="border-t border-stone-200/70 pt-3"><dt className="text-[11px] text-stone-500">Ghi nhận lúc</dt><dd className="mt-1 text-xs leading-5 text-stone-700">{entry.timestamp ? formatCustomerDateTime(new Date(entry.timestamp)) : 'Chưa có thông tin'}</dd></div>
         </dl>
         {settlement.receiptFileId && <div className="mt-4 border-t border-stone-200 pt-4">

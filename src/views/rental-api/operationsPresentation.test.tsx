@@ -15,6 +15,7 @@ import {
 } from "../manager/ManagerOverdueApiPanel"
 import { rentalError } from "./presentation"
 import { ApiClientError } from "../../services/apiClient"
+import { isOperationEvent, isOperationState } from "../../services/renewalOperationsApi"
 import {
   isUncertainRenewalOutcome,
   RenewalAttempt,
@@ -40,9 +41,9 @@ describe("D3 operation prerequisites and truthful UI", () => {
     expect(html).toContain("08:00:00")
     expect(html).not.toContain("08:30:00")
     expect(html).not.toContain("Khách hàng cần đổi lịch")
-    expect(html).toContain("Bạn cần hoàn tất ký trước")
-    expect(html).toContain("Nếu không kịp, hãy liên hệ cơ sở để được hỗ trợ")
-    expect(html).toContain("Cơ sở tiếp nhận gia hạn đến")
+    expect(html).toContain("Hạn ký hợp đồng")
+    expect(html).toContain("Nếu không kịp, hãy liên hệ cơ sở")
+    expect(html).toContain("Thời điểm cuối có thể gia hạn")
     expect(html).not.toContain("Hạn xử lý trước khi chuyển sang thu hồi kho")
   })
   it.each([null, 500, 502, 503])(
@@ -107,6 +108,7 @@ describe("D3 operation prerequisites and truthful UI", () => {
   })
   it.each([
     "SIGNING_EXPIRY_PENDING",
+    "NO_SHOW",
     "SIGNING_EXPIRED",
     "PAYMENT_EXPIRED",
     "COMPLETED",
@@ -119,6 +121,39 @@ describe("D3 operation prerequisites and truthful UI", () => {
         operationsActor("staff"),
       ),
     ).not.toBeNull()
+  })
+  it("enables no-show only after the appointment ends and before any arrival", () => {
+    const appointmentEnd = Date.parse(signingState.appointmentEnd!)
+    expect(operationBlockedReason(signingState, "staff", "noShow", operationsActor("staff"), undefined, undefined, undefined, appointmentEnd - 1))
+      .toContain("sau khi lịch ký kết thúc")
+    expect(operationBlockedReason(signingState, "staff", "noShow", operationsActor("staff"), undefined, undefined, undefined, appointmentEnd))
+      .toBeNull()
+    expect(operationBlockedReason({ ...signingState, phase: "SIGNING_EXPIRY_PENDING" }, "staff", "noShow", operationsActor("staff"), undefined, undefined, undefined, appointmentEnd))
+      .not.toBeNull()
+    expect(operationBlockedReason({ ...signingState, arrivalRef: ids.event }, "staff", "noShow", operationsActor("staff"), undefined, undefined, undefined, appointmentEnd))
+      .toContain("Đã ghi nhận khách đến")
+  })
+  it("lets the customer reschedule a no-show only before the signing deadline", () => {
+    const state = { ...signingState, phase: "NO_SHOW" as const }
+    const deadline = Date.parse(state.effectiveSigningDeadline!)
+    expect(operationBlockedReason(state, "customer", "reschedule", operationsActor("customer"), ids.facility, ids.customer, undefined, deadline - 1))
+      .toBeNull()
+    expect(operationBlockedReason(state, "customer", "reschedule", operationsActor("customer"), ids.facility, ids.customer, undefined, deadline))
+      .not.toBeNull()
+  })
+  it("accepts the strict no-show state/event shape and presents the safety boundary", () => {
+    const state = { ...signingState, phase: "NO_SHOW" as const }
+    expect(isOperationState(state)).toBe(true)
+    expect(isOperationEvent({
+      ...operationEvent,
+      kind: "NO_SHOW",
+      actorId: ids.staff,
+      data: { appointmentRef: ids.event, reason: "Khách không có mặt", disposition: "REVIEW_REQUIRED", occupiedUnitReleased: false },
+    })).toBe(true)
+    const html = renderToStaticMarkup(<RenewalOperationsSummary state={state} role="staff" />)
+    expect(html).toContain("Đã ghi nhận khách không đến")
+    expect(html).toContain("Gian kho khách đang thuê vẫn giữ nguyên")
+    expect(html).toContain("khoản đã thu đang chờ đối soát")
   })
   it("requires Manager actual MANAGE scope and base permission, not name", () => {
     const actor = operationsActor("manager")
@@ -255,14 +290,18 @@ describe("D4 truthful overdue presentation", () => {
         }}
       />,
     )
-    expect(html).toContain("Cập nhật:")
+    expect(html).toContain("Cập nhật lúc")
+    expect(html).toContain("10:00, 08/10/2026")
     expect(html).not.toContain("Chưa đủ dữ liệu")
     expect(html).not.toContain("FINANCIAL_COVERAGE_PARTIAL")
     expect(html).not.toContain("0 đ")
   })
   it("term case null money is not presented as zero debt or invented fees", () => {
-    const html = renderToStaticMarkup(<OverdueCaseSummary record={termCase} />)
+    const html = renderToStaticMarkup(<OverdueCaseSummary record={{ ...termCase, displayCode: "SH-312102", rentalDisplayCode: "SH-349647" }} />)
     expect(html).toContain("Thời hạn thuê")
+    expect(html).toContain("Mã hồ sơ thuê")
+    expect(html.match(/SH-349647/g)).toHaveLength(1)
+    expect(html).not.toContain("SH-312102")
     expect(html).not.toContain("không tự có một khoản nợ tiền")
     expect(html).not.toContain("0 đ")
     expect(html).not.toContain("term-policy")
@@ -270,7 +309,7 @@ describe("D4 truthful overdue presentation", () => {
   it.each([['WAITING_RECOVERY', 'Chờ thu hồi'], ['RECOVERING', 'Đang thu hồi'], ['COMPLETED', 'Hoàn tất']] as const)("shows %s independently from overdue priority and links the existing recovery task", (workflowStatus, label) => {
     const html = renderToStaticMarkup(<OverdueCaseSummary record={{ ...termCase, priority: 'RECOVERY', workflowStatus, recoveryTaskId: ids.event }} />)
     expect(html).toContain(label)
-    expect(html).toContain('Xem và xử lý thu hồi')
+    expect(html).toContain('Xem nhiệm vụ thu hồi')
     expect(html).not.toContain('Mở nhiệm vụ thu hồi')
     expect(html).toContain(termCase.customerName)
     expect(html).toContain(termCase.storageUnitCode)

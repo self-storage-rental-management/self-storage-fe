@@ -1,5 +1,6 @@
+import { CustomerProfileFields, CustomerProfileReminder, validateEmergencyProfile } from '../components/CustomerProfileFields'
 import { userFacingError } from '../presentation/userFacingError'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { PermissionKey, Role, User } from '../types'
 import { Card, Button, Input, PasswordField, Badge, Modal } from '../components/ui'
 import ProfileHeaderCard from '../components/ProfileHeaderCard'
@@ -20,7 +21,46 @@ interface ProfileViewProps {
 
 const MAX_AVATAR_FILE_SIZE = 5 * 1024 * 1024
 const MAX_AVATAR_DATA_LENGTH = 450_000
-type ProfileTab = 'profile' | 'security' | 'role' | 'notifications'
+const PROFILE_DRAFT_KEY_PREFIX = 'storagehub:profile-draft:'
+type ProfileDraft = {
+  name: string
+  phone: string
+  permanentAddress: string
+  emergencyContactName: string
+  emergencyContactPhone: string
+  profileDetails: User['profileDetails']
+}
+
+function profileDraftKey(userId: string) {
+  return `${PROFILE_DRAFT_KEY_PREFIX}${userId}`
+}
+
+function readProfileDraft(userId: string): ProfileDraft | null {
+  try {
+    const raw = sessionStorage.getItem(profileDraftKey(userId))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<ProfileDraft>
+    if (typeof parsed.name !== 'string' || typeof parsed.phone !== 'string' || typeof parsed.permanentAddress !== 'string'
+      || typeof parsed.emergencyContactName !== 'string' || typeof parsed.emergencyContactPhone !== 'string') return null
+    // Build the draft explicitly so the string fields stay typed after the guard above.
+    return {
+      name: parsed.name,
+      phone: parsed.phone,
+      permanentAddress: parsed.permanentAddress,
+      emergencyContactName: parsed.emergencyContactName,
+      emergencyContactPhone: parsed.emergencyContactPhone,
+      profileDetails: parsed.profileDetails || {},
+    }
+  } catch {
+    return null
+  }
+}
+
+function clearProfileDraft(userId: string) {
+  try { sessionStorage.removeItem(profileDraftKey(userId)) } catch {}
+}
+
+type ProfileTab = 'profile' | 'security' | 'role'
 
 export const roleLabelMap: Record<Role, string> = {
   customer: 'Khách hàng thuê kho',
@@ -58,7 +98,7 @@ export const ROLE_NOTIFICATION_CONFIGS: Record<Role, RoleNotificationConfig> = {
   admin: {
     roleTitle: 'Quản Trị Viên Hệ Thống',
     title: 'Kênh Giám Sát & An Ninh Toàn Hệ Thống',
-    subtitle: 'Cấu hình cảnh báo an ninh hạ tầng, audit log bảo mật và giám sát dịch vụ toàn nền tảng StorageHub.',
+    subtitle: 'Cấu hình cảnh báo an ninh hạ tầng, nhật ký hoạt động bảo mật và giám sát dịch vụ toàn nền tảng StorageHub.',
     channels: [
       {
         id: 'admin_security_threats',
@@ -117,8 +157,8 @@ export const ROLE_NOTIFICATION_CONFIGS: Record<Role, RoleNotificationConfig> = {
       },
       {
         id: 'biz_occupancy_threshold',
-        title: 'Cảnh Báo Tỷ Lệ Lấp Đầy & Hiệu Suất Cơ Sở',
-        description: 'Thông báo khi tỷ lệ lấp đầy tại một cơ sở đạt ngưỡng cao (>90%) để mở rộng, hoặc xuống thấp (<50%) cần chạy ưu đãi.',
+        title: 'Cảnh Báo Công Suất & Hiệu Suất Cơ Sở',
+        description: 'Thông báo khi công suất sử dụng tại một cơ sở đạt ngưỡng cao (>90%) để mở rộng, hoặc xuống thấp (<50%) cần chạy ưu đãi.',
         defaultEnabled: true,
         badge: 'Hiệu suất',
         badgeColor: 'bg-blue-50 text-blue-700 border-blue-200'
@@ -199,7 +239,7 @@ export const ROLE_NOTIFICATION_CONFIGS: Record<Role, RoleNotificationConfig> = {
   staff: {
     roleTitle: 'Chuyên Viên Vận Hành Cơ Sở',
     title: 'Kênh Tác Vụ Trực Tiếp & Phục Vụ Khách Hàng',
-    subtitle: 'Cập nhật phân công công việc từ quản lý, lịch hẹn đón khách check-in và hỗ trợ kỹ thuật tại cơ sở.',
+    subtitle: 'Cập nhật phân công công việc từ quản lý, lịch hẹn nhận kho và hỗ trợ kỹ thuật tại cơ sở.',
     channels: [
       {
         id: 'staff_new_assignments',
@@ -211,10 +251,10 @@ export const ROLE_NOTIFICATION_CONFIGS: Record<Role, RoleNotificationConfig> = {
       },
       {
         id: 'staff_checkin_appointments',
-        title: 'Lịch Hẹn Khách Hàng Check-in Trong Ngày',
+        title: 'Lịch nhận kho trong ngày',
         description: 'Nhắc nhở lịch hẹn khách thuê đến nhận kho để bạn chủ động chuẩn bị hợp đồng và hướng dẫn kích hoạt mã PIN mở cửa.',
         defaultEnabled: true,
-        badge: 'Check-in',
+        badge: 'Nhận kho',
         badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200'
       },
       {
@@ -281,7 +321,6 @@ function profileTabFromLocation(): ProfileTab {
   const pathname = url.pathname.replace(/\/+$/, '') || '/'
   if (pathname === '/profile/security' || url.searchParams.get('tab') === 'security') return 'security'
   if (url.searchParams.get('tab') === 'role') return 'role'
-  if (url.searchParams.get('tab') === 'notifications') return 'notifications'
   return 'profile'
 }
 
@@ -326,6 +365,8 @@ function compressAvatar(file: File): Promise<string> {
           reject(new Error('Trình duyệt không hỗ trợ xử lý ảnh.'))
           return
         }
+        context.fillStyle = '#ffffff'
+        context.fillRect(0, 0, canvas.width, canvas.height)
         context.drawImage(image, 0, 0, canvas.width, canvas.height)
         const dataUrl = canvas.toDataURL('image/jpeg', 0.82)
         if (dataUrl.length > MAX_AVATAR_DATA_LENGTH) {
@@ -421,12 +462,14 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
   const [activeTab, setActiveTab] = useState<ProfileTab>(profileTabFromLocation)
 
   // Form states
-  const [name, setName] = useState(user.name)
+  const initialDraft = readProfileDraft(user.id)
+  const [name, setName] = useState(initialDraft?.name ?? user.name)
   const [email, setEmail] = useState(user.email)
-  const [phone, setPhone] = useState(user.phone || '')
-  const [permanentAddress, setPermanentAddress] = useState(user.permanentAddress || '')
-  const [emergencyContactName, setEmergencyContactName] = useState(user.emergencyContactName || '')
-  const [emergencyContactPhone, setEmergencyContactPhone] = useState(user.emergencyContactPhone || '')
+  const [phone, setPhone] = useState(initialDraft?.phone ?? (user.phone || ''))
+  const [permanentAddress, setPermanentAddress] = useState(initialDraft?.permanentAddress ?? (user.permanentAddress || ''))
+  const [profileDetails, setProfileDetails] = useState(initialDraft?.profileDetails ?? (user.profileDetails || {}))
+  const [emergencyContactName, setEmergencyContactName] = useState(initialDraft?.emergencyContactName ?? (user.emergencyContactName || ''))
+  const [emergencyContactPhone, setEmergencyContactPhone] = useState(initialDraft?.emergencyContactPhone ?? (user.emergencyContactPhone || ''))
   const [avatarUrl, setAvatarUrl] = useState(user.avatar || '')
 
   // Security states
@@ -469,24 +512,46 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
   const [apiManagerSummaryError, setApiManagerSummaryError] = useState(false)
 
   const profileHasChanges =
+    JSON.stringify(profileDetails) !== JSON.stringify(user.profileDetails || {}) ||
     name !== user.name ||
     phone !== (user.phone || '') ||
     permanentAddress !== (user.permanentAddress || '') ||
     emergencyContactName !== (user.emergencyContactName || '') ||
     emergencyContactPhone !== (user.emergencyContactPhone || '')
 
+  useEffect(() => {
+    if (!isCustomer) return
+    if (!profileHasChanges) {
+      clearProfileDraft(user.id)
+      return
+    }
+    try {
+      sessionStorage.setItem(profileDraftKey(user.id), JSON.stringify({
+        name, phone, permanentAddress, emergencyContactName, emergencyContactPhone, profileDetails,
+      } satisfies ProfileDraft))
+    } catch {}
+  }, [isCustomer, name, phone, permanentAddress, emergencyContactName, emergencyContactPhone, profileDetails, profileHasChanges, user.id])
+
   const handleCancelProfileChanges = () => {
+    clearProfileDraft(user.id)
     setName(user.name)
     setEmail(user.email)
     setPhone(user.phone || '')
     setPermanentAddress(user.permanentAddress || '')
+    setProfileDetails(user.profileDetails || {})
     setEmergencyContactName(user.emergencyContactName || '')
     setEmergencyContactPhone(user.emergencyContactPhone || '')
   }
 
+  const toastTimerRef = useRef<number | null>(null)
+  useEffect(() => () => {
+    if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current)
+  }, [])
+
   const showToast = (msg: string) => {
     setToastMessage(msg)
-    setTimeout(() => setToastMessage(null), 3500)
+    if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = window.setTimeout(() => setToastMessage(null), 3500)
   }
 
   // Synchronize notification preferences when user or role changes
@@ -510,7 +575,7 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
 
   const handleToggleChannel = (channelId: string, channelTitle: string, nextVal: boolean) => {
     const updated = { ...notifPreferences, [channelId]: nextVal }
-    setNotifPreferences(updated)
+    setNotifPreferences(prev => ({ ...prev, [channelId]: nextVal }))
     try {
       localStorage.setItem(`storagehub:notifications:${user.id}`, JSON.stringify(updated))
     } catch {
@@ -524,7 +589,7 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
     roleConfig.channels.forEach(ch => {
       updated[ch.id] = enabled
     })
-    setNotifPreferences(updated)
+    setNotifPreferences(prev => ({ ...prev, ...updated }))
     try {
       localStorage.setItem(`storagehub:notifications:${user.id}`, JSON.stringify(updated))
     } catch {
@@ -551,7 +616,7 @@ export default function ProfileView({ user, onUpdateUser }: ProfileViewProps) {
     e.preventDefault()
     if (!isCustomer || savingProfile || !profileHasChanges) return
 
-const validationError = validateProfileForm({
+const validationError = validateEmergencyProfile({ name, phone, permanentAddress, emergencyContactName, emergencyContactPhone, profileDetails }) || validateProfileForm({
   name,
   phone,
   permanentAddress,
@@ -573,14 +638,16 @@ setSavingProfile(true)
         emergencyContactName: emergencyContactName.trim(),
         emergencyContactPhone,
         avatarUrl,
+        profileDetails,
       }
       if (isApiAuthenticated()) {
         const actor = await updateCurrentProfileWithApi(profile)
         setAvatarUrl(actor.avatarUrl || '')
         onUpdateUser?.(actorToUser(actor))
       } else {
-        updateCustomerProfile({ name, email, phone, permanentAddress, emergencyContactName, emergencyContactPhone, avatar: avatarUrl }, user)
+        updateCustomerProfile({ name, email, phone, permanentAddress, emergencyContactName, emergencyContactPhone, profileDetails, avatar: avatarUrl }, user)
       }
+      clearProfileDraft(user.id)
       showToast('Đã cập nhật thông tin cá nhân.')
     } catch (error) {
       showToast(userFacingError(error, 'Không thể cập nhật thông tin cá nhân.'))
@@ -590,17 +657,27 @@ setSavingProfile(true)
   }
 
   useEffect(() => {
-    setName(user.name)
+    const draft = readProfileDraft(user.id)
+    setName(draft?.name ?? user.name)
     setEmail(user.email)
-    setPhone(user.phone || '')
-    setPermanentAddress(user.permanentAddress || '')
-    setEmergencyContactName(user.emergencyContactName || '')
-    setEmergencyContactPhone(user.emergencyContactPhone || '')
+    setPhone(draft?.phone ?? (user.phone || ''))
+    setPermanentAddress(draft?.permanentAddress ?? (user.permanentAddress || ''))
+    setProfileDetails(draft?.profileDetails ?? (user.profileDetails || {}))
+    setEmergencyContactName(draft?.emergencyContactName ?? (user.emergencyContactName || ''))
+    setEmergencyContactPhone(draft?.emergencyContactPhone ?? (user.emergencyContactPhone || ''))
     setAvatarUrl(user.avatar || '')
-  }, [user.id, user.name, user.email, user.phone, user.permanentAddress, user.emergencyContactName, user.emergencyContactPhone, user.avatar])
+  }, [user.id, user.name, user.email, user.phone, user.permanentAddress, user.emergencyContactName, user.emergencyContactPhone, user.profileDetails, user.avatar])
 
   useEffect(() => {
-    const syncProfileTab = () => setActiveTab(profileTabFromLocation())
+    const syncProfileTab = () => {
+      const url = new URL(window.location.href)
+      if (url.searchParams.get('tab') === 'notifications') {
+        url.searchParams.delete('tab')
+        window.history.replaceState({ page: 'profile', tab: 'profile' }, '', url)
+      }
+      setActiveTab(profileTabFromLocation())
+    }
+    syncProfileTab()
     window.addEventListener('popstate', syncProfileTab)
     return () => window.removeEventListener('popstate', syncProfileTab)
   }, [])
@@ -609,7 +686,7 @@ setSavingProfile(true)
     const url = new URL(window.location.href)
     url.pathname = '/'
     url.searchParams.set('page', 'profile')
-    if (tab === 'security' || tab === 'role' || tab === 'notifications') url.searchParams.set('tab', tab)
+    if (tab === 'security' || tab === 'role') url.searchParams.set('tab', tab)
     else url.searchParams.delete('tab')
     window.history.pushState({ page: 'profile', tab }, '', url)
     setActiveTab(tab)
@@ -627,13 +704,18 @@ setSavingProfile(true)
       setAvatarUrl(nextAvatarUrl)
       if (isApiAuthenticated()) {
         const actor = await updateCurrentProfileWithApi({
-          fullName: name.trim(),
+          fullName: user.name,
+          phone: user.phone || undefined,
+          permanentAddress: user.permanentAddress || undefined,
+          emergencyContactName: user.emergencyContactName || undefined,
+          emergencyContactPhone: user.emergencyContactPhone || undefined,
           avatarUrl: nextAvatarUrl,
+          profileDetails: user.profileDetails,
         })
         setAvatarUrl(actor.avatarUrl || nextAvatarUrl)
         onUpdateUser?.(actorToUser(actor))
       } else if (isCustomer) {
-        updateCustomerProfile({ name, email, phone, permanentAddress, emergencyContactName, emergencyContactPhone, avatar: nextAvatarUrl }, user)
+        updateCustomerProfile({ name, email, phone, permanentAddress, emergencyContactName, emergencyContactPhone, profileDetails, avatar: nextAvatarUrl }, user)
       }
     } catch (error) {
       setAvatarUrl(previousAvatarUrl)
@@ -653,8 +735,11 @@ setSavingProfile(true)
       .then(nextSessions => {
         if (!cancelled) setApiSessions(nextSessions)
       })
-      .catch(() => {
-        if (!cancelled) setApiSessions([])
+      .catch(error => {
+        if (!cancelled) {
+          setApiSessions([])
+          showToast(userFacingError(error, 'Không thể tải danh sách phiên đăng nhập.'))
+        }
       })
     return () => {
       cancelled = true
@@ -740,6 +825,10 @@ setSavingProfile(true)
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!apiMode) {
+      showToast('Đổi mật khẩu chỉ khả dụng khi tài khoản đã kết nối API.')
+      return
+    }
     if (!currentPassword) {
       showToast('Vui lòng nhập mật khẩu hiện tại.')
       return
@@ -843,16 +932,16 @@ setSavingProfile(true)
             <div className="flex items-center justify-between gap-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
               <div>
                 <p className="font-semibold text-stone-900">Google Authenticator / FIDO2</p>
-                <p className="mt-1 text-xs text-stone-600">Chưa có cấu hình MFA từ backend.</p>
+                <p className="mt-1 text-xs text-stone-600">Chưa thiết lập xác thực nhiều lớp.</p>
               </div>
-              <Button variant="outline" size="sm" onClick={() => showToast('Tính năng MFA sẽ mở sau khi backend cung cấp cấu hình bảo mật.')}>Cấu hình</Button>
+              <Button variant="outline" size="sm" onClick={() => showToast('Xác thực nhiều lớp hiện chưa khả dụng.')}>Cấu hình</Button>
             </div>
             <div className="mt-3 flex items-center justify-between gap-4 rounded-xl border border-stone-200 p-4">
               <div>
                 <p className="font-semibold text-stone-900">Mã khôi phục khẩn cấp</p>
                 <p className="mt-1 text-xs text-stone-600">Chưa phát hành bộ mã dự phòng.</p>
               </div>
-              <Button variant="outline" size="sm" onClick={() => showToast('Chưa thể tạo mã khôi phục khi backend chưa bật MFA.')}>Tạo mã</Button>
+              <Button variant="outline" size="sm" onClick={() => showToast('Cần bật xác thực nhiều lớp trước khi tạo mã khôi phục.')}>Tạo mã</Button>
             </div>
           </Card>
 
@@ -868,20 +957,16 @@ setSavingProfile(true)
                   <Badge variant={session.active ? 'success' : 'muted'}>{session.active ? 'Đang hoạt động' : 'Đã đóng'}</Badge>
                 </div>
               ))}
-              {!apiSessions.length && <p className="rounded-lg bg-stone-50 p-4 text-sm text-stone-600">Chưa có dữ liệu truy cập từ backend.</p>}
+              {!apiSessions.length && <p className="rounded-lg bg-stone-50 p-4 text-sm text-stone-600">Chưa có dữ liệu truy cập.</p>}
             </div>
           </Card>
 
           <Card className="p-6 xl:col-span-2">
             <SectionTitle title="API Key & Personal Access Token" description="Dành cho tích hợp nội bộ, webhook và công cụ DevOps." />
             <div className="flex flex-col gap-3 rounded-xl border border-dashed border-stone-300 bg-stone-50 p-4 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-stone-600">Chưa có token cá nhân nào. Token chỉ được hiển thị một lần sau khi backend hỗ trợ phát hành.</p>
+              <p className="text-sm text-stone-600">Chưa có mã truy cập cá nhân.</p>
               <Button variant="outline" size="sm" onClick={() => showToast('API token chưa được bật cho tài khoản này.')}>Tạo token</Button>
             </div>
-          </Card>
-          <Card className="p-6 xl:col-span-2">
-            <SectionTitle title="Nhật ký thao tác của tôi" description="Các thay đổi do tài khoản này thực hiện trên hệ thống." />
-            <p className="rounded-lg bg-stone-50 p-4 text-sm text-stone-600">Nhật ký cá nhân sẽ hiển thị khi backend cung cấp bộ lọc theo người thực hiện.</p>
           </Card>
         </div>
       )
@@ -944,7 +1029,7 @@ setSavingProfile(true)
                   </div>
                 )
               })}
-              {apiMode && apiRentalsError && <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700 md:col-span-2">Không tải được hồ sơ thuê từ backend.</p>}
+              {apiMode && apiRentalsError && <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700 md:col-span-2">Không tải được hồ sơ thuê.</p>}
               {apiMode && !apiRentalsError && !visibleApiRentals.length && <p className="rounded-lg bg-stone-50 p-4 text-sm text-stone-600 md:col-span-2">Chưa có hồ sơ thuê đang hiệu lực.</p>}
               {!apiMode && !activeRentals.length && <p className="rounded-lg bg-stone-50 p-4 text-sm text-stone-600 md:col-span-2">Chưa có kho đang thuê trong dữ liệu tài khoản.</p>}
             </div>
@@ -982,15 +1067,15 @@ setSavingProfile(true)
             <div className="space-y-2 text-sm">
               <InfoRow label="Mã nhân viên" value={`#STF-${user.id.slice(0, 8).toUpperCase()}`} />
               <InfoRow label="Cơ sở trực thuộc" value={roleFacilityName} />
-              <InfoRow label="Quản lý trực tiếp" value={apiMode ? 'Chưa có API thông tin quản lý' : currentFacility?.manager || 'Chưa có dữ liệu quản lý'} />
-              <InfoRow label="Hotline cơ sở" value={apiMode ? 'Chưa có API hotline cơ sở' : currentFacility?.phone || 'Chưa cập nhật'} />
+              <InfoRow label="Quản lý trực tiếp" value={apiMode ? apiFacility?.managerNames?.join(', ') || 'Chưa có thông tin quản lý trực tiếp' : currentFacility?.manager || 'Chưa có dữ liệu quản lý'} />
+              <InfoRow label="Số điện thoại cơ sở" value={apiMode ? apiFacility?.phone || 'Chưa có số điện thoại cơ sở' : currentFacility?.phone || 'Chưa cập nhật'} />
             </div>
           </Card>
           <Card className="p-6">
-            <SectionTitle title="Ca trực & nhiệm vụ hôm nay" description="Công việc được phân công từ hệ thống vận hành." />
+            <SectionTitle title="Nhiệm vụ hôm nay" description="Công việc được phân công từ hệ thống vận hành." />
             {apiMode ? (
               apiMaintenanceError ? (
-                <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700">Không tải được nhiệm vụ vận hành từ backend.</p>
+                <p className="rounded-lg bg-red-50 p-4 text-sm text-red-700">Không tải được nhiệm vụ vận hành.</p>
               ) : (
                 <>
                   <div className="grid grid-cols-2 gap-3">
@@ -1001,13 +1086,10 @@ setSavingProfile(true)
                 </>
               )
             ) : (
-              <>
-                <div className="grid grid-cols-2 gap-3">
-                  <MetricTile label="Đang xử lý" value={openTasks.length} />
-                  <MetricTile label="Tổng nhiệm vụ" value={assignedTasks.length} />
-                </div>
-                <p className="mt-4 rounded-lg bg-stone-50 p-3 text-xs text-stone-600">Lịch ca chi tiết sẽ hiển thị khi backend ca trực được kết nối.</p>
-              </>
+              <div className="grid grid-cols-2 gap-3">
+                <MetricTile label="Đang xử lý" value={openTasks.length} />
+                <MetricTile label="Tổng nhiệm vụ" value={assignedTasks.length} />
+              </div>
             )}
           </Card>
           {apiMode && <div className="xl:col-span-2"><StaffMaintenanceOperationsPanel showToast={showToast} /></div>}
@@ -1031,7 +1113,7 @@ setSavingProfile(true)
             <SectionTitle title="Ủy quyền ca trực" description="Thiết lập người thay thế khi vắng mặt hoặc nghỉ phép." />
             <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50 p-4">
               <p className="font-semibold text-stone-800">Chưa có người được ủy quyền</p>
-              <p className="mt-1 text-xs text-stone-600">Dữ liệu ủy quyền cần được lưu và kiểm tra từ backend.</p>
+              
               <Button className="mt-3" variant="outline" size="sm" onClick={() => showToast('Tính năng ủy quyền chưa được bật.')}>Thiết lập</Button>
             </div>
           </Card>
@@ -1049,7 +1131,7 @@ setSavingProfile(true)
             <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4">
               <span className="text-sm font-semibold text-emerald-900">Phạm vi dữ liệu</span>
               <Badge variant="success">{apiMode
-                ? (user.role as string) === 'admin'
+                ? ((user.role as string) === 'admin' || (user.role as string) === 'business')
                   ? 'Toàn hệ thống'
                   : Object.keys(apiActor?.facilityScopes ?? {}).length
                     ? 'Theo cơ sở được cấp'
@@ -1060,7 +1142,7 @@ setSavingProfile(true)
             <InfoRow
               label="Quyền nghiệp vụ"
               value={apiMode
-                ? grantedBusinessCapabilities.join(', ') || 'Chưa có quyền nghiệp vụ từ backend'
+                ? grantedBusinessCapabilities.join(', ') || 'Chưa có quyền nghiệp vụ'
                 : 'Báo cáo, chính sách và phê duyệt theo phân quyền'}
             />
           </div>
@@ -1069,10 +1151,10 @@ setSavingProfile(true)
           <SectionTitle title="Mã xác nhận phê duyệt" description="Xác nhận riêng cho các thao tác nhạy cảm về giá và chính sách." />
           <div className="flex items-center justify-between gap-3 rounded-xl border border-dashed border-stone-300 bg-stone-50 p-4">
             <div>
-              <p className="font-semibold text-stone-800">Approval PIN</p>
-              <p className="mt-1 text-xs text-stone-600">Chưa thiết lập mã xác nhận trong backend.</p>
+              <p className="font-semibold text-stone-800">Mã PIN phê duyệt</p>
+              <p className="mt-1 text-xs text-stone-600">Chưa thiết lập mã xác nhận.</p>
             </div>
-            <Button variant="outline" size="sm" onClick={() => showToast('Approval PIN chưa được bật.')}>Thiết lập</Button>
+            <Button variant="outline" size="sm" onClick={() => showToast('Mã PIN phê duyệt chưa được bật.')}>Thiết lập</Button>
           </div>
         </Card>
       </div>
@@ -1097,13 +1179,13 @@ setSavingProfile(true)
         avatarUploading={avatarUploading}
         onAvatarChange={handleAvatarChange}
       />
+      {isCustomer && <CustomerProfileReminder user={{ ...user, name, phone, permanentAddress, emergencyContactName, emergencyContactPhone, profileDetails }} onOpen={() => selectProfileTab('profile')} />}
       {/* Tabs */}
       <div className="flex flex-wrap gap-2 border-b border-[#deddd2] pb-1">
         {([
           ['profile', 'Thông tin cơ bản'],
           ['security', 'Bảo mật tài khoản'],
           ['role', roleTabLabels[user.role]],
-          ['notifications', 'Tùy chọn thông báo'],
         ] as [ProfileTab, string][]).map(([tab, label]) => (
           <button
             key={tab}
@@ -1170,7 +1252,7 @@ setSavingProfile(true)
               <Card className="p-6">
                 <div className="flex items-center justify-between pb-4 mb-5 border-b border-stone-100">
                   <div>
-                    <p className="text-xs text-stone-600">Cập nhật thông tin liên hệ và người liên hệ khẩn cấp</p>
+                    <h2 className="font-semibold text-stone-900">Hồ sơ khách hàng</h2>
                   </div>
                 </div>
 
@@ -1205,6 +1287,7 @@ setSavingProfile(true)
                   </div>
 
                   <Input
+                    id="profile-phone"
                     label="Số điện thoại Việt Nam"
                     value={phone}
                     onChange={e => setPhone(e.target.value)}
@@ -1218,6 +1301,7 @@ setSavingProfile(true)
                       <span className="text-xs text-stone-600 font-normal">Tối thiểu 5 ký tự</span>
                     </div>
                     <textarea
+                      id="profile-address"
                       value={permanentAddress}
                       onChange={e => setPermanentAddress(e.target.value)}
                       placeholder="Nhập số nhà, đường, phường/xã, quận/huyện, tỉnh/thành phố"
@@ -1226,27 +1310,9 @@ setSavingProfile(true)
                     />
                   </label>
 
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div>
-                      <Input
-                        label="Người liên hệ khẩn cấp"
-                        value={emergencyContactName}
-                        onChange={e => setEmergencyContactName(e.target.value)}
-                        placeholder="Họ và tên người liên hệ"
-                      />
-                      <p className="mt-1 text-[11px] text-stone-600">Tối thiểu 2 ký tự</p>
-                    </div>
-                    <div>
-                      <Input
-                        label="SĐT liên hệ khẩn cấp"
-                        value={emergencyContactPhone}
-                        onChange={e => setEmergencyContactPhone(e.target.value)}
-                        placeholder="0901234567"
-                        inputMode="tel"
-                      />
-                      <p className="mt-1 text-[11px] text-stone-600">Nhập 10-11 số bắt đầu bằng 0 hoặc số quốc tế, ví dụ: 0901234562 / +84901234562.</p>
-                    </div>
-                  </div>
+                  <CustomerProfileFields value={profileDetails} onChange={setProfileDetails}
+                    user={{ ...user, name, phone, permanentAddress, emergencyContactName, emergencyContactPhone, profileDetails }}
+                    onNameChange={setEmergencyContactName} onPhoneChange={setEmergencyContactPhone} />
 
                   {profileHasChanges && (
                     <div className="sticky bottom-0 z-10 flex flex-col justify-end gap-3 border-t border-stone-200 bg-white/95 pt-4 sm:flex-row">
@@ -1274,16 +1340,20 @@ setSavingProfile(true)
             {isInternal && (
               <Card className="p-5 bg-[#fbfaf6] border-stone-200">
                 <h3 className="font-semibold text-stone-900 mb-2 text-sm">Thông tin tổ chức</h3>
-                <p className="text-xs text-stone-600 leading-relaxed">Vai trò và cơ sở của tài khoản do công ty cấp. Mọi thay đổi cần Admin/HR duyệt và lưu audit log.</p>
-                <Button className="mt-4 w-full cursor-pointer" size="sm" onClick={() => setRequestModalOpen(true)}>
-                  Gửi yêu cầu chỉnh sửa
-                </Button>
+                <p className="text-xs text-stone-600 leading-relaxed">Vai trò và cơ sở của tài khoản do công ty cấp. Mọi thay đổi cần Admin/HR duyệt và lưu nhật ký hoạt động.</p>
+                {apiMode ? (
+                  <p className="mt-3 text-xs text-stone-500">Vui lòng liên hệ Quản trị viên hoặc HR để điều chỉnh vai trò / phạm vi cơ sở.</p>
+                ) : (
+                  <Button className="mt-4 w-full cursor-pointer" size="sm" onClick={() => setRequestModalOpen(true)}>
+                    Gửi yêu cầu chỉnh sửa
+                  </Button>
+                )}
               </Card>
             )}
 
             {isCustomer && (
               <Card className="sticky top-6 self-start p-5 bg-[#fbfaf6] border-stone-200">
-                <h3 className="text-xs font-mono font-semibold tracking-wider text-stone-600 mb-2">
+                <h3 className="text-xs font-semibold tracking-wider text-stone-600 mb-2">
                   Bảo vệ tài khoản khách hàng
                 </h3>
                 <p className="text-xs text-stone-600 leading-relaxed">Hồ sơ khách hàng được bảo mật theo tiêu chuẩn StorageHub. Bạn có thể đổi mật khẩu trực tiếp ở tab Bảo mật.</p>
@@ -1297,6 +1367,16 @@ setSavingProfile(true)
       {activeTab === 'security' && (
         <div className="space-y-6">
           <div className="max-w-5xl space-y-6">
+            {apiMode && isInternal ? (
+              <Card className="p-6">
+                <div className="pb-3 mb-3 border-b border-stone-100">
+                  <h2 className="text-lg font-bold text-stone-900">Quản lý mật khẩu tài khoản nội bộ</h2>
+                </div>
+                <p className="text-sm text-stone-600">
+                  Tài khoản nhân sự nội bộ không tự đổi mật khẩu trên cổng này. Vui lòng liên hệ Quản trị viên nếu cần đặt lại mật khẩu.
+                </p>
+              </Card>
+            ) : (
             <Card className="p-6">
               <div className="pb-4 mb-5 border-b border-stone-100">
                 <h2 className="text-lg font-bold text-stone-900">Đổi mật khẩu cá nhân</h2>
@@ -1336,6 +1416,7 @@ setSavingProfile(true)
                 </div>
               </form>
             </Card>
+            )}
 
             {/* Active Sessions */}
             <Card className="p-6">
@@ -1402,7 +1483,7 @@ setSavingProfile(true)
       {activeTab === 'role' && renderRolePanel()}
 
       {/* TAB 4: Notifications (Tailored per Role) */}
-      {activeTab === 'notifications' && (
+      {false && (
         <Card className="max-w-5xl p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-5 mb-6 border-b border-stone-100">
             <div>
@@ -1480,7 +1561,7 @@ setSavingProfile(true)
 
           <div className="mt-6 pt-4 border-t border-stone-100 flex items-center justify-between text-[11px] text-stone-600">
             <span>Tùy chọn được lưu tự động theo tài khoản của bạn trên thiết bị này</span>
-            <span className="font-mono text-emerald-600 font-semibold flex items-center gap-1">
+            <span className="text-emerald-600 font-semibold flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               Tự động lưu
             </span>
@@ -1491,7 +1572,7 @@ setSavingProfile(true)
       <Modal open={requestModalOpen && isInternal} onClose={() => setRequestModalOpen(false)} title="Gửi yêu cầu chỉnh sửa hồ sơ">
         <div className="space-y-5">
           <p className="text-xs text-stone-600 leading-relaxed">
-            Chọn các hạng mục thông tin cần điều chỉnh. Đề xuất sẽ được chuyển trực tiếp đến bộ phận Quản Trị & Nhân Sự (Admin/HR) xem xét, phê duyệt và lưu nhật ký kiểm toán (audit log).
+            Chọn các hạng mục thông tin cần điều chỉnh. Đề xuất sẽ được chuyển trực tiếp đến bộ phận Quản Trị & Nhân Sự (Admin/HR) xem xét, phê duyệt và lưu nhật ký kiểm toán (nhật ký hoạt động).
           </p>
 
           <div>

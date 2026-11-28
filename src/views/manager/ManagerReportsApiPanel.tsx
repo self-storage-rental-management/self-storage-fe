@@ -1,13 +1,17 @@
 import { useState, type FormEvent } from 'react'
+import './managerInventoryList.css'
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { ApiClientError } from '../../services/apiClient'
 import { getAuthenticatedActor, type ApiActor } from '../../services/authApi'
 import { useRentalApiResource } from '../../hooks/useRentalApiResource'
-import { getManagerReportSummary, listManagerReportActivities, type ManagerReportActivity } from '../../services/managerReportingApi'
+import { getManagerReportSummary, listManagerReportActivities, type ManagerReportActivity, type ManagerReportSummary } from '../../services/managerReportingApi'
 import { formatVndAmount } from '../../i18n/currency'
 import { exportManagerFacilityExcel } from '../../utils/excelExport'
+import { recordDisplayCode } from '../../utils/recordDisplayCode'
 import { Badge, Button, Card, Input, Modal, SectionHeader, Table, Tbody, Td, Th, Thead, Tr } from '../../components/ui'
 import ManagerPagination from './ManagerPagination'
+import ManagerCashflowPanel from './ManagerCashflowPanel'
+import type { CashflowReport } from '../../services/managerCashflowApi'
 import { managerApiIdentity } from './managerD1D5Api'
 import { managerDisplayError, managerDisplayExplanation } from './managerPresentation'
 import { managerFacilityNotice, singleManagerFacility } from './managerFacilityUi'
@@ -86,6 +90,33 @@ function ReportMetric({ title, value, detail }: { title: string; value: string |
   </Card>
 }
 
+const inUseStorageUnitStatuses = new Set(['occupied', 'reserved', 'assigned', 'held'])
+
+const storageTypeOrder: Record<string, number> = { S: 0, M: 1, L: 2, XL: 3 }
+
+function storageTypeSortKey(row: ManagerReportSummary['unitTypeBreakdown'][number]) {
+  const code = row.typeCode.trim().toUpperCase()
+  if (code in storageTypeOrder) return code
+  const sizeFromName = row.typeName.match(/\((XL|S|M|L)\)\s*$/i)?.[1]
+  return sizeFromName?.toUpperCase() || code
+}
+
+export function sortUnitTypeBreakdown(rows: ManagerReportSummary['unitTypeBreakdown']) {
+  return [...rows].sort((left, right) => {
+    const leftKey = storageTypeSortKey(left)
+    const rightKey = storageTypeSortKey(right)
+    const orderDifference = (storageTypeOrder[leftKey] ?? Number.MAX_SAFE_INTEGER) - (storageTypeOrder[rightKey] ?? Number.MAX_SAFE_INTEGER)
+    return orderDifference || left.typeName.localeCompare(right.typeName, 'vi')
+  })
+}
+
+function countStorageUnitsInUse(summary: { occupiedUnits: number; reservedUnits: number; unitStatusBreakdown: Array<{ status: string; count: number }> }) {
+  if (!summary.unitStatusBreakdown.length) return summary.occupiedUnits + summary.reservedUnits
+  return summary.unitStatusBreakdown
+    .filter(row => inUseStorageUnitStatuses.has(row.status))
+    .reduce((total, row) => total + row.count, 0)
+}
+
 function authorizedManager(): ApiActor {
   const actor = getAuthenticatedActor()
   if (!actor || actor.status !== 'ACTIVE' || !actor.roles.includes('MANAGER') || !actor.permissions.includes('reports:read')) {
@@ -108,6 +139,7 @@ export default function ManagerReportsApiPanel({ overview = false }: { overview?
 
 function ManagerReportsSession({ actor, facilityId, overview }: { actor: ApiActor; facilityId: string; overview: boolean }) {
   const identity = managerApiIdentity(actor)
+  const [financialReport, setFinancialReport] = useState<CashflowReport>()
   const summaryRead = useRentalApiResource(`${identity}:report-summary:${facilityId}`, async () => {
     const response = await getManagerReportSummary(facilityId)
     if (response.data.facilityId !== facilityId) {
@@ -124,6 +156,7 @@ function ManagerReportsSession({ actor, facilityId, overview }: { actor: ApiActo
     listManagerReportActivities({ facilityId, page: page - 1, pageSize, search }))
   const summary = !summaryRead.loading && !summaryRead.error ? summaryRead.data : undefined
   const activities = !activityRead.loading && !activityRead.error ? activityRead.data : undefined
+  const orderedUnitTypeBreakdown = summary ? sortUnitTypeBreakdown(summary.unitTypeBreakdown) : []
 
   function submitSearch(event: FormEvent) {
     event.preventDefault()
@@ -132,8 +165,9 @@ function ManagerReportsSession({ actor, facilityId, overview }: { actor: ApiActo
   }
 
   const handleExportExcel = () => {
-    if (!summary) return
+    if (!summary || !financialReport) return
     exportManagerFacilityExcel({
+      financialReport,
       facilityName: summary.facilityName || facilityId,
       metrics: {
         occupancyRate: summary.occupancyRate,
@@ -142,7 +176,7 @@ function ManagerReportsSession({ actor, facilityId, overview }: { actor: ApiActo
         availableUnits: summary.availableUnits,
         maintenanceUnits: summary.maintenanceUnits,
         monthlyRevenue: summary.monthlyRecurringRevenue,
-        collectedRevenue: summary.collectedRevenue ?? 'Chưa đối soát',
+        collectedRevenue: financialReport.collected,
         overdueRentalsCount: summary.overdueRentalsCount,
         monthCheckinsCount: summary.monthCheckinsCount,
         openReturnsCount: summary.openReturnsCount,
@@ -164,10 +198,10 @@ function ManagerReportsSession({ actor, facilityId, overview }: { actor: ApiActo
       <SectionHeader
         eyebrow="Quản lý cơ sở"
         title="Báo cáo cơ sở"
-        subtitle={summary ? `${summary.facilityName} · Số liệu từ hệ thống vận hành` : 'Số liệu lấy trực tiếp từ API cơ sở.'}
+        subtitle={summary ? `${summary.facilityName} · Số liệu từ hệ thống vận hành` : 'Số liệu lấy trực tiếp từ hệ thống cơ sở.'}
         action={
           summary ? (
-            <Button variant="outline" onClick={handleExportExcel}>
+            <Button variant="outline" onClick={handleExportExcel} disabled={!financialReport}>
               <span>Xuất báo cáo Excel</span>
             </Button>
           ) : undefined
@@ -175,10 +209,12 @@ function ManagerReportsSession({ actor, facilityId, overview }: { actor: ApiActo
       />
     )}
     {summaryRead.loading ? <Card className="p-5" role="status">Đang tải báo cáo cơ sở...</Card> : summaryRead.error ? <Card className="flex flex-wrap items-center justify-between gap-3 p-5" role="alert"><p>{managerDisplayError(summaryRead.error)}</p><Button variant="outline" onClick={summaryRead.refresh}>Thử lại</Button></Card> : summary ? <>
-      <div className="grid min-w-0 grid-cols-2 gap-3 xl:grid-cols-3 2xl:grid-cols-6">
-        <ReportMetric title="Tỷ lệ lấp đầy" value={`${summary.occupancyRate}%`} detail="Tỷ lệ gian kho đang được sử dụng" />
-        <ReportMetric title="Tiền thuê dự kiến/tháng" value={formatVndAmount(summary.monthlyRecurringRevenue)} detail="Theo các hợp đồng đang hiệu lực" />
-        <ReportMetric title="Tiền đã thu" value={summary.collectedRevenue === null ? 'Chưa xác minh' : formatVndAmount(summary.collectedRevenue)} detail="Chỉ tính khoản thu đã được đối soát" />
+      <div className="grid min-w-0 grid-cols-2 gap-3 xl:grid-cols-4">
+        <ReportMetric
+          title="Gian kho đang sử dụng"
+          value={countStorageUnitsInUse(summary)}
+          detail="Gồm đang thuê, giữ chỗ, đã phân bổ và tạm giữ; gian chờ trả vẫn tính trong đang thuê"
+        />
         <ReportMetric title="Hợp đồng quá hạn" value={summary.overdueRentalsCount} detail="Hồ sơ đã qua ngày hết hạn thuê" />
         <ReportMetric title="Nhận kho trong tháng" value={summary.monthCheckinsCount} detail="Số lượt nhận kho trong tháng này" />
         <ReportMetric title="Yêu cầu trả kho" value={summary.openReturnsCount} detail="Các yêu cầu đang chờ hoàn tất" />
@@ -195,39 +231,40 @@ function ManagerReportsSession({ actor, facilityId, overview }: { actor: ApiActo
         </Card>
         <Card className="p-5">
           <h3 className="mb-4 font-bold">Công suất theo loại kho</h3>
-          {summary.unitTypeBreakdown.length ? <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={summary.unitTypeBreakdown}><CartesianGrid strokeDasharray="3 3" stroke="#e7e5e4" /><XAxis dataKey="typeName" tick={{ fontSize: 11 }} /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="totalUnits" fill="#d6d3d1" name="Tổng số" radius={[4, 4, 0, 0]} /><Bar dataKey="occupiedUnits" fill="#e9a12c" name="Đang sử dụng" radius={[4, 4, 0, 0]} /></BarChart>
+          {orderedUnitTypeBreakdown.length ? <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={orderedUnitTypeBreakdown}><CartesianGrid strokeDasharray="3 3" stroke="#e7e5e4" /><XAxis dataKey="typeName" tick={{ fontSize: 11 }} /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="totalUnits" fill="#d6d3d1" name="Tổng số" radius={[4, 4, 0, 0]} /><Bar dataKey="occupiedUnits" fill="#e9a12c" name="Đang sử dụng" radius={[4, 4, 0, 0]} /></BarChart>
           </ResponsiveContainer> : <p className="flex h-[300px] items-center justify-center text-sm text-stone-500">Chưa có dữ liệu loại kho.</p>}
         </Card>
       </div>
+      <ManagerCashflowPanel key={facilityId} facilityId={facilityId} identity={identity} onReport={setFinancialReport} />
     </> : null}
 
-    <Card className="overflow-hidden">
-      <div className="space-y-3 border-b border-stone-200 p-4">
+    <Card className="manager-inventory-list overflow-hidden !rounded-2xl !shadow-none">
+      <div className="space-y-4 border-b border-stone-200 p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold text-stone-900">Nhật ký hoạt động cơ sở</h3>
-          {activities && <span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs tabular-nums text-stone-600">{activities.pagination.totalItems.toLocaleString('vi-VN')} hoạt động</span>}
+          <h3 className="text-lg font-semibold text-stone-900">Nhật ký hoạt động cơ sở</h3>
+          {activities && <span className="rounded-full border border-stone-200 bg-stone-100 px-3 py-1 text-sm tabular-nums text-stone-600">{activities.pagination.totalItems.toLocaleString('vi-VN')} hoạt động</span>}
         </div>
         <form onSubmit={submitSearch} className="flex max-w-4xl flex-wrap items-end gap-2">
-          <label className="min-w-0 basis-60 flex-1 text-xs font-semibold text-stone-600">Tìm hoạt động<Input value={draftSearch} onChange={event => setDraftSearch(event.target.value)} placeholder="Hành động, mã hồ sơ hoặc ghi chú" className="mt-1" /></label>
+          <label className="min-w-0 basis-60 flex-1 text-sm text-stone-600">Tìm hoạt động<Input value={draftSearch} onChange={event => setDraftSearch(event.target.value)} placeholder="Hành động, mã hồ sơ hoặc ghi chú" className="mt-1 min-h-11 !rounded-[10px]" /></label>
           <Button type="submit">Tìm kiếm</Button>
           {search && <Button type="button" variant="ghost" onClick={() => { setDraftSearch(''); setSearch(''); setPage(1) }}>Xóa tìm kiếm</Button>}
         </form>
       </div>
       {activityRead.loading ? <p className="p-6 text-center text-sm text-stone-500" role="status">Đang tải nhật ký hoạt động...</p> : activityRead.error ? <div className="flex flex-wrap items-center justify-between gap-3 p-5" role="alert"><p>{managerDisplayError(activityRead.error)}</p><Button variant="outline" onClick={activityRead.refresh}>Thử lại</Button></div> : activities ? <>
-        <Table tableClassName="min-w-[800px] table-fixed [&_th]:bg-stone-50 [&_th]:normal-case [&_th]:tracking-normal [&_th]:font-sans [&_td]:py-4 [&_td]:align-top">
-          <colgroup><col className="w-[15%]" /><col className="w-[48%]" /><col className="w-[25%]" /><col className="w-[12%]" /></colgroup>
-          <Thead><tr><Th>Thời gian</Th><Th>Hoạt động</Th><Th>Người thực hiện</Th><Th className="text-right">Chi tiết</Th></tr></Thead>
+        <Table tableClassName="min-w-[900px] table-fixed [&_th]:normal-case [&_th]:tracking-normal [&_th]:font-sans [&_td]:align-top">
+          <colgroup><col className="w-[14%]" /><col className="w-[24%]" /><col className="w-[22%]" /><col className="w-[18%]" /><col className="w-[14%]" /><col className="w-[8%]" /></colgroup>
+          <Thead><tr><Th>Thời gian</Th><Th>Hoạt động</Th><Th>Đối tượng</Th><Th>Người thực hiện</Th><Th>Ghi chú</Th><Th className="text-right">Chi tiết</Th></tr></Thead>
           <Tbody>{activities.data.map(row => <Tr key={row.id}>
             <Td><ActivityTime value={row.timestamp} /></Td>
             <Td>
               <Badge variant={activityVariant(row.action)}>{activityTitle(row)}</Badge>
-              <p className="mt-1.5 text-xs text-stone-500">{entityLabels[row.entityType.toLowerCase()] || 'Thông tin cơ sở'}</p>
-              {row.notes && <p className="mt-1 line-clamp-2 break-words text-xs leading-relaxed text-stone-600">{managerDisplayExplanation(row.notes)}</p>}
             </Td>
+            <Td><p className="text-sm text-stone-800">{entityLabels[row.entityType.toLowerCase()] || 'Thông tin cơ sở'}</p><p className="mt-1 break-all text-xs text-stone-500" title={recordDisplayCode(row.entityId)}>{recordDisplayCode(row.entityId)}</p></Td>
             <Td><p className="break-words text-sm font-medium text-stone-800">{actorLabel(row.actorName)}</p><p className="mt-1 break-all text-xs text-stone-400">{actorLabel(row.actorRole)}</p></Td>
+            <Td><p className="line-clamp-2 break-words text-xs leading-relaxed text-stone-600">{row.notes ? managerDisplayExplanation(row.notes) : '-'}</p></Td>
             <Td className="text-right"><Button size="sm" variant="outline" onClick={() => setSelectedActivity(row)} aria-label={`Chi tiết: ${activityTitle(row)}`}>Xem</Button></Td>
-          </Tr>)}{!activities.data.length && <tr><td colSpan={4} className="p-10 text-center text-sm text-stone-500">Không có hoạt động phù hợp.</td></tr>}</Tbody>
+          </Tr>)}{!activities.data.length && <tr><td colSpan={6} className="p-10 text-center text-sm text-stone-500">Không có hoạt động phù hợp.</td></tr>}</Tbody>
         </Table>
         <ManagerPagination page={page} pageCount={Math.max(activities.pagination.totalPages, 1)} total={activities.pagination.totalItems} pageSize={pageSize} onPageChange={setPage} />
       </> : null}

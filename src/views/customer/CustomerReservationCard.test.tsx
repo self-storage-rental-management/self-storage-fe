@@ -1,9 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
-import CustomerReservationCard from './CustomerReservationCard'
-import { paymentCountdown, reservationProgress, reservationStatusLabels } from './reservationPresentation'
+import CustomerReservationCard, { InventoryResolutionNotice, ReservationPreparationNotice } from './CustomerReservationCard'
+import InventoryAppointmentPanel from './InventoryAppointmentPanel'
+import { paymentCountdown, paymentCountdownUrgency, reservationProgress, reservationStatusLabels } from './reservationPresentation'
 import ReservationReceipt from './ReservationReceipt'
-import type { CustomerReservation, ReservationPaymentResult, ReservationStatus } from '../../services/customerReservationApi'
+import type { CustomerReservation, CustomerReservationDetail, ReservationPaymentResult, ReservationStatus } from '../../services/customerReservationApi'
+
+beforeEach(() => { vi.useFakeTimers().setSystemTime(new Date('2026-11-01T09:55:00Z')) })
+afterEach(() => { vi.useRealTimers() })
 
 const base: CustomerReservation = {
   id: 'reservation-1', reservationCode: 'RSV-TEST', quoteId: 'quote-1', facilityId: 'facility-1', unitTypeId: 'type-1',
@@ -16,17 +20,34 @@ const base: CustomerReservation = {
   dueAtCheckIn: 3400000, totalInitialObligation: 4000000, totalGoodsVolumeM3: 0.1,
   totalGoodsWeightKg: 10, holdExpiresAt: '2026-11-01T10:00:00Z', createdAt: '2026-11-01T09:50:00Z',
 }
-function render(status: ReservationStatus) {
-  return renderToStaticMarkup(<CustomerReservationCard reservation={{ ...base, status }} facilityName="Kho HCM" unitTypeName="Kho nhỏ"
+beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date('2026-11-01T09:50:00Z')) })
+afterEach(() => { vi.useRealTimers() })
+function render(status: ReservationStatus, overrides: Partial<CustomerReservation> = {}) {
+  return renderToStaticMarkup(<CustomerReservationCard reservation={{ ...base, status, ...overrides }} facilityName="Kho HCM" unitTypeName="Kho nhỏ"
     onVerify={() => {}} onCancel={() => {}} onRefresh={async () => {}} />)
 }
 describe('customer reservation layout regression', () => {
+  it('keeps the selected appointment visible while goods await review and after staff approval', () => {
+    const appointmentAt = '2026-11-24T03:00:00Z'
+    const waiting = render('AWAITING_REVIEW', { appointmentAt, goodsReviewStatus: 'PENDING' })
+    const approved = render('AWAITING_PAYMENT', { appointmentAt, goodsReviewStatus: 'APPROVED' })
+    for (const html of [waiting, approved]) {
+      expect(html).toContain('24/11/2026')
+      expect(html).toContain('10:00')
+    }
+    expect(waiting).toContain('tối đa 6 giờ')
+    expect(waiting).not.toContain('>Thanh toán đặt cọc giữ chỗ</button>')
+    expect(approved).toContain('Nhân viên cơ sở đã duyệt hàng hóa')
+    expect(approved).toContain('>Thanh toán đặt cọc giữ chỗ</button>')
+  })
   it('counts down against the backend deadline and blocks expired or invalid deadlines', () => {
     const deadline = '2026-11-01T10:00:00Z'
     const timestamp = Date.parse(deadline)
-    expect(paymentCountdown(deadline, timestamp - 600_000)).toEqual({ text: '10:00', expired: false })
+    expect(paymentCountdown(deadline, timestamp - 600_000)).toEqual({ text: '10:00', expired: false, urgency: 'normal' })
+    expect(paymentCountdownUrgency(deadline, timestamp - 600_000)).toBe('normal')
     expect(paymentCountdown(deadline, timestamp - 599_000).text).toBe('09:59')
-    expect(paymentCountdown(deadline, timestamp + 1)).toEqual({ text: '00:00', expired: true })
+    expect(paymentCountdown(deadline, timestamp + 1)).toEqual({ text: '00:00', expired: true, urgency: 'danger' })
+    expect(paymentCountdownUrgency(deadline, timestamp + 1)).toBe('danger')
     expect(paymentCountdown('invalid', timestamp).expired).toBe(true)
   })
 
@@ -37,13 +58,13 @@ describe('customer reservation layout regression', () => {
       responseCode: '00', transactionStatus: '00', gatewayPayDate: '20261101165500', message: '',
       processedAt: '2026-11-01T09:55:00Z', lastReconciledAt: null }
     const html = renderToStaticMarkup(<ReservationReceipt payment={payment} reservationCode={base.reservationCode} />)
-    for (const text of ['Biên lai đặt cọc giữ chỗ', 'transaction-1', 'RSV-TEST', 'Thời điểm VNPay ghi nhận', '01/11/2026 16:55:00', 'Đơn đã xác nhận cọc']) expect(html).toContain(text)
+    for (const text of ['Biên lai đặt cọc giữ chỗ (thanh toán trước 20%)', 'SH-REFERENCE', 'RSV-TEST', 'Thời điểm VNPay ghi nhận', '01/11/2026 16:55:00', 'Đơn đã xác nhận cọc (khoản trả trước)']) expect(html).toContain(text)
     expect(html).toContain('6.402.000 ₫')
     expect(html).not.toContain('166.452.000.000')
     for (const paymentStatus of ['FAILED', 'NOT_RECEIVED'] as const) {
       const failedHtml = renderToStaticMarkup(<ReservationReceipt payment={{ ...payment, paymentStatus }} reservationCode={base.reservationCode} />)
       expect(failedHtml).toContain('chưa có biên lai thanh toán')
-      expect(failedHtml).not.toContain('Đơn đã xác nhận cọc')
+      expect(failedHtml).not.toContain('Đơn đã xác nhận cọc (khoản trả trước)')
     }
   })
 
@@ -53,9 +74,9 @@ describe('customer reservation layout regression', () => {
     expect(html).toContain('Thời gian thanh toán đặt cọc giữ chỗ còn lại')
     expect(html).not.toContain('Thanh toán mô phỏng')
   })
-  it('restores the amber card, financial breakdown and six-step progress for real reservations', () => {
+  it('restores the amber card, financial breakdown and five-step progress for real reservations', () => {
     const html = render('AWAITING_EMAIL')
-    for (const text of ['border-l-amber-500', 'RSV-TEST', 'Kho HCM', 'Báo giá đặt kho', 'Số tiền còn lại phải thanh toán khi bàn giao kho', 'Tiến trình đơn đặt kho', 'Quản lý phân kho', 'Nhận kho và ký', 'Đã bàn giao', 'Xác minh email']) {
+    for (const text of ['border-l-amber-500', 'RSV-TEST', 'Kho HCM', 'Báo giá đặt kho', 'Số tiền còn lại phải thanh toán khi bàn giao kho', 'Tiến trình đơn đặt kho', 'Phê duyệt hồ sơ', 'Quản lý phân kho', 'Nhận kho và ký', 'Đã bàn giao']) {
       expect(html).toContain(text)
     }
     expect(html).toContain('aria-current="step"')
@@ -79,6 +100,57 @@ describe('customer reservation layout regression', () => {
     }
     expect(render('AWAITING_CUSTOMER_RECEIPT')).not.toContain('Lưu lịch nhận kho')
   })
+  it('removes customer receipt confirmation and retains preparation reporting', () => {
+    expect(render('AWAITING_CUSTOMER_RECEIPT')).not.toContain('Xác nhận đã nhận kho')
+    expect(render('PREPARING')).not.toContain('Đã chuẩn bị xong')
+
+    const notice = (checkInStatus: string) => renderToStaticMarkup(
+      <ReservationPreparationNotice checkInStatus={checkInStatus} submitting={false} onReady={() => {}} />,
+    )
+    expect(notice('setup_in_progress')).toContain('Đã chuẩn bị xong')
+    expect(notice('handover_pending_receipt')).not.toContain('Đã chuẩn bị xong')
+    expect(notice('setup_completed')).toContain('Đang chờ nhân viên kiểm kê')
+    expect(notice('setup_completed')).not.toContain('Đã chuẩn bị xong')
+    expect(notice('completed')).toContain('Đã hoàn tất kiểm kê')
+  })
+
+  it('offers one button for both records once handover is ready', () => {
+    expect(render('READY_FOR_CHECKIN')).not.toContain('>Xem biên bản</button>')
+    for (const status of ['AWAITING_CUSTOMER_RECEIPT', 'PREPARING', 'COMPLETED'] as const) {
+      expect(render(status).match(/>Xem biên bản<\/button>/g)).toHaveLength(1)
+    }
+  })
+
+  it('shows the booked inventory time in Vietnam and keeps it distinct from the deadline', () => {
+    const detail = {
+      reservation: base, setupCompletedAt: '2026-11-01T08:00:00Z', inventoryAppointmentAt: '2026-11-02T09:30:00Z',
+      inventoryDueAt: '2026-11-05T08:00:00Z', inventoryFinalDeadlineAt: '2026-11-08T08:00:00Z',
+      inventoryResolutionStatus: 'NOT_STARTED',
+    } as CustomerReservationDetail
+    const html = renderToStaticMarkup(<InventoryAppointmentPanel detail={detail} now={Date.now()} onSaved={vi.fn()} />)
+    expect(html).toContain('02/11/2026 16:30')
+    expect(html).not.toContain('Báo setup xong lúc')
+    expect(html).not.toContain('Mốc nhắc')
+    expect(html).not.toContain('Hạn kiểm kê')
+    expect(html).toContain('Đổi lịch kiểm kê')
+  })
+
+  it('hides appointment changes after arrival, after expiry and after a result is published', () => {
+    const detail = {
+      reservation: base, inventoryAppointmentAt: '2026-11-02T09:30:00Z',
+      inventoryFinalDeadlineAt: '2026-11-08T08:00:00Z', inventoryResolutionStatus: 'NOT_STARTED',
+    } as CustomerReservationDetail
+    const cases: Array<[Partial<CustomerReservationDetail>, number, string]> = [
+      [{ inventoryArrivedAt: '2026-11-02T09:00:00Z' }, Date.parse('2026-11-02T09:05:00Z'), 'Đang chờ xác minh danh tính.'],
+      [{}, Date.parse('2026-11-08T08:00:00Z'), 'Đã quá hạn kiểm kê'],
+      [{ inventoryResolutionStatus: 'PENDING_CUSTOMER' }, Date.now(), 'Nhân viên đã cập nhật kết quả kiểm kê'],
+    ]
+    for (const [overrides, now, text] of cases) {
+      const html = renderToStaticMarkup(<InventoryAppointmentPanel detail={{ ...detail, ...overrides }} now={now} onSaved={vi.fn()} />)
+      expect(html).toContain(text)
+      expect(html).not.toContain('Đổi lịch kiểm kê')
+    }
+  })
   it('requires an explicit cancellation confirmation', () => {
     const html = render('AWAITING_EMAIL')
     expect(html).toContain('Hủy giữ kho')
@@ -92,10 +164,10 @@ describe('customer reservation layout regression', () => {
     expect(html).not.toContain('Gia hạn thanh toán')
   })
   it.each([
-    ['AWAITING_EMAIL', 0], ['AWAITING_REVIEW', 1], ['AWAITING_PAYMENT', 2],
-    ['PAYMENT_GRACE', 2], ['PAYMENT_REVIEW', 2], ['CONFIRMED', 3],
-    ['UNIT_RESERVED', 4], ['READY_FOR_CHECKIN', 4], ['AWAITING_CUSTOMER_RECEIPT', 5],
-    ['COMPLETED', 6], ['CANCELLED', null], ['EXPIRED', null], ['REJECTED', null],
+    ['AWAITING_EMAIL', 0], ['AWAITING_REVIEW', 0], ['AWAITING_PAYMENT', 1],
+    ['PAYMENT_GRACE', 1], ['PAYMENT_REVIEW', 1], ['CONFIRMED', 2],
+    ['UNIT_RESERVED', 3], ['READY_FOR_CHECKIN', 3], ['AWAITING_CUSTOMER_RECEIPT', 4],
+    ['COMPLETED', 5], ['CANCELLED', null], ['EXPIRED', null], ['REJECTED', null],
   ] as const)('maps backend status %s to progress %s', (status, step) => {
     expect(reservationProgress(status)).toBe(step)
   })
@@ -104,7 +176,7 @@ describe('customer reservation layout regression', () => {
 it('pre-handover reservation shows setup-adjusted estimated dates without repricing', () => {
  const html = renderToStaticMarkup(<CustomerReservationCard reservation={{ ...base, rentalPeriodConfirmed: false, appointmentAt: '2026-10-30T03:00:00Z', freeSetupDays: 6 }} facilityName="Kho HCM" unitTypeName="Kho nhỏ" onVerify={() => {}} onCancel={() => {}} onRefresh={async () => {}} />)
  expect(html).toContain('05/11/2026')
- expect(html).toContain('Kỳ thuê dự kiến sau thời gian chuẩn bị')
+ expect(html).toContain('Kỳ thuê có tính phí (dự kiến)')
  expect(html).toContain('4.000.000 ₫')
  expect(html).not.toContain('Kỳ thuê bắt đầu từ ngày kho có thể sẵn sàng sớm nhất')
 })
@@ -117,7 +189,52 @@ it('pre-handover reservation shows setup-adjusted estimated dates without repric
    expect(html).toContain('aria-labelledby="reservation-quote-tab-reservation-1" hidden=""')
    const invoice = html.slice(html.indexOf('role="tabpanel" id="reservation-quote-reservation-1"'))
    expect(invoice).toContain('Tổng chi phí phải thanh toán')
-   expect(html).toContain('Thanh toán đặt cọc giữ chỗ')
+   expect(html).toContain('Đặt cọc giữ chỗ')
    expect(invoice).not.toContain('Thông tin hàng hóa đã khai báo')
    expect(html.split('>Thông tin khách hàng</h3>')).toHaveLength(2)
+ })
+
+ it('shows stepwise return extension button only when extendable and hides future cap upfront', () => {
+   const detailBase = {
+     reservation: { ...base, status: 'COMPLETED' as const },
+     inventoryResolutionStatus: 'PENDING_CUSTOMER' as const,
+     inventoryFullFit: false,
+     inventoryRemovalPublishedAt: '2026-11-20T08:00:00Z',
+     inventoryRemovalDeadlineAt: '2026-11-30T17:00:00Z',
+     inventoryReturnWindowDays: 10,
+     inventoryReturnExtensionDays: 5,
+     inventoryReturnExtensionCount: 0,
+     inventoryReturnCanExtend: true,
+   } as unknown as import('../../services/customerReservationApi').CustomerReservationDetail
+   const now = Date.parse('2026-11-21T08:00:00Z')
+   const html = renderToStaticMarkup(
+     <InventoryResolutionNotice detail={detailBase} now={now} submitting={false} onResolve={() => {}} onExtendReturnWindow={() => {}} />,
+   )
+   expect(html).toContain('Yêu cầu kéo dài thời gian')
+   expect(html).not.toContain('20 ngày')
+   expect(html).not.toContain('tối đa 2 lần')
+
+   const extendedOnce = renderToStaticMarkup(
+     <InventoryResolutionNotice
+       detail={{ ...detailBase, inventoryReturnExtensionCount: 1, inventoryReturnWindowDays: 15, inventoryReturnCanExtend: true }}
+       now={now}
+       submitting={false}
+       onResolve={() => {}}
+       onExtendReturnWindow={() => {}}
+     />,
+   )
+   expect(extendedOnce).toContain('Đã kéo dài thời gian trả kho: 1 lần.')
+   expect(extendedOnce).toContain('Yêu cầu kéo dài thời gian')
+
+   const exhausted = renderToStaticMarkup(
+     <InventoryResolutionNotice
+       detail={{ ...detailBase, inventoryReturnExtensionCount: 2, inventoryReturnWindowDays: 20, inventoryReturnCanExtend: false }}
+       now={now}
+       submitting={false}
+       onResolve={() => {}}
+       onExtendReturnWindow={() => {}}
+     />,
+   )
+   expect(exhausted).toContain('Đã kéo dài thời gian trả kho: 2 lần.')
+   expect(exhausted).not.toContain('Yêu cầu kéo dài thời gian')
  })

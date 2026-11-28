@@ -15,7 +15,8 @@ export const operationLabels: Record<RenewalOperationAction, string> = {
   reschedule: "Đổi lịch ký",
   confirmation: "Xác nhận đề xuất ngoại lệ",
   arrival: "Ghi nhận khách đến",
-  incident: "Báo sự cố tại cơ sở",
+  noShow: "Khách không đến",
+  incident: "Xử lý sự cố lịch ký",
   cash: "Ghi nhận thanh toán",
   completion: "Hoàn tất ký gia hạn",
   exception: "Xem xét ngoại lệ",
@@ -28,6 +29,7 @@ export const phaseLabels: Record<RenewalOperationState["phase"], string> = {
   AWAITING_DEPOSIT: "Chờ thanh toán tiền thuê trả trước",
   SIGNING: "Đang xử lý ký gia hạn",
   SIGNING_EXPIRY_PENDING: "Đã quá hạn ký, chờ đối soát",
+  NO_SHOW: "Khách không đến, chờ đối soát",
   SIGNING_EXPIRED: "Hết hạn ký, cần xem xét",
   PAYMENT_EXPIRED: "Hết hạn thanh toán",
   COMPLETED: "Đã hoàn tất gia hạn",
@@ -58,6 +60,7 @@ const sources: Record<RenewalOperationAction, string[]> = {
     "RESOURCE_EVIDENCE",
     "SHARED_HOLD_RETURN_RECOVERY",
   ],
+  noShow: ["STAFF_PERMISSION_ASSIGNMENT", "SERVICE_CALENDAR", "SHARED_HOLD_RETURN_RECOVERY"],
   incident: ["STAFF_PERMISSION_ASSIGNMENT", "RESOURCE_EVIDENCE"],
   cash: [
     "STAFF_PERMISSION_ASSIGNMENT",
@@ -119,17 +122,20 @@ export function operationBlockedReason(
   )
   if (missing.length)
     return `Chưa đủ thông tin: ${missing.map((ref) => sourceLabels[ref] || "Thông tin xử lý gia hạn").join(", ")}.`
+  const noShowPhase = action === "noShow" && s.phase === "SIGNING"
+  const rescheduleAfterNoShow = role === "customer" && action === "reschedule" && s.phase === "NO_SHOW"
+    && !!s.effectiveSigningDeadline && Date.parse(s.effectiveSigningDeadline) > now
   if (
-    ["appointment", "reschedule", "arrival", "cash", "completion"].includes(
+    ["appointment", "reschedule", "arrival", "noShow", "cash", "completion"].includes(
       action,
     ) &&
-    s.phase !== "SIGNING" && !selectingBeforePayment
+    s.phase !== "SIGNING" && !selectingBeforePayment && !noShowPhase && !rescheduleAfterNoShow
   )
     return "Chỉ thao tác trong bước ký đang hiệu lực."
   if (action === "appointment" && s.appointmentRef)
     return "Đã có lịch, dùng đổi lịch."
   if (
-    ["reschedule", "arrival", "incident"].includes(action) &&
+    ["reschedule", "arrival", "noShow", "incident"].includes(action) &&
     !s.appointmentRef
   )
     return "Chưa có lịch ký được ghi nhận."
@@ -137,6 +143,12 @@ export function operationBlockedReason(
     return "Không thể đổi lịch sau khi khách đã đến."
   if (action === "arrival" && s.arrivalRef)
     return "Đã ghi nhận khách đến cho lịch này."
+  if (action === "noShow" && s.arrivalRef)
+    return "Đã ghi nhận khách đến, không thể chuyển sang khách không đến."
+  if (action === "noShow" && (!s.appointmentEnd || !Number.isFinite(Date.parse(s.appointmentEnd))))
+    return "Chưa có giờ kết thúc lịch ký để ghi nhận khách không đến."
+  if (action === "noShow" && now < Date.parse(s.appointmentEnd!))
+    return "Chỉ có thể ghi nhận khách không đến sau khi lịch ký kết thúc."
   if (action === "completion" && !s.arrivalRef)
     return "Chưa có lượt khách đến được nhân viên ghi nhận."
   if (action === "confirmation") return exceptionConfirmationBlockedReason(s, proposal, now)

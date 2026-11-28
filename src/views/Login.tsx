@@ -1,3 +1,4 @@
+import { formatAuthError } from './auth/formatAuthError'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import type { User } from '../types'
 import BrandLogo from '../components/BrandLogo'
@@ -10,13 +11,10 @@ import {
   registerWithApi,
   requestPasswordResetWithApi,
   resetPasswordWithApi,
-  updateCurrentProfileWithApi,
   verifyEmailWithApi,
-  type ApiActor
 } from '../services/authApi'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT } from '../utils/passwordPolicy'
 import { isVietnameseMobilePhone, VIETNAMESE_PHONE_HINT } from '../domain/vietnamesePhone'
-import StepIndicator from './auth/StepIndicator'
 import PasswordStrength from './auth/PasswordStrength'
 import AuthSidePanel from './auth/AuthSidePanel'
 
@@ -41,57 +39,6 @@ type RecoveryPurpose = 'password-reset' | 'email-verification'
 
 function normalizeVietnamesePhone(value: string) {
   return isVietnameseMobilePhone(value) ? value : ''
-}
-
-function formatAuthError(error: unknown, fallback: string): string {
-  console.error('[Auth Error Technical Detail]:', error)
-  const message = error instanceof Error ? error.message : String(error || '')
-  if (
-    message.includes('Failed to fetch') ||
-    message.includes('NetworkError') ||
-    message.includes('Network request failed') ||
-    message.includes('ECONNREFUSED') ||
-    message.includes('timeout') ||
-    message.includes('Không thể kết nối') ||
-    message.includes('ERR_CONNECTION')
-  ) {
-    return 'Không thể kết nối, vui lòng thử lại sau.'
-  }
-
-  // Extract detailed field validation messages if available from ApiClientError
-  if (error && typeof error === 'object' && 'details' in error) {
-    const details = (error as { details?: unknown }).details
-    if (typeof details === 'string' && details.trim()) {
-      return details
-    }
-    if (details && typeof details === 'object') {
-      const fieldTranslations: Record<string, string> = {
-        password: 'Mật khẩu phải từ 8-128 ký tự, bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt (!@#$%^&*...) không có khoảng trắng.',
-        email: 'Địa chỉ email không hợp lệ hoặc đã được đăng ký trong hệ thống.',
-        phone: 'Số điện thoại phải gồm 10 chữ số viết liền và đúng đầu số di động Việt Nam.',
-        fullName: 'Họ và tên tối thiểu 2 ký tự và không vượt quá 160 ký tự.',
-        permanentAddress: 'Địa chỉ thường trú không hợp lệ hoặc để trống.',
-        emergencyContactName: 'Họ tên người liên hệ khẩn cấp không hợp lệ hoặc để trống.',
-        emergencyContactPhone: 'Số điện thoại người liên hệ khẩn cấp phải gồm 10 chữ số viết liền và đúng đầu số di động Việt Nam.',
-      }
-      const entries = Object.entries(details as Record<string, string>)
-      if (entries.length > 0) {
-        const [field, msg] = entries[0]
-        return fieldTranslations[field] || msg || fallback
-      }
-    }
-  }
-
-  const translations: Record<string, string> = {
-    'The email delivery service is unavailable': 'Dịch vụ gửi email hiện không khả dụng. Vui lòng thử lại sau.',
-    'The email delivery service is not configured': 'Dịch vụ gửi email chưa được cấu hình. Vui lòng báo Admin.',
-    'An account with this email already exists': 'Email này đã được đăng ký trong hệ thống.',
-    'Invalid email or password': 'Email hoặc mật khẩu không chính xác.',
-    'User not found': 'Không tìm thấy tài khoản với thông tin đã cung cấp.',
-    'Account is disabled': 'Tài khoản của bạn tạm thời bị khóa. Vui lòng liên hệ hỗ trợ.',
-    'Request validation failed': 'Thông tin đăng ký chưa hợp lệ. Vui lòng kiểm tra lại các trường thông tin.',
-  }
-  return translations[message] || (message.length > 0 && !message.includes('http') && !message.includes('Error:') ? message : fallback)
 }
 
 // ── Validation Helpers ───────────────────────────────────────────
@@ -144,27 +91,6 @@ function validateFullName(val: string): string | null {
   return null
 }
 
-function validateAddress(val: string): string | null {
-  if (!val.trim()) return 'Vui lòng nhập địa chỉ thường trú.'
-  if (val.trim().length < 5) return 'Địa chỉ thường trú tối thiểu 5 ký tự.'
-  return null
-}
-
-function validateEmergencyName(val: string): string | null {
-  if (!val.trim()) return 'Vui lòng nhập họ tên người liên hệ khẩn cấp.'
-  if (val.trim().length < 2) return 'Họ tên người liên hệ tối thiểu 2 ký tự.'
-  return null
-}
-
-function validateEmergencyPhone(val: string): string | null {
-  const cleaned = cleanPhoneNumber(val)
-  if (!cleaned.trim()) return 'Vui lòng nhập SĐT người liên hệ khẩn cấp.'
-  if (!isVietnameseMobilePhone(cleaned)) {
-    return VIETNAMESE_PHONE_HINT
-  }
-  return null
-}
-
 export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: LoginProps) {
   const [tab, setTab] = useState<AuthTab>(initialTab)
 
@@ -175,8 +101,6 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
   }, [initialTab])
 
   // Register 2-step state
-  const [registerStep, setRegisterStep] = useState<1 | 2>(1)
-  const [googleActor, setGoogleActor] = useState<ApiActor | null>(null)
   const [captcha, setCaptcha] = useState<CaptchaProof | null>(null)
   const [captchaVersion, setCaptchaVersion] = useState(0)
 
@@ -191,9 +115,6 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
   const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [permanentAddress, setPermanentAddress] = useState('')
-  const [emergencyContactName, setEmergencyContactName] = useState('')
-  const [emergencyContactPhone, setEmergencyContactPhone] = useState('')
 
   // Touched state for inline validation on blur + onChange
   const [touched, setTouched] = useState<Record<string, boolean>>({})
@@ -283,17 +204,11 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
   const passwordError = validatePassword(password)
   const confirmPasswordError = validateConfirmPassword(confirmPassword, password)
 
-  const addressError = validateAddress(permanentAddress)
-  const emergencyNameError = validateEmergencyName(emergencyContactName)
-  const emergencyPhoneError = validateEmergencyPhone(emergencyContactPhone)
 
   // Step 1 check
   const isStep1Complete = Boolean(fullName && email && phone && password && confirmPassword)
   const isStep1Valid = isStep1Complete && !fullNameError && !emailError && !phoneError && !passwordError && !confirmPasswordError
 
-  // Step 2 check
-  const isStep2Complete = Boolean(permanentAddress && emergencyContactName && emergencyContactPhone)
-  const isStep2Valid = isStep2Complete && !addressError && !emergencyNameError && !emergencyPhoneError
 
   // Login check
   const isLoginValid = Boolean(email && password) && !emailError && !loginPasswordError
@@ -319,12 +234,7 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
       }
       onLogin(actorToUser(actor))
     } catch (apiError) {
-      const matchedDemo = DEMO_LOGIN_ACCOUNTS.find(a => a.email.toLowerCase() === normalizedEmail)
-      if (matchedDemo && password !== matchedDemo.password) {
-        setError(`Mật khẩu không đúng cho tài khoản ${matchedDemo.label}. Mật khẩu chính xác là: ${matchedDemo.password}`)
-      } else {
-        setError(formatAuthError(apiError, 'Đăng nhập thất bại. Vui lòng kiểm tra email hoặc mật khẩu.'))
-      }
+      setError(formatAuthError(apiError, 'Đăng nhập thất bại. Vui lòng kiểm tra email hoặc mật khẩu.'))
     } finally {
       setIsSubmitting(false)
     }
@@ -338,27 +248,11 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
     setNotice('')
     setIsSubmitting(true)
 
-    // If on Register tab: skip Step 1 and proceed to Step 2
+    // Google registration creates an account; the profile is completed later.
     if (tab === 'register') {
       try {
         const actor = await loginWithGoogleApi(idToken, captcha)
-        setGoogleActor(actor)
-        if (actor.fullName && !fullName) setFullName(actor.fullName)
-        if (actor.email && !email) setEmail(actor.email)
-        if (actor.phone && !phone) setPhone(actor.phone)
-        if (actor.permanentAddress && !permanentAddress) setPermanentAddress(actor.permanentAddress)
-        if (actor.emergencyContactName && !emergencyContactName) setEmergencyContactName(actor.emergencyContactName)
-        if (actor.emergencyContactPhone && !emergencyContactPhone) setEmergencyContactPhone(actor.emergencyContactPhone)
-
-        // If the Google account already had full address and emergency contacts:
-        if (actor.permanentAddress && actor.emergencyContactName && actor.emergencyContactPhone) {
-          onLogin(actorToUser(actor))
-          return
-        }
-
-        // Otherwise jump straight to Step 2 to supplement missing information
-        setRegisterStep(2)
-        setNotice('Tài khoản Google đã kết nối. Vui lòng bổ sung địa chỉ và thông tin liên hệ khẩn cấp để hoàn tất.')
+        onLogin(actorToUser(actor))
       } catch (googleError) {
         setError(formatAuthError(googleError, 'Đăng ký Google thất bại.'))
         setCaptcha(null); setCaptchaVersion(value => value + 1)
@@ -376,16 +270,16 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
       setError(formatAuthError(googleError, 'Đăng nhập Google thất bại.'))
       if (googleError && typeof googleError === 'object' && 'details' in googleError
         && Object.keys((googleError as { details?: Record<string, unknown> }).details || {}).some(key => key.startsWith('captcha'))) {
-        setTab('register'); setRegisterStep(1)
+        setTab('register')
         setError('Tài khoản Google này chưa đăng ký. Vui lòng hoàn thành CAPTCHA rồi chọn Đăng ký Google.')
       }
     } finally {
       setIsSubmitting(false)
     }
-  }, [tab, fullName, email, phone, permanentAddress, emergencyContactName, emergencyContactPhone, onLogin, captcha, isSubmitting])
+  }, [tab, fullName, email, phone, onLogin, captcha, isSubmitting])
 
   // ── Handler: Step 1 Continue ────────────────────────────────────
-  function handleContinueStep1(event: React.FormEvent) {
+  async function handleContinueStep1(event: React.FormEvent) {
     event.preventDefault()
     if (isSubmitting) return
 
@@ -417,71 +311,20 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
     }
 
     setError('')
-    setRegisterStep(2)
+    await handleRegister(event)
   }
 
-  // ── Handler: Step 2 Complete Register ───────────────────────────
+  // ── Handler: Complete Register ───────────────────────────
   async function handleRegister(event: React.FormEvent) {
     event.preventDefault()
     if (isSubmitting) return
 
-    setTouched(prev => ({
-      ...prev,
-      permanentAddress: true,
-      emergencyContactName: true,
-      emergencyContactPhone: true
-    }))
-
-    if (!isStep2Valid) {
-      let firstErrorId: string | null = null
-      if (addressError) firstErrorId = 'register-permanent-address'
-      else if (emergencyNameError) firstErrorId = 'emergency-contact-name'
-      else if (emergencyPhoneError) firstErrorId = 'emergency-contact-phone'
-
-      if (firstErrorId) {
-        const el = document.getElementById(firstErrorId)
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-          el.focus()
-        }
-      }
-      return
-    }
-
+    if (!isStep1Valid) return
     const normalizedPhone = normalizeVietnamesePhone(phone)
-    const normalizedEmergencyPhone = normalizeVietnamesePhone(emergencyContactPhone)
-
-    if (!normalizedEmergencyPhone) {
-      setError('Số điện thoại người liên hệ khẩn cấp không hợp lệ.')
-      return
-    }
-
-    // If registering via Google: update profile with supplementary info
-    if (googleActor) {
-      setError('')
-      setIsSubmitting(true)
-      try {
-        const updatedActor = await updateCurrentProfileWithApi({
-          fullName: fullName.trim() || googleActor.fullName,
-          phone: normalizedPhone || googleActor.phone || undefined,
-          permanentAddress: permanentAddress.trim(),
-          emergencyContactName: emergencyContactName.trim(),
-          emergencyContactPhone: normalizedEmergencyPhone,
-        })
-        onLogin(actorToUser(updatedActor))
-        return
-      } catch (updateError) {
-        setError(formatAuthError(updateError, 'Không thể lưu thông tin bổ sung.'))
-      } finally {
-        setIsSubmitting(false)
-      }
-      return
-    }
-
     // Standard registration with email & password
     if (!normalizedPhone) {
       setError('Số điện thoại phải gồm 10 chữ số viết liền và đúng đầu số di động Việt Nam.')
-      setRegisterStep(1)
+
       return
     }
 
@@ -498,9 +341,6 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
         password,
         fullName: fullName.trim(),
         phone: normalizedPhone,
-        permanentAddress: permanentAddress.trim(),
-        emergencyContactName: emergencyContactName.trim(),
-        emergencyContactPhone: normalizedEmergencyPhone,
       })
       setRecoveryAccount(normalizedEmail)
       setPendingRegistrationPassword(password)
@@ -516,17 +356,8 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
     } catch (registrationError) {
       setCaptcha(null); setCaptchaVersion(value => value + 1)
       setNotice('')
-      const formatted = formatAuthError(registrationError, 'Không thể tạo tài khoản Customer.')
+      const formatted = formatAuthError(registrationError, 'Không thể tạo tài khoản Khách hàng.')
       setError(formatted)
-      if (registrationError && typeof registrationError === 'object' && 'details' in registrationError) {
-        const details = (registrationError as { details?: unknown }).details
-        if (details && typeof details === 'object') {
-          const step1Fields = ['email', 'password', 'fullName', 'phone']
-          if (Object.keys(details as Record<string, unknown>).some(k => step1Fields.includes(k))) {
-            setRegisterStep(1)
-          }
-        }
-      }
     } finally {
       setIsSubmitting(false)
     }
@@ -535,7 +366,7 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
   function switchTab(next: AuthTab) {
     window.history.pushState({ tab: next }, '', next === 'login' ? '/login' : '/register')
     setTab(next)
-    setRegisterStep(1)
+
     setError('')
     setNotice('')
   }
@@ -580,7 +411,7 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
       setError('')
       setNotice(challenge.debugCode
         ? 'Mã khôi phục development đã được tạo. Nhập mã hiển thị bên dưới để tiếp tục.'
-        : `Mã đặt lại mật khẩu đã được gửi đến ${recoveryAccount.trim()}. Hãy kiểm tra hộp thư đến hoặc thư rác.`)
+        : `Yêu cầu đặt lại mật khẩu đã được tiếp nhận. Nếu ${recoveryAccount.trim()} đủ điều kiện khôi phục, mã sẽ được gửi qua email.`)
     } catch (recoveryError) {
       setNotice('')
       setError(formatAuthError(recoveryError, 'Không thể tạo yêu cầu khôi phục.'))
@@ -696,20 +527,13 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
       {/* ── Right Panel: Auth Form ── */}
       <section className="bg-[#FCFBF7] p-5 sm:p-8 md:p-10 relative flex flex-col justify-between">
         <div>
-          {/* Mobile-only Header (< 768px): Logo and Slogan */}
+          {/* Mobile logo */}
           <div className="md:hidden flex flex-col items-center text-center mb-6 pt-1">
             <BrandLogo className="items-center" />
-            <p className="text-xs text-stone-500 font-medium mt-1">Hệ thống tự lưu trữ thông minh chuẩn quốc tế</p>
           </div>
 
-          {/* Top navigation & Portal Badge */}
-          <div className="mb-4 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-800 border border-amber-500/30">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                Cổng Khách Hàng · Customer Portal
-              </span>
-            </div>
+          {/* Top navigation */}
+          <div className="mb-4 flex items-center justify-end">
             {onBackToHome && (
               <button
                 type="button"
@@ -875,28 +699,19 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
               </form>
             </div>
           ) : (
-            /* ── TAB 2: ĐĂNG KÝ (REGISTER 2-STEP) ── */
+            /* ── TAB 2: ĐĂNG KÝ (REGISTER) ── */
             <div className="animate-in fade-in duration-200">
               <div className="mb-4">
                 <h2 className="text-xl font-bold text-stone-900">
                   Tạo tài khoản khách hàng
                 </h2>
                 <p className="text-[13px] text-stone-500 mt-1">
-                  {registerStep === 1
-                    ? 'Nhập thông tin cơ bản để bắt đầu quản lý kho tự lưu trữ.'
-                    : 'Bổ sung địa chỉ và thông tin liên hệ khẩn cấp để kích hoạt quyền thuê kho.'}
+                  Nhập thông tin cơ bản để bắt đầu. CCCD và người liên hệ khẩn cấp được bổ sung trong hồ sơ trước khi thanh toán cọc.
                 </p>
               </div>
 
-              {/* Progress Indicator */}
-              <StepIndicator
-                currentStep={registerStep}
-                totalSteps={2}
-                stepTitles={['Thông tin cá nhân & mật khẩu', 'Địa chỉ & liên hệ khẩn cấp']}
-              />
-
               {/* Google signup button (Shown in Step 1) */}
-              {registerStep === 1 && (
+              {(
                 <>
                   <div className="mb-4">
                     <RegistrationCaptcha key={`google-${captchaVersion}`} onChange={setCaptcha} disabled={isSubmitting} />
@@ -921,7 +736,6 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
               )}
 
               {/* ── STEP 1 FORM ── */}
-              {registerStep === 1 ? (
                 <form onSubmit={handleContinueStep1} noValidate>
                   <FormField
                     id="register-full-name"
@@ -1061,135 +875,13 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
 
                   <PrimaryButton
                     type="submit"
-                    visualDisabled={!isStep1Valid}
+                    visualDisabled={!isStep1Valid || !captcha}
                     disabled={isSubmitting}
                     loading={isSubmitting}
                   >
-                    Tiếp tục →
+                    Tạo tài khoản
                   </PrimaryButton>
                 </form>
-              ) : (
-                /* ── STEP 2 FORM ── */
-                <form onSubmit={handleRegister} noValidate>
-                  {googleActor && (
-                    <div className="mb-4 p-3 rounded-xl border border-amber-200 bg-amber-50 text-xs text-amber-900 flex items-center justify-between">
-                      <div>
-                        <span className="font-semibold">Đăng ký qua Google:</span> {googleActor.email}
-                      </div>
-                      <span className="text-[10px] bg-amber-200 px-2 py-0.5 rounded font-bold uppercase">Đã liên kết</span>
-                    </div>
-                  )}
-
-                  <FormField
-                    id="register-permanent-address"
-                    label="Địa chỉ thường trú"
-                    required
-                    error={addressError}
-                    touched={touched.permanentAddress}
-                  >
-                    <textarea
-                      id="register-permanent-address"
-                      value={permanentAddress}
-                      onChange={e => {
-                        setPermanentAddress(e.target.value)
-                        if (touched.permanentAddress) setTouched(prev => ({ ...prev, permanentAddress: true }))
-                      }}
-                      onBlur={() => setTouched(prev => ({ ...prev, permanentAddress: true }))}
-                      rows={2}
-                      style={{ resize: 'none' }}
-                      autoComplete="street-address"
-                      placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành phố"
-                      maxLength={500}
-                      className={getInputClassName(touched.permanentAddress, addressError, Boolean(permanentAddress))}
-                      aria-invalid={Boolean(touched.permanentAddress && addressError)}
-                    />
-                  </FormField>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3">
-                    <FormField
-                      id="emergency-contact-name"
-                      label="Người liên hệ khẩn cấp"
-                      required
-                      error={emergencyNameError}
-                      touched={touched.emergencyContactName}
-                    >
-                      <input
-                        id="emergency-contact-name"
-                        value={emergencyContactName}
-                        onChange={e => {
-                          setEmergencyContactName(e.target.value)
-                          if (touched.emergencyContactName) setTouched(prev => ({ ...prev, emergencyContactName: true }))
-                        }}
-                        onBlur={() => setTouched(prev => ({ ...prev, emergencyContactName: true }))}
-                        autoComplete="off"
-                        placeholder="Họ và tên"
-                        maxLength={160}
-                        className={getInputClassName(touched.emergencyContactName, emergencyNameError, Boolean(emergencyContactName))}
-                        aria-invalid={Boolean(touched.emergencyContactName && emergencyNameError)}
-                      />
-                    </FormField>
-
-                    <FormField
-                      id="emergency-contact-phone"
-                      label="SĐT liên hệ khẩn cấp"
-                      required
-                      error={emergencyPhoneError}
-                      touched={touched.emergencyContactPhone}
-                    >
-                      <input
-                        id="emergency-contact-phone"
-                        value={emergencyContactPhone}
-                        onChange={e => {
-                          const cleaned = cleanPhoneNumber(e.target.value)
-                          setEmergencyContactPhone(cleaned)
-                          if (touched.emergencyContactPhone) setTouched(prev => ({ ...prev, emergencyContactPhone: true }))
-                        }}
-                        onPaste={e => {
-                          e.preventDefault()
-                          const pasted = e.clipboardData.getData('text')
-                          const cleaned = cleanPhoneNumber(pasted)
-                          setEmergencyContactPhone(cleaned)
-                          if (touched.emergencyContactPhone) setTouched(prev => ({ ...prev, emergencyContactPhone: true }))
-                        }}
-                        onBlur={() => setTouched(prev => ({ ...prev, emergencyContactPhone: true }))}
-                        type="tel"
-                        inputMode="tel"
-                        autoComplete="off"
-                        placeholder="0901234567"
-                        maxLength={15}
-                        className={getInputClassName(touched.emergencyContactPhone, emergencyPhoneError, Boolean(emergencyContactPhone))}
-                        aria-invalid={Boolean(touched.emergencyContactPhone && emergencyPhoneError)}
-                      />
-                    </FormField>
-                  </div>
-
-                  <ErrorMessage message={error} />
-                  <NoticeMessage message={notice} />
-
-                  {!googleActor && <RegistrationCaptcha key={`email-${captchaVersion}`} onChange={setCaptcha} disabled={isSubmitting} />}
-                  <div className="flex items-center gap-3 pt-2">
-                    <SecondaryButton
-                      onClick={() => {
-                        setError('')
-                        setRegisterStep(1)
-                      }}
-                      disabled={isSubmitting}
-                    >
-                      ← Quay lại
-                    </SecondaryButton>
-                    <PrimaryButton
-                      type="submit"
-                      visualDisabled={!isStep2Valid || (!googleActor && !captcha)}
-                      disabled={isSubmitting || (!googleActor && !captcha)}
-                      loading={isSubmitting}
-                      className="flex-1"
-                    >
-                      {isSubmitting ? 'Đang tạo tài khoản…' : 'Hoàn tất đăng ký'}
-                    </PrimaryButton>
-                  </div>
-                </form>
-              )}
-
               {/* Switch back to Login & Note under registration form */}
               <div className="mt-4 text-center">
                 <p className="text-xs text-stone-600">
@@ -1204,14 +896,6 @@ export default function Login({ onLogin, onBackToHome, initialTab = 'login' }: L
                 </p>
               </div>
 
-              <div className="mt-4 pt-3 border-t border-stone-200/80 text-center space-y-1.5">
-                <p className="text-xs font-medium text-stone-500">
-                  Nhân viên và quản lý: tài khoản do quản trị viên cấp.
-                </p>
-                <p className="text-[11px] leading-relaxed text-[#9CA3AF]">
-                  Khi đăng ký, bạn đồng ý với Điều khoản dịch vụ và Chính sách bảo mật của StorageHub.
-                </p>
-              </div>
             </div>
           )}
         </div>
@@ -1494,7 +1178,7 @@ function RecoveryFlow({
   const copy = {
     identify: {
       title: 'Tìm tài khoản của bạn',
-      text: 'Nhập số điện thoại hoặc email liên kết với tài khoản StorageHub.'
+      text: 'Nhập email liên kết với tài khoản StorageHub.'
     },
     verify: {
       title: purpose === 'email-verification' ? 'Xác minh email để hoàn tất đăng ký' : 'Nhập mã khôi phục tài khoản',
@@ -1510,7 +1194,7 @@ function RecoveryFlow({
 
   return (
     <div>
-      <p className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-[.1em] text-[#F59E0B]">
+      <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#F59E0B]">
         {purpose === 'email-verification' ? 'XÁC MINH EMAIL' : 'KHÔI PHỤC TÀI KHOẢN'}
       </p>
       <h1 className="text-2xl font-bold text-stone-900">{copy.title}</h1>
@@ -1528,13 +1212,14 @@ function RecoveryFlow({
 
       {step === 'identify' && (
         <form onSubmit={onFindAccount}>
-          <FormField id="recovery-account" label="Số điện thoại hoặc Email">
+          <FormField id="recovery-account" label="Email">
             <input
               id="recovery-account"
+              type="email"
               value={account}
               onChange={event => setAccount(event.target.value)}
               autoFocus
-              placeholder="Nhập SĐT hoặc email..."
+              placeholder="Nhập email..."
               className={getInputClassName(false, null, Boolean(account))}
             />
           </FormField>

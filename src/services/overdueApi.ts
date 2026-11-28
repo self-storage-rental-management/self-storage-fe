@@ -134,31 +134,20 @@ export async function listOverdueFollowUps(ref: string, page = 0, size = 20) {
     (v) => isOverdueFollowUp(v) && v.caseRef === ref,
   )
 }
-export async function sendOverdueFollowUp(
+export async function openOverdueRecovery(
   ref: string,
-  type: "NOTE" | "REMINDER" | "RECOVERY_HANDOFF",
-  content: string,
+  reason: string,
   expectedVersion: number,
   key: string,
 ) {
   validateMutation(expectedVersion, key)
-  validateText(content)
-  if (!["NOTE", "REMINDER", "RECOVERY_HANDOFF"].includes(type))
-    throw new Error("Thao tác quá hạn không hợp lệ.")
-  const recovery = type === "RECOVERY_HANDOFF"
+  validateText(reason)
   return readRentalEnvelope<OverdueFollowUp>(
-    await apiRequest(
-      `${casePath(ref)}/${recovery ? "recovery-handoffs" : "follow-ups"}`,
-      {
-        method: "POST",
-        headers: { "Idempotency-Key": key },
-        body: JSON.stringify(
-          recovery
-            ? { reason: content, expectedVersion }
-            : { type, content, expectedVersion },
-        ),
-      },
-    ),
-    (v) => isOverdueFollowUp(v) && v.caseRef === ref && v.type === type,
+    await apiRequest(`${casePath(ref)}/recovery-handoffs`, {
+      method: "POST",
+      headers: { "Idempotency-Key": key },
+      body: JSON.stringify({ reason, expectedVersion }),
+    }),
+    (v) => isOverdueFollowUp(v) && v.caseRef === ref && v.type === "RECOVERY_HANDOFF",
   )
 }

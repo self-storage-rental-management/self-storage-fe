@@ -1,3 +1,5 @@
+import { receiptDisplayCode } from './recordDisplayCode'
+import { displayStatusLabel } from '../presentation/statusLabels'
 import * as XLSX from 'xlsx'
 import type { MonthlyRevenueRecord } from '../data/demoDatabase'
 
@@ -41,7 +43,7 @@ export function exportRevenueExcel(options: RevenueExportOptions = {}): string {
     ['Phạm vi: Tháng 4 - Tháng 9'],
     [`Cơ sở: ${facilityName}`, '', `Ngày xuất báo cáo: ${todayStr}`],
     [],
-    ['Tháng', 'Doanh thu', 'Tăng trưởng', 'Số hợp đồng', 'Tỷ lệ lấp đầy']
+    ['Tháng', 'Doanh thu', 'Tăng trưởng', 'Số hợp đồng']
   ]
 
   // Thêm từng dòng tháng
@@ -50,8 +52,7 @@ export function exportRevenueExcel(options: RevenueExportOptions = {}): string {
       r.month,
       r.revenue,
       r.growth,
-      r.contracts,
-      r.occupancyRate
+      r.contracts
     ])
   })
 
@@ -71,8 +72,7 @@ export function exportRevenueExcel(options: RevenueExportOptions = {}): string {
     { wch: 28 }, // Tháng / Chỉ số
     { wch: 20 }, // Doanh thu
     { wch: 16 }, // Tăng trưởng
-    { wch: 16 }, // Số hợp đồng
-    { wch: 18 }  // Tỷ lệ lấp đầy
+    { wch: 16 }  // Số hợp đồng
   ]
 
   // Định dạng format số tiền cho các ô doanh thu: #,##0 "₫"
@@ -141,6 +141,7 @@ export function exportRevenueExcel(options: RevenueExportOptions = {}): string {
 }
 
 export interface ManagerFacilityExportOptions {
+  financialReport?: import('../services/managerCashflowApi').CashflowReport
   facilityName: string
   metrics: {
     occupancyRate: number | string
@@ -157,7 +158,6 @@ export interface ManagerFacilityExportOptions {
   units?: Array<{
     code: string
     type: string
-    floor: number | string
     zone: string
     status: string
     price: number | string
@@ -202,7 +202,6 @@ export function exportManagerFacilityExcel(options: ManagerFacilityExportOptions
     [`Cơ sở: ${facilityName}`, '', `Ngày xuất báo cáo: ${todayStr}`],
     [],
     ['CHỈ SỐ VẬN HÀNH', 'GIÁ TRỊ', 'ĐƠN VỊ / MÔ TẢ'],
-    ['Tỷ lệ lấp đầy', typeof m.occupancyRate === 'number' ? `${m.occupancyRate}%` : m.occupancyRate, 'Tỷ lệ gian kho đang có khách thuê'],
     ['Tổng số gian kho', m.totalUnits, 'Tổng quy mô cơ sở'],
     ['Gian kho đang sử dụng', m.occupiedUnits, 'Số gian có hợp đồng thuê hoạt động'],
     ['Gian kho còn trống', m.availableUnits, 'Khả dụng cho khách thuê mới'],
@@ -210,10 +209,29 @@ export function exportManagerFacilityExcel(options: ManagerFacilityExportOptions
     ['Doanh thu định kỳ/tháng', m.monthlyRevenue ?? '-', 'Tổng giá trị hợp đồng active'],
     ['Tiền đã thu', m.collectedRevenue ?? '-', 'Đã đối soát ghi nhận'],
     ['Hồ sơ thuê quá hạn', m.overdueRentalsCount ?? 0, 'Cần nhắc nợ hoặc xử lý'],
-    ['Lượt nhận kho trong tháng', m.monthCheckinsCount ?? 0, 'Check-in thành công'],
+    ['Lượt nhận kho trong tháng', m.monthCheckinsCount ?? 0, 'Nhận kho thành công'],
     ['Yêu cầu trả kho chờ xử lý', m.openReturnsCount ?? 0, 'Đang chờ nghiệm thu / hoàn tất']
   ]
 
+  if (options.financialReport) {
+    const f = options.financialReport
+    sheetSummary.push([], ['DÒNG TIỀN', `${f.from} → ${f.to}`, f.completeness],
+      ['Đã hoàn trong kỳ', f.refunded, 'Khoản hoàn đã ghi nhận hoàn tất'],
+      ['Thực giữ lại trong kỳ', f.netRetained, 'Đã thu − đã hoàn'],
+      ['Chờ hoàn hiện tại', f.pendingRefund, 'Chưa trừ khỏi dòng tiền'],
+      ['Cọc đang giữ hiện tại', f.securityDepositHeld ?? 'Chưa đủ dữ liệu', f.snapshotAt],
+      ...f.warnings.map(w => ['Lưu ý đối soát', w, '']))
+    const flow = XLSX.utils.aoa_to_sheet([
+      ['Tháng', 'Đã thu', 'Đã hoàn', 'Thực giữ lại'],
+      ...f.monthly.map(m => [m.month, m.collected, m.refunded, m.net]),
+    ])
+    XLSX.utils.book_append_sheet(wb, flow, 'Thu và hoàn tiền')
+    const refunds = XLSX.utils.aoa_to_sheet([
+      ['Đơn', 'Khách', 'Trạng thái', 'Cọc', 'Ghi có tiền thuê', 'Khấu trừ', 'Tiền hoàn', 'Ngày chi', 'Mã phiếu', 'Tham chiếu đối soát', 'Đã xác minh chi'],
+      ...f.settlements.map(s => [s.reservationCode, s.customerName, displayStatusLabel(s.status), s.deposit ?? 'Chưa phân bổ', s.rentalCredit ?? 'Chưa phân bổ', s.deductions ?? 'Chưa phân bổ', s.refund, s.paidAt || '', s.receiptCode || '', s.reference ? receiptDisplayCode(null, s.reference) : '', s.payoutRecorded ? 'Đã ghi nhận' : 'Chưa hoàn']),
+    ])
+    XLSX.utils.book_append_sheet(wb, refunds, 'Quyết toán tiền hoàn')
+  }
   const wsSummary = XLSX.utils.aoa_to_sheet(sheetSummary)
   wsSummary['!cols'] = [{ wch: 30 }, { wch: 22 }, { wch: 45 }]
   XLSX.utils.book_append_sheet(wb, wsSummary, 'Chỉ số tổng quan')
@@ -221,22 +239,21 @@ export function exportManagerFacilityExcel(options: ManagerFacilityExportOptions
   // 2. Sheet Danh sách gian kho
   if (options.units && options.units.length > 0) {
     const sheetUnits: (string | number)[][] = [
-      ['DANH SÁCH GIAN KHO TẠI CƠ SỞ', '', '', '', '', '', `Xuất ngày: ${todayStr}`],
-      ['Mã gian', 'Loại kho', 'Tầng', 'Khu vực', 'Trạng thái', 'Giá thuê/tháng', 'Khả dụng thực tế']
+      ['DANH SÁCH GIAN KHO TẠI CƠ SỞ', '', '', '', '', `Xuất ngày: ${todayStr}`],
+      ['Mã gian', 'Loại kho', 'Khu vực', 'Trạng thái', 'Giá thuê/tháng', 'Khả dụng thực tế']
     ]
     options.units.forEach(u => {
       sheetUnits.push([
         u.code,
         u.type,
-        typeof u.floor === 'number' ? `Tầng ${u.floor}` : u.floor,
         u.zone,
-        u.status,
+        displayStatusLabel(u.status),
         u.price,
         u.availability || '-'
       ])
     })
     const wsUnits = XLSX.utils.aoa_to_sheet(sheetUnits)
-    wsUnits['!cols'] = [{ wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 15 }, { wch: 18 }, { wch: 20 }, { wch: 28 }]
+    wsUnits['!cols'] = [{ wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 28 }]
     XLSX.utils.book_append_sheet(wb, wsUnits, 'Danh sách gian kho')
   }
 
@@ -252,8 +269,8 @@ export function exportManagerFacilityExcel(options: ManagerFacilityExportOptions
         r.unitId,
         r.customerName,
         r.scheduledDate,
-        r.status,
-        r.damageClassification || 'Chưa kiểm tra',
+        displayStatusLabel(r.status),
+        r.damageClassification ? ({ no_damage: 'Không hư hại', minor_damage: 'Hư hại nhẹ', major_damage: 'Hư hại nặng', abandoned_goods: 'Còn hàng trong kho' } as Record<string, string>)[r.damageClassification] || 'Chưa phân loại' : 'Chưa kiểm tra',
         r.notes || '-'
       ])
     })

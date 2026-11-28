@@ -20,6 +20,8 @@ export interface FacilityGeneralInfoProps {
   isEditing: boolean
   code: string
   onChangeCode: (code: string) => void
+  autoCode?: boolean
+  onChangeAutoCode?: (enabled: boolean) => void
   city: string
   onChangeCity: (city: string) => void
   name: string
@@ -106,7 +108,7 @@ export function generateFacilityCode(
   existingFacilities: { id: string; code?: string }[],
   currentFacilityId?: string,
 ): string {
-  const prefix = generateFacilityPrefix(name, city)
+  const prefix = generateFacilityPrefix(name, city).slice(0, 28)
   const existingCodes = new Set(
     (existingFacilities || [])
       .filter(f => !currentFacilityId || f.id !== currentFacilityId)
@@ -128,23 +130,12 @@ export function isFacilityPhoneValid(phone: string): boolean {
   return /^(?:0(?:2\d{8,9}|[35789]\d{8})|\+?84(?:2\d{8,9}|[35789]\d{8})|(?:1900|1800)\d{4,6})$/.test(clean)
 }
 
-export function isFacilityAccessHoursValid(hours: string): boolean {
-  if (!hours.trim()) return true
-  const trimmed = hours.trim()
-  if (trimmed === '24/7') return true
-  const match = trimmed.match(/^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})$/)
-  if (!match) return false
-  const [, h1, m1, h2, m2] = match
-  const hour1 = Number(h1), min1 = Number(m1)
-  const hour2 = Number(h2), min2 = Number(m2)
-  return hour1 >= 0 && hour1 <= 23 && min1 >= 0 && min1 <= 59 &&
-         hour2 >= 0 && hour2 <= 23 && min2 >= 0 && min2 <= 59
-}
-
 export const FacilityGeneralInfo: React.FC<FacilityGeneralInfoProps> = ({
   isEditing,
   code,
   onChangeCode,
+  autoCode = true,
+  onChangeAutoCode,
   city,
   onChangeCity,
   name,
@@ -159,7 +150,7 @@ export const FacilityGeneralInfo: React.FC<FacilityGeneralInfoProps> = ({
   lang = 'vi',
 }) => {
   const [isCityListOpen, setIsCityListOpen] = useState(false)
-  const [isAutoCode, setIsAutoCode] = useState(!isEditing)
+  const isAutoCode = !isEditing && autoCode
 
   // Tự động cập nhật mã khi ở chế độ tạo mới và đang bật Auto
   useEffect(() => {
@@ -174,10 +165,8 @@ export const FacilityGeneralInfo: React.FC<FacilityGeneralInfoProps> = ({
   }, [name, city, isAutoCode, isEditing, existingFacilities, currentFacilityId])
 
   const toggleAutoCode = () => {
-    if (isAutoCode) {
-      setIsAutoCode(false)
-    } else {
-      setIsAutoCode(true)
+    onChangeAutoCode?.(!isAutoCode)
+    if (!isAutoCode) {
       const nextCode = generateFacilityCode(name, city, existingFacilities, currentFacilityId)
       onChangeCode(nextCode)
     }
@@ -379,7 +368,7 @@ export const FacilityGeneralInfo: React.FC<FacilityGeneralInfoProps> = ({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="block text-xs font-semibold text-stone-700 mb-1">
-            {lang === 'vi' ? 'Hotline liên hệ' : 'Phone / Hotline'}
+            {lang === 'vi' ? 'Số điện thoại liên hệ' : 'Phone / Hotline'}
           </label>
           <input
             type="text"
@@ -407,121 +396,51 @@ export interface FacilityOperationsProps {
   accessHours: string
   onChangeAccessHours: (hours: string) => void
   status: 'setup' | 'active' | 'maintenance' | 'inactive'
-  onChangeStatus: (status: 'setup' | 'active' | 'maintenance' | 'inactive') => void
+  onChangeStatus?: (status: FacilityOperationsProps['status']) => void
   statusReadOnly?: boolean
-  initialStatus?: 'setup' | 'active' | 'maintenance' | 'inactive'
   lang?: 'vi' | 'en'
 }
 
-const parseHours = (raw: string) => {
-  const match = raw?.match(/(\d{1,2}):(\d{2}).*?(\d{1,2}):(\d{2})/)
-  if (match) {
-    const h1 = match[1].padStart(2, '0')
-    const m1 = match[2]
-    const h2 = match[3].padStart(2, '0')
-    const m2 = match[4]
-    return { open: `${h1}:${m1}`, close: `${h2}:${m2}` }
-  }
-  return { open: '08:00', close: '17:00' }
+const facilityStatusLabels = {
+  setup: { vi: 'Đang thiết lập', en: 'Setting up' },
+  active: { vi: 'Đang hoạt động', en: 'Active' },
+  maintenance: { vi: 'Tạm ngưng nhận đơn mới', en: 'Not accepting new bookings' },
+  inactive: { vi: 'Ngừng hoạt động', en: 'Inactive' },
+}
+
+const facilityStatusPillColors = {
+  setup: 'bg-sky-200 text-sky-950',
+  active: 'bg-emerald-200 text-emerald-950',
+  maintenance: 'bg-amber-200 text-amber-950',
+  inactive: 'bg-stone-200 text-stone-900',
+}
+
+export function FacilityStatusTag({ status, lang }: {
+  status: FacilityOperationsProps['status']
+  lang: 'vi' | 'en'
+}) {
+  return <span className={`inline-flex max-w-full rounded-full px-3 py-1 text-xs font-bold ${facilityStatusPillColors[status]}`}>
+    {facilityStatusLabels[status][lang]}
+  </span>
 }
 
 export const FacilityOperations: React.FC<FacilityOperationsProps> = ({
-  accessHours,
-  onChangeAccessHours,
   status,
   onChangeStatus,
   statusReadOnly = false,
-  initialStatus,
   lang = 'vi',
 }) => {
-  const { open: openTime, close: closeTime } = parseHours(accessHours)
-  const isHoursValid = isFacilityAccessHoursValid(accessHours)
-
-  const handleOpenTimeChange = (newOpen: string) => {
-    const current = parseHours(accessHours)
-    onChangeAccessHours(`${newOpen || '08:00'} - ${current.close}`)
-  }
-
-  const handleCloseTimeChange = (newClose: string) => {
-    const current = parseHours(accessHours)
-    onChangeAccessHours(`${current.open} - ${newClose || '17:00'}`)
-  }
-
   return (
     <div className="pt-2">
-      <h4 className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-2">
+      <h4 className="mb-3 text-xs font-bold uppercase tracking-wider text-stone-500">
         {lang === 'vi' ? 'Thông số vận hành' : 'Operation Settings'}
       </h4>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-6">
-        {/* Khung giờ mở cửa */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="block text-xs font-semibold text-stone-700">
-              {lang === 'vi' ? 'Khung giờ mở cửa' : 'Opening Hours'}
-            </label>
-            <span className="text-[11px] font-mono font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-              {accessHours || '08:00 - 17:00'}
-            </span>
-          </div>
-
-          {/* Chọn giờ bắt đầu và giờ kết thúc */}
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <span className="block text-[11px] font-medium text-stone-500 mb-1">
-                {lang === 'vi' ? 'Giờ mở cửa' : 'Open time'}
-              </span>
-              <input
-                type="time"
-                className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm bg-white font-medium text-stone-800 focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer"
-                value={openTime}
-                onChange={(e) => handleOpenTimeChange(e.target.value)}
-              />
-            </div>
-            <div>
-              <span className="block text-[11px] font-medium text-stone-500 mb-1">
-                {lang === 'vi' ? 'Giờ đóng cửa' : 'Close time'}
-              </span>
-              <input
-                type="time"
-                className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm bg-white font-medium text-stone-800 focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer"
-                value={closeTime}
-                onChange={(e) => handleCloseTimeChange(e.target.value)}
-              />
-            </div>
-          </div>
-
-          {/* Các nút chọn nhanh (Quick presets) */}
-          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-            <span className="text-[10px] text-stone-400 mr-0.5">{lang === 'vi' ? 'Chọn nhanh:' : 'Presets:'}</span>
-            {[
-              { label: '08:00 - 17:00', desc: 'Hành chính', value: '08:00 - 17:00' },
-              { label: '07:00 - 21:00', desc: 'Cả ngày', value: '07:00 - 21:00' },
-              { label: '06:00 - 22:00', desc: 'Mở rộng', value: '06:00 - 22:00' },
-              { label: '24/7', desc: '00:00 - 23:59', value: '00:00 - 23:59' },
-            ].map((preset) => (
-              <button
-                key={preset.value}
-                type="button"
-                onClick={() => onChangeAccessHours(preset.value)}
-                className={`text-[11px] px-2 py-0.5 rounded border transition cursor-pointer ${
-                  accessHours === preset.value
-                    ? 'border-amber-400 bg-amber-100 text-amber-900 font-semibold'
-                    : 'border-stone-200 bg-stone-50 text-stone-600 hover:bg-stone-100'
-                }`}
-                title={`${preset.label} (${preset.desc})`}
-              >
-                {preset.label}
-              </button>
-            ))}
-          </div>
-          {!isHoursValid && (
-            <p className="text-[10px] font-semibold text-red-600 mt-1">
-              {lang === 'vi' ? 'Định dạng giờ mở cửa không hợp lệ (VD: 08:00 - 17:00 hoặc 24/7)' : 'Invalid opening hours format (e.g. 08:00 - 17:00 or 24/7)'}
-            </p>
-          )}
+      <div className={`grid grid-cols-1 gap-x-6 gap-y-4 ${onChangeStatus ? 'sm:grid-cols-2' : 'lg:grid-cols-3'}`}>
+        <div className="min-w-0 space-y-2">
+          <span className="text-xs font-semibold text-stone-700">{lang === 'vi' ? 'Giờ hoạt động' : 'Operating hours'}</span>
+          <p className="text-sm font-bold text-amber-800">{lang === 'vi' ? '24/24 mỗi ngày' : '24/7 every day'}</p>
         </div>
-        {/* Trạng thái hoạt động (chỉ dùng Tiếng Việt) */}
-        <div>
+        {onChangeStatus && <div>
           <label className="block text-xs font-semibold text-stone-700 mb-1">
             {lang === 'vi' ? 'Trạng thái hoạt động' : 'Initial Status'}
           </label>
@@ -537,22 +456,20 @@ export const FacilityOperations: React.FC<FacilityOperationsProps> = ({
             <option value="inactive">Ngừng hoạt động</option>
           </select>
           <p className="text-[10px] text-stone-500 mt-1">
-            {status === 'setup' ? '● Cơ sở mới tạo, chưa được công bố cho Customer'
-              : status === 'active' ? '● Cơ sở đã công bố và sẵn sàng nhận khách'
-                : status === 'maintenance' ? '▲ Cơ sở đang tạm dừng vận hành / bảo dưỡng'
-                  : '● Cơ sở đã ngừng hoạt động'}
+            {status === 'setup' ? 'Cơ sở mới tạo, chưa hiển thị cho khách hàng'
+              : status === 'active' ? 'Cơ sở đã công bố và sẵn sàng nhận khách'
+                : status === 'maintenance' ? 'Cơ sở đang tạm dừng vận hành / bảo dưỡng'
+                  : 'Cơ sở đã ngừng hoạt động'}
           </p>
-          {status === 'active' && initialStatus === 'active' ? (
-            <div className="mt-2.5 rounded-lg border border-emerald-200 bg-emerald-50/90 p-2.5 text-xs text-emerald-950 flex items-center gap-2 shadow-2xs">
-              <svg className="w-4 h-4 shrink-0 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              <span className="font-semibold text-emerald-900">
-                {lang === 'vi' ? 'Cơ sở đã kích hoạt thành công và đang hiển thị công khai cho khách hàng.' : 'Facility is active and visible to customers.'}
-              </span>
-            </div>
-          ) : null}
-        </div>
+        </div>}
+        {!onChangeStatus && (
+          <dl className="space-y-1">
+            <dt className="text-[11px] font-medium text-stone-500">
+              {lang === 'vi' ? 'Trạng thái hoạt động' : 'Operating status'}
+            </dt>
+            <dd><FacilityStatusTag status={status} lang={lang} /></dd>
+          </dl>
+        )}
       </div>
     </div>
   )
@@ -570,13 +487,20 @@ export const FacilityImageManager: React.FC<FacilityImageManagerProps> = ({
   lang = 'vi',
 }) => {
   const [loadError, setLoadError] = useState<boolean>(false)
+  const [uploadError, setUploadError] = useState('')
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (!file.type.startsWith('image/')) return
+    setUploadError('')
+    if (!file.type.startsWith('image/')) {
+      setUploadError(lang === 'vi' ? 'Vui lòng chọn tệp ảnh.' : 'Choose an image file.')
+      e.target.value = ''
+      return
+    }
     if (file.size > 5 * 1024 * 1024) {
-      alert('Kích thước ảnh vượt quá giới hạn 5MB!')
+      setUploadError(lang === 'vi' ? 'Ảnh vượt quá 5 MB. Chọn ảnh nhỏ hơn hoặc bằng 5 MB.' : 'The image exceeds 5 MB. Choose a smaller image.')
+      e.target.value = ''
       return
     }
 
@@ -677,7 +601,7 @@ export const FacilityImageManager: React.FC<FacilityImageManagerProps> = ({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
               <span className="text-[11px] font-medium text-stone-500">Chưa có ảnh cơ sở</span>
-              <span className="text-[9px] text-stone-400 mt-0.5">Tải lên hoặc dán URL</span>
+              <span className="text-[9px] text-stone-400 mt-0.5">Tải ảnh lên hoặc dán liên kết ảnh</span>
             </div>
           )}
         </div>
@@ -685,13 +609,13 @@ export const FacilityImageManager: React.FC<FacilityImageManagerProps> = ({
         <div className="flex-1 w-full space-y-2 text-xs">
           <div>
             <label className="block text-[11px] font-semibold text-stone-700 mb-1">
-              {lang === 'vi' ? 'Tải ảnh từ máy tính hoặc dán link ảnh (URL)' : 'Upload or paste image URL'}
+              {lang === 'vi' ? 'Tải ảnh từ máy tính hoặc dán liên kết ảnh' : 'Upload or paste image URL'}
             </label>
             <div className="flex gap-2">
               <input
                 type="text"
                 className="flex-1 border border-stone-300 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-                placeholder="https://... hoặc chọn file từ máy tính"
+                placeholder="https://... hoặc chọn tệp từ máy tính"
                 value={image}
                 onChange={(e) => {
                   onChangeImage(e.target.value)
@@ -702,7 +626,7 @@ export const FacilityImageManager: React.FC<FacilityImageManagerProps> = ({
                 <svg className="w-3.5 h-3.5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                 </svg>
-                <span>{lang === 'vi' ? 'Chọn file' : 'Upload'}</span>
+                <span>{lang === 'vi' ? 'Chọn tệp' : 'Upload'}</span>
                 <input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
               </label>
               {image ? (
@@ -716,9 +640,10 @@ export const FacilityImageManager: React.FC<FacilityImageManagerProps> = ({
                 </button>
               ) : null}
             </div>
+            {uploadError && <p role="alert" className="mt-1 text-xs text-red-700">{uploadError}</p>}
             {loadError && (
               <p className="text-[10px] text-red-600 mt-1 font-semibold">
-                Không thể tải hình ảnh từ URL này. Vui lòng kiểm tra lại link hoặc tải file từ máy tính.
+                Không thể tải ảnh. Hãy kiểm tra liên kết hoặc chọn tệp từ máy tính.
               </p>
             )}
             <p className="text-[11px] text-stone-500 mt-1.5">

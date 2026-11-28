@@ -23,7 +23,7 @@ const state = vi.hoisted(() => ({
   loading: false,
   error: undefined as unknown,
 }))
-vi.mock("../../services/authApi", () => ({ getAuthenticatedActor: () => state.actor }))
+vi.mock("../../services/authApi", async original => ({ ...await original<typeof import("../../services/authApi")>(), getAuthenticatedActor: () => state.actor }))
 vi.mock('../../hooks/useSupportMessageReads', () => ({ useSupportUnread: () => new Map(), useSupportMessageReads: () => {} }))
 vi.mock("../../hooks/useRentalApiResource", () => ({
   useRentalApiResource: (key: string) => ({
@@ -79,7 +79,7 @@ describe("Dương verified empty-data presentation", () => {
   it("D2 Customer empty renewal options", () => {
     state.actor = operationsActor("customer"); state.mode = "options"
     const modal = <CustomerRenewalRequestModal actorId={ids.customer} rentalId={ids.rental} onClose={vi.fn()} onSuccess={vi.fn()} />
-    verifyEmptyOnlyAfterSuccess(modal, "Cơ sở hiện chưa có gói thuê còn hiệu lực để gia hạn.")
+    verifyEmptyOnlyAfterSuccess(modal, "Cơ sở hiện chưa có gói gia hạn còn hiệu lực.")
     expect(renderToStaticMarkup(modal)).not.toContain("Lấy báo giá mới")
   })
   it("D3 Staff empty appointment list", () => {
