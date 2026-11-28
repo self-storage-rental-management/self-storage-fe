@@ -1,7 +1,8 @@
 import RentalApiWorkspace from "../rental-api/RentalApiWorkspace"
-export default function ManagerRentalsApiPanel({ initialRentalId, onSuspicionReportSubmitted }: {
+export default function ManagerRentalsApiPanel({ initialRentalId, initialRenewalId, onSuspicionReportSubmitted }: {
   initialRentalId?: string
-  onSuspicionReportSubmitted: (reportId: string) => void
+  initialRenewalId?: string
+  onSuspicionReportSubmitted?: (reportId: string) => void
 }) {
-  return <RentalApiWorkspace role="manager" initialRentalId={initialRentalId} onSuspicionReportSubmitted={onSuspicionReportSubmitted} />
+  return <RentalApiWorkspace role="manager" initialRentalId={initialRentalId} initialRenewalId={initialRenewalId} onSuspicionReportSubmitted={onSuspicionReportSubmitted} />
 }

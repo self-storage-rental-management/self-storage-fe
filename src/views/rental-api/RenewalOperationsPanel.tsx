@@ -12,10 +12,11 @@ import { getAuthenticatedActor } from "../../services/authApi"
 import {
   getRenewalOperations,
   getRenewalCustomerIdentity,
+  revealRenewalCustomerIdentity,
   getRenewalExceptionProposal,
   getRenewalPayableStatement,
-  hasRenewalIncident,
   isUuid,
+  listAllRenewalFacilityIncidentEvents,
   listAllRenewalPaymentEvents,
   listRenewalOperationEvents,
   sendRenewalOperation,
@@ -47,8 +48,29 @@ import { rentalDate, rentalError, rentalMoney, unknown } from "./presentation"
 import RenewalExceptionProposalCard from "./RenewalExceptionProposalCard"
 import RenewalCoordinationPanel, { canCoordinateRenewal } from "../rental-support-integration/RenewalCoordinationPanel"
 import { EvidenceUpload, EvidenceDownload } from "../rental-support-integration/EvidenceControls"
+import { maskCccd } from "../../domain/cccd"
 
 type RenewalFormAction = RenewalOperationAction
+
+function verifiedFacilityFaultIncidentIds(events: RenewalOperationEvent[]) {
+  const latest = new Map<string, { occurredAt: number; facilityFault: boolean; ambiguous: boolean }>()
+  events.filter(event => event.kind === "FAULT_REVIEW").forEach(event => {
+    const data = event.data && typeof event.data === "object" ? event.data as Record<string, unknown> : {}
+    const incidentId = typeof data.incidentId === "string" ? data.incidentId : null
+    const facilityFault = typeof data.facilityFault === "boolean" ? data.facilityFault : null
+    const occurredAt = Date.parse(event.occurredAt)
+    if (!incidentId || facilityFault === null || !Number.isFinite(occurredAt)) return
+    const previous = latest.get(incidentId)
+    if (!previous || occurredAt > previous.occurredAt) {
+      latest.set(incidentId, { occurredAt, facilityFault, ambiguous: false })
+    } else if (occurredAt === previous.occurredAt && previous.facilityFault !== facilityFault) {
+      latest.set(incidentId, { ...previous, ambiguous: true })
+    }
+  })
+  return new Set([...latest.entries()]
+    .filter(([, review]) => review.facilityFault && !review.ambiguous)
+    .map(([incidentId]) => incidentId))
+}
 
 export const operationsInputClass =
   "mt-1 block w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
@@ -459,7 +481,18 @@ export default function RenewalOperationsPanel({
       ? listAllRenewalPaymentEvents(role, id)
       : Promise.resolve(null),
   )
-  const cashRecorded = paymentEventsRead.data?.data.some(event => event.kind === "CASH") ?? false
+  const cashEvent = paymentEventsRead.data?.data.find(event => event.kind === "CASH")
+  const cashRecorded = !!cashEvent
+  const cashReceivedAmount = cashEvent?.data && typeof cashEvent.data === "object" && "amount" in cashEvent.data && typeof cashEvent.data.amount === "number"
+    ? cashEvent.data.amount
+    : null
+  const cashReceivedCurrency = cashEvent?.data && typeof cashEvent.data === "object" && "currency" in cashEvent.data && typeof cashEvent.data.currency === "string"
+    ? cashEvent.data.currency
+    : "VND"
+  const depositEvent = paymentEventsRead.data?.data.find(event => event.kind === "DEPOSIT")
+  const prepaidAmount = depositEvent?.data && typeof depositEvent.data === "object" && "amount" in depositEvent.data && typeof depositEvent.data.amount === "number"
+    ? depositEvent.data.amount
+    : null
   const customerIdentityRead = useRentalApiResource(
     `${identity}:${revision}:customer-identity`,
     () => role === "staff" && !appointmentOnly ? getRenewalCustomerIdentity(id) : Promise.resolve(null),
@@ -478,8 +511,10 @@ export default function RenewalOperationsPanel({
   const incidentRead = useRentalApiResource(
     `${identity}:${revision}:incident-availability:${read.data?.expectedVersion}`,
     () => role === "manager" && !!read.data && canCoordinateRenewal(facilityId)
-      ? hasRenewalIncident(id) : Promise.resolve(null),
+      ? listAllRenewalFacilityIncidentEvents(id) : Promise.resolve(null),
   )
+  const hasManagerIncident = incidentRead.data?.data.some(event => event.kind === "INCIDENT") ?? false
+  const verifiedIncidentIds = verifiedFacilityFaultIncidentIds(incidentRead.data?.data ?? [])
   const [now, setNow] = useState(Date.now)
   useEffect(() => {
     if (role !== "customer" && role !== "staff") return
@@ -496,7 +531,7 @@ export default function RenewalOperationsPanel({
         ]
       : role === "staff"
         ? ["arrival", "cash", "completion"]
-        : incidentRead.data === true && read.data
+      : hasManagerIncident && read.data
           ? (["exception", "refund"] as RenewalFormAction[]).filter(action =>
               !operationBlockedReason(read.data!, role, action, actor, facilityId, customerId, proposalRead.data, now)
               && (action !== "refund" || ["payments:read", "payments:collect", "refunds:approve"].every(permission => actor?.permissions.includes(permission))))
@@ -516,6 +551,11 @@ export default function RenewalOperationsPanel({
         action={selected.action}
         state={selected.state}
         proposal={selected.proposal}
+        prepaidAmount={prepaidAmount}
+        verifiedFacilityFaultIncidentIds={verifiedIncidentIds}
+        onOpenIncident={selected.action === "arrival" ? () => {
+          setSelected({ action: "incident", state: selected.state, proposal: selected.proposal })
+        } : undefined}
         onLocked={lock}
         onCancel={() => {
           setSelected(undefined)
@@ -528,7 +568,7 @@ export default function RenewalOperationsPanel({
           if (e.kind === "NO_SHOW") onDocumentEvent?.(e)
           if (selected.action === "incident") setSuccessMessage("Đã ghi nhận xử lý sự cố lịch ký.")
           if (selected.action === "cash") {
-            setSuccessMessage("Đã ghi nhận thanh toán.")
+            setSuccessMessage("Đã xác nhận thu tiền còn lại.")
           }
           if (selected.action === "completion") setSuccessMessage("Gia hạn đã hoàn tất. Hệ thống đã đối chiếu các khoản thu và biên lai đã lưu.")
           if (e.kind === "ARRIVAL" || e.kind === "COMPLETION") onDocumentEvent?.(e)
@@ -551,8 +591,8 @@ export default function RenewalOperationsPanel({
           {!appointmentOnly && <RenewalOperationsSummary state={read.data} role={role} cashRecorded={cashRecorded} showProgress={!embedded} />}
           {role === "manager" && incidentRead.loading && <p role="status" className="text-sm text-stone-500">Đang kiểm tra sự cố...</p>}
           {role === "manager" && !!incidentRead.error && <div role="alert" className="text-sm text-stone-600">Không tải được danh sách sự cố. <Button type="button" variant="outline" onClick={incidentRead.refresh}>Thử lại</Button></div>}
-          {role === "manager" && incidentRead.data === false && <p className="text-sm text-stone-500">Chưa có sự cố cần xử lý.</p>}
-          {role === "manager" && incidentRead.data === true && !selected && <RenewalCoordinationPanel
+          {role === "manager" && incidentRead.data && !hasManagerIncident && <p className="text-sm text-stone-500">Chưa có sự cố cần xử lý.</p>}
+          {role === "manager" && hasManagerIncident && !selected && <RenewalCoordinationPanel
             key={`${identity}:${revision}`}
             state={read.data} facilityId={facilityId} status={status}
             onLocked={lock} onChanged={event => { if (event) setLastEvent(event); lock(false); setRevision(v => v + 1); onChanged?.() }}
@@ -591,12 +631,12 @@ export default function RenewalOperationsPanel({
               : "A-12"
             const rentalMonths = (customer && typeof customer === "object" && "rentalMonths" in customer && typeof customer.rentalMonths === "number" && customer.rentalMonths > 0)
               ? customer.rentalMonths
-              : 3
+              : null
 
             const staffSteps = [
               { id: 1, label: "Chọn lịch ký", done: isAppointmentDone },
               { id: 2, label: "Thanh toán trả trước", done: isDepositDone },
-              { id: 3, label: "Khách đến", done: isArrivalDone },
+              { id: 3, label: lastEvent?.kind === "ARRIVAL" ? `Khách đến · ${new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", hourCycle: "h23", day: "2-digit", month: "2-digit" }).format(parseVietnamDate(lastEvent.occurredAt)).replace(",", "")}` : "Khách đến", done: isArrivalDone },
               { id: 4, label: "Thu còn lại", done: isPaid },
               { id: 5, label: "Hoàn tất", done: isCompleted },
             ]
@@ -627,19 +667,15 @@ export default function RenewalOperationsPanel({
               return "Đã qua giờ hẹn"
             })()
 
-            const depositEvent = paymentEventsRead.data?.data.find(e => e.kind === "DEPOSIT")
-            const depositAmount = (depositEvent?.data && typeof depositEvent.data === "object" && "amount" in depositEvent.data && typeof depositEvent.data.amount === "number")
-              ? depositEvent.data.amount
-              : (statementRead.data?.amount ? Math.round(statementRead.data.amount * 0.25) : 2400000)
-
-            const remainingAmount = statementRead.data?.amount ?? 9600000
+            const depositAmount = prepaidAmount
+            const remainingAmount = statementRead.data?.amount ?? null
 
             return (
               <Card className="p-5 space-y-5">
                 {/* 1. Header Meta & Customer Pill */}
                 <div className="space-y-2 border-b border-stone-200/80 pb-3">
                   <p className="text-xs sm:text-sm font-medium text-stone-600">
-                    Hợp đồng <span className="font-semibold text-stone-900">{s.rentalDisplayCode || s.displayCode || "HD-0123"}</span>, Ô kho <span className="font-semibold text-stone-900">{unitCode}</span>, Gia hạn <span className="font-semibold text-stone-900">{rentalMonths} tháng</span>
+                    Hợp đồng <span className="font-semibold text-stone-900">{s.rentalDisplayCode || s.displayCode || "HD-0123"}</span>, Ô kho <span className="font-semibold text-stone-900">{unitCode}</span>, Gia hạn <span className="font-semibold text-stone-900">{rentalMonths ? `${rentalMonths} tháng` : "đang tải thời hạn"}</span>
                   </p>
                   <div>
                     <div className="inline-flex flex-wrap items-center gap-4 rounded-lg border border-stone-200 bg-stone-50 px-3.5 py-1.5 text-xs text-stone-700">
@@ -718,7 +754,7 @@ export default function RenewalOperationsPanel({
                   <div className="rounded-xl border border-stone-200 bg-white p-3.5 shadow-xs">
                     <p className="text-xs font-medium text-stone-500">Trả trước 20%</p>
                     <p className="mt-1 text-base sm:text-lg font-bold text-stone-900">
-                      {rentalMoney(depositAmount, "VND")}
+                      {depositAmount === null ? (paymentEventsRead.loading ? "Đang tải…" : "Chưa có dữ liệu") : rentalMoney(depositAmount, "VND")}
                     </p>
                     <p className={`mt-0.5 text-xs font-medium ${isDepositDone ? "text-emerald-700" : "text-amber-700"}`}>
                       {isDepositDone ? "Đã thanh toán" : "Chờ khách thanh toán"}
@@ -729,7 +765,15 @@ export default function RenewalOperationsPanel({
                   <div className="rounded-xl border border-stone-200 bg-white p-3.5 shadow-xs">
                     <p className="text-xs font-medium text-stone-500">Thu tại quầy</p>
                     <p className="mt-1 text-base sm:text-lg font-bold text-stone-900">
-                      {isPaid ? "0 đ" : rentalMoney(remainingAmount, "VND")}
+                      {isPaid
+                        ? cashReceivedAmount !== null
+                          ? rentalMoney(cashReceivedAmount, cashReceivedCurrency)
+                          : remainingAmount === null
+                            ? (paymentEventsRead.loading ? "Đang tải…" : "Chưa có dữ liệu")
+                            : rentalMoney(remainingAmount, "VND")
+                        : remainingAmount === null
+                          ? (statementRead.loading ? "Đang tải…" : "Chưa có bảng kê")
+                          : rentalMoney(remainingAmount, "VND")}
                     </p>
                     <p className={`mt-0.5 text-xs font-medium ${isPaid ? "text-emerald-700" : "text-stone-500"}`}>
                       {isPaid ? "Đã thu đủ" : isArrivalDone ? "Sẵn sàng thu tiền" : "Sau khi khách đến"}
@@ -739,6 +783,16 @@ export default function RenewalOperationsPanel({
 
                 {/* 4. Highlighted Active Step Card */}
                 {(() => {
+                  const expectedAction: RenewalFormAction = !isDepositDone
+                    ? "arrival"
+                    : !isArrivalDone
+                      ? "arrival"
+                      : !isPaid
+                        ? "cash"
+                        : "completion"
+                  if (!isCompleted && selectedForm && (selected?.action === "incident" || selected?.action === expectedAction)) {
+                    return <div className="rounded-xl border-2 border-blue-400 bg-blue-50/40 p-2 sm:p-3">{selectedForm}</div>
+                  }
                   if (isCompleted) {
                     return (
                       <div className="rounded-xl border-2 border-emerald-300 bg-emerald-50/50 p-4">
@@ -825,7 +879,7 @@ export default function RenewalOperationsPanel({
                               setSelected({ action: "cash", state: s, proposal: proposalRead.data })
                             }}
                           >
-                            Ghi nhận thanh toán
+                            Thu tiền còn lại
                           </Button>
                         </div>
                       </div>
@@ -891,8 +945,8 @@ export default function RenewalOperationsPanel({
                         <span className="text-xs text-stone-400">
                           {isArrivalDone ? "Sẵn sàng thu tiền" : "Cần ghi nhận khách đến"}
                         </span>
-                        {!isPaid && (
-                          <Button
+                        {isArrivalDone && !isPaid && (
+                            <Button
                             type="button"
                             size="sm"
                             variant="outline"
@@ -902,8 +956,8 @@ export default function RenewalOperationsPanel({
                               setSuccessMessage(undefined)
                               setSelected({ action: "cash", state: s, proposal: proposalRead.data })
                             }}
-                          >
-                            Ghi nhận thanh toán
+                            >
+                            Thu tiền còn lại
                           </Button>
                         )}
                       </div>
@@ -956,7 +1010,6 @@ export default function RenewalOperationsPanel({
                   </Button>
                 </div>}
 
-                {selected?.action === "incident" && selectedForm}
               </Card>
             )
           })()}
@@ -973,6 +1026,7 @@ export default function RenewalOperationsPanel({
                   proposalRead.data,
                   now,
                 )
+                const managerResolutionBlocked = role === "manager" && action === "refund" && verifiedIncidentIds.size === 0
                 const reason = action === "cash"
                   ? cashRecorded
                     ? "Đã ghi nhận thanh toán còn lại."
@@ -981,7 +1035,9 @@ export default function RenewalOperationsPanel({
                       : paymentEventsRead.error
                         ? "Không thể xác minh trạng thái thanh toán. Hãy tải lại hồ sơ rồi thử lại."
                         : blockedReason
-                  : blockedReason
+                  : managerResolutionBlocked
+                    ? "Cần xác nhận sự cố là lỗi thuộc cơ sở trước khi xem xét hoàn tiền."
+                    : blockedReason
                 return (
                   <div key={action} className="flex min-w-0 flex-col gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3">
                     <Button
@@ -1021,7 +1077,7 @@ export default function RenewalOperationsPanel({
       />}
       {/* Keep the selected snapshot mounted across background read/proposal updates.
           The server still validates its version; uncertain retries retain the original body/key. */}
-      {selected?.action !== "incident" && selectedForm}
+      {role !== "staff" && selected?.action !== "incident" && selectedForm}
       {role === "staff" && !appointmentOnly && !embedded && <>
         <EventTimeline
           key={`${identity}:${revision}:payments`}
@@ -1069,6 +1125,9 @@ function OperationForm({
   state: s,
   proposal,
   appointmentOnly = false,
+  prepaidAmount = null,
+  verifiedFacilityFaultIncidentIds,
+  onOpenIncident,
   onLocked,
   onCancel,
   onSuccess,
@@ -1077,6 +1136,9 @@ function OperationForm({
   state: RenewalOperationState
   proposal?: RenewalExceptionProposal | null
   appointmentOnly?: boolean
+  prepaidAmount?: number | null
+  verifiedFacilityFaultIncidentIds?: ReadonlySet<string>
+  onOpenIncident?: () => void
   onLocked: (locked: boolean) => void
   onCancel: () => void
   onSuccess: (event: RenewalOperationEvent) => void
@@ -1110,9 +1172,14 @@ function OperationForm({
   const [exception, setException] = useState<RenewalExceptionAction>("REJECT")
   const [decision, setDecision] = useState<"APPROVE" | "REJECT">("REJECT")
   const [receiptFile, setReceiptFile] = useState("")
+  const [receiptReference, setReceiptReference] = useState("")
   const [signedDocumentFile, setSignedDocumentFile] = useState("")
   const [balanceMethod, setBalanceMethod] = useState<"CASH" | "BANK_TRANSFER">("CASH")
   const [attested, setAttested] = useState(false)
+  const [identityVisible, setIdentityVisible] = useState(false)
+  const [revealedIdentity, setRevealedIdentity] = useState<string | null>(null)
+  const [identityRevealBusy, setIdentityRevealBusy] = useState(false)
+  const [arrivalNow, setArrivalNow] = useState(Date.now)
   const [validation, setValidation] = useState<string>()
   const manager = action === "exception" || action === "refund"
   const cash = useRentalApiResource(
@@ -1138,7 +1205,30 @@ function OperationForm({
     interactionLock.current = uploadLock.current || command.isLocked()
     onLocked(interactionLock.current)
   }, [locked, onLocked]) // Parent cannot dismiss/reload an uncertain mutation.
+  useEffect(() => {
+    if (action !== "arrival") return
+    const timer = setInterval(() => setArrivalNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [action])
   const files = evidence.split(/[\s,;]+/).filter(Boolean)
+  const expectedCashAmount = cash.data?.amount ?? null
+  // The payable statement is the server-authoritative amount. Staff should not
+  // retype it and risk sending a stale or mistyped value back to the API.
+  const cashAmountMatches = expectedCashAmount !== null && Number.isFinite(expectedCashAmount) && expectedCashAmount > 0
+  const identityNumber = revealedIdentity || customerIdentity.data?.identityDocumentNumber || null
+  const maskedIdentity = identityNumber ? maskCccd(identityNumber) : null
+  const arrivalRecordedAt = new Intl.DateTimeFormat("vi-VN", {
+    timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", hourCycle: "h23", day: "2-digit", month: "2-digit", year: "numeric",
+  }).format(new Date(arrivalNow)).replace(",", "")
+  const arrivalTiming = (() => {
+    if (!s.appointmentStart) return "Chưa có giờ hẹn để đối chiếu"
+    const minutes = Math.round((parseVietnamDate(s.appointmentStart).getTime() - arrivalNow) / 60000)
+    if (Math.abs(minutes) < 15) return "Đúng giờ hẹn"
+    const hours = Math.floor(Math.abs(minutes) / 60)
+    const rest = Math.abs(minutes) % 60
+    const duration = `${hours ? `${hours} giờ` : ""}${hours && rest ? " " : ""}${rest ? `${rest} phút` : ""}`
+    return minutes > 0 ? `Đến sớm ${duration}` : `Đến trễ ${duration}`
+  })()
   const needReason = ["incident", "exception", "refund"].includes(
     action,
   )
@@ -1156,6 +1246,11 @@ function OperationForm({
       : []
   const decisionMissing = missingDecisionSources.filter((ref) =>
     s.missingSources.includes(ref),
+  )
+  const selectedIncidentFacilityFault = !!incidentId && !!verifiedFacilityFaultIncidentIds?.has(incidentId)
+  const managerDecisionNeedsFacilityFault = manager && (
+    (action === "exception" && exception === "APPROVE_RESCHEDULE_BEFORE_CUTOFF") ||
+    (action === "refund" && decision === "APPROVE")
   )
   const build = (): RenewalOperationCommand => {
     if (s.expectedVersion === null) throw new Error("Hồ sơ chưa đủ thông tin để tiếp tục xử lý.")
@@ -1214,10 +1309,11 @@ function OperationForm({
           !statement ||
           statement.amount <= 0 ||
           Date.parse(statement.expiresAt) <= Date.now() ||
-          !attested
+          !attested ||
+          !cashAmountMatches
         )
           throw new Error(
-            "Cần bảng kê còn hiệu lực, số tiền lớn hơn 0 và xác nhận đã nhận đủ tiền.",
+            "Cần bảng kê còn hiệu lực và xác nhận đã đối chiếu số tiền phải thu.",
           )
         if (!isUuid(receiptFile)) throw new Error("Cần chứng từ thanh toán.")
         return {
@@ -1227,6 +1323,7 @@ function OperationForm({
             payableStatementRef: statement.reference,
             receiptFileId: receiptFile,
             paymentMethod: balanceMethod,
+            ...(receiptReference.trim() ? { receiptReference: receiptReference.trim() } : {}),
             received: true,
           },
         }
@@ -1300,14 +1397,34 @@ function OperationForm({
       </header> : <h4 className="font-semibold">{copy(operationLabels[action])}</h4>}
       <fieldset disabled={locked} className="space-y-3">
         {action === 'arrival' && <section aria-label="Thông tin khách để đối chiếu CCCD" className="rounded-lg border border-stone-200 bg-stone-50 p-3">
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={attested} onChange={e => setAttested(e.target.checked)} />Tôi đã đối chiếu giấy tờ gốc, xác minh đúng khách. Thời gian xử lý sau khi nhận khách là 30 phút, tối đa đến hạn thu hồi.</label>
+          <h5 className="font-semibold text-stone-900">Đối chiếu khách trước khi xác nhận</h5>
+          <p className="mt-1 text-xs text-stone-600">So sánh tên, số giấy tờ, ngày sinh và ảnh giấy tờ (nếu có) với bản gốc khách xuất trình.</p>
           <ApiReadState {...customerIdentity} retry={customerIdentity.refresh} />
-          {customerIdentity.data && <>
-            <dl className="grid gap-3 text-sm sm:grid-cols-2">
-              <div><dt className="text-xs text-stone-600">Khách hàng</dt><dd className="mt-1 font-semibold text-stone-900">{customerIdentity.data.fullName || 'Chưa có tên khách'}</dd></div>
-              <div><dt className="text-xs text-stone-600">Số CCCD/CMND đã lưu</dt><dd className="mt-1 break-all font-semibold tabular-nums text-stone-900">{customerIdentity.data.identityDocumentNumber || 'Chưa có CCCD/CMND trong hồ sơ gốc'}</dd></div>
-            </dl>
-          </>}
+          {customerIdentity.data && <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
+            <div><dt className="text-xs text-stone-600">Khách hàng</dt><dd className="mt-1 font-semibold text-stone-900">{customerIdentity.data.fullName || 'Chưa có tên khách'}</dd></div>
+            <div><dt className="text-xs text-stone-600">Số CCCD/CMND đã lưu</dt><dd className="mt-1 flex flex-wrap items-center gap-2 font-semibold tabular-nums text-stone-900">{identityVisible && revealedIdentity ? revealedIdentity : maskedIdentity || 'Chưa có CCCD/CMND trong hồ sơ gốc'}{maskedIdentity && <button type="button" className="text-xs font-medium text-amber-800 underline disabled:opacity-50" disabled={identityRevealBusy} onClick={async () => {
+              if (identityVisible) { setIdentityVisible(false); return }
+              setIdentityRevealBusy(true)
+              try {
+                const revealed = await revealRenewalCustomerIdentity(s.renewalId)
+                setRevealedIdentity(revealed.data?.identityDocumentNumber || null)
+                setIdentityVisible(true)
+              } catch (error) {
+                setValidation(error instanceof Error ? error.message : "Không thể mở số giấy tờ để đối chiếu.")
+              } finally {
+                setIdentityRevealBusy(false)
+              }
+            }}>{identityRevealBusy ? "Đang mở…" : identityVisible ? "Ẩn" : "Xem"}</button>}</dd></div>
+            <div><dt className="text-xs text-stone-600">Ngày sinh</dt><dd className="mt-1 font-semibold text-stone-900">{customerIdentity.data.dateOfBirth || "Chưa lưu — đối chiếu bản gốc"}</dd></div>
+            {identityVisible && revealedIdentity && <div className="sm:col-span-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">CCCD đầy đủ đã được mở để đối chiếu; thao tác này đã được ghi log.</div>}
+          </dl>}
+          <div className="mt-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">
+            <p>Ghi nhận lúc (giờ hệ thống): <b>{arrivalRecordedAt}</b></p>
+            <p className="mt-0.5 font-semibold">{arrivalTiming}</p>
+            <p className="mt-1">Sau khi xác nhận khách đến, hồ sơ được xử lý trong 30 phút; nếu chưa hoàn tất sẽ tiếp tục theo dõi đến hạn thu hồi.</p>
+          </div>
+          <label className="mt-3 flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" checked={attested} onChange={e => setAttested(e.target.checked)} />Tôi đã đối chiếu giấy tờ gốc và xác minh đúng khách.</label>
+          {onOpenIncident && <Button type="button" variant="outline" className="mt-3" onClick={onOpenIncident}>Giấy tờ không khớp / Từ chối ký</Button>}
         </section>}
         {action === "confirmation" && <>
           {proposal && <RenewalExceptionProposalCard proposal={proposal} />}
@@ -1365,7 +1482,7 @@ function OperationForm({
               }
             >
               <option value="REJECT">Từ chối ngoại lệ</option>
-              <option value="APPROVE_RESCHEDULE_BEFORE_CUTOFF">
+              <option value="APPROVE_RESCHEDULE_BEFORE_CUTOFF" disabled={!selectedIncidentFacilityFault}>
                 Đề xuất đổi lịch trước mốc thu hồi (khách hàng cần xác nhận)</option>
               <option value="REQUEST_POST_CUTOFF_REVIEW">
                 Yêu cầu xem xét sau mốc thu hồi (chưa gia hạn)</option>
@@ -1384,10 +1501,17 @@ function OperationForm({
                 }
               >
                 <option value="REJECT">Từ chối</option>
-                <option value="APPROVE">Duyệt hoàn tiền - chưa chuyển tiền</option>
+                <option value="APPROVE" disabled={!selectedIncidentFacilityFault}>Duyệt hoàn tiền - chưa chuyển tiền</option>
               </select>
             </label>
           </>
+        )}
+        {managerDecisionNeedsFacilityFault && (
+          <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            {selectedIncidentFacilityFault
+              ? "Sự cố đã được xác nhận là lỗi thuộc cơ sở. Có thể tiếp tục quyết định."
+              : "Chỉ được đổi lịch hoặc duyệt hoàn tiền sau khi Manager xác nhận đúng sự cố là lỗi thuộc cơ sở."}
+          </p>
         )}
         {["appointment", "reschedule"].includes(action) && <RenewalAppointmentPicker
           renewalId={s.renewalId} expectedVersion={s.expectedVersion} value={appointment}
@@ -1467,9 +1591,12 @@ function OperationForm({
         {needFiles && <EvidenceUpload
           entityType={`DUONG_RENEWAL_${action.toUpperCase()}`}
           entityId={s.renewalId} value={files}
+          label={action === "arrival" ? "Minh chứng khách đến (bắt buộc)" : undefined}
+          accept={action === "arrival" ? "image/jpeg,image/png,image/webp,application/pdf" : undefined}
           fileNamePurpose={`chung-tu-gia-han-${action}`}
           onChange={ids => setEvidence(ids.join(", "))} onBusy={uploadBusy}
         />}
+        {action === "arrival" && <p className="-mt-1 text-xs text-stone-500">Ảnh giấy tờ/ảnh khách hoặc PDF dùng để đối chiếu. JPG, PNG, WebP, PDF; tối đa 25 MB mỗi tệp.</p>}
         {action === "cash" && (
           <>
             <ApiReadState {...cash} retry={cash.refresh} />
@@ -1480,9 +1607,10 @@ function OperationForm({
                   <p className="mt-1 text-2xl font-bold tabular-nums text-stone-900 sm:text-3xl">{rentalMoney(cash.data.amount, cash.data.currency)}</p>
                   <dl className="mt-4 space-y-2 border-t border-amber-200/70 pt-3 text-sm">
                     {cash.data.remainingRentalAmount !== undefined && <div className="flex items-baseline justify-between gap-4"><dt className="text-stone-600">Tiền thuê còn lại</dt><dd className="text-right font-medium tabular-nums text-stone-900">{rentalMoney(cash.data.remainingRentalAmount,cash.data.currency)}</dd></div>}
-                    {cash.data.overdueFee !== undefined && <div className="flex items-baseline justify-between gap-4"><dt className="text-stone-600">Phí quá hạn</dt><dd className="text-right font-medium tabular-nums text-stone-900">{rentalMoney(cash.data.overdueFee,cash.data.currency)}</dd></div>}
+                    {cash.data.overdueFee !== undefined && cash.data.overdueFee > 0 && <div className="flex items-baseline justify-between gap-4"><dt className="text-stone-600">Phí quá hạn</dt><dd className="text-right font-medium tabular-nums text-stone-900">{rentalMoney(cash.data.overdueFee,cash.data.currency)}</dd></div>}
                   </dl>
                 </div>
+                <p className="text-xs font-medium text-stone-700">Tổng kỳ gia hạn {prepaidAmount !== null ? rentalMoney(cash.data.amount + prepaidAmount, cash.data.currency) : "đang tải"} − đã trả trước {prepaidAmount !== null ? rentalMoney(prepaidAmount, cash.data.currency) : "đang tải"} = {rentalMoney(cash.data.amount, cash.data.currency)}</p>
                 <details className="rounded-lg border border-stone-200 px-3 py-2 text-xs text-stone-500">
                   <summary className="cursor-pointer font-medium text-stone-600">Thông tin đối soát</summary>
                   <dl className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -1502,10 +1630,18 @@ function OperationForm({
             </label>
             <p className="text-sm text-stone-600">
               {balanceMethod === "BANK_TRANSFER"
-                ? "Tải ảnh chụp màn hình chuyển khoản làm minh chứng."
-                : "Tải ảnh chụp biên nhận thu tiền mặt làm minh chứng."}
+                ? "Tải ảnh chụp màn hình chuyển khoản làm minh chứng bắt buộc."
+                : "Tải ảnh chụp biên nhận thu tiền mặt làm minh chứng bắt buộc."}
             </p>
+            {cash.data && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              Đã thu từ khách hàng theo bảng kê: <b>{rentalMoney(cash.data.amount, cash.data.currency)}</b>. Nhân viên đối chiếu và xác nhận khoản đã thu.
+            </div>}
+            {balanceMethod === "BANK_TRANSFER" && <label className="block text-sm font-medium text-stone-700">
+              Mã giao dịch chuyển khoản
+              <input className={operationsInputClass} maxLength={100} value={receiptReference} onChange={e => setReceiptReference(e.target.value)} placeholder="Nhập mã giao dịch trên biên lai" />
+            </label>}
             <EvidenceUpload entityType="DUONG_RENEWAL_CASH_RECEIPT" entityId={s.renewalId}
+              label="Minh chứng thu tiền (bắt buộc)"
               disabled={locked} value={receiptFile ? [receiptFile] : []} limit={1}
               fileNamePurpose="bien-chung-thu-tien-gia-han"
               onChange={ids => setReceiptFile(ids[0] || "")} onBusy={uploadBusy} />
@@ -1517,8 +1653,8 @@ function OperationForm({
                 onChange={(e) => setAttested(e.target.checked)}
               />{" "}
               {balanceMethod === "BANK_TRANSFER"
-                ? "Tôi đã đối chiếu tiền chuyển khoản vào tài khoản nhận và số tiền khớp bảng kê."
-                : "Tôi đã nhận đủ tiền mặt theo bảng kê."}</label>
+                ? "Tôi đã đối chiếu giao dịch chuyển khoản theo bảng kê."
+                : "Tôi đã đối chiếu số tiền phải thu theo bảng kê."}</label>
           </>
         )}
         {action === "completion" && (
@@ -1571,6 +1707,9 @@ function OperationForm({
             (action === "incident" && !command.uncertain && !incidentType) ||
             (action === "incident" && !command.uncertain && incidentRequiresOutcome && !attested) ||
             (action === "incident" && !command.uncertain && incidentNeedsNote && !reason.trim()) ||
+            (!command.uncertain && action === "arrival" && (!attested || !customerIdentity.data?.identityDocumentNumber || !files.length || !files.every(isUuid))) ||
+            (!command.uncertain && action === "cash" && (cash.loading || !!cash.error || !cash.data || !cashAmountMatches || !attested || !isUuid(receiptFile))) ||
+            (!command.uncertain && managerDecisionNeedsFacilityFault && !selectedIncidentFacilityFault) ||
             (!command.uncertain && ["appointment", "reschedule"].includes(action) && !scheduleReady) ||
             (!command.uncertain && action === "completion" && (!isUuid(signedDocumentFile) || cash.loading || !!cash.error || !cash.data || cash.data.amount !== 0 || !cash.data.effectiveStartDate)) ||
             (action === "confirmation" && !command.uncertain && (!attested || !!exceptionConfirmationBlockedReason(s, proposal)))
@@ -1642,7 +1781,7 @@ function OperationForm({
             ? ["appointment", "reschedule"].includes(action) ? "Đang lưu lịch ký…" : "Đang gửi…"
             : command.uncertain
               ? "Thử lại cùng yêu cầu"
-              : ["appointment", "reschedule"].includes(action) ? "Lưu lịch ký" : action === "completion" ? "Hoàn tất gia hạn" : action === "cash" ? "Xác nhận đã thu tiền" : action === "noShow" ? "Xác nhận khách không đến" : action === "incident" && incidentRequiresOutcome ? "Xác nhận và cập nhật trạng thái" : action === "incident" ? "Ghi nhận sự cố" : "Gửi yêu cầu"}
+              : ["appointment", "reschedule"].includes(action) ? "Lưu lịch ký" : action === "completion" ? "Hoàn tất gia hạn" : action === "cash" ? "Xác nhận đã thu" : action === "arrival" ? "Xác nhận khách đã đến" : action === "noShow" ? "Xác nhận khách không đến" : action === "incident" && incidentRequiresOutcome ? "Xác nhận và cập nhật trạng thái" : action === "incident" ? "Ghi nhận sự cố" : "Gửi yêu cầu"}
         </Button>
         {!["appointment", "reschedule"].includes(action) && <Button
           variant="outline"
@@ -1653,7 +1792,7 @@ function OperationForm({
             onCancel()
           }}
         >
-          Đóng biểu mẫu
+          Hủy
         </Button>}
       </div>
     </Card>
