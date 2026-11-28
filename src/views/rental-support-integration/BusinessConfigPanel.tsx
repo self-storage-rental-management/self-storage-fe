@@ -21,7 +21,6 @@ export default function BusinessConfigPanel({ canWrite = true }: Props) {
 
   // Form state
   const [gracePeriodDays] = useState(0)
-  const [lateFeeAmount, setLateFeeAmount] = useState(650000)
   const [defaultDepositRatio, setDefaultDepositRatio] = useState(0.2)
   const [holdExpiryHours, setHoldExpiryHours] = useState(2)
   const [managerRefundApprovalLimit, setManagerRefundApprovalLimit] = useState(5000000)
@@ -34,7 +33,6 @@ export default function BusinessConfigPanel({ canWrite = true }: Props) {
     try {
       const data = await getBusinessConfigApi()
       setConfig(data)
-      setLateFeeAmount(data.lateFeeAmount ?? 650000)
       setDefaultDepositRatio(data.defaultDepositRatio ?? 0.2)
       setHoldExpiryHours(data.holdExpiryHours ?? 2)
       setManagerRefundApprovalLimit(data.managerRefundApprovalLimit ?? 5000000)
@@ -60,7 +58,6 @@ export default function BusinessConfigPanel({ canWrite = true }: Props) {
     try {
       const updated = await updateBusinessConfigApi({
         gracePeriodDays: Number(gracePeriodDays),
-        lateFeeAmount: Number(lateFeeAmount),
         defaultDepositRatio: Number(defaultDepositRatio),
         holdExpiryHours: Number(holdExpiryHours),
         managerRefundApprovalLimit: Number(managerRefundApprovalLimit),
@@ -68,7 +65,7 @@ export default function BusinessConfigPanel({ canWrite = true }: Props) {
         autoProrate,
       })
       setConfig(updated)
-      setSuccess('Đã lưu cấu hình vận hành và phí trễ hạn.')
+      setSuccess('Đã lưu cấu hình vận hành.')
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : 'Lỗi khi lưu cấu hình vận hành.')
     } finally {
@@ -94,7 +91,7 @@ export default function BusinessConfigPanel({ canWrite = true }: Props) {
           Cấu hình vận hành và phí
         </h3>
         <p className="mt-1 text-xs text-stone-500">
-          Quản lý mức phí phạt quá hạn thực tế, hạn mức cọc và các tham số tài chính áp dụng cho toàn bộ StorageHub.
+          Quản lý các tham số vận hành áp dụng cho toàn bộ StorageHub. Mức phạt quá hạn được quản lý tại Chính sách kinh doanh tập trung.
         </p>
       </div>
 
@@ -115,7 +112,7 @@ export default function BusinessConfigPanel({ canWrite = true }: Props) {
         )}
 
         <div className="grid gap-5 sm:grid-cols-2">
-          <p className="text-sm">Phí quá hạn mỗi ngày = tiền thuê tháng ÷ 30 × 1,5.</p>
+          <p className="text-sm">Mức phạt quá hạn được lấy từ chính sách kinh doanh tập trung đang có hiệu lực.</p>
 
           {/* 3. Tỷ lệ cọc giữ chỗ mặc định */}
           <div className="rounded-xl border border-stone-200 bg-stone-50/40 p-4 space-y-2">

@@ -6,6 +6,7 @@ import { UNIT_SPECS } from '../../data/demoDatabase'
 import { sampleRackPallet } from '../../services/rackLayoutApi'
 import { DEMO_DATA_ENABLED } from '../../config/runtime'
 import { listPublicFacilities, listPublicUnitTypes, type PublicFacilitySummary, type PublicUnitTypeSummary } from '../../services/publicCatalogApi'
+import { getPublicSiteConfigApi, type PublicSiteConfigApi } from '../../services/businessConfigApi'
 
 interface HomePageProps {
   onOpenLogin: () => void
@@ -223,6 +224,10 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
   const [publicUnitTypes, setPublicUnitTypes] = useState<PublicUnitTypeSummary[]>([])
   const [publicCatalogLoading, setPublicCatalogLoading] = useState(!DEMO_DATA_ENABLED)
   const [publicCatalogError, setPublicCatalogError] = useState(false)
+  const [publicSiteConfig, setPublicSiteConfig] = useState<PublicSiteConfigApi>({
+    maintenanceMode: false,
+    bannerNotice: '',
+  })
 
   const scrollToSection = (sectionId: string) => {
     const el = document.getElementById(sectionId)
@@ -237,6 +242,20 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    void getPublicSiteConfigApi()
+      .then(config => {
+        if (!cancelled) setPublicSiteConfig(config)
+      })
+      .catch(error => {
+        console.error('Failed to load public site configuration', error)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   useEffect(() => {
@@ -370,6 +389,10 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
     }
   })
   const catalogUnitCategories = DEMO_DATA_ENABLED ? unitCategories : publicUnitCategories
+  const bookingDisabled = publicSiteConfig.maintenanceMode
+  const openRegistration = () => {
+    if (!bookingDisabled) onOpenRegister()
+  }
 
   const workflowSteps = [
     {
@@ -447,8 +470,9 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
           <div className="flex items-center gap-2 sm:gap-2.5">
             <button
               type="button"
-              onClick={onOpenRegister}
-              className="hidden sm:inline-flex px-3.5 py-1.5 rounded-lg text-xs font-semibold text-stone-200 border border-[#44453F] hover:bg-[#2D2E29] hover:text-white hover:border-stone-400 transition-all cursor-pointer"
+              onClick={openRegistration}
+              disabled={bookingDisabled}
+              className="hidden sm:inline-flex px-3.5 py-1.5 rounded-lg text-xs font-semibold text-stone-200 border border-[#44453F] hover:bg-[#2D2E29] hover:text-white hover:border-stone-400 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Đăng Ký
             </button>
@@ -531,10 +555,11 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
               <button
                 type="button"
                 onClick={() => {
-                  onOpenRegister()
+                  openRegistration()
                   setMobileMenuOpen(false)
                 }}
-                className="w-full py-2.5 rounded-lg text-xs font-semibold text-center text-stone-200 border border-[#44453F] hover:bg-[#2D2E29]"
+                disabled={bookingDisabled}
+                className="w-full py-2.5 rounded-lg text-xs font-semibold text-center text-stone-200 border border-[#44453F] hover:bg-[#2D2E29] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Đăng Ký Tài Khoản Mới
               </button>
@@ -553,6 +578,19 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
           </div>
         )}
       </header>
+
+      {(publicSiteConfig.bannerNotice.trim() || publicSiteConfig.maintenanceMode) && (
+        <div className={`border-b px-4 py-3 text-sm ${publicSiteConfig.maintenanceMode
+          ? 'border-amber-300 bg-amber-50 text-amber-900'
+          : 'border-sky-200 bg-sky-50 text-sky-900'}`} role={publicSiteConfig.maintenanceMode ? 'alert' : 'status'}>
+          <div className="mx-auto flex max-w-7xl items-start gap-2 sm:px-2">
+            <span className="font-semibold">{publicSiteConfig.maintenanceMode ? 'Tạm dừng đặt kho:' : 'Thông báo:'}</span>
+            <span>{publicSiteConfig.maintenanceMode
+              ? 'Hệ thống đang bảo trì và tạm thời chưa nhận đơn đặt kho mới.'
+              : publicSiteConfig.bannerNotice}</span>
+          </div>
+        </div>
+      )}
 
       {/* ── 2. HERO SECTION ───────────────────────────────── */}
       <section className="relative overflow-hidden pt-8 pb-12 sm:pt-14 sm:pb-20">
@@ -583,8 +621,9 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={onOpenRegister}
-                  className="bg-[#E89520] hover:bg-[#D98514] text-white font-bold text-sm px-6 py-3 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  onClick={openRegistration}
+                  disabled={bookingDisabled}
+                  className="bg-[#E89520] hover:bg-[#D98514] text-white font-bold text-sm px-6 py-3 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <span>Đặt Giữ Kho Ngay</span>
                   <ArrowRightIcon className="w-4 h-4 stroke-[2.5]" />
@@ -904,8 +943,9 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                   </div>
                   <button
                     type="button"
-                    onClick={onOpenRegister}
-                    className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-stone-900 hover:bg-[#E89520] text-white transition cursor-pointer"
+                    onClick={openRegistration}
+                    disabled={bookingDisabled}
+                    className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-stone-900 hover:bg-[#E89520] text-white transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Chọn Thuê
                   </button>
@@ -980,8 +1020,9 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                   </span>
                   <button
                     type="button"
-                    onClick={onOpenRegister}
-                    className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-[#E89520] hover:bg-[#D98514] text-white transition cursor-pointer"
+                    onClick={openRegistration}
+                    disabled={bookingDisabled}
+                    className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-[#E89520] hover:bg-[#D98514] text-white transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Đặt Giữ Chỗ
                   </button>
@@ -1027,8 +1068,9 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
             </button>
             <button
               type="button"
-              onClick={onOpenRegister}
-              className="w-full sm:w-auto bg-[#E89520] hover:bg-[#D98514] text-white font-bold text-sm px-6 py-3 rounded-xl shadow-md transition cursor-pointer inline-flex items-center justify-center gap-2"
+              onClick={openRegistration}
+              disabled={bookingDisabled}
+              className="w-full sm:w-auto bg-[#E89520] hover:bg-[#D98514] text-white font-bold text-sm px-6 py-3 rounded-xl shadow-md transition cursor-pointer inline-flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span>Bắt Đầu Tạo Yêu Cầu Thuê Kho</span>
               <ArrowRightIcon className="w-4 h-4" />
@@ -1153,9 +1195,10 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                     type="button"
                     onClick={() => {
                       setActiveModal(null)
-                      onOpenRegister()
+                      openRegistration()
                     }}
-                    className="bg-[#E89520] hover:bg-[#D98514] text-white font-bold px-4 py-2 rounded-lg text-xs cursor-pointer flex items-center gap-1.5"
+                    disabled={bookingDisabled}
+                    className="bg-[#E89520] hover:bg-[#D98514] text-white font-bold px-4 py-2 rounded-lg text-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <span>Đặt giữ kho tại cơ sở này</span>
                     <ArrowRightIcon className="w-3.5 h-3.5" />
@@ -1296,9 +1339,10 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                     type="button"
                     onClick={() => {
                       setActiveModal(null)
-                      onOpenRegister()
+                      openRegistration()
                     }}
-                    className="bg-[#E89520] hover:bg-[#D98514] text-white font-bold px-4 py-2 rounded-lg text-xs cursor-pointer flex items-center gap-1.5"
+                    disabled={bookingDisabled}
+                    className="bg-[#E89520] hover:bg-[#D98514] text-white font-bold px-4 py-2 rounded-lg text-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <span>Đặt giữ kho ngay</span>
                     <ArrowRightIcon className="w-3.5 h-3.5" />
@@ -1331,9 +1375,10 @@ export default function HomePage({ onOpenLogin, onOpenRegister }: HomePageProps)
                     type="button"
                     onClick={() => {
                       setActiveModal(null)
-                      onOpenRegister()
+                      openRegistration()
                     }}
-                    className="bg-[#E89520] hover:bg-[#D98514] text-white font-bold px-4 py-2 rounded-lg text-xs cursor-pointer flex items-center gap-1.5"
+                    disabled={bookingDisabled}
+                    className="bg-[#E89520] hover:bg-[#D98514] text-white font-bold px-4 py-2 rounded-lg text-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <span>Bắt đầu đặt giữ kho ngay</span>
                     <ArrowRightIcon className="w-3.5 h-3.5" />

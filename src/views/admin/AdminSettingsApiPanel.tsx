@@ -71,12 +71,14 @@ function ToggleSwitch({
   checked,
   onChange,
   disabled = false,
+  ariaLabel,
   labelActive = 'Đang kích hoạt',
   labelInactive = 'Đã tắt',
 }: {
   checked: boolean
   onChange: (val: boolean) => void
   disabled?: boolean
+  ariaLabel?: string
   labelActive?: string
   labelInactive?: string
 }) {
@@ -86,6 +88,7 @@ function ToggleSwitch({
         type="button"
         role="switch"
         aria-checked={checked}
+        aria-label={ariaLabel}
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#e9a12c] focus:ring-offset-2 ${
@@ -111,9 +114,22 @@ const TABS = [
   'Thông tin chung',
   'Hóa đơn & Biểu phí',
   'Bảo mật & Xác thực',
-  'Thông báo tự động',
+  'Lịch vận hành SLA',
   'Bảo trì & Dịch vụ',
 ]
+
+// These rows were seeded by an older demo initializer but have no runtime
+// consumer. Keep legacy database values out of the editable surface.
+const HIDDEN_SETTING_IDS = new Set([
+  'pinRotation',
+  'gracePeriod',
+  'currency',
+  'lateFeeAmount',
+  'emailAlerts',
+  'smsGateAlerts',
+  'slackWebhook',
+  'dailyDigest',
+])
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 
@@ -132,11 +148,12 @@ export default function AdminSettingsApiPanel({ showToast }: { user: import('../
 
     listAdminSettings()
       .then(items => {
-        setSettings(items)
+        const visibleItems = items.filter(item => !HIDDEN_SETTING_IDS.has(item.id))
+        setSettings(visibleItems)
 
         // Normalize all values into clean primitives (No [object Object] strings!)
         const normalized: Record<string, string | number | boolean> = {}
-        items.forEach(item => {
+        visibleItems.forEach(item => {
           if (item.type === 'toggle') {
             normalized[item.id] = extractSettingBooleanValue(item.value)
           } else if (item.type === 'number') {
@@ -223,7 +240,7 @@ export default function AdminSettingsApiPanel({ showToast }: { user: import('../
       <SectionHeader
         eyebrow="QUẢN TRỊ HẠ TẦNG"
         title="Cài đặt hệ thống"
-        subtitle="Quản lý toàn bộ cấu hình vận hành, quy tắc tính phí, chính sách bảo mật và thông báo tự động của StorageHub."
+        subtitle="Quản lý các cấu hình đang được StorageHub sử dụng cho vận hành, tính phí, bảo mật và thông báo."
         action={
           hasChanges && (
             <div className="flex items-center gap-2.5">
@@ -249,10 +266,32 @@ export default function AdminSettingsApiPanel({ showToast }: { user: import('../
         }
       />
 
-      {/* ── Category Navigation Tabs (5 Focused Categories) ─────────────── */}
-      <div className="flex border-b border-stone-200">
-        <Tabs tabs={TABS} active={activeTab} onChange={setActiveTab} />
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Card className="border border-stone-200 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Đang hiển thị</p>
+          <p className="mt-1 text-2xl font-bold text-stone-900">{settings.length}</p>
+          <p className="mt-1 text-xs text-stone-500">Thiết lập thực tế từ hệ thống</p>
+        </Card>
+        <Card className="border border-stone-200 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Danh mục</p>
+          <p className="mt-1 text-2xl font-bold text-stone-900">{new Set(settings.map(item => item.group)).size}</p>
+          <p className="mt-1 text-xs text-stone-500">Nhóm cấu hình đang khả dụng</p>
+        </Card>
+        <Card className={`border p-4 ${hasChanges ? 'border-amber-300 bg-amber-50/50' : 'border-stone-200'}`}>
+          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Trạng thái</p>
+          <p className={`mt-1 text-base font-bold ${hasChanges ? 'text-amber-800' : 'text-emerald-700'}`}>
+            {hasChanges ? `${dirtyCount} thay đổi chưa lưu` : 'Đã đồng bộ'}
+          </p>
+          <p className="mt-1 text-xs text-stone-500">Thay đổi chỉ có hiệu lực sau khi lưu</p>
+        </Card>
       </div>
+
+      {/* ── Category Navigation Tabs ───────────────────────────────────── */}
+      <Card className="border border-stone-200 p-2">
+        <div className="overflow-x-auto">
+          <Tabs tabs={TABS} active={activeTab} onChange={setActiveTab} />
+        </div>
+      </Card>
 
       {/* Error alert */}
       {error && (
@@ -281,18 +320,15 @@ export default function AdminSettingsApiPanel({ showToast }: { user: import('../
               )}
             </div>
 
-            {hasChanges && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
-                <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span>
-                {dirtyCount} thay đổi chưa lưu
-              </span>
-            )}
+            <span className="inline-flex items-center rounded-full bg-stone-100 px-3 py-1 text-xs font-semibold text-stone-600">
+              {activeGroup.items.length} thiết lập
+            </span>
           </div>
 
-          {/* Settings Rows Container */}
-          <div className="divide-y divide-stone-100 px-6 py-2">
+          {/* Settings Cards */}
+          <div className="grid gap-4 p-4 sm:p-6 lg:grid-cols-2">
             {activeGroup.items.length === 0 ? (
-              <div className="py-12 text-center text-sm text-stone-400">
+              <div className="py-12 text-center text-sm text-stone-400 lg:col-span-2">
                 Chưa có thiết lập nào trong danh mục này.
               </div>
             ) : (
@@ -301,10 +337,9 @@ export default function AdminSettingsApiPanel({ showToast }: { user: import('../
                 const isItemDirty = drafts[item.id] !== originalValues[item.id]
 
                 return (
-                  <div key={item.id} className="py-5 transition-colors hover:bg-[#faf9f4]/40">
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
-                      {/* Left Column (35-40%): Title & Short Description */}
-                      <div className="md:col-span-5 pr-4 space-y-1">
+                  <div key={item.id} className="rounded-xl border border-stone-200 bg-white p-4 transition hover:border-stone-300 hover:shadow-sm">
+                    <div className="grid grid-cols-1 gap-4 items-start">
+                      <div className="space-y-1">
                         <div className="flex items-center gap-2">
                           <label className="text-sm font-semibold text-stone-900">
                             {settingItemLabel(item.id, item.label)}
@@ -320,13 +355,13 @@ export default function AdminSettingsApiPanel({ showToast }: { user: import('../
                         </p>
                       </div>
 
-                      {/* Right Column (60-65%): Form Control Appropriately Sized */}
-                      <div className="md:col-span-7">
+                      <div>
                         {item.type === 'toggle' ? (
                           <div className="space-y-1">
                             <ToggleSwitch
                               checked={Boolean(currentValue)}
                               onChange={val => handleDraftChange(item.id, val)}
+                              ariaLabel={settingItemLabel(item.id, item.label)}
                               labelActive="Đang kích hoạt"
                               labelInactive="Đã tắt"
                             />
@@ -339,6 +374,7 @@ export default function AdminSettingsApiPanel({ showToast }: { user: import('../
                         ) : item.type === 'select' ? (
                           <div className="max-w-sm">
                             <select
+                              aria-label={settingItemLabel(item.id, item.label)}
                               value={String(currentValue)}
                               onChange={e => handleDraftChange(item.id, e.target.value)}
                               className="w-full rounded-lg border border-stone-300 bg-white px-3.5 py-2 text-sm text-stone-800 shadow-sm transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#e9a12c]"
@@ -353,6 +389,7 @@ export default function AdminSettingsApiPanel({ showToast }: { user: import('../
                         ) : item.type === 'number' ? (
                           <div className="flex items-center gap-2 max-w-[260px]">
                             <input
+                              aria-label={settingItemLabel(item.id, item.label)}
                               type="number"
                               value={Number(currentValue)}
                               onChange={e => handleDraftChange(item.id, Number(e.target.value))}
@@ -365,6 +402,7 @@ export default function AdminSettingsApiPanel({ showToast }: { user: import('../
                         ) : (
                           <div className="max-w-xl">
                             <input
+                              aria-label={settingItemLabel(item.id, item.label)}
                               type="text"
                               value={String(currentValue)}
                               onChange={e => handleDraftChange(item.id, e.target.value)}

@@ -94,6 +94,10 @@ export default function CentralizedPolicyWorkspace({ user, lang = 'vi', initialP
   // Rollback confirmation
   const [rollbackTarget, setRollbackTarget] = useState<CentralizedPolicyApi | null>(null)
 
+  const latePenaltySummary = activePolicy?.latePenaltyCalculationMethod === 'FIXED_DAILY_AMOUNT'
+    ? `Phí cố định ${formatVnd(activePolicy.lateFeeAmount || 0)} / ngày`
+    : `${activePolicy?.lateFeePercentageRate ?? 0}% × tiền thuê tháng ÷ 30 × 1,5 / ngày`
+
   // Form state for draft editing
   const [formData, setFormData] = useState<Partial<CentralizedPolicyApi>>(initialPolicy ?? DEFAULT_MOCK_POLICY)
 
@@ -579,7 +583,7 @@ export default function CentralizedPolicyWorkspace({ user, lang = 'vi', initialP
 
                 <div className="flex md:flex-col items-center md:items-end justify-between shrink-0 border-t md:border-t-0 pt-2 md:pt-0 border-stone-100">
                   <span className="text-sm font-mono font-bold text-orange-800">
-                    Tiền thuê tháng ÷ 30 × 1,5 / ngày
+                    {latePenaltySummary}
                   </span>
                   <span className="text-[11px] text-stone-500 mt-0.5">Từ ngày quá hạn đầu tiên</span>
                 </div>
@@ -907,7 +911,11 @@ export default function CentralizedPolicyWorkspace({ user, lang = 'vi', initialP
             {editSection === 'payment' && (
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <p className="text-xs">Phí mỗi ngày = tiền thuê tháng ÷ 30 × 1,5, tính từ ngày quá hạn đầu tiên.</p>
+                  <p className="text-xs">
+                    {formData.latePenaltyCalculationMethod === 'FIXED_DAILY_AMOUNT'
+                      ? `Phí cố định ${formatVnd(formData.lateFeeAmount || 0)} / ngày, tính từ ngày quá hạn đầu tiên.`
+                      : `${formData.lateFeePercentageRate ?? 0}% × tiền thuê tháng ÷ 30 × 1,5 / ngày, tính từ ngày quá hạn đầu tiên.`}
+                  </p>
 
                   <div>
                     <label className="block text-xs font-bold text-stone-700 mb-1">Số ngày tối đa trước khi niêm phong kho</label>
