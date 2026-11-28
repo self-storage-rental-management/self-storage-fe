@@ -13,6 +13,11 @@ export interface BusinessConfigApi {
   managerRefundApprovalLimit: number
 }
 
+export interface PublicSiteConfigApi {
+  maintenanceMode: boolean
+  bannerNotice: string
+}
+
 export interface UpdateBusinessConfigInput {
   gracePeriodDays?: number
   lateFeeAmount?: number
@@ -38,5 +43,10 @@ export async function updateBusinessConfigApi(input: UpdateBusinessConfigInput):
     method: 'PUT',
     body: JSON.stringify(input),
   })
+  return response.data
+}
+
+export async function getPublicSiteConfigApi(): Promise<PublicSiteConfigApi> {
+  const response = await apiRequest<Envelope<PublicSiteConfigApi>>('/api/public/site-config')
   return response.data
 }
