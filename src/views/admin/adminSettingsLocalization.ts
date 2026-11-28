@@ -2,7 +2,7 @@ export const SETTING_TAB_TO_GROUP: Record<string, string> = {
   'Thông tin chung': 'Facility & Business Profile',
   'Hóa đơn & Biểu phí': 'Billing & Invoicing Rules',
   'Bảo mật & Xác thực': 'Security & Access Controls',
-  'Thông báo tự động': 'Automated Notifications & Webhooks',
+  'Lịch vận hành SLA': 'Automated Notifications & Webhooks',
   'Bảo trì & Dịch vụ': 'Maintenance & Service Mode',
 }
 
@@ -22,8 +22,8 @@ export const SETTING_GROUP_NAMES: Record<string, string> = {
 const GROUP_LABELS: Record<string, string> = {
   'Facility & Business Profile': 'Thông tin chung và liên hệ',
   'Billing & Invoicing Rules': 'Hóa đơn và quy tắc biểu phí',
-  'Security & Access Controls': 'Bảo mật và kiểm soát truy cập',
-  'Automated Notifications & Webhooks': 'Thông báo tự động và webhook',
+  'Security & Access Controls': 'Bảo mật tài khoản và phiên quản trị',
+  'Automated Notifications & Webhooks': 'Lịch vận hành SLA',
   'Maintenance & Service Mode': 'Bảo trì và chế độ dịch vụ',
 }
 
@@ -38,8 +38,7 @@ const ITEM_LABELS: Record<string, string> = {
   autoInvoiceDays: 'Tạo hóa đơn trước hạn',
   autoProrate: 'Tính tiền theo ngày thực tế (Prorate)',
   require2FA: 'Bắt buộc xác thực hai yếu tố (2FA)',
-  pinRotation: 'Chu kỳ tự động đổi mã PIN cổng',
-  lockoutAttempts: 'Ngưỡng khóa khi nhập sai mã PIN',
+  lockoutAttempts: 'Ngưỡng khóa khi đăng nhập sai',
   sessionTimeout: 'Thời gian hết hạn phiên quản trị',
   emailAlerts: 'Tự động gửi email nhắc nợ quá hạn',
   smsGateAlerts: 'Gửi SMS khi mở cổng ngoài giờ',
@@ -55,19 +54,18 @@ export const ITEM_DESCRIPTIONS: Record<string, string> = {
   hotline: 'Số điện thoại đường dây nóng hỗ trợ khẩn cấp 24/7 và giải đáp thắc mắc dịch vụ.',
   currency: 'Đơn vị tiền tệ chuẩn sử dụng cho biểu phí niêm yết, tính cước thuê và biên lai giao dịch.',
   timezone: 'Múi giờ chuẩn để tính toán thời điểm ra vào kho, ghi nhận nhật ký hoạt động và đối soát thanh toán.',
-  gracePeriod: 'Số ngày cho phép quá hạn trước khi hệ thống bắt đầu phạt phí trễ hoặc đình chỉ mã PIN mở cổng.',
+  gracePeriod: 'Số ngày cho phép quá hạn trước khi hệ thống bắt đầu phạt phí trễ hoặc hạn chế quyền sử dụng dịch vụ.',
   lateFeeAmount: 'Khoản phí phạt phát sinh tự động khi khách hàng chưa thanh toán tiền thuê sau khi hết hạn ân hạn.',
   autoInvoiceDays: 'Hệ thống sẽ tự động phát hành hóa đơn kỳ tiếp theo trước ngày hết hạn của hợp đồng thuê kho.',
   autoProrate: 'Tự động tính cước thuê theo số ngày sử dụng thực tế cho tháng đầu tiên nếu khách nhận kho giữa tháng.',
   require2FA: 'Bật để yêu cầu xác thực OTP qua email hoặc ứng dụng Authenticator đối với toàn bộ tài khoản nội bộ.',
-  pinRotation: 'Tự động làm mới mã PIN kiểm soát cổng định kỳ nhằm phòng ngừa nguy cơ lộ mã số ra vào.',
-  lockoutAttempts: 'Tự động tạm khóa quyền mở khóa của gian kho khi vượt quá số lần nhập sai liên tiếp này.',
+  lockoutAttempts: 'Tự động tạm khóa tài khoản sau số lần đăng nhập sai liên tiếp này.',
   sessionTimeout: 'Tự động đăng xuất tài khoản quản trị khi không có thao tác chuột hoặc bàn phím trong khoảng thời gian này.',
   emailAlerts: 'Tự động gửi email thông báo nhắc nợ định kỳ khi hóa đơn thuê kho chưa được thanh toán.',
   smsGateAlerts: 'Gửi tin nhắn SMS tức thì tới số điện thoại của quản lý cơ sở khi phát hiện có lượt mở cổng ngoài giờ quy định.',
   slackWebhook: 'Đường dẫn Webhook để gửi cảnh báo an ninh khẩn cấp và sự cố vận hành vào kênh Slack nội bộ.',
   dailyDigest: 'Gửi email tổng hợp các chỉ số vận hành (công suất kho, doanh thu, đơn đặt mới) cho ban quản lý mỗi sáng.',
-  maintenanceMode: 'Tạm khóa chức năng đặt kho mới và thanh toán trực tuyến để đội ngũ kỹ thuật nâng cấp hệ thống.',
+  maintenanceMode: 'Tạm dừng tiếp nhận đơn đặt kho mới trong thời gian bảo trì.',
   bannerNotice: 'Dòng thông báo nổi bật xuất hiện trên thanh đầu trang của trang chủ và cổng đặt kho công khai.',
 }
 
@@ -84,16 +82,10 @@ const OPTION_LABELS: Record<string, Record<string, string>> = {
     '14 days before due date': 'Trước hạn 14 ngày',
     '30 days before due date': 'Trước hạn 30 ngày',
   },
-  pinRotation: {
-    '30 days': '30 ngày đổi một lần',
-    '60 days': '60 ngày đổi một lần',
-    '90 days': '90 ngày đổi một lần',
-    'Never (Manual)': 'Không tự động (Đổi thủ công)',
-  },
   lockoutAttempts: {
-    '3 failed attempts': '3 lần nhập sai liên tiếp',
-    '5 failed attempts': '5 lần nhập sai liên tiếp',
-    '10 failed attempts': '10 lần nhập sai liên tiếp',
+    '3 failed attempts': '3 lần đăng nhập sai liên tiếp',
+    '5 failed attempts': '5 lần đăng nhập sai liên tiếp',
+    '10 failed attempts': '10 lần đăng nhập sai liên tiếp',
   },
   sessionTimeout: {
     '15 minutes': '15 phút không thao tác',
@@ -123,6 +115,6 @@ export const SETTING_GROUP_DESCRIPTIONS: Record<string, string> = {
   'Facility & Business Profile': 'Cấu hình thông tin pháp nhân doanh nghiệp, múi giờ và các kênh liên hệ chính.',
   'Billing & Invoicing Rules': 'Thiết lập quy tắc tạo hóa đơn, thời gian ân hạn và mức phí phạt trễ hạn tự động.',
   'Security & Access Controls': 'Quản lý chính sách đăng nhập, xác thực hai yếu tố (2FA) và thời gian hết hạn phiên.',
-  'Automated Notifications & Webhooks': 'Cấu hình thông báo tự động gửi email, SMS và webhook tích hợp với Slack.',
+  'Automated Notifications & Webhooks': 'Cấu hình lịch làm việc và thời hạn xử lý SLA của cơ sở.',
   'Maintenance & Service Mode': 'Kích hoạt chế độ bảo trì khẩn cấp và hiển thị biểu ngữ thông báo công khai.',
 }
