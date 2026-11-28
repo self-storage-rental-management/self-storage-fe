@@ -260,6 +260,7 @@ export interface RenewalCustomerIdentity {
   customerId: string
   fullName: string | null
   identityDocumentNumber: string | null
+  dateOfBirth?: string | null
   phone?: string | null
   unitCode?: string | null
   rentalMonths?: number | null
@@ -267,6 +268,18 @@ export interface RenewalCustomerIdentity {
 export async function getRenewalCustomerIdentity(id: string) {
   return readRentalEnvelope<RenewalCustomerIdentity>(
     await apiRequest(`${path('staff', id)}/customer-identity`),
+    value => {
+      const identity = value as RenewalCustomerIdentity | null
+      return !!identity && identity.renewalId === id && isUuid(identity.customerId)
+        && (identity.fullName === null || typeof identity.fullName === 'string')
+        && (identity.identityDocumentNumber === null || typeof identity.identityDocumentNumber === 'string')
+        && (identity.dateOfBirth === undefined || identity.dateOfBirth === null || typeof identity.dateOfBirth === 'string')
+    },
+  )
+}
+export async function revealRenewalCustomerIdentity(id: string) {
+  return readRentalEnvelope<RenewalCustomerIdentity>(
+    await apiRequest(`${path('staff', id)}/customer-identity/reveal`, { method: 'POST' }),
     value => {
       const identity = value as RenewalCustomerIdentity | null
       return !!identity && identity.renewalId === id && isUuid(identity.customerId)
@@ -337,15 +350,19 @@ export async function listAllRenewalPaymentEvents(role: RenewalOperationsRole, i
   return { ...first, data: events }
 }
 export async function hasRenewalIncident(id: string) {
+  const events = await listAllRenewalFacilityIncidentEvents(id)
+  return events.data.some(event => event.kind === "INCIDENT")
+}
+export async function listAllRenewalFacilityIncidentEvents(id: string) {
   const first = await listRenewalOperationEvents("manager", id, "facility-incidents", 0, 100)
+  const events = [...first.data]
   const totalPages = first.pagination.totalPages
   if (!Number.isInteger(totalPages) || totalPages > 1000) throw new Error("Số trang lịch sử sự cố không hợp lệ.")
-  if (first.data.some(event => event.kind === "INCIDENT")) return true
   for (let page = 1; page < totalPages; page++) {
     const next = await listRenewalOperationEvents("manager", id, "facility-incidents", page, 100)
-    if (next.data.some(event => event.kind === "INCIDENT")) return true
+    events.push(...next.data)
   }
-  return false
+  return { ...first, data: events }
 }
 function linkedEvent(event: RenewalOperationEvent, id: string) {
   const d = event.data as Record<string, unknown>
@@ -471,7 +488,7 @@ const commandFields: Record<RenewalOperationCommand["action"], readonly string[]
   arrival: ["appointmentRef", "evidenceFileIds", "expectedVersion", "identityVerified"],
   noShow: ["appointmentRef", "reason", "expectedVersion"],
   incident: ["appointmentRef", "reason", "evidenceFileIds", "expectedVersion"],
-  cash: ["payableStatementRef", "receiptFileId", "paymentMethod", "received", "expectedVersion"],
+  cash: ["payableStatementRef", "receiptReference", "receiptFileId", "paymentMethod", "received", "expectedVersion"],
   completion: ["identityVerified", "arrivalRef", "signedDocumentFileId", "completionNote", "expectedVersion", "expectedEffectiveStartDate"],
   exception: ["incidentId", "action", "appointmentAt", "revisedDeadline", "reason", "evidenceFileIds", "expectedVersion"],
   refund: ["incidentId", "decision", "reason", "evidenceFileIds", "expectedVersion"],
