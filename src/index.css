@@ -189,14 +189,21 @@ svg:not(.recharts-surface):not(.show-icon) { display: none !important; }
 }
 
 html,
-body,
-#root {
-  height: 100%;
+body {
+  min-height: 100%;
   width: 100%;
   max-width: 100%;
   min-width: 0;
   overflow-x: hidden;
-  overflow-y: hidden;
+  overflow-y: auto;
+}
+
+#root {
+  min-height: 100%;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: visible;
 }
 
 body {
@@ -205,6 +212,11 @@ body {
   color: var(--ink);
   background: var(--canvas);
   -webkit-font-smoothing: antialiased;
+}
+
+/* Keep the public homepage in the normal document flow so sections cannot overlap. */
+.home-page {
+  min-height: 100dvh;
 }
 
 button,
